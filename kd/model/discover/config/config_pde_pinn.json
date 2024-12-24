@@ -1,0 +1,197 @@
+{
+   "task" : {
+      // Deep Symbolic Regression
+      "task_type" : "pde_pinn",
+
+      "dataset" : "dataset_name",
+
+      // To customize a function set, edit this! See functions.py for a list of
+      // supported funcbatch_tions. Note "const" will add placeholder constants that
+      // will be optimized within the training loop. This will considerably
+      // increase runtime.
+      "function_set": ["add_t","sub_t", "mul_t", "div_t", "diff_t","diff2_t", "diff3_t","n2_t","n3_t"],
+      //                 2     3      4      5       6      7      8
+      // Metric to be used for the reward function. See regression.py for
+      // supported metrics.
+      "metric" : "pde_reward",
+      "metric_params" : [0.01],
+
+      // Optional alternate metric to be used at evaluation time.
+      "extra_metric_test" : null,
+      "extra_metric_test_params" : [],
+
+      // NRMSE threshold for early stopping. This is useful for noiseless
+      // benchmark problems when DSO discovers the true solution.
+      "threshold" : 5e-4,
+
+      // You can add artificial reward noise directly to the reward function.
+      // Note this does NOT add noise to the dataset.
+      "reward_noise" : 0.0,
+      //new set
+      "use_torch":true,
+      "cut_ratio":0.03,
+      "data_noise_level":0.1,
+      "eq_num":1
+      },
+   
+   // Only the key training hyperparameters are listed here. See
+   // config_common.json for the full list.
+   "training" : {
+      "n_epochs" : null,
+      "n_samples" : 20000,
+      "batch_size" : 1000,
+      "epsilon" : 0.01,
+      "baseline" : "R_e",
+
+      // Control variate parameters for vanilla policy gradient. If risk-seeking
+      // is used, these have no effect.
+      "alpha" : 0.5,
+      "b_jumpstart" : false,
+
+      // Number of cores to use when evaluating a batch of rewards. For batch
+      // runs using run.py and --runs > 1, this will be overridden to 1. For
+      // single runs, recommended to set this to as many cores as you can use!
+      "n_cores_batch" : 1,
+
+      // The complexity measure is only used to compute a Pareto front. It does
+      // not affect the optimization.
+      "complexity" : "length",
+      
+      // Default terms for equations as prior info
+      "default_terms":[],
+
+      // The constant optimizer used to optimized each "const" token.
+      "const_optimizer" : "dummy",
+      "const_params" : {},
+      "verbose" : true,
+
+      // Debug level
+      "debug" : 1,
+
+      // Whether to stop early if success condition is met
+      "early_stopping" : true,
+
+      // Size of the "hall of fame" (top performers during training) to save.
+      "hof" : 10,
+
+      // EXPERIMENTAL: Hyperparameters related to utilizing a memory buffer.
+      "use_memory" : false,
+      "memory_capacity" : 1e3,
+      "warm_start" : null,
+      "memory_threshold" : null,
+
+      // Parameters to control what outputs to save.
+      "save_all_epoch" : false,
+      "save_summary" : true,
+      "save_positional_entropy" : false,
+      "save_pareto_front" : true,
+      "save_cache" : false,
+      "save_cache_r_min" : 0.9,
+      "save_freq" : 1,
+      "save_token_count" : false,
+
+      // Parameters new
+      "remove_same":false,
+      // Recommended to set this to as many cores as you can use! Especially if
+      // using the "const" token.
+      "stability_selection" : 3
+   },
+   "pinn":  {
+      //task param
+      "use_pinn":true,
+      "use_variance":false,
+      "iter_num":2,
+      //network param
+      "number_layer":8,
+      "input_dim":2,
+      "n_hidden":20,
+      "out_dim":1,
+      "activation":"tanh",
+      "coef_pde":1,
+      "local_sample":true,
+      "pinn_epoch": 1000,
+      "duration":500,
+      "lr":0.001,
+      // data
+      "data_ratio":0.04,
+      "noise":0.5,
+      "coll_data":50000,
+      "generation_type": "AD",
+      "data_type":"1D_1U",
+      // "pretrain_path":"/code/DISCOVER/pyqg_parameterization_benchmarks-master/zoo/DISCOVER-master/DISCOVER-master/discover/log/_pretrain.ckpt"
+   },
+   "gp_agg":{
+      "run_gp_agg":false,
+      "gp":{},
+      "STRidge":{}
+   },
+   "parameterized":{
+      "on":false,
+      "validation_type":""
+   },
+   // Only the key RNN controller hyperparameters are listed here. See
+   // config_common.json for the full list.
+   "controller" : {
+      "learning_rate": 0.0025,
+      "entropy_weight" : 0.03,
+      "entropy_gamma" : 0.7,
+      // Priority queue training hyperparameters.
+      "pqt" : true,
+      "pqt_k" : 10,
+      "pqt_batch_size" : 1,
+      "pqt_weight" : 0.0,
+      "pqt_use_pg" : true,
+      "attention": true
+   },
+
+   // Hyperparameters related to including in situ priors and constraints. Each
+   // prior must explicitly be turned "on" or it will not be used. See
+   // config_common.json for descriptions of each prior.
+   "prior": {
+      // Memory sanity value. Limit strings to size 256
+      // This can be set very high, but it runs slower.
+      // Max value is 1000. 
+      "length" : {
+         "min_" : 3,
+         "max_" : 64,
+         "on" : true
+      },
+      // Memory sanity value. Have at most 10 optimizable constants. 
+      // This can be set very high, but it runs rather slow. 
+      "repeat" : {
+         "tokens" : "add_t",
+         "min_" : null,
+         "max_" : 5,
+         "on" : true
+      },
+      "inverse" : {
+         "on" : true
+      },
+      "trig" : {
+         "on" : true
+      },
+      "const" : {
+         "on" : false
+      },
+      "no_inputs" : {
+         "on" : false
+      },
+      "uniform_arity" : {
+         "on" : false
+      },
+      "soft_length" : {
+         "loc" : 12,
+         "scale" : 5,
+         "on" : true
+      },
+      "diff_left":{
+         "on":true
+      },
+      "diff_right":{
+         "on":true
+      },
+      "diff_descedent":{
+         "on":true
+      }
+   }
+}
