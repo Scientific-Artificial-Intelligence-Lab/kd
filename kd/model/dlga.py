@@ -5,25 +5,28 @@ from ..base import BaseEstimator
 from ..utils.utils_GA import *
 import numpy as np
 import heapq
-import tqdm
+from tqdm import tqdm
 import pickle
 
 
 class BaseGa(BaseEstimator, metaclass=ABCMeta):
-    
+
     @abstractmethod
     def __init__(self):
         pass
+
     @abstractmethod
     def fit(self, X, y):
         """Fit model"""
+
     def predict(self, X):
         pass
-    
+
+
 class DLGA(BaseGa):
     _parameter: dict = {}
-    
-    def __init__(self,epi):
+
+    def __init__(self, epi, input_dim):
         super().__init__()
         self.max_length = 5
         self.partial_prob = 0.6
@@ -33,75 +36,108 @@ class DLGA(BaseGa):
         self.add_rate = 0.4
         self.pop_size = 400
         self.n_generations = 100
-        self.train_ratio=0.8
-        self.valid_ratio=0.2
-        self.device=torch.device('cuda') if torch.cuda.is_available()  else torch.device("cpu")
-        self.Net=NN(Num_Hidden_Layers=5,
-                 Neurons_Per_Layer=50,
-                 Input_Dim=2,
-                 Output_Dim=1,
-                 Data_Type=torch.float32,
-                 Device='cuda',
-                 Activation_Function="Sin",
-                 Batch_Norm=False)
+        self.train_ratio = 0.8
+        self.valid_ratio = 0.2
+        self.device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
+        self.Net = NN(
+            Num_Hidden_Layers=5,
+            Neurons_Per_Layer=50,
+            Input_Dim=input_dim,
+            Output_Dim=1,
+            Data_Type=torch.float32,
+            Device=self.device,
+            Activation_Function="Sin",
+            Batch_Norm=False,
+        )
 
         self.epi = epi
 
-    def train_NN(self,X,y):
+    def train_NN(self, X, y):
         state = np.random.get_state()
         np.random.shuffle(X)
         np.random.set_state(state)
         np.random.shuffle(y)
-        X_train=X[0:int(X.shape[0]*self.train_ratio)]
-        y_train=y[0:int(X.shape[0]*self.train_ratio)]
-        X_valid = X[int(X.shape[0] * self.train_ratio):int(X.shape[0] * self.train_ratio)+int(X.shape[0] * self.valid_ratio)]
-        y_valid = y[int(X.shape[0] * self.train_ratio):int(X.shape[0] * self.train_ratio)+int(X.shape[0] * self.valid_ratio)]
-        X_train=torch.from_numpy(X_train.astype(np.float32)).to(self.device)
-        y_train=torch.from_numpy(y_train.astype(np.float32)).to(self.device)
+        X_train = X[0 : int(X.shape[0] * self.train_ratio)]
+        y_train = y[0 : int(X.shape[0] * self.train_ratio)]
+        X_valid = X[
+            int(X.shape[0] * self.train_ratio) : int(X.shape[0] * self.train_ratio)
+            + int(X.shape[0] * self.valid_ratio)
+        ]
+        y_valid = y[
+            int(X.shape[0] * self.train_ratio) : int(X.shape[0] * self.train_ratio)
+            + int(X.shape[0] * self.valid_ratio)
+        ]
+        X_train = torch.from_numpy(X_train.astype(np.float32)).to(self.device)
+        y_train = torch.from_numpy(y_train.astype(np.float32)).to(self.device)
         X_valid = torch.from_numpy(X_valid.astype(np.float32)).to(self.device)
 
-        NN_optimizer = torch.optim.Adam([
-            {'params': self.Net.parameters()},
-        ])
+        NN_optimizer = torch.optim.Adam(
+            [
+                {"params": self.Net.parameters()},
+            ]
+        )
 
         MSELoss = torch.nn.MSELoss()
         validate_error = []
         try:
-            os.makedirs(f'model_save/')
+            os.makedirs(f"model_save/")
         except OSError:
             pass
-        print(f'===============train Net=================')
+        print(f"===============train Net=================")
         for iter in range(50000):
             NN_optimizer.zero_grad()
             prediction = self.Net(X_train)
-            prediction_validate = self.Net(X_valid).cpu().data.numpy()
-            loss = MSELoss(prediction, y_train)
-            loss_validate = np.mean((prediction_validate.cpu().data.numpy() - y_valid) ** 2)
+            prediction_validate = self.Net(X_valid)
+            loss = MSELoss(prediction, y_train.view(-1, 1))
+            loss_validate = np.mean(
+                (prediction_validate.detach().cpu().numpy() - y_valid) ** 2
+            )
             loss.backward()
             NN_optimizer.step()
 
             if (iter + 1) % 500 == 0:
                 validate_error.append(loss_validate)
-                torch.save(self.Net.state_dict(),
-                           f'model_save/' + f"Net_{iter + 1}.pkl")
+                torch.save(
+                    self.Net.state_dict(), f"model_save/" + f"Net_{iter + 1}.pkl"
+                )
 
-                print("iter_num: %d      loss: %.8f    loss_validate: %.8f" % (iter + 1, loss, loss_validate))
+                print(
+                    "iter_num: %d      loss: %.8f    loss_validate: %.8f"
+                    % (iter + 1, loss, loss_validate)
+                )
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
-        return self.Net,self.best_epoch
+        return self.Net, self.best_epoch
 
-    def generate_meta_data(self,X):
+    def generate_meta_data(self, X):
         X = torch.from_numpy(X.astype(np.float32)).to(self.device)
-        self.Net.load_state_dict(torch.load(f'model_save/Net_{self.best_epoch}.pkl'))
+        X.requires_grad_(True)
+
+        self.Net.load_state_dict(
+            torch.load(f"model_save/Net_{self.best_epoch}.pkl", weights_only=True)
+        )
         self.Net.eval()
         u = self.Net(X)
         u_grad = torch.autograd.grad(outputs=u.sum(), inputs=X, create_graph=True)[0]
         ux = u_grad[:, 0].reshape(-1, 1)
         ut = u_grad[:, 1].reshape(-1, 1)
-        uxx = torch.autograd.grad(outputs=ux.sum(), inputs=X, create_graph=True)[0][:, 0].reshape(-1, 1)
-        uxxx = torch.autograd.grad(outputs=uxx.sum(), inputs=X, create_graph=True)[0][:, 0].reshape(-1, 1)
-        utt = torch.autograd.grad(outputs=ut.sum(), inputs=X, create_graph=True)[0][:, 1].reshape(-1, 1)
+        uxx = torch.autograd.grad(outputs=ux.sum(), inputs=X, create_graph=True)[0][
+            :, 0
+        ].reshape(-1, 1)
+        uxxx = torch.autograd.grad(outputs=uxx.sum(), inputs=X, create_graph=True)[0][
+            :, 0
+        ].reshape(-1, 1)
+        utt = torch.autograd.grad(outputs=ut.sum(), inputs=X, create_graph=True)[0][
+            :, 1
+        ].reshape(-1, 1)
         Theta = torch.concatenate([u, ux, uxx, uxxx, ut, utt], axis=1)
-        self.Theta=Theta
+        self.Theta = Theta
+
+        # 初始化 u_t 和 u_tt # FIXME: 需要检查
+        self.u_t = ut.cpu().detach().numpy()
+        self.u_tt = utt.cpu().detach().numpy()
+
         return self.Theta
 
     def random_module(self):
@@ -126,14 +162,15 @@ class DLGA(BaseGa):
         return genes
 
     def translate_DNA(self, gene):
-        gene_translate = np.ones([self.total, 1])
+        total = self.Theta.shape[0]
+        gene_translate = np.ones([total, 1])
         length_penalty_coef = 0
         for k in range(len(gene)):
             gene_module = gene[k]
             length_penalty_coef += len(gene_module)
-            module_out = np.ones([self.u.shape[0], self.u.shape[1]])
+            module_out = np.ones([self.Theta.shape[0], 1])
             for i in gene_module:
-                temp = self.Theta[:,i].reshape(-1,1)
+                temp = self.Theta[:, i].detach().reshape(-1, 1).cpu().numpy()
                 module_out *= temp
             gene_translate = np.hstack((gene_translate, module_out))
         gene_translate = np.delete(gene_translate, [0], axis=1)
@@ -152,17 +189,17 @@ class DLGA(BaseGa):
         coef_tt = -coef_NN[1:].reshape(coef_NN.shape[0] - 1, 1)
         res_tt = u_tt - np.dot(gene_translate, coef_tt)
 
-        MSE_true = np.sum(np.array(res) ** 2) / self.total
-        MSE_true_tt = np.sum(np.array(res_tt) ** 2) / self.total
+        total = self.Theta.shape[0]
+        MSE_true = np.sum(np.array(res) ** 2) / total
+        MSE_true_tt = np.sum(np.array(res_tt) ** 2) / total
 
         if MSE_true < MSE_true_tt:
-            name = 'u_t'
+            name = "u_t"
             MSE = MSE_true + self.epi * length_penalty_coef
-            coef = coef
             return coef, MSE, MSE_true, name
-
-        if MSE_true > MSE_true_tt:
-            name = 'u_tt'
+        # FIXME: 需要检查 coef
+        else:
+            name = "u_tt"
             MSE = MSE_true_tt + self.epi * length_penalty_coef
             return coef_tt, MSE, MSE_true_tt, name
 
@@ -226,11 +263,15 @@ class DLGA(BaseGa):
 
         for i in range(size_pop):
             gene_translate, length_penalty_coef = DLGA.translate_DNA(self, Chrom[i])
-            coef, MSE, MSE_true, name = DLGA.get_fitness(self, gene_translate, length_penalty_coef)
+            coef, MSE, MSE_true, name = DLGA.get_fitness(
+                self, gene_translate, length_penalty_coef
+            )
             fitness_list.append(MSE)
             coef_list.append(coef)
             name_list.append(name)
-        re1 = list(map(fitness_list.index, heapq.nsmallest(int(size_pop / 2), fitness_list)))
+        re1 = list(
+            map(fitness_list.index, heapq.nsmallest(int(size_pop / 2), fitness_list))
+        )
 
         for index in re1:
             new_Chrom.append(Chrom[index])
@@ -259,19 +300,19 @@ class DLGA(BaseGa):
         return self.Chrom
 
     def convert_chrom_to_eq(self, chrom, left_name, coef):
-        name = ['u', 'ux', 'uxx', 'uxxx', 'ut', 'utt']
+        name = ["u", "ux", "uxx", "uxxx", "ut", "utt"]
         string = []
         for i in range(len(chrom)):
             item = chrom[i]
             string.append(str(np.round(coef[i, 0], 4)))
-            string.append('*')
+            string.append("*")
             for gene in item:
                 string.append(name[gene])
-                string.append('*')
+                string.append("*")
             string.pop(-1)
-            string.append('+')
+            string.append("+")
         string.pop(-1)
-        string = f"{left_name}=" + ''.join(string)
+        string = f"{left_name}=" + "".join(string)
         return string
 
     def evolution(self):
@@ -280,59 +321,62 @@ class DLGA(BaseGa):
         for iter in range(self.pop_size):
             intial_genome = DLGA.random_genome(self)
             self.Chrom.append(intial_genome)
-            gene_translate, length_penalty_coef = DLGA.translate_DNA(self, intial_genome)
-            coef, MSE, MSE_true, name = DLGA.get_fitness(self, gene_translate, length_penalty_coef)
+            gene_translate, length_penalty_coef = DLGA.translate_DNA(
+                self, intial_genome
+            )
+            coef, MSE, MSE_true, name = DLGA.get_fitness(
+                self, gene_translate, length_penalty_coef
+            )
             self.Fitness.append(MSE)
         DLGA.delete_duplicates(self)
         try:
-            os.makedirs(f'result_save/')
+            os.makedirs(f"result_save/")
         except OSError:
             pass
 
-        with open(f'result_save/DLGA_output.txt', "a") as f:
-            f.write(f'============Params=============\n')
-            f.write(f'#l0_penalty:{self.epi}\n')
-            f.write(f'#pop_size:{self.pop_size}\n')
-            f.write(f'#generations:{self.n_generations}\n')
-            f.write(f'============results=============\n')
+        with open(f"result_save/DLGA_output.txt", "a") as f:
+            f.write(f"============Params=============\n")
+            f.write(f"#l0_penalty:{self.epi}\n")
+            f.write(f"#pop_size:{self.pop_size}\n")
+            f.write(f"#generations:{self.n_generations}\n")
+            f.write(f"============results=============\n")
         for iter in tqdm(range(self.n_generations)):
-            pickle.dump(self.Chrom.copy()[0],
-                        open(f'result_save/best_save.pkl', 'wb'))
+            pickle.dump(self.Chrom.copy()[0], open(f"result_save/best_save.pkl", "wb"))
             best = self.Chrom.copy()[0]
             DLGA.cross_over(self)
             DLGA.mutation(self)
             DLGA.delete_duplicates(self)
-            best = pickle.load(open(f'result_save/best_save.pkl', 'rb'))
+            best = pickle.load(open(f"result_save/best_save.pkl", "rb"))
             self.Chrom[0] = best
             DLGA.select(self)
             if self.Chrom[0] != best:
-                with open(f'result_save/DLGA_output.txt', "a") as f:
-                    f.write(f'iter: {iter + 1}\n')
-                    f.write(f'The best Chrom: {self.Chrom[0]}\n')
-                    f.write(f'The best coef:  \n{self.coef[0]}\n')
-                    f.write(f'The best fitness: {self.Fitness[0]}\n')
-                    f.write(f'The best name: {self.name[0]}\n')
-                    f.write(f'----------------------------------------\n')
-                    print(f'iter: {iter + 1}\n')
-                    print(f'The best Chrom: {self.Chrom[0]}')
-                    print(f'The best coef:  \n{self.coef[0]}')
-                    print(f'The best fitness: {self.Fitness[0]}')
-                    print(f'The best name: {self.name[0]}\r')
-        print('-------------------------------------------')
-        print(f'Finally discovered equation')
-        print(f'The best Chrom: {self.Chrom[0]}')
-        print(f'The best coef:  \n{self.coef[0]}')
-        print(f'The best fitness: {self.Fitness[0]}')
-        print(f'The best name: {self.name[0]}\r')
-        print('---------------------------------------------')
+                with open(f"result_save/DLGA_output.txt", "a") as f:
+                    f.write(f"iter: {iter + 1}\n")
+                    f.write(f"The best Chrom: {self.Chrom[0]}\n")
+                    f.write(f"The best coef:  \n{self.coef[0]}\n")
+                    f.write(f"The best fitness: {self.Fitness[0]}\n")
+                    f.write(f"The best name: {self.name[0]}\n")
+                    f.write(f"----------------------------------------\n")
+                    print(f"iter: {iter + 1}\n")
+                    print(f"The best Chrom: {self.Chrom[0]}")
+                    print(f"The best coef:  \n{self.coef[0]}")
+                    print(f"The best fitness: {self.Fitness[0]}")
+                    print(f"The best name: {self.name[0]}\r")
+        print("-------------------------------------------")
+        print(f"Finally discovered equation")
+        print(f"The best Chrom: {self.Chrom[0]}")
+        print(f"The best coef:  \n{self.coef[0]}")
+        print(f"The best fitness: {self.Fitness[0]}")
+        print(f"The best name: {self.name[0]}\r")
+        print("---------------------------------------------")
 
         return self.Chrom[0], self.coef[0], self.Fitness[0], self.name[0]
-    
+
     def fit(self, X, y):
-        self.Net, self.best_epoch=DLGA.train_NN(X,y)
-        self.Theta=DLGA.generate_meta_data(X)
-        Chrom, coef, _, name=DLGA.evolution()
-        print("equation form:",DLGA.convert_chrom_to_eq(Chrom, name, coef))
+        self.Net, self.best_epoch = self.train_NN(X, y)
+        self.Theta = self.generate_meta_data(X)
+        Chrom, coef, _, name = self.evolution()
+        print("equation form:", self.convert_chrom_to_eq(Chrom, name, coef))
 
     def predict(self):
         pass
