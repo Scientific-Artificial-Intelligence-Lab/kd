@@ -8,6 +8,8 @@ import heapq
 from tqdm import tqdm
 import pickle
 
+from kd.vizr import Vizr
+
 
 class BaseGa(BaseEstimator, metaclass=ABCMeta):
 
@@ -86,6 +88,24 @@ class DLGA(BaseGa):
         except OSError:
             pass
         print(f"===============train Net=================")
+        # init Vizr
+        vizr = Vizr("Training Progress", nrows=1, ncols=2)
+        vizr.set_subplot_labels(
+            subplot_idx=0,
+            xlabel="Iteration",
+            ylabel="Train Loss",
+            title="Training Loss",
+        )
+        vizr.add_plot("train_loss", subplot_idx=0, plot_type="line", color="red")
+
+        vizr.set_subplot_labels(
+            subplot_idx=1,
+            xlabel="Iteration",
+            ylabel="Valid Loss",
+            title="Validation Loss",
+        )
+        vizr.add_plot("valid_loss", subplot_idx=1, plot_type="line", color="blue")
+
         for iter in range(50000):
             NN_optimizer.zero_grad()
             prediction = self.Net(X_train)
@@ -107,6 +127,11 @@ class DLGA(BaseGa):
                     "iter_num: %d      loss: %.8f    loss_validate: %.8f"
                     % (iter + 1, loss, loss_validate)
                 )
+
+                vizr.update("train_loss", iter + 1, float(loss), subplot_idx=0).update(
+                    "valid_loss", iter + 1, float(loss_validate), subplot_idx=1
+                ).render(0.01)
+
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
 

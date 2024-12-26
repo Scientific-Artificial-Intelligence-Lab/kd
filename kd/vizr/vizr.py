@@ -1,62 +1,140 @@
-from collections import namedtuple
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import matplotlib.pyplot as plt
+from typing import Dict, Any, Optional, Union
+from numbers import Real
+import numpy as np
 
-# Define a namedtuple to store the configuration of a single plot
-PlotConfig = namedtuple("PlotConfig", ["type", "label", "color", "style"])
+
+class VizrPlot(ABC):
+    """Base class for all plot types in Vizr."""
+
+    @abstractmethod
+    def create(self, ax) -> Any:
+        """Create the plot on given axes."""
+        pass
+
+    @abstractmethod
+    def update(self, plot_obj: Any, xdata: Any, ydata: Any):
+        """Update plot with new data."""
+        pass
+
+
+@dataclass
+class DefaultPlot(VizrPlot):
+    """Built-in plot types (line, scatter)."""
+
+    type: str
+    label: str
+    color: str = "blue"
+    style: str = "-"
+    marker_size: float = 6.0
+    alpha: float = 1.0
+
+    def create(self, ax):
+        kwargs = {"label": self.label, "color": self.color, "alpha": self.alpha}
+
+        if self.type == "line":
+            kwargs["linestyle"] = self.style
+            return ax.plot([], [], **kwargs)[0]
+        elif self.type == "scatter":
+            kwargs["s"] = self.marker_size
+            return ax.scatter([], [], **kwargs)
+
+        raise ValueError(f"Unsupported plot type: {self.type}")
+
+    def update(self, plot, xdata, ydata):
+        if self.type == "line":
+            plot.set_data(xdata, ydata)
+        elif self.type == "scatter":
+            plot.set_offsets(list(zip(xdata, ydata)))
 
 
 class Vizr:
-    def __init__(self, title="Training Metrics", xlabel="Epoch", ylabel="Value"):
-        """Initialize a new Visualizer instance."""
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_title(title)
-        self.ax.set_xlabel(xlabel)
-        self.ax.set_ylabel(ylabel)
-        self.plots = {}  # Store plot configurations and data
+    """Visualization manager for real-time plotting."""
 
-    def add_plot(self, label, plot_type="line", color="blue", style="-"):
-        """Add a new plot series to the visualization."""
-        if plot_type == "line":
-            (plot,) = self.ax.plot([], [], label=label, color=color, linestyle=style)
-        elif plot_type == "scatter":
-            plot = self.ax.scatter([], [], label=label, color=color)
-        else:
-            raise ValueError(f"Unsupported plot type: {plot_type}")
+    def __init__(self, title="Title", nrows=1, ncols=1):
+        self.fig, self.axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4 * nrows))
+        self.fig.suptitle(title)
 
-        self.plots[label] = {
-            "config": PlotConfig(type=plot_type, label=label, color=color, style=style),
-            "plot": plot,
+        # Convert axes to array for consistent indexing
+        if nrows * ncols == 1:
+            self.axes = np.array([self.axes])
+        self.axes = self.axes.flatten()
+
+        self._plots = [{} for _ in range(nrows * ncols)]  # 每个子图一个 plot dict
+        self.nrows = nrows
+        self.ncols = ncols
+
+    def set_subplot_labels(self, subplot_idx: int, xlabel="X", ylabel="Y", title=""):
+        """Set labels for a specific subplot."""
+        self.axes[subplot_idx].set_xlabel(xlabel)
+        self.axes[subplot_idx].set_ylabel(ylabel)
+        self.axes[subplot_idx].set_title(title)
+        return self
+
+    def add_plot(
+        self,
+        label: str,
+        subplot_idx: int = 0,
+        plot_handler: Optional[VizrPlot] = None,
+        plot_type="line",
+        **kwargs,
+    ) -> "Vizr":
+        if subplot_idx >= len(self._plots):
+            raise ValueError(f"Subplot index {subplot_idx} out of range")
+
+        if plot_handler is None:
+            plot_handler = DefaultPlot(type=plot_type, label=label, **kwargs)
+
+        plot_obj = plot_handler.create(self.axes[subplot_idx])
+
+        self._plots[subplot_idx][label] = {
+            "handler": plot_handler,
+            "plot": plot_obj,
             "xdata": [],
             "ydata": [],
         }
-        self.ax.legend()
+        self.axes[subplot_idx].legend()
         return self
 
-    def update(self, label, x, y):
-        """Update data for a specific plot series."""
-        if label not in self.plots:
-            raise ValueError(f"Plot '{label}' is not registered. Use add_plot() first.")
+    def update(self, label: str, x: Real, y: Real, subplot_idx: int = 0) -> "Vizr":
+        if not isinstance(x, Real) or not isinstance(y, Real):
+            raise TypeError("x and y must be real numbers")
 
-        plot_data = self.plots[label]
+        if subplot_idx >= len(self._plots):
+            raise ValueError(f"Subplot index {subplot_idx} out of range")
+
+        if label not in self._plots[subplot_idx]:
+            raise ValueError(f"Plot '{label}' not found in subplot {subplot_idx}")
+
+        plot_data = self._plots[subplot_idx][label]
         plot_data["xdata"].append(x)
         plot_data["ydata"].append(y)
 
-        if plot_data["config"].type == "line":
-            plot_data["plot"].set_data(plot_data["xdata"], plot_data["ydata"])
-        elif plot_data["config"].type == "scatter":
-            plot_data["plot"].set_offsets(
-                list(zip(plot_data["xdata"], plot_data["ydata"]))
-            )
+        plot_data["handler"].update(
+            plot_data["plot"], plot_data["xdata"], plot_data["ydata"]
+        )
 
-        self.ax.relim()
-        self.ax.autoscale_view()
+        self.axes[subplot_idx].relim()
+        self.axes[subplot_idx].autoscale_view()
         return self
 
-    def render(self):
-        """Refresh the visualization."""
-        plt.pause(0.1)
+    def render(self, pause_interval: float = 0.1) -> "Vizr":
+        plt.pause(pause_interval)
         return self
 
     def close(self):
-        """Close the visualization."""
         plt.close(self.fig)
+
+
+# class CustomVizrPlot(VizrPlot):
+#     def create(self, ax):
+#         # 自定义绘制逻辑
+#         pass
+
+#     def update(self, plot_obj, xdata, ydata):
+#         # 自定义更新逻辑
+#         pass
+
+# vizr.add_plot("custom", plot_handler=CustomVizrPlot())

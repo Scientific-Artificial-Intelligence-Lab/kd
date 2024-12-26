@@ -1,21 +1,21 @@
 import unittest
-from vizr import Vizr
+
 import numpy as np
 import matplotlib.pyplot as plt
+
+from kd.vizr import Vizr
 
 
 class TestVizr(unittest.TestCase):
 
     def test_line_plot(self):
-
-        vizr = Vizr(title="Test Line Plot", xlabel="X", ylabel="Y")
-        vizr.add_plot("test_line", plot_type="line", color="red", style="-")
+        vizr = Vizr("single line plot")
+        vizr.add_plot("test_line", plot_type="line", color="cyan", style="-")
 
         x_data = np.linspace(0, 10, 100)
         y_data = np.sin(x_data)
         for x, y in zip(x_data, y_data):
-            vizr.update("test_line", x, y)
-            vizr.render()
+            vizr.update("test_line", x, y).render(0.01)
 
         vizr.close()
 
@@ -30,9 +30,7 @@ class TestVizr(unittest.TestCase):
         y_data2 = np.cos(x_data)
 
         for x, y1, y2 in zip(x_data, y_data1, y_data2):
-            vizr.update("test_line1", x, y1)
-            vizr.update("test_line2", x, y2)
-            vizr.render()
+            vizr.update("test_line1", x, y1).update("test_line2", x, y2).render()
 
         vizr.close()
 
@@ -47,12 +45,45 @@ class TestVizr(unittest.TestCase):
         vizr.ax.set_xlim(-10, 10)
         vizr.ax.set_ylim(-10, 10)
         for x, y in zip(x_data, y_data):
-            vizr.update("test_scatter", x, y)
-            vizr.render()
+            vizr.update("test_scatter", x, y).render()
+
+        plt.show()
+        vizr.close()
+
+    def test_multi_subplot(self):
+        vizr = Vizr("Multi Subplot", nrows=2, ncols=2)
+
+        vizr.set_subplot_labels(0, title="Sin")
+        vizr.set_subplot_labels(1, title="Cos")
+        vizr.set_subplot_labels(2, title="Square")
+        vizr.set_subplot_labels(3, title="Cubic")
+
+        vizr.add_plot("sin_line", subplot_idx=0, plot_type="line", color="red")
+        vizr.add_plot("cos_line", subplot_idx=1, plot_type="line", color="blue")
+        vizr.add_plot("square_line", subplot_idx=2, plot_type="line", color="green")
+        vizr.add_plot("cubic_line", subplot_idx=3, plot_type="line", color="purple")
+
+        x_data = np.linspace(0, 10, 100)
+        for x in x_data:
+            vizr.update("sin_line", x, np.sin(x), subplot_idx=0).update(
+                "cos_line", x, np.cos(x), subplot_idx=1
+            ).update("square_line", x, x**2, subplot_idx=2).update(
+                "cubic_line", x, x**3, subplot_idx=3
+            ).render(
+                0.01
+            )
 
         plt.show()
         vizr.close()
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.TestSuite()
+
+    # suite.addTest(TestVizr("test_line_plot"))
+    # suite.addTest(TestVizr("test_double_line_plot"))
+    # suite.addTest(TestVizr("test_scatter_plot"))
+    suite.addTest(TestVizr("test_multi_subplot"))
+
+    runner = unittest.TextTestRunner()
+    runner.run(suite)

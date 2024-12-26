@@ -176,3 +176,5 @@ cython_debug/
 # temp result
 model_save/
 result_save/
+
+.cursorignore
