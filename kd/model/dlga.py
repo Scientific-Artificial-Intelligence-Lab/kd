@@ -55,6 +55,9 @@ class DLGA(BaseGa):
         )
 
         self.epi = epi
+        self.fitness_history = []  # 用来track每一代的best fitness
+        self.vizr = Vizr("Training Progress")
+        self.subplot_count = 0  # TODO
 
     def train_NN(self, X, y):
         state = np.random.get_state()
@@ -343,6 +346,8 @@ class DLGA(BaseGa):
     def evolution(self):
         self.Chrom = []
         self.Fitness = []
+        self.fitness_history = []
+
         for iter in range(self.pop_size):
             intial_genome = DLGA.random_genome(self)
             self.Chrom.append(intial_genome)
@@ -365,6 +370,22 @@ class DLGA(BaseGa):
             f.write(f"#pop_size:{self.pop_size}\n")
             f.write(f"#generations:{self.n_generations}\n")
             f.write(f"============results=============\n")
+
+        # Add new subplot for GA evolution
+        self.vizr.add_subplot()
+        ga_plot_idx = self.subplot_count
+        self.subplot_count += 1
+
+        self.vizr.set_subplot_labels(
+            subplot_idx=ga_plot_idx,
+            xlabel="Generation",
+            ylabel="Best Fitness",
+            title="GA Evolution",
+        )
+        self.vizr.add_plot(
+            "ga_fitness", subplot_idx=ga_plot_idx, plot_type="line", color="green"
+        )
+
         for iter in tqdm(range(self.n_generations)):
             pickle.dump(self.Chrom.copy()[0], open(f"result_save/best_save.pkl", "wb"))
             best = self.Chrom.copy()[0]
@@ -387,6 +408,15 @@ class DLGA(BaseGa):
                     print(f"The best coef:  \n{self.coef[0]}")
                     print(f"The best fitness: {self.Fitness[0]}")
                     print(f"The best name: {self.name[0]}\r")
+
+            if len(self.Fitness) > 0:
+                best_fitness = min(self.Fitness)
+                self.fitness_history.append(best_fitness)
+
+                self.vizr.update(
+                    "ga_fitness", iter + 1, float(best_fitness), subplot_idx=ga_plot_idx
+                ).render(0.01)
+
         print("-------------------------------------------")
         print(f"Finally discovered equation")
         print(f"The best Chrom: {self.Chrom[0]}")

@@ -76,6 +76,54 @@ class TestVizr(unittest.TestCase):
         plt.show()
         vizr.close()
 
+    def test_dynamic_add_plot(self):
+        vizr = Vizr(title="Dynamic Adding Plots")
+        vizr.add_plot("line1", plot_type="line", color="red")
+        vizr.add_plot("line2", plot_type="line", color="blue")
+
+        x_data = np.linspace(0, 10, 100)
+
+        # First plot 50 points with just 2 lines
+        for i in range(50):
+            x = x_data[i]
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).render(
+                0.01
+            )
+
+        # Add a third line halfway through
+        vizr.add_plot("line3", plot_type="line", color="green")
+
+        # Continue plotting with all 3 lines
+        for i in range(50, 100):
+            x = x_data[i]
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).update(
+                "line3", x, np.sin(2 * x)
+            ).render(0.01)
+
+        plt.show()
+        vizr.close()
+
+    def test_dynamic_add_subplot(self):
+        vizr = Vizr(title="Dynamic Adding Subplots")
+
+        vizr.add_plot("line1", subplot_idx=0, plot_type="line", color="red")
+        x_data = np.linspace(0, 10, 100)
+        for i in range(50):
+            x = x_data[i]
+            vizr.update("line1", x, np.sin(x), subplot_idx=0).render(0.01)
+
+        # Add another subplot
+        vizr.add_subplot()
+        vizr.add_plot("line2", subplot_idx=1, plot_type="line", color="blue")
+        for i in range(50, 100):
+            x = x_data[i]
+            vizr.update("line1", x, np.sin(x), subplot_idx=0).update(
+                "line2", x, np.cos(x), subplot_idx=1
+            ).render(0.01)
+
+        plt.show()
+        vizr.close()
+
 
 if __name__ == "__main__":
     suite = unittest.TestSuite()
@@ -83,7 +131,9 @@ if __name__ == "__main__":
     # suite.addTest(TestVizr("test_line_plot"))
     # suite.addTest(TestVizr("test_double_line_plot"))
     # suite.addTest(TestVizr("test_scatter_plot"))
-    suite.addTest(TestVizr("test_multi_subplot"))
+    # suite.addTest(TestVizr("test_multi_subplot"))
+    # suite.addTest(TestVizr("test_dynamic_add_plot"))
+    suite.addTest(TestVizr("test_dynamic_add_subplot"))
 
     runner = unittest.TextTestRunner()
     runner.run(suite)

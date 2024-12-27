@@ -54,17 +54,63 @@ class Vizr:
     """Visualization manager for real-time plotting."""
 
     def __init__(self, title="Title", nrows=1, ncols=1):
+        self.title = title  # Store title for later use
+        self.create_figure(nrows, ncols)
+
+    def create_figure(self, nrows, ncols):
+        """Create or recreate the figure with new dimensions"""
+        # Close old figure if it exists
+        if hasattr(self, "fig"):
+            plt.close(self.fig)
+
         self.fig, self.axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4 * nrows))
-        self.fig.suptitle(title)
+        self.fig.suptitle(self.title)
 
         # Convert axes to array for consistent indexing
         if nrows * ncols == 1:
             self.axes = np.array([self.axes])
         self.axes = self.axes.flatten()
 
-        self._plots = [{} for _ in range(nrows * ncols)]  # 每个子图一个 plot dict
+        # Preserve existing plot data if any
+        old_plots = getattr(self, "_plots", [])
+        self._plots = [{} for _ in range(nrows * ncols)]
+        for i in range(min(len(old_plots), len(self._plots))):
+            self._plots[i] = old_plots[i]
+
         self.nrows = nrows
         self.ncols = ncols
+
+    def add_subplot(self):
+        """Add a new subplot to the figure"""
+        current_plots = len(self._plots)
+        new_nrows = int(np.ceil(np.sqrt(current_plots + 1)))
+        new_ncols = int(np.ceil((current_plots + 1) / new_nrows))
+
+        # Store current plot data
+        old_plots_data = {}
+        for subplot_idx, plots in enumerate(self._plots):
+            old_plots_data[subplot_idx] = {}
+            for label, plot_info in plots.items():
+                old_plots_data[subplot_idx][label] = {
+                    "xdata": plot_info["xdata"].copy(),
+                    "ydata": plot_info["ydata"].copy(),
+                    "handler": plot_info["handler"],
+                }
+
+        # Recreate figure with new dimensions
+        self.create_figure(new_nrows, new_ncols)
+
+        # Restore all plots
+        for subplot_idx, plots in old_plots_data.items():
+            for label, plot_info in plots.items():
+                self.add_plot(
+                    label, subplot_idx=subplot_idx, plot_handler=plot_info["handler"]
+                )
+                # Restore data
+                for x, y in zip(plot_info["xdata"], plot_info["ydata"]):
+                    self.update(label, x, y, subplot_idx=subplot_idx)
+
+        return current_plots  # Returns the index of the new subplot
 
     def set_subplot_labels(self, subplot_idx: int, xlabel="X", ylabel="Y", title=""):
         """Set labels for a specific subplot."""
