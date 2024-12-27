@@ -81,10 +81,20 @@ class Vizr:
         self.ncols = ncols
 
     def add_subplot(self):
-        """Add a new subplot to the figure"""
+        """Add a new subplot to the figure and optimize layout"""
         current_plots = len(self._plots)
-        new_nrows = int(np.ceil(np.sqrt(current_plots + 1)))
-        new_ncols = int(np.ceil((current_plots + 1) / new_nrows))
+
+        # Calculate optimal layout
+        if current_plots + 1 <= 2:
+            new_nrows, new_ncols = 1, current_plots + 1
+        elif current_plots + 1 == 3:
+            new_nrows, new_ncols = 2, 2  # 2x2 layout for 3 plots
+        elif current_plots + 1 == 4:
+            new_nrows, new_ncols = 2, 2
+        else:
+            # For more than 4 plots, use ceiling of square root
+            new_nrows = int(np.ceil(np.sqrt(current_plots + 1)))
+            new_ncols = int(np.ceil((current_plots + 1) / new_nrows))
 
         # Store current plot data
         old_plots_data = {}
@@ -97,7 +107,6 @@ class Vizr:
                     "handler": plot_info["handler"],
                 }
 
-        # Recreate figure with new dimensions
         self.create_figure(new_nrows, new_ncols)
 
         # Restore all plots
@@ -109,6 +118,13 @@ class Vizr:
                 # Restore data
                 for x, y in zip(plot_info["xdata"], plot_info["ydata"]):
                     self.update(label, x, y, subplot_idx=subplot_idx)
+
+        # Hide unused subplots
+        for i in range(current_plots + 1, new_nrows * new_ncols):
+            self.axes[i].set_visible(False)
+
+        # Adjust layout to make better use of space
+        self.fig.tight_layout()
 
         return current_plots  # Returns the index of the new subplot
 
