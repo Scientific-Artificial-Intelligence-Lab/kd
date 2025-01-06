@@ -180,3 +180,4 @@ result_save/
 .cursorignore
 
 log/
+!log/.gitkeep
