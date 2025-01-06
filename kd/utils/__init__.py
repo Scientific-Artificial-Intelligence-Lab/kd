@@ -1,5 +1,3 @@
-from _attrdict import Attrdict
+from .attrdict import Attrdict
 
-__all__ = [
-    "Attrdict"
-]
+__all__ = ["Attrdict"]

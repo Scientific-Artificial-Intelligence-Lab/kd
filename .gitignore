@@ -178,3 +178,5 @@ model_save/
 result_save/
 
 .cursorignore
+
+log/

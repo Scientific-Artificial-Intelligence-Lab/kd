@@ -86,3 +86,7 @@ pip install -r requirements.txt
 
 ### 代码示例
 
+### 注释
+
+需要 graphviz 被安装
+macOS: `brew install graphviz`
