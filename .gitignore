@@ -179,5 +179,5 @@ result_save/
 
 .cursorignore
 
-log/
+log/*
 !log/.gitkeep
