@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, Any, Optional, Type, Union
 from numbers import Real
 import numpy as np
+from sympy import latex
 
 
 class VizrPlot(ABC):
@@ -64,6 +65,43 @@ class ScatterPlot(VizrPlot):
         plot.set_offsets(
             list(zip(xdata, ydata))
         )  # Update data for the PathCollection object
+
+
+@dataclass
+class EquationPlot(VizrPlot):
+    """Plot for displaying mathematical equations using LaTeX."""
+
+    label: str
+    fontsize: float = 14
+    color: str = "black"
+    x_pos: float = 0.5
+    y_pos: float = 0.5
+
+    def create(self, ax):
+        """Create text object for equation."""
+        # Clear axis elements
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Create and return the text object
+        text = ax.text(
+            self.x_pos,
+            self.y_pos,
+            "$u_t = 0.0984\\frac{\\partial^2 u}{\\partial x^2} -0.5002\\frac{\\partial (uu)}{\\partial x}$",
+            fontsize=self.fontsize,
+            color=self.color,
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=ax.transAxes,
+            usetex=True,
+        )
+        return text
+
+    def update(self, plot_obj, xdata, ydata):
+        """Placeholder update method."""
+        pass
 
 
 class Vizr:

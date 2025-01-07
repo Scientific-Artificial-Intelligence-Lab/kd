@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
 
 from kd.vizr.vizr import *
 
@@ -117,16 +118,21 @@ class TestVizr(unittest.TestCase):
         plt.show()
         vizr.close()
 
+    def test_equation_plot(self):
+        """Test equation plot visualization."""
+        vizr = Vizr("Test Equation Plot")
+        vizr.add(EquationPlot, "test_equation", fontsize=16)
+        plt.show()
+
 
 if __name__ == "__main__":
     suite = unittest.TestSuite()
-
     # suite.addTest(TestVizr("test_line_plot"))
     # suite.addTest(TestVizr("test_double_line_plot"))
     # suite.addTest(TestVizr("test_scatter_plot"))
     # suite.addTest(TestVizr("test_multi_subplot"))
     # suite.addTest(TestVizr("test_dynamic_add_plot"))
-    suite.addTest(TestVizr("test_dynamic_add_subplot"))
+    suite.addTest(TestVizr("test_equation_plot"))
 
     runner = unittest.TextTestRunner()
     runner.run(suite)
