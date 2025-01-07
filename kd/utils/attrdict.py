@@ -1,4 +1,4 @@
-class AttrDict(dict):
+class Attrdict(dict):
     """
     A dictionary subclass that allows attribute-style access to dictionary keys.
     Reference: https://stackoverflow.com/a/14620633
