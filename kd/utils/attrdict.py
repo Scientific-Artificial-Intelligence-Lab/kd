@@ -16,14 +16,14 @@ class Attrdict(dict):
         >>> print(data.keys())  # Use dictionary methods like keys()
         dict_keys(['b', 'c'])
     """
-    
+
     def __init__(self, *args, **kwargs):
         """
         Initialize the dictionary and bind its internal dictionary to the instance.
         """
-        super(AttrDict, self).__init__(*args, **kwargs)
+        super(Attrdict, self).__init__(*args, **kwargs)
         # Avoid shadowing by explicitly setting an internal reference for attributes
-        object.__setattr__(self, '_internal_dict', self)
+        object.__setattr__(self, "_internal_dict", self)
 
     def __getattr__(self, item):
         """
@@ -33,7 +33,9 @@ class Attrdict(dict):
         try:
             return self[item]  # Attempt to retrieve the item using key access
         except KeyError:
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{item}'")
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{item}'"
+            )
 
     def __setattr__(self, key, value):
         """
@@ -49,7 +51,9 @@ class Attrdict(dict):
         try:
             del self[item]
         except KeyError:
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{item}'")
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{item}'"
+            )
 
     def __dir__(self):
         """
@@ -57,4 +61,3 @@ class Attrdict(dict):
         """
         # Combine default attributes with current dictionary keys
         return super().__dir__() + list(self.keys())
-
