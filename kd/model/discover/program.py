@@ -13,7 +13,8 @@ import time
 from .functions import PlaceholderConstant
 from .const import make_const_optimizer,ScipyMinimize
 from .utils import cached_property
-import kd.model.discover.utils as U
+# import kd.model.discover.utils as U
+from . import utils as U
 from .stridge import STRidge,Regulations,Node,build_tree,unsafe_execute_torch,unsafe_execute
 
 
