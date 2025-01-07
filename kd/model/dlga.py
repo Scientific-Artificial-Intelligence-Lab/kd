@@ -8,7 +8,7 @@ import heapq
 from tqdm import tqdm
 import pickle
 
-from kd.vizr import Vizr
+from kd.vizr.vizr import *
 
 
 class BaseGa(BaseEstimator, metaclass=ABCMeta):
@@ -56,7 +56,16 @@ class DLGA(BaseGa):
 
         self.epi = epi
         self.fitness_history = []  # 用来track每一代的best fitness
-        self.vizr = Vizr("Training Progress", nrows=1, ncols=2)
+        self.vizr = Vizr("DLGA Training Progress", nrows=1, ncols=2)
+
+        # Add plots for training and validation loss
+        self.vizr.add(LinePlot, "train_loss", id=0, color="red")
+        self.vizr.add(LinePlot, "valid_loss", id=1, color="blue")
+
+        # Set labels for first subplot
+        self.vizr.axes[0].set_xlabel("Iteration")
+        self.vizr.axes[0].set_ylabel("Loss")
+        self.vizr.axes[0].set_title("Training Progress")
 
     def train_NN(self, X, y):
         state = np.random.get_state()
@@ -90,23 +99,6 @@ class DLGA(BaseGa):
         except OSError:
             pass
         print(f"===============train Net=================")
-        # init Vizr
-        # vizr = Vizr("Training Progress", nrows=1, ncols=2)
-        self.vizr.set_subplot_labels(
-            subplot_idx=0,
-            xlabel="Iteration",
-            ylabel="Train Loss",
-            title="Training Loss",
-        )
-        self.vizr.add_plot("train_loss", subplot_idx=0, plot_type="line", color="red")
-
-        self.vizr.set_subplot_labels(
-            subplot_idx=1,
-            xlabel="Iteration",
-            ylabel="Valid Loss",
-            title="Validation Loss",
-        )
-        self.vizr.add_plot("valid_loss", subplot_idx=1, plot_type="line", color="blue")
 
         for iter in range(50000):
             NN_optimizer.zero_grad()
@@ -121,22 +113,16 @@ class DLGA(BaseGa):
 
             if (iter + 1) % 500 == 0:
                 validate_error.append(loss_validate)
-                torch.save(
-                    self.Net.state_dict(), f"model_save/" + f"Net_{iter + 1}.pkl"
-                )
+                torch.save(self.Net.state_dict(), f"model_save/Net_{iter + 1}.pkl")
 
                 print(
                     "iter_num: %d      loss: %.8f    loss_validate: %.8f"
                     % (iter + 1, loss, loss_validate)
                 )
 
-                self.vizr.update(
-                    "train_loss", iter + 1, float(loss), subplot_idx=0
-                ).update(
-                    "valid_loss", iter + 1, float(loss_validate), subplot_idx=1
-                ).render(
-                    0.01
-                )
+                self.vizr.update("train_loss", iter + 1, float(loss), id=0).update(
+                    "valid_loss", iter + 1, float(loss_validate), id=1
+                ).render(0.01)
 
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
@@ -349,21 +335,18 @@ class DLGA(BaseGa):
     def evolution(self):
         self.Chrom = []
         self.Fitness = []
-        self.fitness_history = []  # reset history at the start of evolution
+        self.fitness_history = []
 
-        # Add new subplot for GA evolution
-        ga_plot_idx = self.vizr.add_subplot()  # 这会返回新subplot的索引
+        # Add GA evolution subplot
+        ga_plot_idx = self.vizr.add_subplot()
+        self.vizr.add(LinePlot, "best_fitness", id=ga_plot_idx, color="green")
 
-        self.vizr.set_subplot_labels(
-            subplot_idx=ga_plot_idx,
-            xlabel="Generation",
-            ylabel="Best Fitness",
-            title="GA Evolution",
-        )
-        self.vizr.add_plot(
-            "fitness", subplot_idx=ga_plot_idx, plot_type="line", color="green"
-        )
+        # Set labels for GA subplot
+        self.vizr.axes[ga_plot_idx].set_xlabel("Generation")
+        self.vizr.axes[ga_plot_idx].set_ylabel("Best Fitness")
+        self.vizr.axes[ga_plot_idx].set_title("GA Evolution")
 
+        # Initial population
         for iter in range(self.pop_size):
             intial_genome = DLGA.random_genome(self)
             self.Chrom.append(intial_genome)
@@ -377,7 +360,7 @@ class DLGA(BaseGa):
 
             # Update visualization
             self.vizr.update(
-                "fitness", iter + 1, float(MSE), subplot_idx=ga_plot_idx
+                "best_fitness", iter + 1, float(MSE), id=ga_plot_idx
             ).render(0.01)
 
         DLGA.delete_duplicates(self)
