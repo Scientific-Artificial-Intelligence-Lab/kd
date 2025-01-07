@@ -4,7 +4,8 @@ from collections import defaultdict
 
 import numpy as np
 
-import kd.model.discover.utils as U
+# import kd.model.discover.utils as U
+from . import utils as U
 
 
 class Token():
