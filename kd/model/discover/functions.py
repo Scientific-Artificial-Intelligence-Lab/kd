@@ -8,7 +8,8 @@ import torch
 from .library import Token, PlaceholderConstant, HardCodedConstant
 from .task.pde.utils_fd import Diff, Diff2, Diff3, Diff4,Diff_2, Diff2_2, Laplace,Diff_3, Diff2_3
 from .task.pde.utils_nn import torch_diff,Laplacian_t
-import kd.model.discover.utils as U
+# import kd.model.discover.utils as U
+from . import utils as U
 
 
 GAMMA = 0.57721566490153286060651209008240243104215933593992
