@@ -1,5 +1,6 @@
 import numpy as np
-
+import sys
+sys.path.append("../kd-main")
 from kd.model.dlga import DLGA
 
 X = 2 * np.random.RandomState(0).randn(100, 5)
