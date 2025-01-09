@@ -1,18 +1,23 @@
 import dataclasses
 import copy
+from typing import Optional
 
 @dataclasses.dataclass
 class DatasetInfo:
     """
     Class representing the metadata for a dataset.
 
-    This class holds information about the dataset such as its description, citation, homepage, and license.
+    This class holds information about the dataset such as its description, citation, homepage, license,
+    author information, and keywords.
 
     Attributes:
         description (str): A short description of the dataset.
         citation (str): Citation information for the dataset (e.g., paper citation).
         homepage (str): The URL to the dataset's homepage.
         license (str): The license information of the dataset (e.g., MIT, Apache 2.0).
+        author (Optional[str]): The author(s) of the dataset (optional).
+        keywords (Optional[list]): List of keywords relevant to the dataset (optional).
+        version (Optional[str]): Version of the dataset (optional).
     """
     
     # Attribute definitions with default empty string values
@@ -20,6 +25,16 @@ class DatasetInfo:
     citation: str = dataclasses.field(default_factory=str)      # Citation information for the dataset
     homepage: str = dataclasses.field(default_factory=str)      # URL to the dataset's homepage
     license: str = dataclasses.field(default_factory=str)       # License under which the dataset is distributed
+    author: Optional[str] = dataclasses.field(default_factory=str)  # Author(s) of the dataset (optional)
+    keywords: Optional[list] = dataclasses.field(default_factory=list)  # Keywords related to the dataset
+    version: Optional[str] = dataclasses.field(default_factory=str)  # Dataset version (optional)
+
+    def __post_init__(self):
+        """Ensure the keywords are always a list if it's not None."""
+        if isinstance(self.keywords, str):  # If the keywords are provided as a comma-separated string, split them
+            self.keywords = [kw.strip() for kw in self.keywords.split(',')]
+        elif self.keywords is None:
+            self.keywords = []
 
     @classmethod
     def from_dict(cls, dataset_info_dict: dict) -> "DatasetInfo":
@@ -55,3 +70,51 @@ class DatasetInfo:
         # Create a deep copy of the instance's dictionary and instantiate a new object with the copied data
         return self.__class__(**{k: copy.deepcopy(v) for k, v in self.__dict__.items()})
 
+    def update(self, **kwargs) -> None:
+        """
+        Update the attributes of the current `DatasetInfo` instance with new values.
+
+        This method allows for dynamic updates to the dataset's metadata by providing keyword arguments.
+
+        Args:
+            **kwargs: Key-value pairs representing attributes to update in the instance.
+        """
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
+
+    def to_dict(self) -> dict:
+        """
+        Convert the `DatasetInfo` instance to a dictionary.
+
+        Returns:
+            dict: A dictionary representation of the `DatasetInfo` instance.
+        """
+        return dataclasses.asdict(self)
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the `DatasetInfo` instance.
+        
+        This provides a human-readable output for the object, listing its attributes and values.
+        """
+        return f"DatasetInfo(description={self.description}, citation={self.citation}, homepage={self.homepage}, " \
+               f"license={self.license}, author={self.author}, keywords={self.keywords}, version={self.version})"
+    
+    def __eq__(self, other) -> bool:
+        """
+        Check if two `DatasetInfo` instances are equal.
+        
+        This compares the values of all attributes to determine equality.
+
+        Args:
+            other (DatasetInfo): The other `DatasetInfo` instance to compare with.
+
+        Returns:
+            bool: True if the two instances have the same attribute values, otherwise False.
+        """
+        if not isinstance(other, DatasetInfo):
+            return False
+        return self.to_dict() == other.to_dict()
