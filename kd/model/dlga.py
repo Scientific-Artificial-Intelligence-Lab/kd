@@ -62,10 +62,12 @@ class DLGA(BaseGa):
         self.vizr.add(LinePlot, "train_loss", id=0, color="red")
         self.vizr.add(LinePlot, "valid_loss", id=1, color="blue")
 
-        # Set labels for first subplot
+        # Set labels for subplot
         self.vizr.axes[0].set_xlabel("Iteration")
-        self.vizr.axes[0].set_ylabel("Loss")
-        self.vizr.axes[0].set_title("Training Progress")
+        self.vizr.axes[0].set_ylabel("train_loss")
+
+        self.vizr.axes[1].set_xlabel("Iteration")
+        self.vizr.axes[1].set_ylabel("valid_loss")
 
     def train_NN(self, X, y):
         state = np.random.get_state()
@@ -413,6 +415,7 @@ class DLGA(BaseGa):
         self.Theta = self.generate_meta_data(X)
         Chrom, coef, _, name = self.evolution()
         print("equation form:", self.convert_chrom_to_eq(Chrom, name, coef))
+        plt.show()
 
     def predict(self):
         pass
