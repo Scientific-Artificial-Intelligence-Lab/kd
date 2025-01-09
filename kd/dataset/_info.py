@@ -1,6 +1,8 @@
 import dataclasses
 import copy
 from typing import Optional
+from importlib import resources
+from pathlib import Path
 
 @dataclasses.dataclass
 class DatasetInfo:
@@ -56,6 +58,37 @@ class DatasetInfo:
         
         # Filter the dictionary and create a new instance by unpacking the matching key-value pairs
         return cls(**{k: v for k, v in dataset_info_dict.items() if k in field_names})
+
+    def load_descr(descr_file_name, *, encoding="utf-8"):
+        """
+        Load and read the content of a specified description file, supporting both absolute and relative file paths.
+        
+        Parameters:
+            descr_file_name (str): The path of the description file to load. Can be either an absolute or relative path.
+            encoding (str, default="utf-8"): The encoding used to read the file.
+        
+        Returns:
+            str: The content of the description file.
+        
+        This function reads the content of a description file based on the provided path. If a relative path is given,
+        it is converted into an absolute path based on the current working directory.
+        """
+        # Convert the description file path to a Path object
+        file_path = Path(descr_file_name)
+
+        # If it's a relative path, convert it to an absolute path
+        if not file_path.is_absolute():
+            file_path = Path.cwd() / file_path  # Combine current working directory with relative path
+            
+        # path = resources.files(descr_module) / descr_file_name
+
+        # Ensure the file exists
+        if not file_path.exists():
+            raise FileNotFoundError(f"Description file '{descr_file_name}' not found at the specified path.")
+
+        # Read the content of the file and return it
+        return file_path.read_text(encoding=encoding)
+
 
     def copy(self) -> "DatasetInfo":
         """
