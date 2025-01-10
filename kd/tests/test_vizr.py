@@ -10,20 +10,20 @@ from kd.vizr.vizr import *
 class TestVizr(unittest.TestCase):
 
     def test_line_plot(self):
-        vizr = Vizr("single line plot")
+        vizr = Vizr("single line plot", realtime=False)
         vizr.add(LinePlot, "test_line")
 
         x_data = np.linspace(0, 10, 100)
         y_data = np.sin(x_data)
         for x, y in zip(x_data, y_data):
-            vizr.update("test_line", x, y).render(0.01)
+            vizr.update("test_line", x, y)
 
-        plt.show()
+        vizr.show()
         vizr.close()
 
     def test_double_line_plot(self):
 
-        vizr = Vizr(title="Test Double Line Plot")
+        vizr = Vizr(title="Test Double Line Plot", realtime=False)
         vizr.add(LinePlot, "test_line1", color="red", style="-")
         vizr.add(LinePlot, "test_line2", color="blue", style="-")
 
@@ -32,13 +32,14 @@ class TestVizr(unittest.TestCase):
         y_data2 = np.cos(x_data)
 
         for x, y1, y2 in zip(x_data, y_data1, y_data2):
-            vizr.update("test_line1", x, y1).update("test_line2", x, y2).render()
+            vizr.update("test_line1", x, y1).update("test_line2", x, y2)
 
+        vizr.show()
         vizr.close()
 
     def test_scatter_plot(self):
 
-        vizr = Vizr(title="Test Scatter Plot", xlabel="X", ylabel="Y")
+        vizr = Vizr(title="Test Scatter Plot", xlabel="X", ylabel="Y", realtime=True)
         vizr.add(ScatterPlot, "test_scatter")
 
         x_data = np.random.normal(0, 2, 10)
@@ -46,9 +47,9 @@ class TestVizr(unittest.TestCase):
         vizr.axes[0].set_xlim(-10, 10)
         vizr.axes[0].set_ylim(-10, 10)
         for x, y in zip(x_data, y_data):
-            vizr.update("test_scatter", x, y).render()
+            vizr.update("test_scatter", x, y)
 
-        plt.show()
+        vizr.show()
         vizr.close()
 
     def test_multi_subplot(self):
@@ -62,14 +63,11 @@ class TestVizr(unittest.TestCase):
         x_data = np.linspace(0, 10, 100)
         for x in x_data:
             vizr.update("sin_line", x, np.sin(x), id=0).update(
-                "cos_line", x, np.cos(x), id=1
-            ).update("square_line", x, x**2, id=2).update(
-                "cubic_line", x, x**3, id=3
-            ).render(
-                0.01
-            )
+                "cos_line", x, np.cos(x), id=1).update(
+                "square_line", x, x**2, id=2).update(
+                "cubic_line", x, x**3, id=3)
 
-        plt.show()
+        vizr.show()
         vizr.close()
 
     def test_dynamic_add_plot(self):
@@ -81,42 +79,34 @@ class TestVizr(unittest.TestCase):
 
         for i in range(50):
             x = x_data[i]
-            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).render(
-                0.01
-            )
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x))
 
         vizr.add(LinePlot, "line3", color="green")
 
         for i in range(50, 100):
             x = x_data[i]
-            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).update(
-                "line3", x, np.sin(2 * x)
-            ).render(0.01)
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).update("line3", x, np.sin(2 * x))
 
-        plt.show()
-        vizr.close()
+        vizr.show()
 
     def test_dynamic_add_subplot(self):
-        vizr = Vizr(title="Dynamic Adding Subplots")
+        vizr = Vizr(title="Dynamic Adding Subplots", realtime=False)
 
         vizr.add(LinePlot, "line1", color="red")
         x_data = np.linspace(0, 10, 100)
         for i in range(50):
-            x = x_data[i]
-            vizr.update("line1", x, np.sin(x), id=0).render(0.01)
+            x = i
+            vizr.update("line1", x, np.sin(x), id=0)
 
         # Add another subplot
         new_id = vizr.add_subplot()
         vizr.add(LinePlot, "line2", id=new_id, color="blue")
 
         for i in range(50, 100):
-            x = x_data[i]
-            vizr.update("line1", x, np.sin(x), id=0).update(
-                "line2", x, np.cos(x), id=1
-            ).render(0.01)
+            x = i - 50
+            vizr.update("line1", 50 + x, np.sin(x), id=0).update("line2", x, np.cos(x), id=1)
 
-        plt.show()
-        vizr.close()
+        vizr.show()
 
     def test_equation_plot(self):
         """Test equation plot visualization."""
@@ -130,9 +120,9 @@ if __name__ == "__main__":
     # suite.addTest(TestVizr("test_line_plot"))
     # suite.addTest(TestVizr("test_double_line_plot"))
     # suite.addTest(TestVizr("test_scatter_plot"))
-    # suite.addTest(TestVizr("test_multi_subplot"))
     # suite.addTest(TestVizr("test_dynamic_add_plot"))
-    suite.addTest(TestVizr("test_equation_plot"))
+    suite.addTest(TestVizr("test_dynamic_add_subplot"))
+    # suite.addTest(TestVizr("test_equation_plot"))
 
     runner = unittest.TextTestRunner()
     runner.run(suite)

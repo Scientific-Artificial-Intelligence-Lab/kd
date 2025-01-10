@@ -124,7 +124,7 @@ class DLGA(BaseGa):
 
                 self.vizr.update("train_loss", iter + 1, float(loss), id=0).update(
                     "valid_loss", iter + 1, float(loss_validate), id=1
-                ).render(0.01)
+                )
 
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
@@ -363,7 +363,7 @@ class DLGA(BaseGa):
             # Update visualization
             self.vizr.update(
                 "best_fitness", iter + 1, float(MSE), id=ga_plot_idx
-            ).render(0.01)
+            )
 
         DLGA.delete_duplicates(self)
         try:
@@ -415,7 +415,7 @@ class DLGA(BaseGa):
         self.Theta = self.generate_meta_data(X)
         Chrom, coef, _, name = self.evolution()
         print("equation form:", self.convert_chrom_to_eq(Chrom, name, coef))
-        plt.show()
+        self.vizr.show()
 
     def predict(self):
         pass

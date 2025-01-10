@@ -107,10 +107,11 @@ class EquationPlot(VizrPlot):
 class Vizr:
     """Visualization manager for real-time plotting."""
 
-    def __init__(self, title="Vizr", nrows=1, ncols=1, **kwargs):
+    def __init__(self, title="Vizr", nrows=1, ncols=1, realtime=True, **kwargs):
         self.title = title
         self.xlabel = kwargs.get("xlabel", "")
         self.ylabel = kwargs.get("ylabel", "")
+        self.realtime = realtime
         self.create_figure(nrows, ncols)
 
     def create_figure(self, nrows, ncols):
@@ -139,13 +140,10 @@ class Vizr:
         self.nrows = nrows
         self.ncols = ncols
 
-    def add_subplot(self):
+    def add_subplot(self) -> int:
         """Add a new subplot to the figure"""
-        # Close the old figure first
-        plt.close(self.fig)
-
         current_plots = len(self._plots)
-        new_subplot_id = current_plots  # 新 subplot 的 id
+        new_subplot_id = current_plots
 
         # Calculate optimal layout
         if current_plots + 1 <= 2:
@@ -160,11 +158,12 @@ class Vizr:
         old_plots_data = {}
         for subplot_idx, plots in enumerate(self._plots):
             old_plots_data[subplot_idx] = {
-                "plots": plots,
-                "axis_limits": self.axes[subplot_idx].axis(),
+                "plots": plots.copy(),  # 深拷贝 plot data
+                # 不保存axis limits，让坐标轴自动调整
             }
 
-        # 创建新的 figure
+        # Close old figure and create new one
+        plt.close(self.fig)
         self.fig, axes = plt.subplots(
             new_nrows, new_ncols, figsize=(6 * new_ncols, 4 * new_nrows)
         )
@@ -175,26 +174,33 @@ class Vizr:
             axes = np.array([axes])
         self.axes = axes.flatten()
 
-        # 扩展 self._plots 以容纳新的 subplot
-        self._plots.append({})
+        # Initialize new plots list with correct size
+        self._plots = [{} for _ in range(current_plots + 1)]
 
         # 恢复所有已存在的 plots
         for subplot_idx, data in old_plots_data.items():
-            # 复制原有的 plots 数据
-            self._plots[subplot_idx] = data["plots"]
-
-            # 重新创建每个 plot
             for label, plot_info in data["plots"].items():
+                # 重新创建 plot object
                 plot_obj = plot_info["handler"].create(self.axes[subplot_idx])
-                self._plots[subplot_idx][label]["plot"] = plot_obj
-
-                # 恢复数据
+                
+                # 保持原有数据结构
+                self._plots[subplot_idx][label] = {
+                    "handler": plot_info["handler"],
+                    "plot": plot_obj,
+                    "xdata": plot_info["xdata"].copy(),  # 复制数据
+                    "ydata": plot_info["ydata"].copy()   # 复制数据
+                }
+                
+                # 更新 plot 数据
                 plot_info["handler"].update(
-                    plot_obj, plot_info["xdata"], plot_info["ydata"]
+                    plot_obj,
+                    self._plots[subplot_idx][label]["xdata"],
+                    self._plots[subplot_idx][label]["ydata"]
                 )
 
-            # 恢复坐标轴范围
-            self.axes[subplot_idx].axis(data["axis_limits"])
+            # 重新计算坐标轴范围
+            self.axes[subplot_idx].relim()
+            self.axes[subplot_idx].autoscale_view()
             self.axes[subplot_idx].legend()
 
         # Hide unused subplots
@@ -204,7 +210,7 @@ class Vizr:
         # Adjust layout
         self.fig.tight_layout()
 
-        return new_subplot_id  # 返回新创建的 subplot 的 id
+        return new_subplot_id
 
     # FIXME: id 的做法有待商榷 需要设计一个自增然后存到 self
     def add(
@@ -245,14 +251,7 @@ class Vizr:
         return id
 
     def update(self, label: str, x: Real, y: Real, id: int = 0) -> "Vizr":
-        """Update plot data with new values.
 
-        Args:
-            label: The label of the plot to update
-            x: New x value
-            y: New y value
-            id: Subplot id (default: 0)
-        """
         if not isinstance(x, Real) or not isinstance(y, Real):
             raise TypeError("x and y must be real numbers")
 
@@ -272,11 +271,25 @@ class Vizr:
 
         self.axes[id].relim()
         self.axes[id].autoscale_view()
+        
+        if self.realtime:
+            self.render()
         return self
 
-    def render(self, pause_interval: float = 0.1) -> "Vizr":
+    # TODO: batch update
+
+    def render(self, pause_interval: float = 0.001) -> "Vizr":
         plt.pause(pause_interval)
         return self
 
     def close(self):
         plt.close(self.fig)
+
+    def show(self):
+        """Display all plots (for non-realtime mode)"""
+        if not self.realtime:
+            for id in range(len(self._plots)):
+                self.axes[id].relim()
+                self.axes[id].autoscale_view()
+        
+        plt.show()
