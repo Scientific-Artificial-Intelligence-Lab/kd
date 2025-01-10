@@ -17,6 +17,7 @@ class TestVizr(unittest.TestCase):
         y_data = np.sin(x_data)
         for x, y in zip(x_data, y_data):
             vizr.update("test_line", x, y)
+            vizr.render()
 
         vizr.show()
         vizr.close()
@@ -32,7 +33,7 @@ class TestVizr(unittest.TestCase):
         y_data2 = np.cos(x_data)
 
         for x, y1, y2 in zip(x_data, y_data1, y_data2):
-            vizr.update("test_line1", x, y1).update("test_line2", x, y2)
+            vizr.update("test_line1", x, y1).update("test_line2", x, y2).render()
 
         vizr.show()
         vizr.close()
@@ -47,7 +48,7 @@ class TestVizr(unittest.TestCase):
         vizr.axes[0].set_xlim(-10, 10)
         vizr.axes[0].set_ylim(-10, 10)
         for x, y in zip(x_data, y_data):
-            vizr.update("test_scatter", x, y)
+            vizr.update("test_scatter", x, y).render()  
 
         vizr.show()
         vizr.close()
@@ -65,7 +66,7 @@ class TestVizr(unittest.TestCase):
             vizr.update("sin_line", x, np.sin(x), id=0).update(
                 "cos_line", x, np.cos(x), id=1).update(
                 "square_line", x, x**2, id=2).update(
-                "cubic_line", x, x**3, id=3)
+                "cubic_line", x, x**3, id=3).render()
 
         vizr.show()
         vizr.close()
@@ -79,13 +80,13 @@ class TestVizr(unittest.TestCase):
 
         for i in range(50):
             x = x_data[i]
-            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x))
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).render()
 
         vizr.add(LinePlot, "line3", color="green")
 
         for i in range(50, 100):
             x = x_data[i]
-            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).update("line3", x, np.sin(2 * x))
+            vizr.update("line1", x, np.sin(x)).update("line2", x, np.cos(x)).update("line3", x, np.sin(2 * x)).render()
 
         vizr.show()
 
@@ -96,7 +97,7 @@ class TestVizr(unittest.TestCase):
         x_data = np.linspace(0, 10, 100)
         for i in range(50):
             x = i
-            vizr.update("line1", x, np.sin(x), id=0)
+            vizr.update("line1", x, np.sin(x), id=0).render()
 
         # Add another subplot
         new_id = vizr.add_subplot()
@@ -104,7 +105,7 @@ class TestVizr(unittest.TestCase):
 
         for i in range(50, 100):
             x = i - 50
-            vizr.update("line1", 50 + x, np.sin(x), id=0).update("line2", x, np.cos(x), id=1)
+            vizr.update("line1", 50 + x, np.sin(x), id=0).update("line2", x, np.cos(x), id=1).render()
 
         vizr.show()
 

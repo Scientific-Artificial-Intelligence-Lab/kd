@@ -272,14 +272,13 @@ class Vizr:
         self.axes[id].relim()
         self.axes[id].autoscale_view()
         
-        if self.realtime:
-            self.render()
         return self
 
     # TODO: batch update
 
     def render(self, pause_interval: float = 0.001) -> "Vizr":
-        plt.pause(pause_interval)
+        if self.realtime:
+            plt.pause(pause_interval)
         return self
 
     def close(self):

@@ -124,7 +124,7 @@ class DLGA(BaseGa):
 
                 self.vizr.update("train_loss", iter + 1, float(loss), id=0).update(
                     "valid_loss", iter + 1, float(loss_validate), id=1
-                )
+                ).render()
 
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
@@ -153,7 +153,6 @@ class DLGA(BaseGa):
         Theta = torch.concatenate([u, ux, uxx, uxxx, ut, utt], axis=1)
         self.Theta = Theta
 
-        # 初始化 u_t 和 u_tt # FIXME: 需要检查
         self.u_t = ut.cpu().detach().numpy()
         self.u_tt = utt.cpu().detach().numpy()
 
@@ -363,7 +362,7 @@ class DLGA(BaseGa):
             # Update visualization
             self.vizr.update(
                 "best_fitness", iter + 1, float(MSE), id=ga_plot_idx
-            )
+            ).render()
 
         DLGA.delete_duplicates(self)
         try:
