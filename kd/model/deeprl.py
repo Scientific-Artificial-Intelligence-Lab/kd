@@ -229,7 +229,7 @@ class DeepRL_Pinn(DeepRL):
                         **kwargs )
         self.base_config_file = "./discover/config/config_pde_pinn.json"
         self.set_config(config_out)
-
+        self.is_realtime = False
 
     def set_config(self,config=None):
         super().set_config(config)
@@ -247,6 +247,7 @@ class DeepRL_Pinn(DeepRL):
             self.config_task['dataset'],
             device
         )
+        model.vizr.realtime = self.is_realtime
         return model
     
     
