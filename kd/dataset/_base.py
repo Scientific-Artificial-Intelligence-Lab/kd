@@ -40,5 +40,8 @@ def load_csv_data():
 def load_mat_data():
     pass
 
+def load_numpy_data():
+    pass
+
 def load_burgers():
     pass
