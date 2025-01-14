@@ -257,7 +257,7 @@ class PINN_model:
                     logging.info(f'epoch: {i+1}, loss_u: {loss.item()} , loss_val:{loss_val.item()}' )
                     self.vizr.update("loss_train", i, loss.item(), 0).update(
                         "loss_val", i, loss_val.item(), 1
-                    ).render(0.01)
+                    ).render()
      
                 loss.backward()
                 self.optimizer_pretrain.step()

@@ -48,4 +48,4 @@ x,y,lb,ub = prepare_data()
 
 step_output = model.fit(x,y,[lb,ub],n_epochs=2)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
-model.plot(fig_type ='tree')
+model.plot(fig_type ='tree').view()

@@ -181,3 +181,5 @@ result_save/
 
 log/*
 !log/.gitkeep
+
+docs/build/*
