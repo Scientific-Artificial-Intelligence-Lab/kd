@@ -359,19 +359,27 @@ class Vizr:
     def add(self, plot_type: Type[VizrPlot], name: str, id: Optional[int] = None, **kwargs):
         """Add a new plot to the visualization.
         
+        Creates a new plot of the specified type and adds it to the visualization.
+        If no subplot ID is provided, creates a new subplot automatically.
+        
         Args:
-            plot_type: Type of plot to add (LinePlot, ScatterPlot, etc.)
-            name (str): Name of the plot
-            id (Optional[int]): Plot identifier. If not provided, a new subplot will be created.
+            plot_type (Type[VizrPlot]): The type of plot to create (LinePlot, ScatterPlot, etc.)
+            name (str): Unique identifier for the plot
+            id (Optional[int], optional): Subplot ID to add plot to. If not specified, creates new subplot.
             **kwargs: Additional arguments passed to the plot constructor
+                color (str): Plot color
+                label (str): Legend label
+                style (str): Line style (for LinePlot)
+                marker_size (float): Marker size (for ScatterPlot)
+                alpha (float): Transparency
             
         Returns:
-            self: Returns self for method chaining
+            Vizr: Self for method chaining
             
         Example:
-            >>> vizr = Vizr("My Plot")
-            >>> vizr.add(LinePlot, "data1", color="red")
-            >>> vizr.add(ScatterPlot, "data2", color="blue")
+            >>> vizr = Vizr()
+            >>> vizr.add(LinePlot, "data1", color="red")  # New subplot
+            >>> vizr.add(ScatterPlot, "data2", id=0)  # Add to first subplot
         """
         if not isinstance(plot_type, VizrPlot):
             if isinstance(plot_type, type) and issubclass(plot_type, VizrPlot):

@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import scipy.io as scio
 from pyDOE import lhs
+from .utils.utils_fd import FiniteDiff
 
 data_list = [
     'chafee-infante', 'Burgers', 'Kdv'

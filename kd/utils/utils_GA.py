@@ -1,3 +1,17 @@
+"""Neural network utilities for genetic algorithms.
+
+This module provides neural network components used in genetic algorithm based approaches:
+    - Rational: Rational activation function
+    - Sin: Sinusoidal activation function
+    - NN: Configurable neural network with multiple activation options
+
+Additional features:
+    - Support for batch normalization
+    - Multiple activation function options
+    - Xavier initialization for weights
+    - Configurable architecture
+"""
+
 import torch
 import torch.nn.functional as F
 import random
@@ -9,6 +23,24 @@ import math
 
 
 class Rational(torch.nn.Module):
+    """Rational activation function.
+    
+    This activation function is based on the paper:
+    "Rational neural networks" by Boulle, Nicolas, et al. (arXiv:2004.01902)
+    
+    The function approximates ReLU using a rational function of the form:
+        R(x) = P(x)/Q(x)
+    where P and Q are polynomials with learnable coefficients.
+    
+    Attributes:
+        a (Parameter): Numerator coefficients [a0, a1, a2, a3]
+        b (Parameter): Denominator coefficients [b0, b1, b2]
+        
+    Example:
+        >>> layer = Rational()
+        >>> x = torch.randn(10)
+        >>> output = layer(x)
+    """
     def __init__(self,
                  Data_Type=torch.float32,
                  Device=torch.device('cpu')):
@@ -58,6 +90,16 @@ class Rational(torch.nn.Module):
 
 
 class Sin(nn.Module):
+    """Sinusoidal activation function.
+    
+    Simple wrapper around torch.sin for use as an activation function.
+    Useful for learning periodic patterns in the data.
+    
+    Example:
+        >>> layer = Sin()
+        >>> x = torch.randn(10)
+        >>> output = layer(x)  # Applies sine to each element
+    """
     def __init__(self):
         super(Sin, self).__init__()
 
@@ -67,6 +109,31 @@ class Sin(nn.Module):
 
 
 class NN(torch.nn.Module):
+    """Configurable neural network with multiple activation options.
+    
+    This class implements a fully connected neural network with:
+        - Configurable number of layers and neurons
+        - Multiple activation function options (Tanh, Sin, Rational)
+        - Optional batch normalization
+        - Xavier initialization
+    
+    Attributes:
+        Input_Dim (int): Input dimension
+        Output_Dim (int): Output dimension
+        Num_Hidden_Layers (int): Number of hidden layers
+        Batch_Norm (bool): Whether to use batch normalization
+        Layers (ModuleList): List of linear layers
+        Activation_Functions (ModuleList): List of activation functions
+        
+    Example:
+        >>> net = NN(Num_Hidden_Layers=3, 
+        ...          Neurons_Per_Layer=20,
+        ...          Input_Dim=2,
+        ...          Output_Dim=1,
+        ...          Activation_Function="Rational")
+        >>> x = torch.randn(100, 2)
+        >>> output = net(x)
+    """
     def __init__(self,
                  Num_Hidden_Layers: int = 3,
                  Neurons_Per_Layer: int = 20,  # Neurons in each Hidden Layer

@@ -1,3 +1,5 @@
-from .attrdict import Attrdict
+"""Utility functions and classes."""
 
-__all__ = ["Attrdict"]
+from .utils_fd import FiniteDiff
+
+__all__ = ['FiniteDiff']

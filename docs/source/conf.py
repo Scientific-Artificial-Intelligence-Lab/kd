@@ -17,41 +17,18 @@ author = 'Scientific-Artificial-Intelligence-Lab'
 # The full version, including alpha/beta/rc tags
 release = '0.0.1'
 
+
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
+# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
+# ones.
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'sphinx.ext.intersphinx',  # Add cross-references to other documentation
-    'sphinx.ext.coverage',     # Add coverage reports
-    'sphinx.ext.todo',         # Support for todo items
+    # 'sphinx_rtd_theme', 
 ]
-
-# Napoleon settings
-napoleon_google_docstring = True
-napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = True
-napoleon_include_private_with_doc = True
-napoleon_include_special_with_doc = True
-napoleon_use_admonition_for_examples = True
-napoleon_use_admonition_for_notes = True
-napoleon_use_admonition_for_references = True
-napoleon_use_ivar = True
-napoleon_use_param = True
-napoleon_use_rtype = True
-napoleon_type_aliases = None
-
-# Autodoc settings
-autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'undoc-members': True,
-    'exclude-members': '__weakref__'
-}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -61,43 +38,29 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
 
-# The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+# 设置语言支持
+language = 'en'
+locale_dirs = ['locale/']   # 存放翻译文件的目录
+gettext_compact = False     # 禁用 gettext 压缩
+languages = ['en', 'zh_CN']  # 支持的语言列表
 
-# If true, `todo` and `todoList` produce output, else they produce nothing.
-todo_include_todos = True
 
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.
-html_theme = 'alabaster'
-
-# Theme options
-html_theme_options = {
-    'github_user': 'Scientific-Artificial-Intelligence-Lab',
-    'github_repo': 'kd',
-    'description': 'Knowledge Discovery Documentation',
-    'fixed_sidebar': True,
-    'show_powered_by': True,
-    'show_related': True,
-    'note_bg': '#FFF59C',
-    'pre_bg': '#f6f6f6',
-}
+# The theme to use for HTML and HTML Help pages.  See the documentation for
+# a list of builtin themes.
+#
+html_theme = 'alabaster'  # 使用默认的 alabaster theme
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# Language settings
-language = 'en'
-locale_dirs = ['locale/']   # Translation files directory
-gettext_compact = False     # Disable gettext compression
-languages = ['en', 'zh_CN'] # Supported languages
-
-# Intersphinx configuration
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
-    'torch': ('https://pytorch.org/docs/stable/', None),
+# 添加语言切换按钮的配置
+html_theme_options = {
+    'github_user': 'Scientific-Artificial-Intelligence-Lab',
+    'github_repo': 'kd',
+    'description': 'Knowledge Discovery Documentation',
+    'fixed_sidebar': True,
 }

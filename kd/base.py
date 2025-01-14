@@ -3,10 +3,8 @@
 This class provides basic functionality for all estimators in the KD framework,
 including parameter management and string representation. It is inspired by
 scikit-learn's BaseEstimator.
-
-Attributes:
-    None
 """
+
 import inspect
 from collections import defaultdict
 import warnings
@@ -18,8 +16,9 @@ class BaseEstimator:
     This class should not be used directly. Instead, use derived classes.
     All estimators should inherit from this class.
     
-    Attributes:
-        None
+    This is an abstract base class that provides common functionality for 
+    parameter management and string representation. It does not have any
+    attributes of its own.
     """
 
     def __init__(self, **params):
