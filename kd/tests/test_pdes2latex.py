@@ -29,6 +29,11 @@ dprlpinn_pde_cases = [
 
 dprl_pde_cases = [
     "0.0984 * diff2(u1,x1) + -0.5002 * diff(n2(u1),x1)",
+    "0.0327 * diff2(mul(u1,n2(x1)),x1) + -0.0003 * diff2(mul(n2(n2(x1)),u1),x1) + -0.0422 * u1",
+    "0.1912 * mul(u1,mul(diff(n2(u1),x1),x1))",
+    "0.1275 * mul(x1,diff(mul(u1,n2(u1)),x1))",
+    "0.0985 * diff2(u1,x1) + -0.5007 * diff(n2(u1),x1) + -0.0001 * diff2(mul(n2(x1),u1),x1)",
+    "-0.0009 * u1 + 0.0981 * diff2(u1,x1) + -0.4989 * diff(n2(u1),x1)",
 ]
 
 # TODO

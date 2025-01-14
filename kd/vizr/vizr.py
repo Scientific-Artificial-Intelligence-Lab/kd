@@ -1,3 +1,21 @@
+"""Real-time visualization module for scientific data.
+
+This module provides a flexible and extensible framework for real-time data visualization.
+It supports:
+    - Multiple plot types (line, scatter, equation)
+    - Real-time and non-real-time plotting
+    - Dynamic subplot management
+    - Method chaining for concise updates
+    - LaTeX equation rendering
+
+Example:
+    >>> vizr = Vizr("My Plot")
+    >>> vizr.add(LinePlot, "data", color="red")
+    >>> for x, y in data:
+    ...     vizr.update("data", x, y).render()
+    >>> vizr.show()
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
@@ -8,22 +26,48 @@ from sympy import latex
 
 
 class VizrPlot(ABC):
-    """Base class for all plot types in Vizr."""
+    """Abstract base class for all plot types.
+    
+    This class defines the interface that all plot types must implement.
+    Each plot type should provide methods for creation and updating of plots.
+    """
 
     @abstractmethod
     def create(self, ax) -> Any:
-        """Create the plot on given axes."""
+        """Create a new plot on the given axes.
+        
+        Args:
+            ax: Matplotlib axes object to create the plot on.
+            
+        Returns:
+            Any: The created plot object (e.g., Line2D, PathCollection).
+        """
         pass
 
     @abstractmethod
     def update(self, plot_obj: Any, xdata: Any, ydata: Any):
-        """Update plot with new data."""
+        """Update an existing plot with new data.
+        
+        Args:
+            plot_obj: The plot object to update.
+            xdata: New x-axis data.
+            ydata: New y-axis data.
+        """
         pass
 
 
 @dataclass
 class LinePlot(VizrPlot):
-    """Line plot implementation."""
+    """Line plot implementation.
+    
+    Creates and updates line plots with customizable appearance.
+    
+    Attributes:
+        label (str): Label for the plot legend.
+        color (str): Line color (default: "blue").
+        style (str): Line style (default: "-").
+        alpha (float): Line transparency (default: 1.0).
+    """
 
     label: str
     color: str = "blue"
@@ -31,21 +75,45 @@ class LinePlot(VizrPlot):
     alpha: float = 1.0
 
     def create(self, ax):
+        """Create a line plot.
+        
+        Args:
+            ax: Matplotlib axes object.
+            
+        Returns:
+            Line2D: The created line plot object.
+        """
         kwargs = {
             "label": self.label,
             "color": self.color,
             "linestyle": self.style,
             "alpha": self.alpha,
         }
-        return ax.plot([], [], **kwargs)[0]  # Return the Line2D object
+        return ax.plot([], [], **kwargs)[0]
 
     def update(self, plot, xdata, ydata):
-        plot.set_data(xdata, ydata)  # Update data for the Line2D object
+        """Update line plot data.
+        
+        Args:
+            plot: Line2D object to update.
+            xdata: New x coordinates.
+            ydata: New y coordinates.
+        """
+        plot.set_data(xdata, ydata)
 
 
 @dataclass
 class ScatterPlot(VizrPlot):
-    """Scatter plot implementation."""
+    """Scatter plot implementation.
+    
+    Creates and updates scatter plots with customizable markers.
+    
+    Attributes:
+        label (str): Label for the plot legend.
+        color (str): Marker color (default: "blue").
+        marker_size (float): Size of markers (default: 6.0).
+        alpha (float): Marker transparency (default: 1.0).
+    """
 
     label: str
     color: str = "blue"
@@ -53,23 +121,46 @@ class ScatterPlot(VizrPlot):
     alpha: float = 1.0
 
     def create(self, ax):
+        """Create a scatter plot.
+        
+        Args:
+            ax: Matplotlib axes object.
+            
+        Returns:
+            PathCollection: The created scatter plot object.
+        """
         kwargs = {
             "label": self.label,
             "color": self.color,
             "s": self.marker_size,
             "alpha": self.alpha,
         }
-        return ax.scatter([], [], **kwargs)  # Return the PathCollection object
+        return ax.scatter([], [], **kwargs)
 
     def update(self, plot, xdata, ydata):
-        plot.set_offsets(
-            list(zip(xdata, ydata))
-        )  # Update data for the PathCollection object
+        """Update scatter plot data.
+        
+        Args:
+            plot: PathCollection object to update.
+            xdata: New x coordinates.
+            ydata: New y coordinates.
+        """
+        plot.set_offsets(list(zip(xdata, ydata)))
 
 
 @dataclass
 class EquationPlot(VizrPlot):
-    """Plot for displaying mathematical equations using LaTeX."""
+    """LaTeX equation plot implementation.
+    
+    Displays mathematical equations using LaTeX rendering.
+    
+    Attributes:
+        label (str): Label for the equation.
+        fontsize (float): Font size (default: 14).
+        color (str): Text color (default: "black").
+        x_pos (float): Relative x position (0-1) (default: 0.5).
+        y_pos (float): Relative y position (0-1) (default: 0.5).
+    """
 
     label: str
     fontsize: float = 14
@@ -78,7 +169,14 @@ class EquationPlot(VizrPlot):
     y_pos: float = 0.5
 
     def create(self, ax):
-        """Create text object for equation."""
+        """Create an equation plot.
+        
+        Args:
+            ax: Matplotlib axes object.
+            
+        Returns:
+            Text: The created text object containing the equation.
+        """
         # Clear axis elements
         ax.set_xticks([])
         ax.set_yticks([])
@@ -100,14 +198,54 @@ class EquationPlot(VizrPlot):
         return text
 
     def update(self, plot_obj, xdata, ydata):
-        """Placeholder update method."""
+        """Update equation plot (no-op).
+        
+        Equation plots are static and don't need updating.
+        
+        Args:
+            plot_obj: The text object.
+            xdata: Ignored.
+            ydata: Ignored.
+        """
         pass
 
 
 class Vizr:
-    """Visualization manager for real-time plotting."""
+    """Real-time visualization manager.
+    
+    This class manages multiple plots and subplots, providing an interface
+    for real-time updates and dynamic subplot management.
+    
+    Key features:
+        - Real-time and non-real-time plotting modes
+        - Dynamic subplot addition and management
+        - Multiple plot types support
+        - Method chaining for updates
+    
+    Attributes:
+        title (str): Figure title.
+        xlabel (str): X-axis label.
+        ylabel (str): Y-axis label.
+        realtime (bool): Whether to update in real-time.
+        fig: Matplotlib figure object.
+        axes: Array of subplot axes.
+        nrows (int): Number of subplot rows.
+        ncols (int): Number of subplot columns.
+        _plots (list): Internal storage for plot data.
+    """
 
     def __init__(self, title="Vizr", nrows=1, ncols=1, realtime=True, **kwargs):
+        """Initialize visualization manager.
+        
+        Args:
+            title (str, optional): Figure title. Defaults to "Vizr".
+            nrows (int, optional): Initial number of subplot rows. Defaults to 1.
+            ncols (int, optional): Initial number of subplot columns. Defaults to 1.
+            realtime (bool, optional): Whether to update in real-time. Defaults to True.
+            **kwargs: Additional keyword arguments:
+                xlabel: Label for x-axis
+                ylabel: Label for y-axis
+        """
         self.title = title
         self.xlabel = kwargs.get("xlabel", "")
         self.ylabel = kwargs.get("ylabel", "")
@@ -115,23 +253,26 @@ class Vizr:
         self.create_figure(nrows, ncols)
 
     def create_figure(self, nrows, ncols):
-        """Create or recreate the figure with new dimensions"""
-        # Close old figure if it exists
+        """Create or recreate the figure with new dimensions.
+        
+        This method handles the creation of new figures and the transfer
+        of existing plots when the figure layout changes.
+        
+        Args:
+            nrows (int): Number of subplot rows.
+            ncols (int): Number of subplot columns.
+        """
         if hasattr(self, "fig"):
             plt.close(self.fig)
 
         self.fig, self.axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4 * nrows))
         self.fig.suptitle(self.title)
 
-        # self.axes.set_xlabel(self.xlabel)
-        # self.axes.set_ylabel(self.ylabel)
-
-        # Convert axes to array for consistent indexing
         if nrows * ncols == 1:
             self.axes = np.array([self.axes])
         self.axes = self.axes.flatten()
 
-        # Preserve existing plot data if any
+        # Preserve existing plot data
         old_plots = getattr(self, "_plots", [])
         self._plots = [{} for _ in range(nrows * ncols)]
         for i in range(min(len(old_plots), len(self._plots))):
@@ -141,7 +282,17 @@ class Vizr:
         self.ncols = ncols
 
     def add_subplot(self) -> int:
-        """Add a new subplot to the figure"""
+        """Add a new subplot to the figure.
+        
+        This method:
+            1. Calculates optimal layout for the new subplot
+            2. Creates new figure with updated layout
+            3. Transfers existing plots to the new figure
+            4. Updates subplot management data structures
+        
+        Returns:
+            int: Index of the new subplot.
+        """
         current_plots = len(self._plots)
         new_subplot_id = current_plots
 
@@ -154,51 +305,45 @@ class Vizr:
             new_nrows = int(np.ceil(np.sqrt(current_plots + 1)))
             new_ncols = int(np.ceil((current_plots + 1) / new_nrows))
 
-        # 保存当前所有的 plot data
+        # Save current plot data
         old_plots_data = {}
         for subplot_idx, plots in enumerate(self._plots):
             old_plots_data[subplot_idx] = {
-                "plots": plots.copy(),  # 深拷贝 plot data
-                # 不保存axis limits，让坐标轴自动调整
+                "plots": plots.copy(),
             }
 
-        # Close old figure and create new one
+        # Create new figure
         plt.close(self.fig)
         self.fig, axes = plt.subplots(
             new_nrows, new_ncols, figsize=(6 * new_ncols, 4 * new_nrows)
         )
         self.fig.suptitle(self.title)
 
-        # Convert axes to array for consistent indexing
         if new_nrows * new_ncols == 1:
             axes = np.array([axes])
         self.axes = axes.flatten()
 
-        # Initialize new plots list with correct size
+        # Initialize new plots list
         self._plots = [{} for _ in range(current_plots + 1)]
 
-        # 恢复所有已存在的 plots
+        # Restore existing plots
         for subplot_idx, data in old_plots_data.items():
             for label, plot_info in data["plots"].items():
-                # 重新创建 plot object
                 plot_obj = plot_info["handler"].create(self.axes[subplot_idx])
                 
-                # 保持原有数据结构
                 self._plots[subplot_idx][label] = {
                     "handler": plot_info["handler"],
                     "plot": plot_obj,
-                    "xdata": plot_info["xdata"].copy(),  # 复制数据
-                    "ydata": plot_info["ydata"].copy()   # 复制数据
+                    "xdata": plot_info["xdata"].copy(),
+                    "ydata": plot_info["ydata"].copy()
                 }
                 
-                # 更新 plot 数据
                 plot_info["handler"].update(
                     plot_obj,
                     self._plots[subplot_idx][label]["xdata"],
                     self._plots[subplot_idx][label]["ydata"]
                 )
 
-            # 重新计算坐标轴范围
             self.axes[subplot_idx].relim()
             self.axes[subplot_idx].autoscale_view()
             self.axes[subplot_idx].legend()
@@ -207,42 +352,47 @@ class Vizr:
         for i in range(current_plots + 1, new_nrows * new_ncols):
             self.axes[i].set_visible(False)
 
-        # Adjust layout
         self.fig.tight_layout()
 
         return new_subplot_id
 
-    # FIXME: id 的做法有待商榷 需要设计一个自增然后存到 self
-    def add(
-        self,
-        plot_handler: Type[VizrPlot],
-        label: str,
-        id: Optional[int] = None,
-        **kwargs,
-    ) -> int:
-
-        if not isinstance(plot_handler, VizrPlot):
-            # 如果是 class，则实例化
-            if isinstance(plot_handler, type) and issubclass(plot_handler, VizrPlot):
-                plot_handler = plot_handler(label=label, **kwargs)
+    def add(self, plot_type: Type[VizrPlot], name: str, id: Optional[int] = None, **kwargs):
+        """Add a new plot to the visualization.
+        
+        Args:
+            plot_type: Type of plot to add (LinePlot, ScatterPlot, etc.)
+            name (str): Name of the plot
+            id (Optional[int]): Plot identifier. If not provided, a new subplot will be created.
+            **kwargs: Additional arguments passed to the plot constructor
+            
+        Returns:
+            self: Returns self for method chaining
+            
+        Example:
+            >>> vizr = Vizr("My Plot")
+            >>> vizr.add(LinePlot, "data1", color="red")
+            >>> vizr.add(ScatterPlot, "data2", color="blue")
+        """
+        if not isinstance(plot_type, VizrPlot):
+            if isinstance(plot_type, type) and issubclass(plot_type, VizrPlot):
+                plot_type = plot_type(label=name, **kwargs)
             else:
                 raise TypeError(
-                    f"{plot_handler} is not a VizrPlot instance or subclass"
+                    f"{plot_type} is not a VizrPlot instance or subclass"
                 )
 
-        # plot_handler 现在已经是实例，直接使用
         if id is None:
             id = 0
         if id >= len(self._plots):
             raise ValueError(f"Subplot index {id} out of range")
-        plot_obj = plot_handler.create(self.axes[id])
+        plot_obj = plot_type.create(self.axes[id])
 
-        if label in self._plots[id]:
+        if name in self._plots[id]:
             raise ValueError(
-                f"Plot with label '{label}' already exists in subplot {id}"
+                f"Plot with label '{name}' already exists in subplot {id}"
             )
-        self._plots[id][label] = {
-            "handler": plot_handler,
+        self._plots[id][name] = {
+            "handler": plot_type,
             "plot": plot_obj,
             "xdata": [],
             "ydata": [],
@@ -251,7 +401,21 @@ class Vizr:
         return id
 
     def update(self, label: str, x: Real, y: Real, id: int = 0) -> "Vizr":
-
+        """Update a plot with new data.
+        
+        Args:
+            label (str): Label of the plot to update.
+            x (Real): New x-coordinate.
+            y (Real): New y-coordinate.
+            id (int, optional): Subplot index. Defaults to 0.
+            
+        Returns:
+            Vizr: Self for method chaining.
+            
+        Raises:
+            TypeError: If x or y are not real numbers.
+            ValueError: If subplot ID or plot label is invalid.
+        """
         if not isinstance(x, Real) or not isinstance(y, Real):
             raise TypeError("x and y must be real numbers")
 
@@ -274,18 +438,29 @@ class Vizr:
         
         return self
 
-    # TODO: batch update
-
     def render(self, pause_interval: float = 0.001) -> "Vizr":
+        """Render the current state of all plots.
+        
+        Args:
+            pause_interval (float, optional): Time to pause between updates.
+                Defaults to 0.001.
+                
+        Returns:
+            Vizr: Self for method chaining.
+        """
         if self.realtime:
             plt.pause(pause_interval)
         return self
 
     def close(self):
+        """Close the figure window."""
         plt.close(self.fig)
 
     def show(self):
-        """Display all plots (for non-realtime mode)"""
+        """Display all plots.
+        
+        For non-realtime mode, this will show the final state of all plots.
+        """
         if not self.realtime:
             for id in range(len(self._plots)):
                 self.axes[id].relim()
