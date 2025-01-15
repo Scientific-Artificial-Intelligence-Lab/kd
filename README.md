@@ -89,4 +89,16 @@ pip install -r requirements.txt
 ### 注释
 
 需要 graphviz 被安装
+
 macOS: `brew install graphviz`
+
+ubuntu: `apt install graphviz`
+
+### 致谢
+
+我们感谢以下GitHub仓库提供了宝贵的代码：
+1. https://github.com/menggedu/DISCOVER
+2. https://github.com/dso-org/deep-symbolic-optimization
+3. https://github.com/sympy/sympy
+4. https://github.com/lululxvi/deepxde
+5. https://github.com/MilesCranmer/PySR
