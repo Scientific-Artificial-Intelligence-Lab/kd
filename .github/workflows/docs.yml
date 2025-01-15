@@ -24,6 +24,15 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
+        cache: 'pip'
+        
+    - name: Cache Sphinx build
+      uses: actions/cache@v3
+      with:
+        path: docs/build
+        key: ${{ runner.os }}-sphinx-${{ hashFiles('docs/**') }}
+        restore-keys: |
+          ${{ runner.os }}-sphinx-
         
     - name: Install dependencies
       run: |
