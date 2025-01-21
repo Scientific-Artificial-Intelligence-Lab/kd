@@ -48,5 +48,5 @@ x,y,lb,ub = prepare_data()
 model.import_inner_data(dataset='Burgers', data_type='regular')
 step_output = model.train(n_epochs=50)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
-model.plot(fig_type ='tree').view() # TODO 需要跨平台
+model.plot(fig_type ='tree').view()
 model.plot(fig_type='evolution')

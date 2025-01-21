@@ -27,7 +27,6 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    # 'sphinx_rtd_theme', 
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -63,4 +62,7 @@ html_theme_options = {
     'github_repo': 'kd',
     'description': 'Knowledge Discovery Documentation',
     'fixed_sidebar': True,
+    'show_powered_by': False,  # 是否显示 "Powered by Sphinx"
+    'github_banner': True,     # 添加 GitHub 角标
+    'github_button': True,     # 添加 GitHub star/fork 按钮
 }

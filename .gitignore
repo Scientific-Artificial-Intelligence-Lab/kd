@@ -182,4 +182,6 @@ result_save/
 log/*
 !log/.gitkeep
 
-docs/build/*
+# Sphinx documentation
+docs/build/
+docs/_build/
