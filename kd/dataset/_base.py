@@ -8,6 +8,7 @@ import pandas as pd
 import scipy.io as sio
 from typing import Any, Dict, Union, Optional
 from pathlib import Path
+from abc import ABC, abstractmethod
 
 
 DATA_MODULE = "kd.datasets.data"
@@ -113,12 +114,34 @@ def load_mat_file(file_path: str) -> Dict[str, Any]:
         raise ValueError("The .mat file is of an unsupported format (likely version 7.3 or higher).")
 
   
-def load_numpy_data():
-    pass
+def load_numpy_data(file_path: str) -> Union[np.ndarray, dict]:
+    """
+    Loads NumPy data from a `.npy` or `.npz` file and returns it as a NumPy array or a dictionary (for `.npz` files).
 
+    Args:
+        file_path (str): The path to the `.npy` or `.npz` file.
 
-def load_burgers():
-    pass
+    Returns:
+        np.ndarray or dict: If the file is a `.npy` file, a NumPy array is returned. 
+                             If the file is a `.npz` file, a dictionary of arrays is returned.
+
+    Example:
+        >>> data = load_numpy_data('data.npy')
+        >>> print(data)
+        [1. 2. 3. 4.]
+        
+        >>> data = load_numpy_data('data.npz')
+        >>> print(data['arr_0'])
+        [1. 2. 3. 4.]
+    """
+    if file_path.endswith('.npy'):
+        # Load a single NumPy array from a .npy file
+        return np.load(file_path)
+    elif file_path.endswith('.npz'):
+        # Load a NumPy compressed archive (.npz) and return as a dictionary of arrays
+        return np.load(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path}")
 
 
 class FiniteDifferenceOperator:
@@ -198,3 +221,12 @@ class FiniteDifferenceOperator:
         """
         operator = FiniteDifferenceOperator(u, dx, dim=u.ndim)
         return operator.compute(order)
+
+
+class DataLoaderBase(ABC):
+    """
+    Abstract base class defining the interface for data loaders.
+    """
+    @abstractmethod
+    def load_data(self):
+        pass
