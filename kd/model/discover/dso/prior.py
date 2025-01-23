@@ -291,7 +291,7 @@ class Constraint(Prior):
         Parameters
         __________
 
-        mask : np.ndarray, shape=(?,), dtype=np.bool_
+        mask : np.ndarray, shape=(?,), dtype=bool
             Boolean mask of samples to constrain.
 
         tokens : np.ndarray, dtype=np.int32
@@ -953,11 +953,11 @@ class SoftLengthPrior(Prior):
         self.scale = scale
         self.n_objects = Program.n_objects
 
-        self.terminal_mask = np.zeros((self.L,), dtype=np.bool)
+        self.terminal_mask = np.zeros((self.L,), dtype=bool)
         self.terminal_mask[self.library.terminal_tokens] = True
         self.nonterminal_mask = ~self.terminal_mask
 
-        self.add_mask = np.zeros((self.L,), dtype=np.bool)
+        self.add_mask = np.zeros((self.L,), dtype=bool)
         candidates = ['add', 'add_t', 'sub','sub_t']
         for name in candidates:
             if name in self.library.names:
