@@ -1,4 +1,5 @@
 __all__ = [
+    "PDEData",
     "Burgers_equation",
     "Burgers_equation_shock",
     "KdV_equation",

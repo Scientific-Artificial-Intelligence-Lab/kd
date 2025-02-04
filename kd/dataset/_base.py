@@ -9,6 +9,7 @@ import scipy.io as sio
 from typing import Any, Dict, Union, Optional
 from pathlib import Path
 from abc import ABC, abstractmethod
+from ..utils import Attrdict
 
 
 DATA_MODULE = "kd.datasets.data"
@@ -223,10 +224,131 @@ class FiniteDifferenceOperator:
         return operator.compute(order)
 
 
-class DataLoaderBase(ABC):
+class BaseDataLoader(ABC):
     """
     Abstract base class defining the interface for data loaders.
     """
     @abstractmethod
     def load_data(self):
         pass
+    
+class PDEDataLoader(BaseDataLoader):
+    def __init__(self):
+        pass
+    
+    def load_data(self, equation_name):
+        pass
+        
+
+class MetaBase(type):
+    """ Metaclass to ensure subclasses implement required methods and contain necessary attributes """
+    
+    def __new__(cls, name, bases, dct):
+        required_methods = ['get_datapoint', 'get_domain', 'get_size']
+        required_attributes = ['x', 't', 'usol']
+
+        # 确保子类实现了必需的方法
+        for method in required_methods:
+            if method not in dct:
+                raise TypeError(f'{name} class must implement the method: {method}')
+
+        # 确保子类包含必需的属性
+        for attr in required_attributes:
+            if not any(hasattr(base, attr) for base in bases) and attr not in dct:
+                raise TypeError(f'{name} class must contain the attribute: "{attr}"')
+
+        return super().__new__(cls, name, bases, dct)
+
+
+class MetaData(metaclass=MetaBase):
+    """ Base class to store metadata of a Partial Differential Equation (PDE) dataset """
+
+    def __init__(self, equation_name, descr):
+        """
+        :param equation_name: Name of the PDE
+        :param descr: Description of the equation
+        """
+        self.equation_name = equation_name
+        self.descr = descr
+
+
+class PDEDataset(MetaData):
+    """ Class representing a PDE dataset, providing access and analysis functionalities """
+
+    def __init__(self, equation_name, descr, pde_data, domain, epi):
+        """
+        :param equation_name: Name of the PDE
+        :param descr: Description of the equation
+        :param pde_data: Dictionary containing 'x', 't', and 'usol' data
+        :param domain: Domain conditions as ((x_min, x_max), (t_min, t_max))
+        :param epi: Additional parameter
+        """
+        super().__init__(equation_name, descr)
+        
+        # 读取 pde_data 并检查完整性
+        try:
+            self.x = np.array(pde_data['x'])
+            self.t = np.array(pde_data['t'])
+            self.usol = np.array(pde_data['usol'])
+        except KeyError as e:
+            raise ValueError(f"Missing key in pde_data: {e}")
+
+        # 赋值额外参数
+        self.domain = domain  
+        self.epi = epi  
+
+        # 确保 usol 维度匹配 x 和 t
+        if self.usol.shape != (len(self.x), len(self.t)):
+            raise ValueError("Dimensions of 'usol' must match 'x' and 't'")
+
+    def get_datapoint(self, x_id, t_id):
+        """ Retrieve the (x, t) coordinates and corresponding usol value at a given index """
+        return self.x[x_id], self.t[t_id], self.usol[x_id, t_id]
+    
+    def get_boundaries(self):
+        """ Return the min and max boundaries of x and t """
+        return {'x': [self.x.min(), self.x.max()], 't': [self.t.min(), self.t.max()]}
+
+    def get_domain(self):
+        """ Return the domain conditions """
+        return self.domain
+
+    def get_range(self, x_range, t_range):
+        """ 
+        Return x and t data within the given ranges along with the corresponding usol values
+        
+        :param x_range: Tuple (min_x, max_x) specifying the x range
+        :param t_range: Tuple (min_t, max_t) specifying the t range
+        :return: Dictionary containing sub-x, sub-t, and corresponding sub-usol
+        """
+        x_mask = (self.x >= x_range[0]) & (self.x <= x_range[1])
+        t_mask = (self.t >= t_range[0]) & (self.t <= t_range[1])
+
+        sub_x = self.x[x_mask]
+        sub_t = self.t[t_mask]
+        sub_usol = self.usol[np.ix_(x_mask, t_mask)]
+
+        return {'x': sub_x, 't': sub_t, 'usol': sub_usol}
+
+    def get_size(self):
+        """ Return the size of usol as (number of spatial points, number of time points) """
+        return self.usol.shape
+
+    def get_data(self):
+        """ Return all PDE data as a dictionary """
+        (x_low, x_up), (t_low, t_up) = self.domain
+        return {
+            'x': self.x,
+            't': self.t,
+            'usol': self.usol,
+            'x_low': x_low,
+            'x_up': x_up,
+            't_low': t_low,
+            't_up': t_up,
+            'epi': self.epi
+        }
+
+    def __repr__(self):
+        """ Return a formatted representation of the dataset """
+        return (f"PDEDataset(equation='{self.equation_name}', size={self.get_size()}, "
+                f"boundaries={self.get_boundaries()})")
