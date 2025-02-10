@@ -236,12 +236,51 @@ class BaseDataLoader(ABC):
 
 
 class PDEDataLoader(BaseDataLoader):
-    def __init__(self):
-        pass
-    
-    def load_data(self, equation_name):
-        pass
-        
+    def __init__(self, data_dir: str):
+        """
+        Initializes the data loader.
+
+        :param data_dir: Directory where data files are stored.
+        """
+        self.data_dir = Path(data_dir)
+
+    def load_data(self, equation_name: str) -> Union[np.ndarray, Dict[str, Any]]:
+        """
+        Loads PDE-related data from different file formats (CSV, MAT, NPY, NPZ).
+
+        :param equation_name: The equation name (file name prefix).
+        :return: The loaded data as a NumPy array or a dictionary.
+        :raises FileNotFoundError: If no matching data file is found.
+        :raises ValueError: If the file format is unsupported.
+        """
+        # Find the matching file based on the equation name
+        file_path = self._find_file(equation_name)
+        if file_path is None:
+            raise FileNotFoundError(f"No data file found for equation: {equation_name}")
+
+        # Load the file based on its extension
+        if file_path.suffix == ".csv":
+            return load_csv_data(str(file_path))
+        elif file_path.suffix == ".mat":
+            return load_mat_file(str(file_path))
+        elif file_path.suffix in [".npy", ".npz"]:
+            return load_numpy_data(str(file_path))
+        else:
+            raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+    def _find_file(self, equation_name: str) -> Union[Path, None]:
+        """
+        Searches for a file that matches the given equation name in the data directory.
+
+        :param equation_name: The equation name (file name prefix).
+        :return: The path to the matching file, or None if no file is found.
+        """
+        for ext in [".csv", ".mat", ".npy", ".npz"]:
+            file_path = self.data_dir / f"{equation_name}{ext}"
+            if file_path.exists():
+                return file_path
+        return None
+
 
 class MetaBase(type):
     """ 
