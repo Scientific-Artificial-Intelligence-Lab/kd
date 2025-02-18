@@ -8,6 +8,7 @@ import pandas as pd
 import scipy.io as sio
 from typing import Any, Dict, Union, Optional, Tuple
 from pathlib import Path
+from importlib import resources
 from abc import ABC, abstractmethod
 from ..utils import Attrdict
 from _info import DatasetInfo
@@ -91,7 +92,7 @@ def load_csv_data(data_file_path: str, encoding: str = "utf-8", has_header: bool
     return data_array
 
 
-def load_mat_file(file_path: str) -> Dict[str, Any]:
+def load_mat_file(file_path: str, data_module: str = DATA_MODULE) -> Dict[str, Any]:
     """
     Parses a .mat file (MATLAB format) and returns its content as a Python dictionary.
     Supports both older .mat files (MATLAB 5) and newer ones (MATLAB 7.3 or HDF5 format).
@@ -105,10 +106,11 @@ def load_mat_file(file_path: str) -> Dict[str, Any]:
     Raises:
         ValueError: If the file format is not supported or if there's an error in reading the file.
     """
+    data_path = resources.files(data_module) / file_path
     # Attempt to load the file as a standard .mat (MATLAB 5) file using scipy.io
     try:
         # Try loading with scipy (for MATLAB version 5 and below)
-        mat_data = sio.loadmat(file_path)
+        mat_data = sio.loadmat(data_path)
         # Remove MATLAB-specific metadata (keys like __header__, __version__, __globals__)
         mat_data_clean = {key: value for key, value in mat_data.items() if not key.startswith('__')}
         return mat_data_clean
@@ -165,19 +167,26 @@ class PDEDataLoader(BaseDataLoader):
         """
         self.data_dir = Path(data_dir)
 
-    def load_data(self, equation_name: str) -> Union[np.ndarray, Dict[str, Any]]:
+    def load_data(self, equation_name: str = None, file: str = None) -> Union[np.ndarray, Dict[str, Any]]:
         """
         Loads PDE-related data from different file formats (CSV, MAT, NPY, NPZ).
 
-        :param equation_name: The equation name (file name prefix).
+        :param equation_name: The equation name (file name prefix) if file path is not provided.
+        :param file: The full file path to load.
         :return: The loaded data as a NumPy array or a dictionary.
         :raises FileNotFoundError: If no matching data file is found.
         :raises ValueError: If the file format is unsupported.
         """
-        # Find the matching file based on the equation name
-        file_path = self._find_file(equation_name)
-        if file_path is None:
-            raise FileNotFoundError(f"No data file found for equation: {equation_name}")
+        if file:
+            file_path = Path(file)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Specified file does not exist: {file}")
+        elif equation_name:
+            file_path = self._find_file(equation_name)
+            if file_path is None:
+                raise FileNotFoundError(f"No data file found for equation: {equation_name}")
+        else:
+            raise ValueError("Either 'equation_name' or 'file' must be provided.")
 
         # Load the file based on its extension
         if file_path.suffix == ".csv":
@@ -265,7 +274,7 @@ class PDEDataset(MetaData):
     """
 
     def __init__(self, equation_name: str, descr: DatasetInfo, pde_data: Dict[str, Any], 
-                 domain: Tuple[Tuple[float, float], Tuple[float, float]], epi: float):
+                 domain: Dict[str, Tuple[float, float]], epi: float):
         """
         Initialize the PDE dataset with given parameters.
 
@@ -275,7 +284,7 @@ class PDEDataset(MetaData):
                          - 'x': Array representing spatial coordinates.
                          - 't': Array representing time coordinates.
                          - 'usol': 2D array representing the solution u(x, t).
-        :param domain: Tuple representing domain conditions as ((x_min, x_max), (t_min, t_max)).
+        :param domain: Dictionary representing domain conditions as {name: (min, max)).
         :param epi: Additional parameter related to the dataset.
         """
         super().__init__(equation_name, descr)
@@ -289,7 +298,7 @@ class PDEDataset(MetaData):
             raise ValueError(f"Missing key in pde_data: {e}")
 
         # Assign additional parameters
-        self.domain: Tuple[Tuple[float, float], Tuple[float, float]] = domain  # Domain range
+        self.domain: Dict[str, Tuple[float, float]] = domain  # Domain range
         self.epi: float = epi  # Extra parameter
 
         # Ensure 'usol' dimensions match 'x' and 't'
@@ -314,7 +323,7 @@ class PDEDataset(MetaData):
         """
         return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
 
-    def get_domain(self) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    def get_domain(self) -> Dict[str, Tuple[float, float]]:
         """
         Retrieve the domain conditions.
 
@@ -405,3 +414,23 @@ class PDEDataset(MetaData):
         """
         return (f"PDEDataset(equation='{self.equation_name}', size={self.get_size()}, "
                 f"boundaries={self.get_boundaries()})")
+
+def load_burgers_equation():    
+    descr = DatasetInfo(
+        description = """
+        Dataset for high-viscosity Burgers equation 
+        ut=-uux+0.1uxx
+        x∈[-8.0,8.0), t∈[0,10]
+        nx=256, nt=201, u.shape=(256,201)
+        Resource:DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm
+        """
+    )
+    
+    pde_data = load_mat_file("Burgers_equation.mat")
+    return PDEDataset(
+        equation_name = 'burgers equation',
+        descr = descr,
+        pde_data = pde_data,
+        domain = {'x': (-7.0, 7.0), 't': (1, 9)},
+        epi = 0.01
+    )

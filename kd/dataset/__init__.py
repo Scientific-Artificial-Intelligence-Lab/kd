@@ -1,3 +1,5 @@
+from _base import PDEDataset
+
 __all__ = [
     "PDEData",
     "Burgers_equation",
