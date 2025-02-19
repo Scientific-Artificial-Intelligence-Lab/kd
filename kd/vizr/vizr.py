@@ -221,12 +221,14 @@ class Vizr:
         - Dynamic subplot addition and management
         - Multiple plot types support
         - Method chaining for updates
+        - Auto-close functionality to prevent blocking
     
     Attributes:
         title (str): Figure title.
         xlabel (str): X-axis label.
         ylabel (str): Y-axis label.
         realtime (bool): Whether to update in real-time.
+        auto_close (float): Time in seconds after which to auto-close the window (default: 3.0).
         fig: Matplotlib figure object.
         axes: Array of subplot axes.
         nrows (int): Number of subplot rows.
@@ -234,7 +236,7 @@ class Vizr:
         _plots (list): Internal storage for plot data.
     """
 
-    def __init__(self, title="Vizr", nrows=1, ncols=1, realtime=True, **kwargs):
+    def __init__(self, title="Vizr", nrows=1, ncols=1, realtime=True, auto_close=3.0, **kwargs):
         """Initialize visualization manager.
         
         Args:
@@ -242,6 +244,7 @@ class Vizr:
             nrows (int, optional): Initial number of subplot rows. Defaults to 1.
             ncols (int, optional): Initial number of subplot columns. Defaults to 1.
             realtime (bool, optional): Whether to update in real-time. Defaults to True.
+            auto_close (float, optional): Time in seconds after which to auto-close. Defaults to 3.0.
             **kwargs: Additional keyword arguments:
                 xlabel: Label for x-axis
                 ylabel: Label for y-axis
@@ -250,6 +253,7 @@ class Vizr:
         self.xlabel = kwargs.get("xlabel", "")
         self.ylabel = kwargs.get("ylabel", "")
         self.realtime = realtime
+        self.auto_close = auto_close
         self.create_figure(nrows, ncols)
 
     def create_figure(self, nrows, ncols):
@@ -468,10 +472,25 @@ class Vizr:
         """Display all plots.
         
         For non-realtime mode, this will show the final state of all plots.
+        If auto_close is set, the window will automatically close after the specified time.
         """
         if not self.realtime:
             for id in range(len(self._plots)):
                 self.axes[id].relim()
                 self.axes[id].autoscale_view()
         
-        plt.show()
+        if self.auto_close > 0:
+            import threading
+            def close_after_timeout():
+                import time
+                time.sleep(self.auto_close)
+                plt.close(self.fig)
+                # Ensure the function returns immediately after closing
+                plt.close('all')
+            
+            # Start auto-close timer in background thread
+            threading.Thread(target=close_after_timeout, daemon=True).start()
+        
+        plt.show(block=False)
+        # Ensure the function returns immediately after showing
+        plt.close('all')
