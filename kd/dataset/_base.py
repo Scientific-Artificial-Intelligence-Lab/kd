@@ -11,11 +11,11 @@ from pathlib import Path
 from importlib import resources
 from abc import ABC, abstractmethod
 from ..utils import Attrdict
-from _info import DatasetInfo
+from ._info import DatasetInfo
 from scipy.interpolate import interp2d
 
 
-DATA_MODULE = "kd.datasets.data"
+DATA_MODULE = "kd.dataset.data"
 
 
 def _convert_data_dataframe(
@@ -92,7 +92,7 @@ def load_csv_data(data_file_path: str, encoding: str = "utf-8", has_header: bool
     return data_array
 
 
-def load_mat_file(file_path: str, data_module: str = DATA_MODULE) -> Dict[str, Any]:
+def load_mat_file(file_path: str) -> Dict[str, Any]:
     """
     Parses a .mat file (MATLAB format) and returns its content as a Python dictionary.
     Supports both older .mat files (MATLAB 5) and newer ones (MATLAB 7.3 or HDF5 format).
@@ -106,7 +106,7 @@ def load_mat_file(file_path: str, data_module: str = DATA_MODULE) -> Dict[str, A
     Raises:
         ValueError: If the file format is not supported or if there's an error in reading the file.
     """
-    data_path = resources.files(data_module) / file_path
+    data_path = Path(file_path)
     # Attempt to load the file as a standard .mat (MATLAB 5) file using scipy.io
     try:
         # Try loading with scipy (for MATLAB version 5 and below)
@@ -258,6 +258,10 @@ class MetaBase(type):
 class MetaData(metaclass=MetaBase):
     """ Base class to store metadata of a Partial Differential Equation (PDE) dataset """
 
+    x = None
+    t = None
+    usol = None
+    
     def __init__(self, equation_name: str, descr: DatasetInfo):
         """
         :param equation_name: Name of the PDE
@@ -265,6 +269,32 @@ class MetaData(metaclass=MetaBase):
         """
         self.equation_name = equation_name
         self.descr = descr
+        
+    def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
+        """
+        Retrieve the (x, t) coordinates and the corresponding solution value at a given index.
+
+        :param x_id: Index of the spatial coordinate.
+        :param t_id: Index of the time coordinate.
+        :return: Tuple (x, t, usol) containing the coordinate and solution value.
+        """
+        raise NotImplementedError
+    
+    def get_domain(self) -> Dict[str, Tuple[float, float]]:
+        """
+        Retrieve the domain conditions.
+
+        :return: Tuple containing the domain ranges ((x_min, x_max), (t_min, t_max)).
+        """
+        raise NotImplementedError
+    
+    def get_size(self) -> Tuple[int, int]:
+        """
+        Retrieve the size of the solution array.
+
+        :return: Tuple (number of spatial points, number of time points).
+        """
+        raise NotImplementedError
 
 
 class PDEDataset(MetaData):
@@ -291,9 +321,9 @@ class PDEDataset(MetaData):
         
         # Read pde_data and validate its completeness
         try:
-            self.x: np.ndarray = np.array(pde_data['x'])  # Spatial coordinates
-            self.t: np.ndarray = np.array(pde_data['t'])  # Time coordinates
-            self.usol: np.ndarray = np.array(pde_data['usol'])  # Solution array
+            self.x: np.ndarray = np.asarray(pde_data['x']).flatten()  # Ensure x is a 1D array
+            self.t: np.ndarray = np.asarray(pde_data['t']).flatten()  # Ensure t is a 1D array
+            self.usol: np.ndarray = np.asarray(pde_data['usol'])  # Solution array
         except KeyError as e:
             raise ValueError(f"Missing key in pde_data: {e}")
 
@@ -303,7 +333,7 @@ class PDEDataset(MetaData):
 
         # Ensure 'usol' dimensions match 'x' and 't'
         if self.usol.shape != (len(self.x), len(self.t)):
-            raise ValueError("Dimensions of 'usol' must match 'x' and 't'")
+            raise ValueError(f"Dimensions of 'usol' {self.usol.shape} must match 'x' {len(self.x)} and 't' {len(self.t)}")
 
     def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
         """
@@ -369,7 +399,8 @@ class PDEDataset(MetaData):
                  - 't_low', 't_up': The time domain boundaries.
                  - 'epi': Additional dataset parameter.
         """
-        (x_low, x_up), (t_low, t_up) = self.domain
+        x_low, x_up = self.domain['x']
+        t_low, t_up = self.domain['t']
         return {
             'x': self.x,
             't': self.t,
@@ -388,10 +419,11 @@ class PDEDataset(MetaData):
         :param x_points: Number of spatial points.
         :param t_points: Number of time points.
         """
-        (x_min, x_max), (t_min, t_max) = self.domain
-        self.x = np.linspace(x_min, x_max, x_points)
-        self.t = np.linspace(t_min, t_max, t_points)
-        self.usol = np.zeros((x_points, t_points))  # Placeholder
+        if self.x is None or self.t is None:
+            (x_min, x_max), (t_min, t_max) = self.domain
+            self.x = np.linspace(x_min, x_max, x_points)
+            self.t = np.linspace(t_min, t_max, t_points)
+            self.usol = np.zeros((x_points, t_points))  # Placeholder
 
     def extract_time_slice(self, t_value: float) -> np.ndarray:
         """
@@ -425,8 +457,8 @@ def load_burgers_equation():
         Resource:DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm
         """
     )
-    
-    pde_data = load_mat_file("Burgers_equation.mat")
+    file_path = resources.files(DATA_MODULE) / "Burgers_equation.mat"
+    pde_data = load_mat_file(file_path)
     return PDEDataset(
         equation_name = 'burgers equation',
         descr = descr,

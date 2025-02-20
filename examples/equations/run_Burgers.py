@@ -1,7 +1,7 @@
-from kd.dataset import PDE
+from kd.dataset import load_burgers_equation
 from kd.model import DeepRL
 
-burgers_dataset = PDE('burgers')
+burgers_dataset = load_burgers_equation()
 
 burgers_dataset.describe()
 
