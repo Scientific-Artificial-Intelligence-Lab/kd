@@ -1,8 +1,9 @@
-from _base import PDEDataset
+from ._base import PDEDataset, load_burgers_equation, load_mat_file
 
 __all__ = [
-    "PDEData",
-    "Burgers_equation",
+    "PDEDataset",
+    "load_burgers_equation",
+    "load_mat_file",
     "Burgers_equation_shock",
     "KdV_equation",
     "KdV_equation_sine",
