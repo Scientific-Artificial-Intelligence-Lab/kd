@@ -1,9 +1,12 @@
 """PDE solution visualization utilities.
 
-This module provides functions for visualizing PDE solutions, including:
-- Solution heatmaps
-- Training data point overlays
-- Time slice comparisons
+This module provides functions for visualizing and comparing PDE solutions, including:
+- Solution heatmaps with training data point overlays
+- Time slice comparisons between exact and predicted solutions
+- Customizable visualization layouts
+
+The main function plot_pde_comparison creates a comprehensive visualization
+that combines a heatmap of the full solution with specific time slice comparisons.
 """
 
 import numpy as np
@@ -16,20 +19,36 @@ def plot_pde_comparison(x, t, u_exact, u_pred, X_train,
                        slice_times=[0.25, 0.5, 0.75],
                        save_path=None,
                        figsize=(12, 8)):
-    """Plot PDE solution comparison with heatmap and time slices.
-    
+    """Create a comprehensive comparison plot for PDE solutions.
+
+    This function generates a figure with two main components:
+        1. A heatmap showing the full spatio-temporal evolution of the solution,
+           with training data points overlaid
+        2. Three subplots showing solution comparisons at specific time slices
+
     Args:
-        x: Spatial coordinates array
-        t: Time coordinates array
-        u_exact: Exact solution array (nt x nx)
-        u_pred: Predicted solution array (nt x nx)
-        X_train: Training data points array (n_points x 2)
-        slice_times: List of time points for slice plots (default: [0.25, 0.5, 0.75])
-        save_path: Path to save the figure (default: None)
-        figsize: Figure size in inches (default: (12, 8))
-        
+        x (numpy.ndarray): Spatial coordinates array
+        t (numpy.ndarray): Time coordinates array
+        u_exact (numpy.ndarray): Exact solution array (nt x nx)
+        u_pred (numpy.ndarray): Predicted solution array (nt x nx)
+        X_train (numpy.ndarray): Training data points array (n_points x 2)
+        slice_times (list, optional): List of time points for slice plots.
+            Values should be between 0 and 1. Defaults to [0.25, 0.5, 0.75].
+        save_path (str, optional): Path to save the figure. If None, figure
+            is not saved. Defaults to None.
+        figsize (tuple, optional): Figure size in inches. Defaults to (12, 8).
+    
     Returns:
-        fig: The matplotlib figure object
+        matplotlib.figure.Figure: The created figure object
+    
+    Example:
+        >>> x = np.linspace(-1, 1, 100)
+        >>> t = np.linspace(0, 1, 100)
+        >>> u_exact = compute_exact_solution(x, t)
+        >>> u_pred = model_predictions(x, t)
+        >>> X_train = np.array([[0, 0], [0.5, 0.5]])  # Example training points
+        >>> fig = plot_pde_comparison(x, t, u_exact, u_pred, X_train)
+        >>> plt.show()
     """
     # Create figure
     fig = plt.figure(figsize=figsize)

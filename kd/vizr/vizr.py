@@ -2,11 +2,11 @@
 
 This module provides a flexible and extensible framework for real-time data visualization.
 It supports:
-    - Multiple plot types (line, scatter, equation)
-    - Real-time and non-real-time plotting
-    - Dynamic subplot management
-    - Method chaining for concise updates
-    - LaTeX equation rendering TODO
+- Multiple plot types (line, scatter, equation)
+- Real-time and non-real-time plotting
+- Dynamic subplot management
+- Method chaining for concise updates
+- LaTeX equation rendering TODO
 
 Example:
     >>> vizr = Vizr("My Plot")
