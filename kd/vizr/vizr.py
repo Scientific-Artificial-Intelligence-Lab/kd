@@ -6,7 +6,7 @@ It supports:
     - Real-time and non-real-time plotting
     - Dynamic subplot management
     - Method chaining for concise updates
-    - LaTeX equation rendering
+    - LaTeX equation rendering TODO
 
 Example:
     >>> vizr = Vizr("My Plot")
@@ -485,12 +485,8 @@ class Vizr:
                 import time
                 time.sleep(self.auto_close)
                 plt.close(self.fig)
-                # Ensure the function returns immediately after closing
-                plt.close('all')
             
             # Start auto-close timer in background thread
             threading.Thread(target=close_after_timeout, daemon=True).start()
         
-        plt.show(block=False)
-        # Ensure the function returns immediately after showing
-        plt.close('all')
+        plt.show()
