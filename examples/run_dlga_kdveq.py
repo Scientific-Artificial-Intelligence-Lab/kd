@@ -21,6 +21,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(kd_main_dir)
 
+from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
 from kd.vizr.pde_comparison import plot_pde_comparison
 
@@ -28,29 +29,11 @@ from kd.vizr.pde_comparison import plot_pde_comparison
 # Load and prepare KdV equation data
 #####################################################################
 
-# Load data from .mat file
-data_path = os.path.join(kd_main_dir, "kd/dataset/data/KdV_equation.mat")
-data = scipy.io.loadmat(data_path)
+# Load KdV equation data
+kdv_data = load_kdv_equation()
 
-# Extract data arrays
-t = data['tt'].flatten()  # Time points (201)
-x = data['x'].flatten()   # Spatial points (512)
-u = data['uu']           # Solution values (512 x 201)
-
-# Create training dataset by sampling points
-X_train = []
-y_train = []
-
-n_samples = 1000
-t_idx = np.random.randint(0, t.shape[0], n_samples)  # Sample from 0 to 200
-x_idx = np.random.randint(0, x.shape[0], n_samples)  # Sample from 0 to 511
-
-for i, j in zip(t_idx, x_idx):
-    X_train.append([x[j], t[i]])
-    y_train.append(u[j,i])  # Note: u is (x, t) indexed
-
-X_train = np.array(X_train)
-y_train = np.array(y_train)
+# Extract data
+X_train, y_train = kdv_data.sample(n_samples=1000)
 
 #####################################################################
 # Initialize and train DLGA model
