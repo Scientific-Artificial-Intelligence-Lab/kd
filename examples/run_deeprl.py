@@ -41,7 +41,7 @@ def prepare_data():
     print(f"random sample number: {sample_num} ")
     ID = np.random.choice(total_num, sample_num, replace = False)
     X_u_meas = X_star[ID,:]
-    u_meas = u_star[ID,:]  
+    u_meas = u_star[ID,:]
     return X_u_meas,u_meas, lb,ub
 
 x,y,lb,ub = prepare_data()
