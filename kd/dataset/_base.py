@@ -214,70 +214,42 @@ class PDEDataLoader(BaseDataLoader):
 
 
 class MetaBase(type):
-    """ 
-    Metaclass to enforce that subclasses implement required methods 
-    and contain necessary attributes. This ensures a consistent interface 
-    for all subclasses.
     """
+    Metaclass to enforce that subclasses implement required methods 
+    and contain necessary attributes, ensuring a consistent interface.
+    """
+    required_methods = {'get_data'}
+    required_attributes = ('x', 't', 'usol')
     
     def __new__(cls, name, bases, dct):
         """
-        Overrides the default method for creating new class definitions.
-        
-        This method checks that any subclass of `MetaBase` implements the required 
-        methods and contains the necessary attributes. If any condition is not met, 
-        an error is raised to enforce conformity.
-
-        :param cls: The metaclass instance.
-        :param name: Name of the new class being created.
-        :param bases: Tuple containing base classes of the new class.
-        :param dct: Dictionary containing attributes and methods of the new class.
-        :return: The newly created class.
+        Overrides class creation to enforce method and attribute requirements.
         """
-
-        # List of required methods that every subclass must implement
-        required_methods = ['get_data']
-
-        # List of required attributes that every subclass must have
-        required_attrs = dct.get("required_attributes", set())
-
-        if not isinstance(required_attrs, (set, list, tuple)):
+                
+        if not isinstance(cls.required_attributes, (set, list, tuple)):
             raise TypeError(f"{name}.required_attributes must be a set, list, or tuple.")
         
-        # Ensure that the subclass implements all required methods
-        for method in required_methods:
+        # Ensure required methods are implemented
+        for method in cls.required_methods:
             if method not in dct:
-                raise TypeError(f'{name} class must implement the method: {method}')
-
-        # Ensure that the subclass contains all required attributes
-        for attr in required_attrs:
-            # Check if the attribute exists in the subclass or any of its base classes
-            if not any(hasattr(base, attr) for base in bases) and attr not in dct:
-                raise TypeError(f'{name} class must contain the attribute: "{attr}"')
-
-        # Create and return the new class
+                raise TypeError(f'{name} must implement the method: {method}')
+        
+        # Ensure required attributes exist
+        for attr in cls.required_attributes:
+            if attr not in dct and not any(attr in base.__dict__ for base in bases):
+                raise TypeError(f'{name} must contain the attribute: "{attr}"')
+        
         return super().__new__(cls, name, bases, dct)
 
 
 class MetaData(metaclass=MetaBase):
     """Base class to store metadata of a Partial Differential Equation (PDE) dataset."""
-
-    required_attributes = {'x', 't', 'usol'}
-
-    def __getitem__(self, key: str) -> Any:
-        """
-        Allow dictionary-like access to the attributes.
-
-        :param key: The attribute name to access.
-        :return: The value of the attribute.
-        :raises KeyError: If the attribute does not exist.
-        """
-        if hasattr(self, key):
-            return getattr(self, key)
-        else:
-            raise KeyError(f"Attribute '{key}' not found in {self.__class__.__name__}.")
-
-    def __init__(self, info: DatasetInfo):
+    
+    x = None
+    t = None
+    usol = None
+    
+    def __init__(self, info: Any):
         """
         Initialize the metadata for a PDE dataset.
 
@@ -285,14 +257,21 @@ class MetaData(metaclass=MetaBase):
         """
         self.info = info
 
+    def __getitem__(self, key: str) -> Any:
+        """
+        Allow dictionary-like access to attributes.
+        """
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Attribute '{key}' not found in {self.__class__.__name__}.")
+
     @abstractmethod
     def get_data(self) -> Dict[str, Any]:
         """
         Retrieve all PDE dataset information.
-
-        :return: Dictionary containing all dataset attributes.
         """
         pass
+
 
 class PDEDataset(MetaData):
     """ 
@@ -300,12 +279,14 @@ class PDEDataset(MetaData):
     and analysis functionality.
     """
     
-    def __init__(self, equation_name: str, descr: DatasetInfo, 
+    def __init__(self, equation_name: str,
                  pde_data: Optional[Dict[str, Any]],
-                 x: Optional[np.ndarray], 
-                 t: Optional[np.ndarray], 
-                 usol: Optional[np.ndarray],
-                 domain: Dict[str, Tuple[float, float]], epi: float):
+                 domain: Optional[Dict[str, Tuple[float, float]]],
+                 epi: float,
+                 x: Optional[np.ndarray] = None, 
+                 t: Optional[np.ndarray] = None, 
+                 usol: Optional[np.ndarray] = None,
+                 descr: Optional[DatasetInfo] = None):
         """
         Initializes the PDE dataset, supporting two input methods:
         1. Providing data through the `pde_data` dictionary.
@@ -320,7 +301,7 @@ class PDEDataset(MetaData):
         :param domain: Dictionary defining the domain {variable: (min_value, max_value)}.
         :param epi: Additional parameter.
         """
-        super().__init__(equation_name, descr)
+        super().__init__(equation_name)
 
         if pde_data is not None:
             # Assign data from the provided dictionary
@@ -338,7 +319,8 @@ class PDEDataset(MetaData):
         # Ensure consistency of data dimensions
         if self.usol.shape != (len(self.x), len(self.t)):
             raise ValueError(f"usol dimensions {self.usol.shape} do not match x {len(self.x)} and t {len(self.t)}")
-
+        
+        self.equation_name = equation_name
         self.domain = domain
         self.epi = epi 
         
@@ -354,6 +336,12 @@ class PDEDataset(MetaData):
             raise IndexError("Index out of range.")
         return self.x[x_id], self.t[t_id], self.usol[x_id, t_id]
 
+    def get_data(self) -> Dict[str, Any]:
+        """
+        Returns the dataset information as a dictionary.
+        """
+        return {'x': self.x, 't': self.t, 'usol': self.usol}
+    
     def sample(self, n_samples: int, method: str = 'random') -> Dict[str, np.ndarray]:
         """
         Samples a subset of the data points using different sampling methods.
@@ -365,13 +353,15 @@ class PDEDataset(MetaData):
         if method == 'random':
             indices = np.random.choice(len(self.x) * len(self.t), n_samples, replace=False)
             x_samples, t_samples = np.unravel_index(indices, self.usol.shape)
-            return {'x': self.x[x_samples], 't': self.t[t_samples], 'usol': self.usol[x_samples, t_samples]}
+            sampled_points = list(zip(self.x[x_samples], self.t[t_samples]))
+            sampled_usol = self.usol[x_samples, t_samples]
         
         elif method == 'uniform':
             x_indices = np.linspace(0, len(self.x) - 1, int(np.sqrt(n_samples)), dtype=int)
             t_indices = np.linspace(0, len(self.t) - 1, int(np.sqrt(n_samples)), dtype=int)
             x_samples, t_samples = np.meshgrid(x_indices, t_indices)
-            return {'x': self.x[x_samples.flatten()], 't': self.t[t_samples.flatten()], 'usol': self.usol[x_samples.flatten(), t_samples.flatten()]}
+            sampled_points = list(zip(self.x[x_samples.flatten()], self.t[t_samples.flatten()]))
+            sampled_usol = self.usol[x_samples.flatten(), t_samples.flatten()]
         
         elif method == 'spline':
             x_new = np.linspace(self.x.min(), self.x.max(), int(np.sqrt(n_samples)))
@@ -379,11 +369,14 @@ class PDEDataset(MetaData):
             spline = interp2d(self.t, self.x, self.usol, kind='cubic')
             usol_new = spline(t_new, x_new)
             x_samples, t_samples = np.meshgrid(x_new, t_new)
-            return {'x': x_samples.flatten(), 't': t_samples.flatten(), 'usol': usol_new.flatten()}
+            sampled_points = list(zip(x_samples.flatten(), t_samples.flatten()))
+            sampled_usol = usol_new.flatten()
         
         else:
             raise ValueError(f"Unsupported sampling method: {method}")
         
+        return np.array(sampled_points), sampled_usol
+    
     def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
         """ Returns the minimum and maximum values for x and t. """
         return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
@@ -461,5 +454,28 @@ def load_burgers_equation():
         descr = descr,
         pde_data = pde_data,
         domain = {'x': (-7.0, 7.0), 't': (1, 9)},
-        epi = 0.01
+        epi = 1e-3
+    )
+    
+def load_kdv_equation():
+    descr = DatasetInfo(
+        description = """
+        Dataset for Korteweg-De Vries (KdV) equation with sin initial condition, actually a standardized form of Kdv_equation dataset
+        ut=-uux-uxxx
+        x∈[-20,20), t∈[0,40]
+        nx=256, nt=201, u.shape=(256,201)
+        Resource: PDE-READ: Human-readable Partial Differential Equation Discovery using Deep Learning, pp20
+        """
+    )
+    file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
+    pde_data = load_mat_file(file_path)
+    return PDEDataset(
+        equation_name = 'kdv equation',
+        descr = descr,
+        pde_data = None,
+        x = pde_data['x'].flatten(),
+        t = pde_data['tt'].flatten(),
+        usol = pde_data['uu'],
+        domain = {'x': (-16, 16), 't': (5, 35)},
+        epi = 1e-3
     )
