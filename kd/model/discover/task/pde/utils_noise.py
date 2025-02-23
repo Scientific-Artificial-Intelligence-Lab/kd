@@ -13,7 +13,7 @@ def cut_bound_quantile(x, t, quantile=0.1):
     up_x,up_t = [np.quantile(x[i],1-quantile, axis =0) for i in range(len(x))], np.quantile(t,1-quantile,axis =0)
     x_dim = len(low_x)
     x_len = len(x[0])
-    x_limit = np.ones(x_len, dtype=np.bool) 
+    x_limit = np.ones(x_len, dtype=bool) 
     # import pdb;pdb.set_trace()
     for i in range(x_dim):
         
