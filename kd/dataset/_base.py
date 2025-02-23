@@ -354,6 +354,36 @@ class PDEDataset(MetaData):
             raise IndexError("Index out of range.")
         return self.x[x_id], self.t[t_id], self.usol[x_id, t_id]
 
+    def sample(self, n_samples: int, method: str = 'random') -> Dict[str, np.ndarray]:
+        """
+        Samples a subset of the data points using different sampling methods.
+
+        :param n_samples: Number of samples to draw.
+        :param method: Sampling method to use ('random', 'uniform', 'spline').
+        :return: A dictionary containing the sampled x, t, and usol arrays.
+        """
+        if method == 'random':
+            indices = np.random.choice(len(self.x) * len(self.t), n_samples, replace=False)
+            x_samples, t_samples = np.unravel_index(indices, self.usol.shape)
+            return {'x': self.x[x_samples], 't': self.t[t_samples], 'usol': self.usol[x_samples, t_samples]}
+        
+        elif method == 'uniform':
+            x_indices = np.linspace(0, len(self.x) - 1, int(np.sqrt(n_samples)), dtype=int)
+            t_indices = np.linspace(0, len(self.t) - 1, int(np.sqrt(n_samples)), dtype=int)
+            x_samples, t_samples = np.meshgrid(x_indices, t_indices)
+            return {'x': self.x[x_samples.flatten()], 't': self.t[t_samples.flatten()], 'usol': self.usol[x_samples.flatten(), t_samples.flatten()]}
+        
+        elif method == 'spline':
+            x_new = np.linspace(self.x.min(), self.x.max(), int(np.sqrt(n_samples)))
+            t_new = np.linspace(self.t.min(), self.t.max(), int(np.sqrt(n_samples)))
+            spline = interp2d(self.t, self.x, self.usol, kind='cubic')
+            usol_new = spline(t_new, x_new)
+            x_samples, t_samples = np.meshgrid(x_new, t_new)
+            return {'x': x_samples.flatten(), 't': t_samples.flatten(), 'usol': usol_new.flatten()}
+        
+        else:
+            raise ValueError(f"Unsupported sampling method: {method}")
+        
     def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
         """ Returns the minimum and maximum values for x and t. """
         return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
