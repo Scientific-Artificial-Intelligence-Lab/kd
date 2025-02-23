@@ -6,6 +6,7 @@ import csv
 import numpy as np
 import pandas as pd
 import scipy.io as sio
+import matplotlib.pyplot as plt
 from typing import Any, Dict, Union, Optional, Tuple
 from pathlib import Path
 from importlib import resources
@@ -235,18 +236,21 @@ class MetaBase(type):
         """
 
         # List of required methods that every subclass must implement
-        required_methods = ['get_datapoint', 'get_domain', 'get_size']
+        required_methods = ['get_data']
 
         # List of required attributes that every subclass must have
-        required_attributes = ['x', 't', 'usol']
+        required_attrs = dct.get("required_attributes", set())
 
+        if not isinstance(required_attrs, (set, list, tuple)):
+            raise TypeError(f"{name}.required_attributes must be a set, list, or tuple.")
+        
         # Ensure that the subclass implements all required methods
         for method in required_methods:
             if method not in dct:
                 raise TypeError(f'{name} class must implement the method: {method}')
 
         # Ensure that the subclass contains all required attributes
-        for attr in required_attributes:
+        for attr in required_attrs:
             # Check if the attribute exists in the subclass or any of its base classes
             if not any(hasattr(base, attr) for base in bases) and attr not in dct:
                 raise TypeError(f'{name} class must contain the attribute: "{attr}"')
@@ -256,197 +260,160 @@ class MetaBase(type):
 
 
 class MetaData(metaclass=MetaBase):
-    """ Base class to store metadata of a Partial Differential Equation (PDE) dataset """
+    """Base class to store metadata of a Partial Differential Equation (PDE) dataset."""
 
-    x = None
-    t = None
-    usol = None
-    
-    def __init__(self, equation_name: str, descr: DatasetInfo):
+    required_attributes = {'x', 't', 'usol'}
+
+    def __getitem__(self, key: str) -> Any:
         """
-        :param equation_name: Name of the PDE
-        :param descr: Description of the equation
+        Allow dictionary-like access to the attributes.
+
+        :param key: The attribute name to access.
+        :return: The value of the attribute.
+        :raises KeyError: If the attribute does not exist.
         """
-        self.equation_name = equation_name
-        self.descr = descr
-        
-    def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
+        if hasattr(self, key):
+            return getattr(self, key)
+        else:
+            raise KeyError(f"Attribute '{key}' not found in {self.__class__.__name__}.")
+
+    def __init__(self, info: DatasetInfo):
         """
-        Retrieve the (x, t) coordinates and the corresponding solution value at a given index.
+        Initialize the metadata for a PDE dataset.
 
-        :param x_id: Index of the spatial coordinate.
-        :param t_id: Index of the time coordinate.
-        :return: Tuple (x, t, usol) containing the coordinate and solution value.
+        :param info: Description of the equation.
         """
-        raise NotImplementedError
-    
-    def get_domain(self) -> Dict[str, Tuple[float, float]]:
-        """
-        Retrieve the domain conditions.
+        self.info = info
 
-        :return: Tuple containing the domain ranges ((x_min, x_max), (t_min, t_max)).
-        """
-        raise NotImplementedError
-    
-    def get_size(self) -> Tuple[int, int]:
-        """
-        Retrieve the size of the solution array.
-
-        :return: Tuple (number of spatial points, number of time points).
-        """
-        raise NotImplementedError
-
-
-class PDEDataset(MetaData):
-    """ 
-    Class representing a Partial Differential Equation (PDE) dataset, 
-    providing access and analysis functionalities.
-    """
-
-    def __init__(self, equation_name: str, descr: DatasetInfo, pde_data: Dict[str, Any], 
-                 domain: Dict[str, Tuple[float, float]], epi: float):
-        """
-        Initialize the PDE dataset with given parameters.
-
-        :param equation_name: Name of the PDE.
-        :param descr: Description of the equation.
-        :param pde_data: Dictionary containing 'x', 't', and 'usol' data arrays.
-                         - 'x': Array representing spatial coordinates.
-                         - 't': Array representing time coordinates.
-                         - 'usol': 2D array representing the solution u(x, t).
-        :param domain: Dictionary representing domain conditions as {name: (min, max)).
-        :param epi: Additional parameter related to the dataset.
-        """
-        super().__init__(equation_name, descr)
-        
-        # Read pde_data and validate its completeness
-        try:
-            self.x: np.ndarray = np.asarray(pde_data['x']).flatten()  # Ensure x is a 1D array
-            self.t: np.ndarray = np.asarray(pde_data['t']).flatten()  # Ensure t is a 1D array
-            self.usol: np.ndarray = np.asarray(pde_data['usol'])  # Solution array
-        except KeyError as e:
-            raise ValueError(f"Missing key in pde_data: {e}")
-
-        # Assign additional parameters
-        self.domain: Dict[str, Tuple[float, float]] = domain  # Domain range
-        self.epi: float = epi  # Extra parameter
-
-        # Ensure 'usol' dimensions match 'x' and 't'
-        if self.usol.shape != (len(self.x), len(self.t)):
-            raise ValueError(f"Dimensions of 'usol' {self.usol.shape} must match 'x' {len(self.x)} and 't' {len(self.t)}")
-
-    def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
-        """
-        Retrieve the (x, t) coordinates and the corresponding solution value at a given index.
-
-        :param x_id: Index of the spatial coordinate.
-        :param t_id: Index of the time coordinate.
-        :return: Tuple (x, t, usol) containing the coordinate and solution value.
-        """
-        return self.x[x_id], self.t[t_id], self.usol[x_id, t_id]
-    
-    def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
-        """
-        Return the minimum and maximum boundaries of x and t.
-
-        :return: Dictionary with min and max values for x and t.
-        """
-        return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
-
-    def get_domain(self) -> Dict[str, Tuple[float, float]]:
-        """
-        Retrieve the domain conditions.
-
-        :return: Tuple containing the domain ranges ((x_min, x_max), (t_min, t_max)).
-        """
-        return self.domain
-
-    def get_range(self, x_range: Tuple[float, float], t_range: Tuple[float, float]) -> Dict[str, np.ndarray]:
-        """ 
-        Retrieve x and t data within the specified ranges along with the corresponding solution values.
-
-        :param x_range: Tuple (min_x, max_x) specifying the x range.
-        :param t_range: Tuple (min_t, max_t) specifying the t range.
-        :return: Dictionary containing:
-                 - 'x': Subset of x values within the given range.
-                 - 't': Subset of t values within the given range.
-                 - 'usol': Corresponding subset of the solution array.
-        """
-        x_mask = (self.x >= x_range[0]) & (self.x <= x_range[1])
-        t_mask = (self.t >= t_range[0]) & (self.t <= t_range[1])
-
-        sub_x = self.x[x_mask]
-        sub_t = self.t[t_mask]
-        sub_usol = self.usol[np.ix_(x_mask, t_mask)]
-
-        return {'x': sub_x, 't': sub_t, 'usol': sub_usol}
-
-    def get_size(self) -> Tuple[int, int]:
-        """
-        Retrieve the size of the solution array.
-
-        :return: Tuple (number of spatial points, number of time points).
-        """
-        return self.usol.shape
-
+    @abstractmethod
     def get_data(self) -> Dict[str, Any]:
         """
         Retrieve all PDE dataset information.
 
-        :return: Dictionary containing all dataset attributes:
-                 - 'x', 't', 'usol': The core dataset arrays.
-                 - 'x_low', 'x_up': The spatial domain boundaries.
-                 - 't_low', 't_up': The time domain boundaries.
-                 - 'epi': Additional dataset parameter.
+        :return: Dictionary containing all dataset attributes.
         """
-        x_low, x_up = self.domain['x']
-        t_low, t_up = self.domain['t']
-        return {
-            'x': self.x,
-            't': self.t,
-            'usol': self.usol,
-            'x_low': x_low,
-            'x_up': x_up,
-            't_low': t_low,
-            't_up': t_up,
-            'epi': self.epi
-        }
+        pass
 
-    def generate_grid(self, x_points: int = 100, t_points: int = 100) -> None:
-        """
-        Generate an evenly spaced grid for x and t if they are not provided.
-
-        :param x_points: Number of spatial points.
-        :param t_points: Number of time points.
-        """
-        if self.x is None or self.t is None:
-            (x_min, x_max), (t_min, t_max) = self.domain
-            self.x = np.linspace(x_min, x_max, x_points)
-            self.t = np.linspace(t_min, t_max, t_points)
-            self.usol = np.zeros((x_points, t_points))  # Placeholder
-
-    def extract_time_slice(self, t_value: float) -> np.ndarray:
-        """
-        Extract the solution values at a specific time.
-
-        :param t_value: The time value to extract.
-        :return: Array of solution values at the specified time.
-        """
-        t_index = np.abs(self.t - t_value).argmin()  # Find the closest time index
-        return self.usol[:, t_index]
+class PDEDataset(MetaData):
+    """ 
+    A class representing a Partial Differential Equation (PDE) dataset, providing data access 
+    and analysis functionality.
+    """
     
-    def info(self) -> DatasetInfo:
-        return self.descr
-    
+    def __init__(self, equation_name: str, descr: DatasetInfo, 
+                 pde_data: Optional[Dict[str, Any]],
+                 x: Optional[np.ndarray], 
+                 t: Optional[np.ndarray], 
+                 usol: Optional[np.ndarray],
+                 domain: Dict[str, Tuple[float, float]], epi: float):
+        """
+        Initializes the PDE dataset, supporting two input methods:
+        1. Providing data through the `pde_data` dictionary.
+        2. Directly passing `x`, `t`, and `usol` arrays.
+
+        :param equation_name: Name of the PDE.
+        :param descr: Metadata containing information about the PDE.
+        :param pde_data: Optional dictionary containing 'x', 't', and 'usol' data.
+        :param x: Optional, spatial coordinate array.
+        :param t: Optional, temporal coordinate array.
+        :param usol: Optional, solution array u(x, t).
+        :param domain: Dictionary defining the domain {variable: (min_value, max_value)}.
+        :param epi: Additional parameter.
+        """
+        super().__init__(equation_name, descr)
+
+        if pde_data is not None:
+            # Assign data from the provided dictionary
+            self.x = np.asarray(pde_data.get('x'), dtype=float).flatten()
+            self.t = np.asarray(pde_data.get('t'), dtype=float).flatten()
+            self.usol = np.asarray(pde_data.get('usol'), dtype=float)
+        elif x is not None and t is not None and usol is not None:
+            # Directly assign provided x, t, and usol arrays
+            self.x = np.asarray(x, dtype=float).flatten()
+            self.t = np.asarray(t, dtype=float).flatten()
+            self.usol = np.asarray(usol, dtype=float)
+        else:
+            raise ValueError("Either `pde_data` or `x`, `t`, and `usol` must be provided.")
+
+        # Ensure consistency of data dimensions
+        if self.usol.shape != (len(self.x), len(self.t)):
+            raise ValueError(f"usol dimensions {self.usol.shape} do not match x {len(self.x)} and t {len(self.t)}")
+
+        self.domain = domain
+        self.epi = epi 
+        
+    def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
+        """
+        Retrieves the (x, t) coordinates and the corresponding solution value.
+
+        :param x_id: Index in the spatial dimension.
+        :param t_id: Index in the temporal dimension.
+        :return: A tuple (x, t, usol) representing the coordinates and solution.
+        """
+        if not (0 <= x_id < len(self.x)) or not (0 <= t_id < len(self.t)):
+            raise IndexError("Index out of range.")
+        return self.x[x_id], self.t[t_id], self.usol[x_id, t_id]
+
+    def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
+        """ Returns the minimum and maximum values for x and t. """
+        return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
+
+    def get_domain(self) -> Dict[str, Tuple[float, float]]:
+        """ Retrieves the domain definition. """
+        return self.domain
+
+    def get_derivative(self, axis: str = 'x') -> np.ndarray:
+        """
+        Computes the derivative of `usol` along the spatial or temporal axis.
+
+        :param axis: Direction of differentiation ('x' or 't').
+        :return: The computed derivative array.
+        """
+        if axis == 'x':
+            return np.gradient(self.usol, axis=0)
+        elif axis == 't':
+            return np.gradient(self.usol, axis=1)
+        else:
+            raise ValueError("Invalid axis name, must be 'x' or 't'.")
+
+    def get_range(self, x_range: Tuple[float, float], t_range: Tuple[float, float]) -> Dict[str, np.ndarray]:
+        """ 
+        Retrieves subsets of x, t, and the corresponding solution within the specified range.
+
+        :param x_range: Tuple representing the range of x values (min_x, max_x).
+        :param t_range: Tuple representing the range of t values (min_t, max_t).
+        :return: A dictionary containing subsets of x, t, and usol.
+        """
+        x_start, x_end = np.searchsorted(self.x, [x_range[0], x_range[1]])
+        t_start, t_end = np.searchsorted(self.t, [t_range[0], t_range[1]])
+
+        return {'x': self.x[x_start:x_end], 
+                't': self.t[t_start:t_end], 
+                'usol': self.usol[x_start:x_end, t_start:t_end]}
+
+    def get_size(self) -> Tuple[int, int]:
+        """ Returns the dimensions of the solution array (x dimension, t dimension). """
+        return self.usol.shape
+
+    def plot_solution(self) -> None:
+        """
+        Generates a heatmap visualization of the solution `usol` over (x, t) dimensions.
+        """
+        plt.figure(figsize=(8, 6))
+        plt.imshow(self.usol, aspect='auto', origin='lower',
+                   extent=[self.t.min(), self.t.max(), self.x.min(), self.x.max()])
+        plt.colorbar(label='Solution u(x, t)')
+        plt.xlabel('Time (t)')
+        plt.ylabel('Space (x)')
+        plt.title(f"Solution of {self.equation_name}")
+        plt.show()
+
     def __repr__(self) -> str:
-        """
-        Return a formatted string representation of the dataset.
-
-        :return: String summarizing the dataset properties.
-        """
+        """ Returns a string representation of the dataset. """
         return (f"PDEDataset(equation='{self.equation_name}', size={self.get_size()}, "
                 f"boundaries={self.get_boundaries()})")
-
+        
+        
 def load_burgers_equation():    
     descr = DatasetInfo(
         description = """
