@@ -320,6 +320,7 @@ class PDEDataset(MetaData):
         if self.usol.shape != (len(self.x), len(self.t)):
             raise ValueError(f"usol dimensions {self.usol.shape} do not match x {len(self.x)} and t {len(self.t)}")
         
+        self.u = self.usol
         self.equation_name = equation_name
         self.domain = domain
         self.epi = epi 
@@ -376,6 +377,16 @@ class PDEDataset(MetaData):
             raise ValueError(f"Unsupported sampling method: {method}")
         
         return np.array(sampled_points), sampled_usol
+    
+    def mesh(self, indexing='ij') -> np.ndarray:
+        """
+        Returns a 2D coordinate grid where each row is a combination of (x, t).
+        Equivalent to np.meshgrid(x, t) but flattened into a 2D array.
+
+        :return: A 2D array of shape (len(x) * len(t), 2) where each row is (x, t).
+        """
+        X, T = np.meshgrid(self.x, self.t, indexing=indexing)
+        return np.column_stack([X.ravel(), T.ravel()])
     
     def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
         """ Returns the minimum and maximum values for x and t. """

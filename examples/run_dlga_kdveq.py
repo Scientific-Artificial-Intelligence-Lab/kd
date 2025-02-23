@@ -53,17 +53,25 @@ model.fit(X_train, y_train)
 
 print("\nGenerating predictions for visualization...")
 # Create prediction points grid
-X_pred = []
-for i in range(len(x)):
-    for j in range(len(t)):
-        X_pred.append([x[i], t[j]])
-X_pred = np.array(X_pred)
+
+# x = kdv_data.x
+# t = kdv_data.t
+# u = kdv_data.u
+# X_pred = []
+# for i in range(len(x)):
+#     for j in range(len(t)):
+#         X_pred.append([x[i], t[j]])
+# X_pred = np.array(X_pred)
+
+X_pred = kdv_data.mesh()
+
+data_shape = kdv_data.get_size()
 
 # Generate predictions
 X_pred_tensor = torch.from_numpy(X_pred.astype(np.float32)).to(model.device)
 with torch.no_grad():
     y_pred = model.Net(X_pred_tensor).cpu().numpy()
-u_pred = y_pred.reshape(len(x), len(t))
+u_pred = y_pred.reshape(*data_shape)
 
 # Create and save visualization
 print("\nCreating visualization...")
@@ -75,9 +83,9 @@ try:
     # Create comparison plot
     print("Creating comparison plot...")
     fig = plot_pde_comparison(
-        x=x,
-        t=t,
-        u_exact=u.T,  # Transpose to match expected shape
+        x=kdv_data.x,
+        t=kdv_data.t,
+        u_exact=kdv_data.u.T,  # Transpose to match expected shape
         u_pred=u_pred.T,  # Transpose to match expected shape
         X_train=X_train,
         slice_times=[0.25, 0.5, 0.75]
