@@ -185,3 +185,9 @@ log/*
 # Sphinx documentation
 docs/build/
 docs/_build/
+
+.plot_output/
+.cursor/
+.evolution_temp/
+
+*.mp4

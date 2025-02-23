@@ -29,7 +29,12 @@ Models
 
 Visualization
 -------------
-.. automodule:: kd.vizr
+.. automodule:: kd.vizr.vizr
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.vizr.pde_comparison
    :members:
    :undoc-members:
    :show-inheritance:
