@@ -36,7 +36,6 @@ class DLGAHook:
     """Hook for monitoring DLGA model.
     
     这个 hook 通过 adapter 将 DLGA 的训练和进化过程数据转发给 monitor。
-    不影响原有的 vizr 功能。
     """
     
     def __init__(self, adapter: DLGAAdapter):
