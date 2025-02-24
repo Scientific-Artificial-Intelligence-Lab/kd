@@ -47,9 +47,15 @@ EvolutionVisBase (基类)
   - 智能 chunk size 计算
   - 内存使用优化
 - ✅ 文件管理
-  - 临时文件自动清理
-  - 元数据保留
-  - 自定义路径支持
+  - 自动创建输出目录
+    ```
+    evolution_output/           # 主输出目录
+    ├── task_*                 # 临时任务目录
+    └── test_cases/           # 测试输出目录
+    ```
+  - 自动清理临时文件
+  - 支持自定义路径
+  - 保留文件元数据
 - ✅ 渲染优化
   - 临时帧低 DPI 渲染
   - 最终输出高质量保证
@@ -176,7 +182,7 @@ def test_snapshot_frames(self):
 
 ### 基本用法
 ```python
-from kd.plot.interface.dlga import DLGAPlotter
+from kd.plot.interface.dlga_plotter import DLGAPlotter
 
 # 创建 plotter
 plotter = DLGAPlotter()

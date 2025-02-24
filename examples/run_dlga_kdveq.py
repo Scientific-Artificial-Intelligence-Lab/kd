@@ -21,7 +21,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(kd_main_dir)
 
-from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
 from kd.vizr.pde_comparison import plot_pde_comparison
 
@@ -29,11 +28,29 @@ from kd.vizr.pde_comparison import plot_pde_comparison
 # Load and prepare KdV equation data
 #####################################################################
 
-# Load KdV equation data
-kdv_data = load_kdv_equation()
+# Load data from .mat file
+data_path = os.path.join(kd_main_dir, "kd/dataset/data/KdV_equation.mat")
+data = scipy.io.loadmat(data_path)
 
-# Extract data
-X_train, y_train = kdv_data.sample(n_samples=1000)
+# Extract data arrays
+t = data['tt'].flatten()  # Time points (201)
+x = data['x'].flatten()   # Spatial points (512)
+u = data['uu']           # Solution values (512 x 201)
+
+# Create training dataset by sampling points
+X_train = []
+y_train = []
+
+n_samples = 1000
+t_idx = np.random.randint(0, t.shape[0], n_samples)  # Sample from 0 to 200
+x_idx = np.random.randint(0, x.shape[0], n_samples)  # Sample from 0 to 511
+
+for i, j in zip(t_idx, x_idx):
+    X_train.append([x[j], t[i]])
+    y_train.append(u[j,i])  # Note: u is (x, t) indexed
+
+X_train = np.array(X_train)
+y_train = np.array(y_train)
 
 #####################################################################
 # Initialize and train DLGA model
@@ -53,25 +70,17 @@ model.fit(X_train, y_train)
 
 print("\nGenerating predictions for visualization...")
 # Create prediction points grid
-
-# x = kdv_data.x
-# t = kdv_data.t
-# u = kdv_data.u
-# X_pred = []
-# for i in range(len(x)):
-#     for j in range(len(t)):
-#         X_pred.append([x[i], t[j]])
-# X_pred = np.array(X_pred)
-
-X_pred = kdv_data.mesh()
-
-data_shape = kdv_data.get_size()
+X_pred = []
+for i in range(len(x)):
+    for j in range(len(t)):
+        X_pred.append([x[i], t[j]])
+X_pred = np.array(X_pred)
 
 # Generate predictions
 X_pred_tensor = torch.from_numpy(X_pred.astype(np.float32)).to(model.device)
 with torch.no_grad():
     y_pred = model.Net(X_pred_tensor).cpu().numpy()
-u_pred = y_pred.reshape(*data_shape)
+u_pred = y_pred.reshape(len(x), len(t))
 
 # Create and save visualization
 print("\nCreating visualization...")
@@ -83,9 +92,9 @@ try:
     # Create comparison plot
     print("Creating comparison plot...")
     fig = plot_pde_comparison(
-        x=kdv_data.x,
-        t=kdv_data.t,
-        u_exact=kdv_data.u.T,  # Transpose to match expected shape
+        x=x,
+        t=t,
+        u_exact=u.T,  # Transpose to match expected shape
         u_pred=u_pred.T,  # Transpose to match expected shape
         X_train=X_train,
         slice_times=[0.25, 0.5, 0.75]

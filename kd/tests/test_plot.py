@@ -7,7 +7,7 @@ import os
 import shutil
 import tempfile
 
-from kd.plot.interface.dlga import DLGAPlotter
+from kd.plot.interface.dlga_plotter import DLGAPlotter
 from kd.plot.scientific.residual import (
     ResidualHeatmap,
     ResidualTimeslice,
@@ -150,6 +150,42 @@ class TestResidualPlots(unittest.TestCase):
         plotter.save("test_analysis.png")
         plt.close()
         
+    def test_shape_mismatch(self):
+        """Test handling of shape mismatch between predictions and exact values."""
+        plotter = ResidualHeatmap()
+        mismatched_pred = np.random.rand(50, 60)  # Different shape
+        with self.assertRaises(ValueError):
+            plotter.plot(mismatched_pred, self.u_exact, self.x, self.t)
+            
+    def test_empty_data(self):
+        """Test handling of empty data."""
+        plotter = ResidualHeatmap()
+        empty_data = np.array([])
+        with self.assertRaises(ValueError):
+            plotter.plot(empty_data, empty_data, self.x, self.t)
+            
+    def test_custom_slice_times(self):
+        """Test time slice plot with custom time points."""
+        plotter = ResidualTimeslice()
+        custom_times = [0.1, 0.3, 0.7, 0.9]
+        plotter.plot(self.u_pred, self.u_exact, self.x, self.t, slice_times=custom_times)
+        plt.close()
+        
+    def test_histogram_bins(self):
+        """Test histogram with different bin configurations."""
+        plotter = ResidualHistogram()
+        # Test with different bin numbers
+        for bins in [10, 50, 100]:
+            plotter.plot(self.u_pred, self.u_exact, bins=bins)
+            plt.close()
+            
+    def test_large_dataset(self):
+        """Test handling of large datasets."""
+        x_large, t_large, u_exact_large, u_pred_large = generate_sample_data(nx=1000, nt=1000)
+        plotter = ResidualAnalysis()
+        plotter.plot(u_pred_large, u_exact_large, x_large, t_large)
+        plt.close()
+        
     def test_dlga_interface(self):
         """Test DLGA plotting interface."""
         plotter = DLGAPlotter()
@@ -165,6 +201,18 @@ class TestResidualPlots(unittest.TestCase):
                 save_path=f"test_dlga_{plot_type}.png"
             )
             plt.close()
+            
+    def test_invalid_plot_type(self):
+        """Test handling of invalid plot type in DLGA interface."""
+        plotter = DLGAPlotter()
+        with self.assertRaises(ValueError):
+            plotter.plot_residual(
+                self.u_pred,
+                self.u_exact,
+                self.x,
+                self.t,
+                plot_type='invalid_type'
+            )
             
     def tearDown(self):
         """Clean up after tests."""

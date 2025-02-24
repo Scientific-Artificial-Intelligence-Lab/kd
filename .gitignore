@@ -190,4 +190,8 @@ docs/_build/
 .cursor/
 .evolution_temp/
 
+evolution_output/
+
 *.mp4
+
+result/

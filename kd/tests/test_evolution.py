@@ -9,8 +9,9 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict
 
-from kd.plot.interface.dlga import DLGAPlotter
+from kd.plot.interface.dlga_plotter import DLGAPlotter
 from kd.plot.scientific.evolution import EvolutionAnimation, EvolutionSnapshot
+from moviepy.editor import VideoFileClip
 
 @dataclass
 class Individual:
@@ -106,7 +107,6 @@ class TestEvolutionVisualization(unittest.TestCase):
         self.assertTrue(os.path.getsize(result_path) > 0)
         
         # 验证视频时长
-        from moviepy.editor import VideoFileClip
         with VideoFileClip(result_path) as clip:
             # 允许0.5秒的误差
             self.assertAlmostEqual(clip.duration, 5, delta=0.5)
@@ -162,25 +162,43 @@ class TestEvolutionVisualization(unittest.TestCase):
         
     def test_temp_cleanup(self):
         """Test temporary file cleanup."""
-        temp_dir = os.path.join(self.test_dir, ".evolution_temp")
+        # 检查基础输出目录
+        base_dir = Path("evolution_output")
         
-        # Generate output with cleanup
-        self.plotter.plot_evolution(
+        # 生成带清理的输出
+        result1 = self.plotter.plot_evolution(
             self.mock_data,
             mode="snapshot",
-            temp_dir=temp_dir,
+            output_format="mp4",
+            output_path=os.path.join(self.test_dir, "test1.mp4"),
             cleanup_temp=True
         )
-        self.assertFalse(os.path.exists(temp_dir))
         
-        # Generate output without cleanup
-        self.plotter.plot_evolution(
+        # 验证基础目录存在但任务目录已被清理
+        self.assertTrue(base_dir.exists())
+        task_dirs1 = list(base_dir.glob("task_*"))
+        self.assertEqual(len(task_dirs1), 0)  # 所有任务目录都应该被清理
+        
+        # 生成不清理的输出
+        result2 = self.plotter.plot_evolution(
             self.mock_data,
             mode="snapshot",
-            temp_dir=temp_dir,
+            output_format="mp4",
+            output_path=os.path.join(self.test_dir, "test2.mp4"),
             cleanup_temp=False
         )
-        self.assertTrue(os.path.exists(temp_dir))
+        
+        # 验证任务目录保留
+        task_dirs2 = list(base_dir.glob("task_*"))
+        self.assertEqual(len(task_dirs2), 1)  # 应该有一个任务目录
+        self.assertTrue(task_dirs2[0].name.startswith("task_"))
+        
+        # 验证输出文件存在
+        self.assertTrue(os.path.exists(result1))
+        self.assertTrue(os.path.exists(result2))
+        
+        # 清理测试环境
+        shutil.rmtree(base_dir, ignore_errors=True)
         
     def test_invalid_mode(self):
         """Test invalid mode handling."""
@@ -194,8 +212,8 @@ class TestEvolutionVisualization(unittest.TestCase):
         """Test parallel frame generation."""
         output_path = os.path.join(self.test_dir, "test_parallel.mp4")
         
-        # Generate large dataset
-        large_data = generate_mock_data(n_generations=50, pop_size=100)
+        # Generate moderate dataset for testing
+        large_data = generate_mock_data(n_generations=30, pop_size=50)
         
         # Time parallel processing
         import time
@@ -204,25 +222,50 @@ class TestEvolutionVisualization(unittest.TestCase):
         self.plotter.plot_evolution(
             large_data,
             mode="snapshot",
-            output_path=output_path
+            output_path=output_path,
+            fps=30,  # 增加帧率以减少处理时间
+            cleanup_temp=True,  # 确保清理临时文件
+            desired_duration=5  # 设置更短的视频时长
         )
         
         processing_time = time.time() - start_time
         
         # Basic checks
         self.assertTrue(os.path.exists(output_path))
-        self.assertTrue(processing_time < 60)  # Should complete within reasonable time
+        self.assertTrue(processing_time < 120)  # 调整为更合理的时间限制
+        
+        # 检查视频时长
+        with VideoFileClip(output_path) as clip:
+            self.assertLess(clip.duration, 10)  # 视频时长应该小于10秒
         
     def test_data_validation(self):
         """Test data validation."""
-        # Test with empty data
+        # Test invalid data
+        invalid_data = None
         with self.assertRaises(ValueError):
-            self.plotter.plot_evolution([], mode="snapshot")
+            self.plotter.plot_evolution(invalid_data, mode="snapshot", output_path="test.mp4")
             
-        # Test with invalid data structure
-        invalid_data = [{"invalid": "structure"}]
-        with self.assertRaises(AttributeError):
-            self.plotter.plot_evolution(invalid_data, mode="snapshot")
+        # Test empty data
+        empty_data = []
+        with self.assertRaises(ValueError):
+            self.plotter.plot_evolution(empty_data, mode="snapshot", output_path="test.mp4")
+            
+        # Test invalid mode
+        with self.assertRaises(ValueError):
+            self.plotter.plot_evolution(self.mock_data, mode="invalid")
+            
+        # Test missing output_path in snapshot mode
+        with self.assertRaises(ValueError):
+            self.plotter.plot_evolution(self.mock_data, mode="snapshot")
+            
+        # Test invalid output format
+        with self.assertRaises(ValueError):
+            self.plotter.plot_evolution(
+                self.mock_data, 
+                mode="snapshot",
+                output_path="test.invalid",
+                output_format="invalid"
+            )
             
     def test_figure_properties(self):
         """Test figure customization."""

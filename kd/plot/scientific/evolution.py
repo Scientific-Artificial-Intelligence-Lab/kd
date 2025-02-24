@@ -9,6 +9,7 @@ from moviepy.editor import VideoFileClip, ImageSequenceClip
 import imageio.v2 as imageio
 from ..core.base import BasePlot
 import shutil
+from PIL import Image
 
 class EvolutionVisBase(BasePlot):
     """Base class for evolution visualization"""
@@ -205,28 +206,32 @@ class EvolutionAnimation(EvolutionVisBase):
 class EvolutionSnapshot(EvolutionVisBase):
     """Frame sequence generator for evolution visualization"""
     
+    # Class level constant for base output directory
+    BASE_OUTPUT_DIR = Path("evolution_output")
+    
     def __init__(self, figsize=(10, 8), dpi=300,
-                 temp_dir=".evolution_temp",
                  output_format="mp4",
                  fps=30,
-                 desired_duration=15,  # 新增: 期望的视频时长(秒)
+                 desired_duration=15,
                  cleanup_temp=True):
         """
         Args:
             figsize: Figure size
             dpi: DPI for saved images
-            temp_dir: Directory for temporary frame files
             output_format: Output format, one of ['mp4', 'gif', 'frames']
             fps: Default frames per second for video
             desired_duration: Desired duration in seconds for video/gif
             cleanup_temp: Whether to cleanup temp files after processing
         """
         super().__init__(figsize=figsize, dpi=dpi)
-        self.temp_dir = Path(temp_dir)
         self.output_format = output_format
         self.fps = fps
         self.desired_duration = desired_duration
         self.cleanup_temp = cleanup_temp
+        
+        # Create unique temp directory for this instance
+        import uuid
+        self.temp_dir = self.BASE_OUTPUT_DIR / f"task_{uuid.uuid4().hex[:8]}"
         
     def save_evolution(self, evolution_data, output_path=None):
         """Save evolution visualization
@@ -235,34 +240,44 @@ class EvolutionSnapshot(EvolutionVisBase):
             evolution_data: List/Iterator of generation data
             output_path: Output file/directory path. If None, use default name.
         """
-        # Create temp directory
+        # Create base and temp directories
+        self.BASE_OUTPUT_DIR.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True, parents=True)
         
-        # Save frames
-        frame_files = self._save_frames(evolution_data)
-        
-        # Check if we have any frames
-        if not frame_files:
-            raise ValueError("No frames were generated. Check if evolution_data is empty.")
+        try:
+            # Save frames
+            frame_files = self._save_frames(evolution_data)
             
-        # Process based on format
-        if output_path is None:
-            output_path = f"evolution.{self.output_format}"
+            # Check if we have any frames
+            if not frame_files:
+                raise ValueError("No frames were generated. Check if evolution_data is empty.")
+                
+            # Process based on format
+            if output_path is None:
+                output_path = f"evolution.{self.output_format}"
+                
+            if self.output_format == "mp4":
+                self._make_video(frame_files, output_path)
+            elif self.output_format == "gif":
+                self._make_gif(frame_files, output_path)
+            elif self.output_format == "frames":
+                if not output_path.endswith("/"):
+                    output_path += "/"
+                output_path = self._save_frames_to_dir(frame_files, output_path)
+                
+            return output_path
             
-        if self.output_format == "mp4":
-            self._make_video(frame_files, output_path)
-        elif self.output_format == "gif":
-            self._make_gif(frame_files, output_path)
-        elif self.output_format == "frames":
-            if not output_path.endswith("/"):
-                output_path += "/"
-            output_path = self._save_frames_to_dir(frame_files, output_path)
-            
-        # Cleanup if needed
-        if self.cleanup_temp:
-            self._cleanup(frame_files)
-            
-        return output_path
+        finally:
+            # Cleanup if needed
+            if self.cleanup_temp and self.temp_dir.exists():
+                self._cleanup()
+                
+    def _cleanup(self):
+        """Clean up temporary files for this task only"""
+        try:
+            shutil.rmtree(self.temp_dir)
+        except OSError:
+            pass  # Ignore errors
         
     def _save_frame(self, frame_data, frame_num):
         """Save single frame
@@ -278,9 +293,12 @@ class EvolutionSnapshot(EvolutionVisBase):
         self.clear()
         self._plot_generation(frame_data)
         
-        # Save frame with lower DPI for better performance
+        # Adjust layout but don't use tight_bbox for consistent size
+        self.fig.tight_layout()
+        
+        # Save frame with specified DPI
         frame_path = self.temp_dir / f"frame_{frame_num:05d}.png"
-        self.fig.savefig(frame_path, dpi=100, bbox_inches='tight')  # Lower DPI for temp files
+        self.fig.savefig(frame_path, dpi=self.dpi)
         return frame_path
         
     def _save_frames(self, evolution_data):
@@ -362,10 +380,22 @@ class EvolutionSnapshot(EvolutionVisBase):
             frame_files: List of paths to frame files
             output_path: Output GIF path
         """
-        # 读取所有帧
+        # 读取所有帧并确保尺寸一致
         frames = []
+        first_frame = None
+        
         for frame_file in frame_files:
-            frames.append(imageio.imread(frame_file))
+            frame = imageio.imread(frame_file)
+            if first_frame is None:
+                first_frame = frame
+                target_shape = frame.shape[:2]
+            else:
+                # 如果尺寸不同，调整到第一帧的尺寸
+                if frame.shape[:2] != target_shape:
+                    img = Image.fromarray(frame)
+                    img = img.resize(target_shape[::-1], Image.Resampling.LANCZOS)
+                    frame = np.array(img)
+            frames.append(frame)
         
         # 计算合适的帧率
         n_frames = len(frames)
@@ -391,24 +421,60 @@ class EvolutionSnapshot(EvolutionVisBase):
             new_path = output_path / f"evolution_frame_{i:05d}.png"
             shutil.copy2(frame_file, new_path)  # 使用copy2保留元数据
             
-        return output_path
-            
-    def _cleanup(self, frame_files):
-        """Clean up temporary files
+        return output_path 
+
+class EvolutionPlot(BasePlot):
+    """Plot evolution metrics over generations."""
+    
+    def __init__(self, figsize=(10, 6)):
+        super().__init__(figsize=figsize)
+        
+    def plot(self, data):
+        """Create evolution plot.
         
         Args:
-            frame_files: List of paths to frame files
+            data: Dictionary containing evolution data with keys:
+                - generations: Array of generation numbers
+                - best_fitness: Array of best fitness values
         """
-        # Remove frame files
-        for frame_file in frame_files:
+        self.fig, self.axes = plt.subplots(figsize=self.figsize)
+        
+        # Convert generations to integers and ensure they're unique
+        generations = data['generations'].astype(int)
+        best_fitness = data['best_fitness']
+        
+        # Plot with integer x-axis
+        self.axes.plot(generations, best_fitness, 'b-', marker='o', markersize=4)
+        
+        # Configure axes
+        self.axes.set_xlabel('Generation')
+        self.axes.set_ylabel('Best Fitness')
+        self.axes.set_title('Evolution Progress')
+        
+        # Set integer ticks for generations
+        self.axes.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+        
+        # Force x-axis to show only integer ticks
+        min_gen = int(generations.min())
+        max_gen = int(generations.max())
+        self.axes.set_xticks(np.arange(min_gen, max_gen + 1))
+        
+        # Add grid
+        self.axes.grid(True, linestyle=':', alpha=0.6)
+        
+        # Add trend line if enough points
+        if len(generations) > 3:
             try:
-                if frame_file.exists():
-                    frame_file.unlink()
-            except OSError:
-                pass  # Ignore errors
-                
-        # Try to remove temp directory
-        try:
-            shutil.rmtree(self.temp_dir)
-        except OSError:
-            pass  # Ignore errors 
+                z = np.polyfit(generations, best_fitness, 2)
+                p = np.poly1d(z)
+                trend_x = np.arange(min_gen, max_gen + 1)  # Use integer x values for trend
+                self.axes.plot(trend_x, p(trend_x), 'r--', alpha=0.5, 
+                             label='Trend')
+                self.axes.legend()
+            except (np.linalg.LinAlgError, ValueError) as e:
+                print(f"Warning: Could not compute trend line: {e}")
+    
+    def save(self):
+        """Save the plot if save path is provided."""
+        if self.save_path:
+            self.fig.savefig(self.save_path, dpi=300, bbox_inches='tight')

@@ -19,6 +19,9 @@ class TermsHeatmap(BasePlot):
     
     def _validate_data(self, terms: Dict[str, np.ndarray]) -> bool:
         """Validate input data shapes match."""
+        if not terms:
+            raise ValueError("No terms provided")
+            
         shapes = [term.shape for term in terms.values()]
         if len(set(shapes)) > 1:
             raise ValueError(f"Terms have inconsistent shapes: {shapes}")
@@ -96,8 +99,10 @@ class TermsAnalysis(CompositePlot):
             show_correlations: Whether to show correlation matrix
             show_statistics: Whether to show term statistics
         """
-        self._validate_data(terms)
-        
+        if not terms:
+            print("Warning: No terms provided, skipping plot")
+            return
+            
         # Create figure with GridSpec
         self.fig = plt.figure(figsize=(15, 10))
         gs = gridspec.GridSpec(2, 2)
@@ -107,7 +112,7 @@ class TermsAnalysis(CompositePlot):
         self._plot_combined_heatmap(terms, x, t, ax1)
         
         # Correlation matrix
-        if show_correlations:
+        if show_correlations and len(terms) > 1:
             ax2 = self.fig.add_subplot(gs[0, 1])
             self._plot_correlation_matrix(terms, ax2)
         
@@ -150,24 +155,42 @@ class TermsAnalysis(CompositePlot):
     def _plot_correlation_matrix(self, terms: Dict[str, np.ndarray],
                                ax: plt.Axes):
         """Plot correlation matrix between terms."""
-        # Calculate correlations
-        term_arrays = [values.flatten() for values in terms.values()]
-        corr_matrix = np.corrcoef(term_arrays)
-        
-        # Plot correlation matrix
-        im = ax.imshow(corr_matrix, cmap='RdBu', vmin=-1, vmax=1)
-        plt.colorbar(im, ax=ax)
-        
-        # Add labels
-        ax.set_xticks(range(len(terms)))
-        ax.set_yticks(range(len(terms)))
-        ax.set_xticklabels(terms.keys(), rotation=45)
-        ax.set_yticklabels(terms.keys())
-        ax.set_title('Term Correlations')
+        if len(terms) < 2:
+            ax.text(0.5, 0.5, 'Insufficient terms\nfor correlation',
+                   ha='center', va='center')
+            ax.axis('off')
+            return
+            
+        try:
+            # Calculate correlations
+            term_arrays = [values.flatten() for values in terms.values()]
+            corr_matrix = np.corrcoef(term_arrays)
+            
+            # Plot correlation matrix
+            im = ax.imshow(corr_matrix, cmap='RdBu', vmin=-1, vmax=1)
+            plt.colorbar(im, ax=ax)
+            
+            # Add labels
+            ax.set_xticks(range(len(terms)))
+            ax.set_yticks(range(len(terms)))
+            ax.set_xticklabels(terms.keys(), rotation=45)
+            ax.set_yticklabels(terms.keys())
+            ax.set_title('Term Correlations')
+        except (ValueError, np.linalg.LinAlgError) as e:
+            print(f"Warning: Could not compute correlation matrix: {e}")
+            ax.text(0.5, 0.5, 'Could not compute\ncorrelations',
+                   ha='center', va='center')
+            ax.axis('off')
     
     def _plot_term_magnitudes(self, terms: Dict[str, np.ndarray],
                             ax: plt.Axes):
         """Plot magnitude distribution of terms."""
+        if not terms:
+            ax.text(0.5, 0.5, 'No terms to plot',
+                   ha='center', va='center')
+            ax.axis('off')
+            return
+            
         positions = range(len(terms))
         ax.boxplot([values.flatten() for values in terms.values()],
                   tick_labels=terms.keys())
@@ -178,6 +201,12 @@ class TermsAnalysis(CompositePlot):
     def _plot_statistics(self, terms: Dict[str, np.ndarray],
                         ax: plt.Axes):
         """Plot statistical summary of terms."""
+        if not terms:
+            ax.text(0.5, 0.5, 'No terms to analyze',
+                   ha='center', va='center')
+            ax.axis('off')
+            return
+            
         stats_text = []
         for name, values in terms.items():
             flat_values = values.flatten()

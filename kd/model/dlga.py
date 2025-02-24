@@ -173,6 +173,10 @@ class DLGA(BaseGa):
                 self.vizr.update("train_loss", iter + 1, float(loss), id=0).update(
                     "valid_loss", iter + 1, float(loss_validate), id=1
                 ).render()
+                
+                # Notify hook of epoch end
+                if hasattr(self, 'hook') and self.hook is not None:
+                    self.hook.on_epoch_end(iter + 1, float(loss), float(loss_validate))
 
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
@@ -531,6 +535,28 @@ class DLGA(BaseGa):
                     print(f"The best coef:  \n{self.coef[0]}")
                     print(f"The best fitness: {self.Fitness[0]}")
                     print(f"The best name: {self.name[0]}\r")
+                    
+                    # Notify hook of generation end
+                    if hasattr(self, 'hook') and self.hook is not None:
+                        # Calculate diversity as number of unique chromosomes
+                        # Convert each chromosome to a string for hashing
+                        unique_chroms = set()
+                        for chrom in self.Chrom:
+                            chrom_str = str(sorted([sorted(gene) for gene in chrom]))
+                            unique_chroms.add(chrom_str)
+                            
+                        stats = {
+                            'mean_fitness': float(np.mean(self.Fitness)),
+                            'diversity': len(unique_chroms)
+                        }
+                        self.hook.on_generation_end(
+                            iter + 1, 
+                            self.Chrom[0],
+                            self.coef[0],
+                            self.Fitness[0],
+                            self.name[0],
+                            stats
+                        )
 
         # Print final results
         print("-------------------------------------------")
