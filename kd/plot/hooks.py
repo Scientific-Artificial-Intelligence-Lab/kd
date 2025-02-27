@@ -1,4 +1,4 @@
-"""Hook system for DLGA monitoring.
+"""Hook system for model monitoring.
 
 这个 hook system 与现有的 vizr 系统并行工作，不影响原有功能。
 """
@@ -7,9 +7,10 @@ from typing import Dict, Any, Optional, Callable
 import numpy as np
 from functools import wraps
 from .adapters.dlga_adapter import DLGAAdapter
+from .adapters.deeprl_adapter import DeepRLAdapter
 
 def inject_hook(hook_method: str):
-    """Decorator to inject hook calls into DLGA methods.
+    """Decorator to inject hook calls into model methods.
     
     这个 decorator 用于在不修改原有代码的情况下注入 hook 调用。
     
@@ -102,12 +103,82 @@ class DLGAHook:
             equation_str=best_name,
             stats=stats
         )
+
+class DeepRLHook:
+    """Hook for monitoring DeepRL model.
+    
+    这个 hook 通过 adapter 将 DeepRL 的训练过程数据转发给 monitor。
+    """
+    
+    def __init__(self, adapter: DeepRLAdapter):
+        """Initialize hook.
         
-def attach_hook(model: Any, hook: DLGAHook) -> None:
+        Args:
+            adapter: DeepRLAdapter instance for data forwarding
+        """
+        self.adapter = adapter
+        
+    def on_training_start(self, model, model_config: Optional[Dict] = None) -> None:
+        """Called when training starts.
+        
+        Args:
+            model: DeepRL model instance
+            model_config: Optional model configuration
+        """
+        if model_config is None:
+            model_config = {
+                'n_samples_per_batch': getattr(model, 'n_samples_per_batch', None),
+                'binary_operators': getattr(model, 'binary_operators', []),
+                'unary_operators': getattr(model, 'unary_operators', [])
+            }
+        self.adapter.notify_training_start(model_config)
+        
+    def on_training_step(self, step: int, metrics: Dict[str, float]) -> None:
+        """Called at each training step.
+        
+        Args:
+            step: Current training step
+            metrics: Dictionary of metric values
+        """
+        self.adapter.notify_training_step(step, metrics)
+        
+    def on_episode_end(self, episode: int, metrics: Dict[str, float]) -> None:
+        """Called at the end of each episode.
+        
+        Args:
+            episode: Current episode number
+            metrics: Dictionary of metric values
+        """
+        self.adapter.notify_episode_end(episode, metrics)
+        
+    def on_state_action(self, state: np.ndarray, action: np.ndarray,
+                       value: float, reward: float,
+                       next_state: Optional[np.ndarray] = None,
+                       info: Optional[Dict] = None) -> None:
+        """Called for each state-action pair.
+        
+        Args:
+            state: Current state
+            action: Action taken
+            value: Value estimate
+            reward: Reward received
+            next_state: Next state (optional)
+            info: Additional information (optional)
+        """
+        self.adapter.notify_state_action(
+            state=state,
+            action=action,
+            value=value,
+            reward=reward,
+            next_state=next_state,
+            info=info
+        )
+        
+def attach_hook(model: Any, hook: Any) -> None:
     """Attach hook to model.
     
     Args:
-        model: DLGA model instance
+        model: Model instance
         hook: Hook instance to attach
     """
     model.hook = hook 

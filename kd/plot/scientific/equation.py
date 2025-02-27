@@ -7,9 +7,10 @@ including heatmaps of individual terms and comprehensive term analysis.
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable, Union, List
 import seaborn as sns
 from scipy import stats
+import torch
 
 from ..core.base import BasePlot, CompositePlot
 
@@ -239,3 +240,79 @@ class TermsAnalysis(CompositePlot):
         
         ax.axis('off')
         ax.set_title('Term Statistics', pad=20)  # Add padding to title 
+
+def calculate_metadata(model, X: np.ndarray) -> Dict[str, np.ndarray]:
+    """计算模型元数据（导数）。
+    
+    参数:
+        model: 具有Net属性的模型实例 (如DLGA模型)
+        X: 输入点数组 (n_samples, input_dim)
+        
+    返回:
+        Dict: 包含u及其导数的字典
+    """
+    # 转换为张量
+    device = model.device if hasattr(model, 'device') else 'cpu'
+    X_meta = torch.from_numpy(X.astype(np.float32)).to(device)
+    X_meta.requires_grad_(True)
+    
+    # 计算u (函数值)
+    u_meta = model.Net(X_meta)
+    
+    # 计算一阶导数
+    u_grad = torch.autograd.grad(outputs=u_meta.sum(), inputs=X_meta, create_graph=True)[0]
+    
+    # 创建基本元数据字典
+    metadata = {
+        'u': u_meta.detach().cpu().numpy(),
+    }
+    
+    # 添加各个维度的导数
+    input_dim = X_meta.shape[1]
+    dim_names = ['x', 't', 'z'] if input_dim <= 3 else [f'x{i}' for i in range(input_dim)]
+    
+    for i in range(input_dim):
+        # 一阶导数
+        dim_grad = u_grad[:, i].reshape(-1, 1)
+        metadata[f'u_{dim_names[i]}'] = dim_grad.detach().cpu().numpy()
+        
+        # 二阶导数
+        dim_grad2 = torch.autograd.grad(outputs=dim_grad.sum(), inputs=X_meta, create_graph=True)[0][:, i].reshape(-1, 1)
+        metadata[f'u_{dim_names[i]}{dim_names[i]}'] = dim_grad2.detach().cpu().numpy()
+        
+        # 仅对空间维度计算三阶导数
+        if i == 0:  # 假设第一维是主要空间维度
+            dim_grad3 = torch.autograd.grad(outputs=dim_grad2.sum(), inputs=X_meta, create_graph=True)[0][:, i].reshape(-1, 1)
+            metadata[f'u_{dim_names[i]}{dim_names[i]}{dim_names[i]}'] = dim_grad3.detach().cpu().numpy()
+    
+    # 混合导数 (针对2D+情况)
+    if input_dim >= 2:
+        for i in range(input_dim):
+            for j in range(i+1, input_dim):
+                # 计算混合二阶导数 (如u_xt)
+                grad_i = u_grad[:, i].reshape(-1, 1)
+                grad_ij = torch.autograd.grad(outputs=grad_i.sum(), inputs=X_meta, create_graph=True)[0][:, j].reshape(-1, 1)
+                metadata[f'u_{dim_names[i]}{dim_names[j]}'] = grad_ij.detach().cpu().numpy()
+    
+    return metadata
+
+def calculate_equation_residual(metadata: Dict[str, np.ndarray], 
+                              equation_func: Callable) -> np.ndarray:
+    """计算方程残差。
+    
+    参数:
+        metadata: 包含u及其导数的字典
+        equation_func: 方程定义函数，接收metadata返回残差
+        
+    返回:
+        方程残差数组 (n_samples, 1)
+    """
+    if equation_func is None:
+        raise ValueError("必须提供equation_func参数，用于定义方程")
+    
+    residual = equation_func(metadata)
+    
+    # 确保输出形状为 (n_samples, 1)
+    if len(residual.shape) == 1:
+        residual = residual.reshape(-1, 1)
+    return residual 

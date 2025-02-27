@@ -19,15 +19,15 @@
 
 ## DOING
 
-### 1. DLGA Integration
-- [ ] evolution plot 还有点问题
-- [ ] Direct Plot Interface 是否完全实现了?
-
-### 2. DeepRL Integration
+### 1. DeepRL Integration [重要]
 - [ ] DeepRL adapter 实现
 - [ ] Training metrics 收集
 - [ ] Evolution data 适配
 - [ ] Visualization components 扩展
+
+### 2. DLGA Integration
+- [ ] evolution plot 还有点问题
+- [ ] Direct Plot Interface 是否完全实现了?
 
 ### 3. vizr 移植 和 删除
 - [ ] vizr 移植

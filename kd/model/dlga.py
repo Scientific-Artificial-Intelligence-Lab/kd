@@ -152,7 +152,7 @@ class DLGA(BaseGa):
         print(f"===============train Net=================")
 
         # Training loop
-        for iter in range(50000):
+        for iter in range(1500):
             NN_optimizer.zero_grad()
             prediction = self.Net(X_train)
             prediction_validate = self.Net(X_valid)
