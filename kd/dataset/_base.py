@@ -467,7 +467,10 @@ def load_kdv_equation():
         Resource: PDE-READ: Human-readable Partial Differential Equation Discovery using Deep Learning, pp20
         """
     )
-    file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
+    # file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
+    file_path = Path(__file__).parent / "data" / "KdV_equation.mat"
+    if not file_path.exists():
+        raise FileNotFoundError(f"Data file not found: {file_path}")
     pde_data = load_mat_file(file_path)
     return PDEDataset(
         equation_name = 'kdv equation',

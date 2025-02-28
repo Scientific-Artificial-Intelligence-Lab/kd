@@ -41,6 +41,7 @@ from kd.viz.dlga_viz import *
 
 # Load KdV equation data
 kdv_data = load_kdv_equation()
+x, t, u = kdv_data.x, kdv_data.t, kdv_data.usol
 
 # Extract data
 X_train, y_train = kdv_data.sample(n_samples=1000)
@@ -50,7 +51,7 @@ X_train, y_train = kdv_data.sample(n_samples=1000)
 #####################################################################
 
 # Initialize model
-model = DLGA(epi=0.2, input_dim=2)  # 2D input: (x,t)
+model = DLGA(epi=kdv_data.epi, input_dim=2)  # 2D input: (x,t)
 
 # Train the model
 print("\nTraining DLGA model...")
