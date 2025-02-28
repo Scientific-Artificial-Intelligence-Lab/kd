@@ -13,7 +13,7 @@ import numpy as np
 import heapq
 from tqdm import tqdm
 import pickle
-from kd.vizr.vizr import *
+import matplotlib.pyplot as plt
 
 
 class BaseGa(BaseEstimator, metaclass=ABCMeta):
@@ -54,7 +54,11 @@ class DLGA(BaseGa):
         Net (NN): Neural network model.
         epi (float): Penalty coefficient for equation length.
         fitness_history (list): History of best fitness values.
-        vizr (Vizr): Visualization manager.
+        train_loss_history (list): History of training loss values.
+        val_loss_history (list): History of validation loss values.
+        metadata (dict): Metadata for equation terms.
+        evolution_history (list): History of evolution data.
+        complexity_history (list): History of complexity data.
     """
     
     _parameter: dict = {}
@@ -93,17 +97,11 @@ class DLGA(BaseGa):
 
         self.epi = epi
         self.fitness_history = []  # Track best fitness per generation
-        self.vizr = Vizr("DLGA Training Progress", nrows=1, ncols=2)
-
-        # Add plots for training and validation loss
-        self.vizr.add(LinePlot, "train_loss", id=0, color="red")
-        self.vizr.add(LinePlot, "valid_loss", id=1, color="blue")
-
-        # Set labels for subplot
-        self.vizr.axes[0].set_xlabel("Iteration")
-        self.vizr.axes[0].set_ylabel("train_loss")
-        self.vizr.axes[1].set_xlabel("Iteration")
-        self.vizr.axes[1].set_ylabel("valid_loss")
+        self.train_loss_history = []  # 训练损失历史
+        self.val_loss_history = []    # 验证损失历史
+        self.metadata = {}  # 新增元数据存储
+        self.evolution_history = []  # 存储完整的进化历史数据
+        self.complexity_history = []  # 存储复杂度历史
 
     def train_NN(self, X, y):
         """Train neural network on data.
@@ -152,7 +150,7 @@ class DLGA(BaseGa):
         print(f"===============train Net=================")
 
         # Training loop
-        for iter in range(50000):
+        for iter in range(20000):
             NN_optimizer.zero_grad()
             prediction = self.Net(X_train)
             prediction_validate = self.Net(X_valid)
@@ -170,9 +168,9 @@ class DLGA(BaseGa):
                     "iter_num: %d      loss: %.8f    loss_validate: %.8f"
                     % (iter + 1, loss, loss_validate)
                 )
-                self.vizr.update("train_loss", iter + 1, float(loss), id=0).update(
-                    "valid_loss", iter + 1, float(loss_validate), id=1
-                ).render()
+
+            self.train_loss_history.append(float(loss))
+            self.val_loss_history.append(float(loss_validate))
 
         self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
@@ -213,6 +211,13 @@ class DLGA(BaseGa):
 
         self.u_t = ut.cpu().detach().numpy()
         self.u_tt = utt.cpu().detach().numpy()
+
+        self.metadata = {
+            'u': u.cpu().detach().numpy(),
+            'u_x': ux.cpu().detach().numpy(),
+            'u_xxx': uxxx.cpu().detach().numpy(),
+            'u_t': ut.cpu().detach().numpy()
+        }
 
         return self.Theta
 
@@ -390,26 +395,57 @@ class DLGA(BaseGa):
             coef_list.append(coef)
             name_list.append(name)
 
-        # Select best half
-        re1 = list(
-            map(fitness_list.index, heapq.nsmallest(int(size_pop / 2), fitness_list))
-        )
-
-        for index in re1:
+        # Select best half with tournament selection
+        new_population_size = int(size_pop / 2)
+        selected_indices = []
+        
+        for _ in range(new_population_size):
+            # Tournament selection
+            tournament_size = 3
+            tournament = np.random.choice(size_pop, tournament_size, replace=False)
+            winner = tournament[np.argmin([fitness_list[i] for i in tournament])]
+            selected_indices.append(winner)
+        
+        # Add selected individuals to new population
+        for index in selected_indices:
             new_Chrom.append(Chrom[index])
             new_fitness.append(fitness_list[index])
             new_coef.append(coef_list[index])
             new_name.append(name_list[index])
-
-        # Generate new random chromosomes for other half
-        for index in range(int(size_pop / 2)):
-            new = DLGA.random_genome(self)
-            new_Chrom.append(new)
+        
+        # Generate new random chromosomes with higher initial quality
+        for _ in range(new_population_size):
+            attempts = 3  # Try multiple times to get a good initial solution
+            best_new = None
+            best_new_fitness = float('inf')
+            
+            for _ in range(attempts):
+                new_genome = self.random_genome()
+                gene_translate, length_penalty = self.translate_DNA(new_genome)
+                coef, MSE, _, name = self.get_fitness(gene_translate, length_penalty)
+                
+                if MSE < best_new_fitness:
+                    best_new = new_genome
+                    best_new_fitness = MSE
+                    best_new_coef = coef
+                    best_new_name = name
+            
+            new_Chrom.append(best_new)
+            new_fitness.append(best_new_fitness)
+            new_coef.append(best_new_coef)
+            new_name.append(best_new_name)
 
         self.Chrom = new_Chrom
         self.Fitness = new_fitness
         self.coef = new_coef
         self.name = new_name
+        self.fitness_history.append(self.Fitness[0])
+        # 记录完整进化数据
+        self.evolution_history.append({
+            'generation': len(self.fitness_history),
+            'fitness': self.Fitness[0],
+            'complexity': len(self.Chrom[0])  # 用染色体长度表示复杂度
+        })
         return self.Chrom, self.Fitness, self.coef, self.name
 
     def delete_duplicates(self):
@@ -429,49 +465,61 @@ class DLGA(BaseGa):
         return self.Chrom
 
     def convert_chrom_to_eq(self, chrom, left_name, coef):
-        """Convert chromosome to equation string.
-        
-        Args:
-            chrom: Chromosome to convert.
-            left_name: Left-hand side variable name.
-            coef: Coefficients.
-            
-        Returns:
-            str: Equation string.
-        """
+        """Convert chromosome to equation string."""
         name = ["u", "ux", "uxx", "uxxx", "ut", "utt"]
+        
+        # Debug信息
+        print("\nDebug convert_chrom_to_eq:")
+        print(f"Chromosome length: {len(chrom)}")
+        print(f"Coefficient shape: {coef.shape}")
+        print(f"Chromosome structure: {chrom}")
+        print(f"Coefficients: {coef}")
+        
         string = []
-        for i in range(len(chrom)):
-            item = chrom[i]
-            string.append(str(np.round(coef[i, 0], 4)))
-            string.append("*")
-            for gene in item:
-                string.append(name[gene])
+        try:
+            for i in range(len(chrom)):
+                if i >= coef.shape[0]:
+                    print(f"Warning: More chromosome modules than coefficients at index {i}")
+                    break
+                    
+                item = chrom[i]
+                coef_str = str(np.round(coef[i, 0], 4))
+                string.append(coef_str)
                 string.append("*")
-            string.pop(-1)
-            string.append("+")
-        string.pop(-1)
-        string = f"{left_name}=" + "".join(string)
-        return string
+                
+                # 确保item是有效的基因模块
+                if not item:
+                    print(f"Warning: Empty module at index {i}")
+                    continue
+                    
+                for gene in item:
+                    if gene < 0 or gene >= len(name):
+                        print(f"Warning: Invalid gene index {gene} at module {i}")
+                        continue
+                    string.append(name[gene])
+                    string.append("*")
+                string.pop(-1)
+                string.append("+")
+                
+            if string:  # 确保有内容再删除最后的加号
+                string.pop(-1)
+            
+            equation = f"{left_name}=" + "".join(string)
+            print(f"Generated equation: {equation}")
+            return equation
+            
+        except Exception as e:
+            print(f"Error in convert_chrom_to_eq: {str(e)}")
+            print(f"Current string state: {string}")
+            raise
 
     def evolution(self):
-        """Run genetic algorithm evolution.
-        
-        Returns:
-            tuple: (best chromosome, coefficients, fitness, equation type)
-        """
+        """Run genetic algorithm evolution."""
         self.Chrom = []
         self.Fitness = []
         self.fitness_history = []
-
-        # Add GA evolution subplot
-        ga_plot_idx = self.vizr.add_subplot()
-        self.vizr.add(LinePlot, "best_fitness", id=ga_plot_idx, color="green")
-
-        # Set labels for GA subplot
-        self.vizr.axes[ga_plot_idx].set_xlabel("Generation")
-        self.vizr.axes[ga_plot_idx].set_ylabel("Best Fitness")
-        self.vizr.axes[ga_plot_idx].set_title("GA Evolution")
+        best_solution = None
+        best_fitness = float('inf')
 
         # Initialize population
         for iter in range(self.pop_size):
@@ -484,11 +532,6 @@ class DLGA(BaseGa):
                 self, gene_translate, length_penalty_coef
             )
             self.Fitness.append(MSE)
-
-            # Update visualization
-            self.vizr.update(
-                "best_fitness", iter + 1, float(MSE), id=ga_plot_idx
-            ).render()
 
         DLGA.delete_duplicates(self)
 
@@ -508,17 +551,27 @@ class DLGA(BaseGa):
 
         # Evolution loop
         for iter in tqdm(range(self.n_generations)):
-            pickle.dump(self.Chrom.copy()[0], open(f"result_save/best_save.pkl", "wb"))
-            best = self.Chrom.copy()[0]
+            # 保存当前最优解
+            current_best = self.Chrom[0].copy()
+            current_best_fitness = self.Fitness[0]
+            
+            # 进行交叉变异
             DLGA.cross_over(self)
             DLGA.mutation(self)
             DLGA.delete_duplicates(self)
-            best = pickle.load(open(f"result_save/best_save.pkl", "rb"))
-            self.Chrom[0] = best
+            
+            # 选择新一代
             DLGA.select(self)
-
-            # Save if better solution found
-            if self.Chrom[0] != best:
+            
+            # 修改精英策略实现
+            # 比较并更新全局最优解
+            if self.Fitness[0] < best_fitness:
+                best_solution = self.Chrom[0].copy()
+                best_coef = self.coef[0].copy()  # 同时保存系数
+                best_fitness = self.Fitness[0]
+                best_name = self.name[0]
+                
+                # 记录改进
                 with open(f"result_save/DLGA_output.txt", "a") as f:
                     f.write(f"iter: {iter + 1}\n")
                     f.write(f"The best Chrom: {self.Chrom[0]}\n")
@@ -526,22 +579,55 @@ class DLGA(BaseGa):
                     f.write(f"The best fitness: {self.Fitness[0]}\n")
                     f.write(f"The best name: {self.name[0]}\n")
                     f.write(f"----------------------------------------\n")
-                    print(f"iter: {iter + 1}\n")
-                    print(f"The best Chrom: {self.Chrom[0]}")
-                    print(f"The best coef:  \n{self.coef[0]}")
-                    print(f"The best fitness: {self.Fitness[0]}")
-                    print(f"The best name: {self.name[0]}\r")
+                    print(f"\nNew best solution found at generation {iter + 1}")
+                    print(f"Improvement: {((current_best_fitness - self.Fitness[0])/current_best_fitness):.2%}")
+            
+            # 每代结束时确保最优解的保留
+            worst_idx = np.argmax(self.Fitness)
+            if best_solution is not None and best_fitness < self.Fitness[worst_idx]:
+                self.Chrom[worst_idx] = best_solution.copy()
+                self.coef[worst_idx] = best_coef.copy()
+                self.Fitness[worst_idx] = best_fitness
+                self.name[worst_idx] = best_name
+            
+            # 记录历史（确保记录全局最优，而不是当前代的最优）
+            self.fitness_history.append(min(self.Fitness[0], best_fitness))
+            total_genes = sum(len(chrom) for chrom in self.Chrom)
+            unique_genes = len(set(tuple(sorted(module)) 
+                                 for chrom in self.Chrom 
+                                 for module in chrom))
+            
+            self.evolution_history.append({
+                'generation': iter,
+                'fitness': self.Fitness[0],
+                'complexity': len(self.Chrom[0]),
+                'population_size': total_genes,
+                'unique_modules': unique_genes
+            })
 
-        # Print final results
-        print("-------------------------------------------")
-        print(f"Finally discovered equation")
-        print(f"The best Chrom: {self.Chrom[0]}")
-        print(f"The best coef:  \n{self.coef[0]}")
-        print(f"The best fitness: {self.Fitness[0]}")
-        print(f"The best name: {self.name[0]}\r")
-        print("---------------------------------------------")
+            # 定期打印统计信息
+            if iter % 10 == 0:
+                print(f"\nGeneration {iter} stats:")
+                print(f"Current best fitness: {self.Fitness[0]:.4f}")
+                print(f"Global best fitness: {best_fitness:.4f}")
+                print(f"Population size: {total_genes}")
+                print(f"Unique modules: {unique_genes}")
 
-        return self.Chrom[0], self.coef[0], self.Fitness[0], self.name[0]
+        # 在返回之前确保数据匹配
+        final_chrom = best_solution if best_solution is not None else self.Chrom[0]
+        final_coef = self.coef[0]
+        
+        if len(final_chrom) != final_coef.shape[0]:
+            print(f"\nWarning: Mismatch between chromosome length ({len(final_chrom)}) "
+                  f"and coefficient count ({final_coef.shape[0]})")
+            
+            # 截断较长的一方以匹配
+            if len(final_chrom) > final_coef.shape[0]:
+                final_chrom = final_chrom[:final_coef.shape[0]]
+            else:
+                final_coef = final_coef[:len(final_chrom)]
+                
+        return final_chrom, final_coef, best_fitness, self.name[0]
 
     def fit(self, X, y):
         """Fit model to data.
@@ -552,10 +638,23 @@ class DLGA(BaseGa):
         """
         self.Net, self.best_epoch = self.train_NN(X, y)
         self.Theta = self.generate_meta_data(X)
-        Chrom, coef, _, name = self.evolution()
-        print("equation form:", self.convert_chrom_to_eq(Chrom, name, coef))
-        self.vizr.show()
+        
+        try:
+            Chrom, coef, fitness, name = self.evolution()
+            print("\nFinal solution debug info:")
+            print(f"Chromosome length: {len(Chrom)}")
+            print(f"Coefficient shape: {coef.shape}")
+            print(f"Chromosome: {Chrom}")
+            print(f"Coefficients: {coef}")
+            
+            equation = self.convert_chrom_to_eq(Chrom, name, coef)
+            print(f"equation form: {equation}")
+        except Exception as e:
+            print(f"Error in fit: {str(e)}")
+            raise
+
 
     def predict(self):
         """Make predictions (not implemented)."""
+        pass
         pass
