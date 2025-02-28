@@ -1,21 +1,4 @@
 """Example of running DLGA on real PDE data (KdV equation).
-
-Visualization Checklist:
-1. Training Process Visualization
-   ✓ 1.1 Training Loss Curve
-   ✓ 1.2 Validation Loss Curve
-   ✓ 1.3 Optimization Analysis (weights & diversity)
-   ✓ 1.4 Evolution Visualization
-
-2. Solution Analysis
-   ✓ 2.1 PDE Solution Comparison
-   ✓ 2.2 Residual Analysis
-   ✓ 2.3 Time Slice Comparison
-
-3. Equation Discovery Analysis
-   ✓ 3.1 Term Relationship Plot
-   ✓ 3.2 Metadata Plane Visualization
-   ✓ 3.3 Derivative Relationships
 """
 
 import os
@@ -133,16 +116,15 @@ plot_time_slices(
 # 3. Equation Discovery Analysis
 #-------------------------------------------------------------------
 # 3.1 方程项关系可视化
-if hasattr(model, 'metadata') and model.metadata:
-    plot_equation_terms(
-        model.metadata,
-        terms={
-            'x_term': {'vars': ['u', 'u_x'], 'label': '6uu_x'},
-            'y_term': {'vars': ['u_xxx'], 'label': '-u_xxx'}
-        },
-        equation_name="KdV Equation",
-        output_dir=VIZ_DIR
-    )
+plot_equation_terms(
+    model.metadata,
+    terms={
+        'x_term': {'vars': ['u', 'u_x'], 'label': '6uu_x'},
+        'y_term': {'vars': ['u_xxx'], 'label': '-u_xxx'}
+    },
+    equation_name="KdV Equation",
+    output_dir=VIZ_DIR
+)
 
 # 3.2 元数据平面可视化（x-t平面上的方程残差分布）
 plot_metadata_plane(
