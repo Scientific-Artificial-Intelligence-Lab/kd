@@ -8,6 +8,5 @@ from . import base
 from . import data
 from . import model
 from . import utils
-from . import vizr
 
-__all__ = ['base', 'data', 'model', 'utils', 'vizr'] 
+__all__ = ['base', 'data', 'model', 'utils'] 

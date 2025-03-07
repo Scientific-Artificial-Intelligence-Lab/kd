@@ -27,18 +27,6 @@ Models
    :undoc-members:
    :show-inheritance:
 
-Visualization
--------------
-.. automodule:: kd.vizr.vizr
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: kd.vizr.pde_comparison
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Utils
 -----
 .. automodule:: kd.utils

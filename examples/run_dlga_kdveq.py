@@ -16,6 +16,7 @@ sys.path.append(kd_main_dir)
 from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
 from kd.viz.dlga_viz import *
+from kd.viz.dlga_kdv import *
 
 #####################################################################
 # 1. Load and prepare data
