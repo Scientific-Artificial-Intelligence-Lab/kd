@@ -188,3 +188,4 @@ docs/_build/
 
 .cursor/
 .plot_output/
+output/
