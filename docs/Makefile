@@ -8,12 +8,6 @@ SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
 
-new_makefile=false
-if [ ! -f "Makefile" ]; then
-    sphinx-quickstart
-    new_makefile=true
-fi
-
 # Put it first so that "make" without argument is like "make help".
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
