@@ -27,6 +27,28 @@ Models
    :undoc-members:
    :show-inheritance:
 
+Visualization
+------------
+.. automodule:: kd.viz.dlga_viz
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.viz.dlga_kdv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.viz.deeprl_viz
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.viz.deeprl_kdv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Utils
 -----
 .. automodule:: kd.utils
