@@ -1,0 +1,1961 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>API Documentation &#8212; kd 0.0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=a66d8bb5" />
+    <script src="_static/documentation_options.js?v=d45e8c67"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Welcome to kd’s documentation!" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">kd</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-kd.base">Base Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kd.data">Data Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kd.model.deeprl">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#visualization">Visualization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kd.utils">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="previous chapter">Welcome to kd’s documentation!</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="api-documentation">
+<h1>API Documentation<a class="headerlink" href="#api-documentation" title="Link to this heading">¶</a></h1>
+<section id="module-kd.base">
+<span id="base-module"></span><h2>Base Module<a class="headerlink" href="#module-kd.base" title="Link to this heading">¶</a></h2>
+<p>Base class for all estimators in KD.</p>
+<p>This class provides basic functionality for all estimators in the KD framework,
+including parameter management and string representation. It is inspired by
+scikit-learn’s BaseEstimator.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.base.</span></span><span class="sig-name descname"><span class="pre">BaseEstimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for all estimators in KD.</p>
+<p>This class should not be used directly. Instead, use derived classes.
+All estimators should inherit from this class.</p>
+<p>This is an abstract base class that provides common functionality for
+parameter management and string representation. It does not have any
+attributes of its own.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator.get_params">
+<span class="sig-name descname"><span class="pre">get_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator.get_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator.get_params" title="Link to this definition">¶</a></dt>
+<dd><p>Get parameters for this estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>deep</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, will return the parameters for this
+estimator and contained subobjects that are estimators. Defaults to True.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Parameter names mapped to their values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator.set_params">
+<span class="sig-name descname"><span class="pre">set_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator.set_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator.set_params" title="Link to this definition">¶</a></dt>
+<dd><p>Set the parameters of this estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**params</strong> – Estimator parameters.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Estimator instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>self</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If trying to set an invalid parameter.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-kd.data">
+<span id="data-module"></span><h2>Data Module<a class="headerlink" href="#module-kd.data" title="Link to this heading">¶</a></h2>
+<p>Data handling module for PDE-related datasets.</p>
+<dl class="simple">
+<dt>This module provides classes for handling different types of PDE data:</dt><dd><ul class="simple">
+<li><p>chafee-infante: Chafee-Infante equation data (301x200)</p></li>
+<li><p>Burgers: Burgers equation data</p></li>
+<li><p>Kdv: Korteweg-de Vries equation data (512x201)</p></li>
+</ul>
+</dd>
+</dl>
+<p>The module supports both regular grid data (RegularData) and sparse sampling data (SparseData).</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.data.</span></span><span class="sig-name descname"><span class="pre">BaseDataHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#BaseDataHandler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.BaseDataHandler" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>Abstract base class for data handling.</p>
+<p>This class provides basic data loading and cleaning functionality.
+Subclasses should implement specific data processing logic.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.source">
+<span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#kd.data.BaseDataHandler.source" title="Link to this definition">¶</a></dt>
+<dd><p>Data source (file path or DataFrame)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.data">
+<span class="sig-name descname"><span class="pre">data</span></span><a class="headerlink" href="#kd.data.BaseDataHandler.data" title="Link to this definition">¶</a></dt>
+<dd><p>Loaded and processed data</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.clean_data">
+<span class="sig-name descname"><span class="pre">clean_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#BaseDataHandler.clean_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.BaseDataHandler.clean_data" title="Link to this definition">¶</a></dt>
+<dd><p>Clean data by removing NaN values and duplicates.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#BaseDataHandler.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.BaseDataHandler.get_data" title="Link to this definition">¶</a></dt>
+<dd><p>Get the processed data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Processed data dictionary</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.load_data">
+<span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#BaseDataHandler.load_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.BaseDataHandler.load_data" title="Link to this definition">¶</a></dt>
+<dd><p>Load data from source.</p>
+<dl class="simple">
+<dt>Supports loading from:</dt><dd><ul class="simple">
+<li><p>CSV files</p></li>
+<li><p>Pandas DataFrames</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If source format is not supported</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.BaseDataHandler.process_data">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">process_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#BaseDataHandler.process_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.BaseDataHandler.process_data" title="Link to this definition">¶</a></dt>
+<dd><p>Process data according to specific requirements.</p>
+<p>To be implemented by subclasses.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.data.RegularData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.data.</span></span><span class="sig-name descname"><span class="pre">RegularData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#RegularData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.RegularData" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.data.BaseDataHandler" title="kd.data.BaseDataHandler"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDataHandler</span></code></a></p>
+<p>Handler for regular grid PDE data.</p>
+<dl class="simple">
+<dt>This class handles data from PDE solutions on regular grids, including:</dt><dd><ul class="simple">
+<li><p>chafee-infante (301x200)</p></li>
+<li><p>Burgers equation</p></li>
+<li><p>KdV equation (512x201)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.RegularData.X">
+<span class="sig-name descname"><span class="pre">X</span></span><a class="headerlink" href="#kd.data.RegularData.X" title="Link to this definition">¶</a></dt>
+<dd><p>Spatial coordinates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.RegularData.sym_true">
+<span class="sig-name descname"><span class="pre">sym_true</span></span><a class="headerlink" href="#kd.data.RegularData.sym_true" title="Link to this definition">¶</a></dt>
+<dd><p>Symbolic form of the true equation</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.RegularData.n_input_dim">
+<span class="sig-name descname"><span class="pre">n_input_dim</span></span><a class="headerlink" href="#kd.data.RegularData.n_input_dim" title="Link to this definition">¶</a></dt>
+<dd><p>Number of spatial dimensions (default: 1)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.RegularData.u">
+<span class="sig-name descname"><span class="pre">u</span></span><a class="headerlink" href="#kd.data.RegularData.u" title="Link to this definition">¶</a></dt>
+<dd><p>Solution values</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.RegularData.ut">
+<span class="sig-name descname"><span class="pre">ut</span></span><a class="headerlink" href="#kd.data.RegularData.ut" title="Link to this definition">¶</a></dt>
+<dd><p>Time derivatives</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.RegularData.info">
+<span class="sig-name descname"><span class="pre">info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#RegularData.info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.RegularData.info" title="Link to this definition">¶</a></dt>
+<dd><p>Print information about the loaded data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.RegularData.load_data">
+<span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#RegularData.load_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.RegularData.load_data" title="Link to this definition">¶</a></dt>
+<dd><p>Load data from predefined datasets.</p>
+<dl class="simple">
+<dt>The following datasets are supported:</dt><dd><ul class="simple">
+<li><p>chafee-infante: Chafee-Infante equation data</p></li>
+<li><p>Burgers: Burgers equation data</p></li>
+<li><p>Kdv: Korteweg-de Vries equation data</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If dataset is not supported.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.RegularData.process_data">
+<span class="sig-name descname"><span class="pre">process_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#RegularData.process_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.RegularData.process_data" title="Link to this definition">¶</a></dt>
+<dd><p>Process regular grid data.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.data.SparseData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.data.</span></span><span class="sig-name descname"><span class="pre">SparseData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#SparseData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.SparseData" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.data.BaseDataHandler" title="kd.data.BaseDataHandler"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDataHandler</span></code></a></p>
+<p>Handler for sparsely sampled PDE data.</p>
+<p>This class handles data from sparse sampling points, typically used
+when regular grid data is not available. It includes functionality
+for train/validation splitting and collocation point sampling.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.SparseData.xt">
+<span class="sig-name descname"><span class="pre">xt</span></span><a class="headerlink" href="#kd.data.SparseData.xt" title="Link to this definition">¶</a></dt>
+<dd><p>Space-time coordinates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.SparseData.x">
+<span class="sig-name descname"><span class="pre">x</span></span><a class="headerlink" href="#kd.data.SparseData.x" title="Link to this definition">¶</a></dt>
+<dd><p>Spatial coordinates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.SparseData.t">
+<span class="sig-name descname"><span class="pre">t</span></span><a class="headerlink" href="#kd.data.SparseData.t" title="Link to this definition">¶</a></dt>
+<dd><p>Time coordinates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.SparseData.u">
+<span class="sig-name descname"><span class="pre">u</span></span><a class="headerlink" href="#kd.data.SparseData.u" title="Link to this definition">¶</a></dt>
+<dd><p>Solution values (shape: (N, 1))</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.data.SparseData.colloc_num">
+<span class="sig-name descname"><span class="pre">colloc_num</span></span><a class="headerlink" href="#kd.data.SparseData.colloc_num" title="Link to this definition">¶</a></dt>
+<dd><p>Number of collocation points (default: 20000)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.data.SparseData.process_data">
+<span class="sig-name descname"><span class="pre">process_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">domains</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/data.html#SparseData.process_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.data.SparseData.process_data" title="Link to this definition">¶</a></dt>
+<dd><p>Process sparse data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>domains</strong> (<em>tuple</em>) – (lower_bound, upper_bound) for the domain</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>The processing includes:</dt><dd><ol class="arabic simple">
+<li><p>Train/validation split (80/20)</p></li>
+<li><p>Latin Hypercube Sampling for collocation points</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-kd.model.deeprl">
+<span id="models"></span><h2>Models<a class="headerlink" href="#module-kd.model.deeprl" title="Link to this heading">¶</a></h2>
+<p>Deep Reinforcement Learning for PDE Discovery.</p>
+<p>This module implements a deep reinforcement learning approach for discovering
+governing equations of PDEs. It supports both regular grid data and sparse
+sampling, and can be combined with Physics-Informed Neural Networks (PINN).</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.deeprl.BaseRL">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.deeprl.</span></span><span class="sig-name descname"><span class="pre">BaseRL</span></span><a class="reference internal" href="_modules/kd/model/deeprl.html#BaseRL"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.BaseRL" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.base.BaseEstimator" title="kd.base.BaseEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a></p>
+<p>Abstract base class for reinforcement learning based models.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.BaseRL.fit">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#BaseRL.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.BaseRL.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.BaseRL.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#BaseRL.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.BaseRL.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.deeprl.</span></span><span class="sig-name descname"><span class="pre">DeepRL</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_per_batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'./log/'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">core_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.model.deeprl.BaseRL" title="kd.model.deeprl.BaseRL"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseRL</span></code></a></p>
+<p>Deep Reinforcement Learning model for PDE discovery.</p>
+<p>This class implements a deep RL approach to discover governing equations
+of PDEs. It uses a controller to generate candidate equations and a
+searcher to evaluate them.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.n_iterations">
+<span class="sig-name descname"><span class="pre">n_iterations</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.n_iterations" title="Link to this definition">¶</a></dt>
+<dd><p>Number of training iterations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.n_samples_per_batch">
+<span class="sig-name descname"><span class="pre">n_samples_per_batch</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.n_samples_per_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Number of samples per batch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.operator">
+<span class="sig-name descname"><span class="pre">operator</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.operator" title="Link to this definition">¶</a></dt>
+<dd><p>List of allowed operators.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.out_path">
+<span class="sig-name descname"><span class="pre">out_path</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.out_path" title="Link to this definition">¶</a></dt>
+<dd><p>Path for output files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.dataset">
+<span class="sig-name descname"><span class="pre">dataset</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Dataset object.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.seed" title="Link to this definition">¶</a></dt>
+<dd><p>Random seed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.core_num">
+<span class="sig-name descname"><span class="pre">core_num</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.core_num" title="Link to this definition">¶</a></dt>
+<dd><p>Number of CPU cores to use.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.config">
+<span class="sig-name descname"><span class="pre">config</span></span><a class="headerlink" href="#kd.model.deeprl.DeepRL.config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> (<em>list</em>) – Domain boundaries.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.import_inner_data">
+<span class="sig-name descname"><span class="pre">import_inner_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'regular'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.import_inner_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.import_inner_data" title="Link to this definition">¶</a></dt>
+<dd><p>Import data from predefined datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> (<em>str</em>) – Name of dataset.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data (‘regular’ or ‘sparse’).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.info">
+<span class="sig-name descname"><span class="pre">info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.info" title="Link to this definition">¶</a></dt>
+<dd><p>Print model information.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_controller">
+<span class="sig-name descname"><span class="pre">make_controller</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_controller"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_controller" title="Link to this definition">¶</a></dt>
+<dd><p>Create controller.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Controller object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Controller</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_gp_aggregator">
+<span class="sig-name descname"><span class="pre">make_gp_aggregator</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_gp_aggregator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_gp_aggregator" title="Link to this definition">¶</a></dt>
+<dd><p>Create GP aggregator if enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>GP aggregator object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>GPAggregator or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_outter_data">
+<span class="sig-name descname"><span class="pre">make_outter_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_outter_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_outter_data" title="Link to this definition">¶</a></dt>
+<dd><p>Create data handler for external data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>AssertionError</strong> – If data type is not ‘regular’.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_prior">
+<span class="sig-name descname"><span class="pre">make_prior</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_prior"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_prior" title="Link to this definition">¶</a></dt>
+<dd><p>Create prior for equation generation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Prior object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Prior</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_searcher">
+<span class="sig-name descname"><span class="pre">make_searcher</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_searcher"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_searcher" title="Link to this definition">¶</a></dt>
+<dd><p>Create searcher.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Searcher object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Searcher</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.make_state_manager">
+<span class="sig-name descname"><span class="pre">make_state_manager</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.make_state_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.make_state_manager" title="Link to this definition">¶</a></dt>
+<dd><p>Create state manager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State manager object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>StateManager</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.plot">
+<span class="sig-name descname"><span class="pre">plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig_type</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.plot" title="Link to this definition">¶</a></dt>
+<dd><p>Plot training results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fig_type</strong> (<em>str</em>) – Type of figure to plot.</p></li>
+<li><p><strong>**kwargs</strong> – Additional plotting arguments.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Matplotlib figure.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions (not implemented).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.print_pq">
+<span class="sig-name descname"><span class="pre">print_pq</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.print_pq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.print_pq" title="Link to this definition">¶</a></dt>
+<dd><p>Print priority queue.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.set_config">
+<span class="sig-name descname"><span class="pre">set_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.set_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.set_config" title="Link to this definition">¶</a></dt>
+<dd><p>Set model configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – Configuration dictionary or path.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.set_seeds">
+<span class="sig-name descname"><span class="pre">set_seeds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_seed</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.set_seeds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.set_seeds" title="Link to this definition">¶</a></dt>
+<dd><p>Set random seeds for reproducibility.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>new_seed</strong> (<em>int</em>) – Random seed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.set_task">
+<span class="sig-name descname"><span class="pre">set_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.set_task"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.set_task" title="Link to this definition">¶</a></dt>
+<dd><p>Set task configuration and optimizer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.setup" title="Link to this definition">¶</a></dt>
+<dd><p>Setup model components.</p>
+<dl class="simple">
+<dt>Initializes:</dt><dd><ul class="simple">
+<li><p>Program cache</p></li>
+<li><p>Task</p></li>
+<li><p>Prior</p></li>
+<li><p>State manager</p></li>
+<li><p>Controller</p></li>
+<li><p>GP aggregator</p></li>
+<li><p>Searcher</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.train">
+<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.train" title="Link to this definition">¶</a></dt>
+<dd><p>Train model for multiple epochs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL.train_one_step">
+<span class="sig-name descname"><span class="pre">train_one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL.train_one_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL.train_one_step" title="Link to this definition">¶</a></dt>
+<dd><p>Train model for one step.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>epoch</strong> (<em>int</em>) – Current epoch.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.deeprl.</span></span><span class="sig-name descname"><span class="pre">DeepRL_Pinn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.model.deeprl.DeepRL" title="kd.model.deeprl.DeepRL"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeepRL</span></code></a></p>
+<p>DeepRL model with Physics-Informed Neural Networks.</p>
+<p>This class extends DeepRL with PINN capabilities for better
+equation discovery in sparse data settings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.callIterPINN">
+<span class="sig-name descname"><span class="pre">callIterPINN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.callIterPINN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.callIterPINN" title="Link to this definition">¶</a></dt>
+<dd><p>Run iterative PINN and PDE discovery.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.make_outter_data">
+<span class="sig-name descname"><span class="pre">make_outter_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.make_outter_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.make_outter_data" title="Link to this definition">¶</a></dt>
+<dd><p>Create data handler for external data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.make_pinn_model">
+<span class="sig-name descname"><span class="pre">make_pinn_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.make_pinn_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.make_pinn_model" title="Link to this definition">¶</a></dt>
+<dd><p>Create PINN model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>PINN model object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>PINN_model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.pinn_train">
+<span class="sig-name descname"><span class="pre">pinn_train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">best_p</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.pinn_train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.pinn_train" title="Link to this definition">¶</a></dt>
+<dd><p>Train PINN with discovered equation constraint.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>best_p</strong> – Best program found.</p></li>
+<li><p><strong>count</strong> (<em>int</em>) – Iteration count.</p></li>
+<li><p><strong>coef</strong> (<em>float</em>) – Coefficient for PDE constraint.</p></li>
+<li><p><strong>local_sample</strong> (<em>bool</em>) – Whether to use local sampling.</p></li>
+<li><p><strong>last</strong> (<em>bool</em>) – Whether this is the last iteration.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions (not implemented).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.pretrain">
+<span class="sig-name descname"><span class="pre">pretrain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.pretrain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.pretrain" title="Link to this definition">¶</a></dt>
+<dd><p>Pretrain PINN model with observations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.reset_up">
+<span class="sig-name descname"><span class="pre">reset_up</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clear_cache</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset_controller</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.reset_up"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.reset_up" title="Link to this definition">¶</a></dt>
+<dd><p>Reset model components.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>clear_cache</strong> (<em>bool</em>) – Whether to clear program cache.</p></li>
+<li><p><strong>reset_controller</strong> (<em>bool</em>) – Whether to reset controller.</p></li>
+<li><p><strong>new_seed</strong> (<em>int</em>) – New random seed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.set_config">
+<span class="sig-name descname"><span class="pre">set_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.set_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.set_config" title="Link to this definition">¶</a></dt>
+<dd><p>Set model configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – Configuration dictionary or path.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.setup" title="Link to this definition">¶</a></dt>
+<dd><p>Setup model components including PINN.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.deeprl.DeepRL_Pinn.train">
+<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/deeprl.html#DeepRL_Pinn.train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.deeprl.DeepRL_Pinn.train" title="Link to this definition">¶</a></dt>
+<dd><p>Train model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<p id="module-kd.model.dlga">Deep Learning Genetic Algorithm (DLGA) for PDE discovery.</p>
+<p>This module implements a hybrid approach combining neural networks and genetic algorithms
+to discover governing equations of PDEs. It uses neural networks to fit the data and
+genetic algorithms to search for the symbolic form of equations.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.dlga.BaseGa">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.dlga.</span></span><span class="sig-name descname"><span class="pre">BaseGa</span></span><a class="reference internal" href="_modules/kd/model/dlga.html#BaseGa"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.BaseGa" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.base.BaseEstimator" title="kd.base.BaseEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a></p>
+<p>Abstract base class for genetic algorithm based models.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.BaseGa.fit">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#BaseGa.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.BaseGa.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.BaseGa.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#BaseGa.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.BaseGa.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.dlga.</span></span><span class="sig-name descname"><span class="pre">DLGA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_dim</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.model.dlga.BaseGa" title="kd.model.dlga.BaseGa"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseGa</span></code></a></p>
+<p>Deep Learning Genetic Algorithm for PDE discovery.</p>
+<p>This class combines neural networks with genetic algorithms to discover PDEs.
+The neural network fits the data while the genetic algorithm searches for
+the symbolic form of the governing equations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.max_length">
+<span class="sig-name descname"><span class="pre">max_length</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.max_length" title="Link to this definition">¶</a></dt>
+<dd><p>Maximum length of gene modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.partial_prob">
+<span class="sig-name descname"><span class="pre">partial_prob</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.partial_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Probability for partial gene generation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.genes_prob">
+<span class="sig-name descname"><span class="pre">genes_prob</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.genes_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Probability for gene generation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.mutate_rate">
+<span class="sig-name descname"><span class="pre">mutate_rate</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.mutate_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Mutation rate for genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.delete_rate">
+<span class="sig-name descname"><span class="pre">delete_rate</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.delete_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Rate for deleting gene modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.add_rate">
+<span class="sig-name descname"><span class="pre">add_rate</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.add_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Rate for adding gene modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.pop_size">
+<span class="sig-name descname"><span class="pre">pop_size</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.pop_size" title="Link to this definition">¶</a></dt>
+<dd><p>Population size for genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.n_generations">
+<span class="sig-name descname"><span class="pre">n_generations</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.n_generations" title="Link to this definition">¶</a></dt>
+<dd><p>Number of generations to evolve.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.train_ratio">
+<span class="sig-name descname"><span class="pre">train_ratio</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.train_ratio" title="Link to this definition">¶</a></dt>
+<dd><p>Ratio of training data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.valid_ratio">
+<span class="sig-name descname"><span class="pre">valid_ratio</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.valid_ratio" title="Link to this definition">¶</a></dt>
+<dd><p>Ratio of validation data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.device">
+<span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.device" title="Link to this definition">¶</a></dt>
+<dd><p>Device to use for computation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.device</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.Net">
+<span class="sig-name descname"><span class="pre">Net</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.Net" title="Link to this definition">¶</a></dt>
+<dd><p>Neural network model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>NN</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.epi">
+<span class="sig-name descname"><span class="pre">epi</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.epi" title="Link to this definition">¶</a></dt>
+<dd><p>Penalty coefficient for equation length.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.fitness_history">
+<span class="sig-name descname"><span class="pre">fitness_history</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.fitness_history" title="Link to this definition">¶</a></dt>
+<dd><p>History of best fitness values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.train_loss_history">
+<span class="sig-name descname"><span class="pre">train_loss_history</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.train_loss_history" title="Link to this definition">¶</a></dt>
+<dd><p>History of training loss values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.val_loss_history">
+<span class="sig-name descname"><span class="pre">val_loss_history</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.val_loss_history" title="Link to this definition">¶</a></dt>
+<dd><p>History of validation loss values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.metadata">
+<span class="sig-name descname"><span class="pre">metadata</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.metadata" title="Link to this definition">¶</a></dt>
+<dd><p>Metadata for equation terms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.evolution_history">
+<span class="sig-name descname"><span class="pre">evolution_history</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.evolution_history" title="Link to this definition">¶</a></dt>
+<dd><p>History of evolution data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.complexity_history">
+<span class="sig-name descname"><span class="pre">complexity_history</span></span><a class="headerlink" href="#kd.model.dlga.DLGA.complexity_history" title="Link to this definition">¶</a></dt>
+<dd><p>History of complexity data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.convert_chrom_to_eq">
+<span class="sig-name descname"><span class="pre">convert_chrom_to_eq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chrom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.convert_chrom_to_eq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.convert_chrom_to_eq" title="Link to this definition">¶</a></dt>
+<dd><p>Convert chromosome to equation string.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.cross_over">
+<span class="sig-name descname"><span class="pre">cross_over</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.cross_over"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.cross_over" title="Link to this definition">¶</a></dt>
+<dd><p>Perform crossover operation in genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>New population after crossover.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.delete_duplicates">
+<span class="sig-name descname"><span class="pre">delete_duplicates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.delete_duplicates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.delete_duplicates" title="Link to this definition">¶</a></dt>
+<dd><p>Remove duplicate gene modules from chromosomes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Population with duplicates removed.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.evolution">
+<span class="sig-name descname"><span class="pre">evolution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.evolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.evolution" title="Link to this definition">¶</a></dt>
+<dd><p>Run genetic algorithm evolution following dlga_old.py strategy.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.generate_meta_data">
+<span class="sig-name descname"><span class="pre">generate_meta_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.generate_meta_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.generate_meta_data" title="Link to this definition">¶</a></dt>
+<dd><p>Generate meta-data for PDE discovery.</p>
+<p>Computes various derivatives needed for equation discovery.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>X</strong> – Input data.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(Theta matrix, cache)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.get_fitness">
+<span class="sig-name descname"><span class="pre">get_fitness</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gene_translate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">length_penalty_coef</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.get_fitness"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.get_fitness" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate fitness of a gene.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gene_translate</strong> – Translated gene expression.</p></li>
+<li><p><strong>length_penalty_coef</strong> – Length penalty coefficient.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(coefficients, MSE, true MSE, equation type)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.mutation">
+<span class="sig-name descname"><span class="pre">mutation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.mutation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.mutation" title="Link to this definition">¶</a></dt>
+<dd><p>Perform mutation operation in genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>New population after mutation.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions (not implemented).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.random_genome">
+<span class="sig-name descname"><span class="pre">random_genome</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.random_genome"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.random_genome" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a random genome (collection of gene modules).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Random genome.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.random_module">
+<span class="sig-name descname"><span class="pre">random_module</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.random_module"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.random_module" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a random gene module.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Random gene module.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.select">
+<span class="sig-name descname"><span class="pre">select</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.select"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.select" title="Link to this definition">¶</a></dt>
+<dd><p>Perform selection operation in genetic algorithm.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.train_NN">
+<span class="sig-name descname"><span class="pre">train_NN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.train_NN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.train_NN" title="Link to this definition">¶</a></dt>
+<dd><p>Train neural network on data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(trained network, best epoch)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.dlga.DLGA.translate_DNA">
+<span class="sig-name descname"><span class="pre">translate_DNA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gene</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/dlga.html#DLGA.translate_DNA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.dlga.DLGA.translate_DNA" title="Link to this definition">¶</a></dt>
+<dd><p>Translate gene to mathematical expression.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>gene</strong> – Gene to translate.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(translated expression, length penalty)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="visualization">
+<h2>Visualization<a class="headerlink" href="#visualization" title="Link to this heading">¶</a></h2>
+<p id="module-kd.viz.dlga_viz">Visualization module for DLGA results (v0.2).</p>
+<p>This module provides visualization tools for analyzing and plotting results
+from Deep Learning Genetic Algorithm (DLGA) model runs.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.configure_plotting">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">configure_plotting</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#configure_plotting"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.configure_plotting" title="Link to this definition">¶</a></dt>
+<dd><p>Configure global plotting settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>style</strong> – Custom style dictionary</p></li>
+<li><p><strong>cmap</strong> – Default colormap name</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_derivative_relationships">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_derivative_relationships</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_derivative_relationships"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_derivative_relationships" title="Link to this definition">¶</a></dt>
+<dd><p>Analyze relationships between different order derivatives.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>metadata</strong> – Dictionary containing derivative terms</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_equation_terms">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_equation_terms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">terms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'u_t'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">equation_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PDE'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'equation_terms_analysis.png'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_equation_terms"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_equation_terms" title="Link to this definition">¶</a></dt>
+<dd><p>Visualize relationships between equation terms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>metadata</strong> – Dictionary containing equation term values</p></li>
+<li><p><strong>terms</strong> – Dictionary defining terms to visualize</p></li>
+<li><p><strong>color_var</strong> – Variable name for coloring</p></li>
+<li><p><strong>equation_name</strong> – Name of equation for title</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+<li><p><strong>filename</strong> – Output filename</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_evolution">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_evolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_evolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_evolution" title="Link to this definition">¶</a></dt>
+<dd><p>Visualize the evolution process of genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – DLGA model with evolution history</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_optimization_analysis">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_optimization_analysis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_optimization_analysis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_optimization_analysis" title="Link to this definition">¶</a></dt>
+<dd><p>Analyze optimization metrics including population diversity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – DLGA model with optimization history</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_pde_comparison">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_pde_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_true</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_pde_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_pde_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Compare true and predicted PDE solutions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Spatial coordinates</p></li>
+<li><p><strong>t</strong> – Time coordinates</p></li>
+<li><p><strong>u_true</strong> – True solution array</p></li>
+<li><p><strong>u_pred</strong> – Predicted solution array</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_residual_analysis">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_residual_analysis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_true</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_residual_analysis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_residual_analysis" title="Link to this definition">¶</a></dt>
+<dd><p>Visualize residual analysis including training points and overall distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – DLGA model instance</p></li>
+<li><p><strong>X_train</strong> – Training data coordinates</p></li>
+<li><p><strong>y_train</strong> – Training data values</p></li>
+<li><p><strong>u_true</strong> – True solution array</p></li>
+<li><p><strong>u_pred</strong> – Predicted solution array</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_time_slices">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_time_slices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_true</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slice_times</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_time_slices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_time_slices" title="Link to this definition">¶</a></dt>
+<dd><p>Plot solution comparisons at different time slices.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Spatial coordinates</p></li>
+<li><p><strong>t</strong> – Time coordinates</p></li>
+<li><p><strong>u_true</strong> – True solution array</p></li>
+<li><p><strong>u_pred</strong> – Predicted solution array</p></li>
+<li><p><strong>slice_times</strong> – List of relative time points for slicing</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_training_loss">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_training_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_training_loss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_training_loss" title="Link to this definition">¶</a></dt>
+<dd><p>Plot training loss curve.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – DLGA model containing train_loss_history</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_viz.plot_validation_loss">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_viz.</span></span><span class="sig-name descname"><span class="pre">plot_validation_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_viz.html#plot_validation_loss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_viz.plot_validation_loss" title="Link to this definition">¶</a></dt>
+<dd><p>Plot validation loss curve.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – DLGA model containing val_loss_history</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-kd.viz.dlga_kdv">Specialized visualization module for KdV equation analysis in DLGA framework.</p>
+<p>This module provides visualization tools specifically designed for analyzing
+the KdV (Korteweg-de Vries) equation results from DLGA model.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.dlga_kdv.plot_metadata_plane">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.dlga_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_metadata_plane</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/dlga_kdv.html#plot_metadata_plane"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.dlga_kdv.plot_metadata_plane" title="Link to this definition">¶</a></dt>
+<dd><p>Visualize KdV equation characteristics on the x-t plane.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>metadata</strong> – Dictionary containing equation terms and derivatives</p></li>
+<li><p><strong>x</strong> – Spatial coordinates</p></li>
+<li><p><strong>t</strong> – Time coordinates</p></li>
+<li><p><strong>output_dir</strong> – Output directory path</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-kd.viz.deeprl_viz">Deep Reinforcement Learning Visualization Module</p>
+<p>This module provides functions for visualizing the training process and results of deep reinforcement learning models.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.compare_models">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">compare_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">8)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#compare_models"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.compare_models" title="Link to this definition">¶</a></dt>
+<dd><p>Compare the training performance of multiple models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>models</strong> (<em>list</em>) – List of trained DeepRL models.</p></li>
+<li><p><strong>labels</strong> (<em>list</em>) – List of labels corresponding to the models.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.configure_plotting">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">configure_plotting</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#configure_plotting"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.configure_plotting" title="Link to this definition">¶</a></dt>
+<dd><p>Configure global plotting style and color map.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>style</strong> (<em>dict</em><em>, </em><em>optional</em>) – Custom style dictionary, will override default style.</p></li>
+<li><p><strong>cmap</strong> (<em>str</em><em>, </em><em>optional</em>) – Custom color map name.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_all_metrics">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_all_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_all_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_all_metrics" title="Link to this definition">¶</a></dt>
+<dd><p>Generate all available metrics plots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figures.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary of generated figure objects.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_best_expressions">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_best_expressions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">8)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_best_expressions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_best_expressions" title="Link to this definition">¶</a></dt>
+<dd><p>Plot the top N best expressions by reward value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>top_n</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of top expressions to plot.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_expression_tree">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_expression_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_expression_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_expression_tree" title="Link to this definition">¶</a></dt>
+<dd><p>Plot the best expression tree.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated graph object, or matplotlib.figure.Figure if Graphviz is not installed.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>graphviz.Digraph</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_reward_density">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_reward_density</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">6)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_reward_density"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_reward_density" title="Link to this definition">¶</a></dt>
+<dd><p>Plot reward density distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>epochs</strong> (<em>list</em><em>, </em><em>optional</em>) – List of specific epochs to plot.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_simulated_annealing_metrics">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_simulated_annealing_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">10)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_simulated_annealing_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_simulated_annealing_metrics" title="Link to this definition">¶</a></dt>
+<dd><p>Plot simulated annealing optimization metrics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object, or None if no simulated annealing data is available.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.plot_training_rewards">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">plot_training_rewards</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">6)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#plot_training_rewards"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.plot_training_rewards" title="Link to this definition">¶</a></dt>
+<dd><p>Plot reward changes during training.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_viz.save_figure">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_viz.</span></span><span class="sig-name descname"><span class="pre">save_figure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bbox_inches</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tight'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_viz.html#save_figure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_viz.save_figure" title="Link to this definition">¶</a></dt>
+<dd><p>Save figure to specified directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fig</strong> (<em>matplotlib.figure.Figure</em>) – Figure object to save.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em>) – Output directory path.</p></li>
+<li><p><strong>filename</strong> (<em>str</em>) – File name, should include extension (e.g., .png, .pdf).</p></li>
+<li><p><strong>dpi</strong> (<em>int</em><em>, </em><em>optional</em>) – Resolution, if None uses the setting in PLOT_STYLE.</p></li>
+<li><p><strong>bbox_inches</strong> (<em>str</em><em>, </em><em>optional</em>) – Boundary box setting, default is ‘tight’.</p></li>
+<li><p><strong>**kwargs</strong> – Other parameters passed to plt.savefig.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-kd.viz.deeprl_kdv">KdV Equation Deep Reinforcement Learning Visualization Module</p>
+<p>This module provides functions for visualizing the training process and results of KdV equation deep reinforcement learning models.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.generate_all_kdv_visualizations">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">generate_all_kdv_visualizations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#generate_all_kdv_visualizations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.generate_all_kdv_visualizations" title="Link to this definition">¶</a></dt>
+<dd><p>Generate all KdV equation visualizations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>t_grid</strong> – Time grid.</p></li>
+<li><p><strong>x_grid</strong> – Space grid.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figures.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary of generated figure objects.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_all_kdv_visualizations">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_all_kdv_visualizations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_all_kdv_visualizations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_all_kdv_visualizations" title="Link to this definition">¶</a></dt>
+<dd><p>Plot all KdV equation visualizations and return the figure objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>t_grid</strong> – Time grid.</p></li>
+<li><p><strong>x_grid</strong> – Space grid.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figures.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary of generated figure objects.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_residual_distribution">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_residual_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">6)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_residual_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_residual_distribution" title="Link to this definition">¶</a></dt>
+<dd><p>Plot KdV equation residual distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_simulated_annealing_metrics">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_simulated_annealing_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">12)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_simulated_annealing_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_simulated_annealing_metrics" title="Link to this definition">¶</a></dt>
+<dd><p>Plot KdV equation simulated annealing optimization metrics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object, or None if no simulated annealing data is available.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_solution_comparison">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_solution_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">10)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_solution_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_solution_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Plot KdV equation solution comparison.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>t_grid</strong> – Time grid.</p></li>
+<li><p><strong>x_grid</strong> – Space grid.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_space_time_error">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_space_time_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">8)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_space_time_error"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_space_time_error" title="Link to this definition">¶</a></dt>
+<dd><p>Plot KdV equation space-time error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>t_grid</strong> – Time grid.</p></li>
+<li><p><strong>x_grid</strong> – Space grid.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_term_magnitudes">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_term_magnitudes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">8)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_term_magnitudes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_term_magnitudes" title="Link to this definition">¶</a></dt>
+<dd><p>Plot magnitude chart of KdV equation terms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.plot_kdv_time_slices">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">plot_kdv_time_slices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_points</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(12,</span> <span class="pre">8)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#plot_kdv_time_slices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.plot_kdv_time_slices" title="Link to this definition">¶</a></dt>
+<dd><p>Plot slices of KdV equation solutions at specific time points.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – Trained DeepRL model.</p></li>
+<li><p><strong>X_test</strong> – Test input data.</p></li>
+<li><p><strong>y_test</strong> – Test target data.</p></li>
+<li><p><strong>t_grid</strong> – Time grid.</p></li>
+<li><p><strong>x_grid</strong> – Space grid.</p></li>
+<li><p><strong>time_points</strong> (<em>list</em><em>, </em><em>optional</em>) – List of time points to plot.</p></li>
+<li><p><strong>time_indices</strong> (<em>list</em><em>, </em><em>optional</em>) – List of time indices to plot (alternative to time_points).</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Figure size.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Generated figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.figure.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.deeprl_kdv.save_figure">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.deeprl_kdv.</span></span><span class="sig-name descname"><span class="pre">save_figure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/deeprl_kdv.html#save_figure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.deeprl_kdv.save_figure" title="Link to this definition">¶</a></dt>
+<dd><p>Save figure to output directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fig</strong> – matplotlib figure object.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em>) – Directory path to save the figure.</p></li>
+<li><p><strong>filename</strong> (<em>str</em>) – Filename for the saved figure.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-kd.utils">
+<span id="utils"></span><h2>Utils<a class="headerlink" href="#module-kd.utils" title="Link to this heading">¶</a></h2>
+<p>Utility functions and classes.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+      |
+      <a href="_sources/api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
