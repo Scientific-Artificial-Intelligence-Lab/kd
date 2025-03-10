@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.viz.deeprl_viz &#8212; KD 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.viz.deeprl_viz</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Deep Reinforcement Learning Visualization Module</span>
+
+<span class="sd">This module provides functions for visualizing the training process and results of deep reinforcement learning models.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSegmentedColormap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mpl</span>
+
+<span class="c1"># Set font that supports both English and Chinese characters</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;font.sans-serif&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;SimHei&#39;</span><span class="p">,</span> <span class="s1">&#39;DejaVu Sans&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial Unicode MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial&#39;</span><span class="p">]</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;axes.unicode_minus&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># Fix minus sign display</span>
+
+<span class="c1"># Global plotting style configuration</span>
+<span class="n">PLOT_STYLE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;figure.titlesize&#39;</span><span class="p">:</span> <span class="mi">14</span><span class="p">,</span>
+    <span class="s1">&#39;axes.labelsize&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;xtick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;ytick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;axes.prop_cycle&#39;</span><span class="p">:</span> <span class="n">plt</span><span class="o">.</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span> <span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="s1">&#39;#d62728&#39;</span><span class="p">]),</span>
+    <span class="s1">&#39;savefig.dpi&#39;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+    <span class="s1">&#39;savefig.bbox&#39;</span><span class="p">:</span> <span class="s1">&#39;tight&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;font.sans-serif&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;SimHei&#39;</span><span class="p">,</span> <span class="s1">&#39;DejaVu Sans&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial Unicode MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;axes.unicode_minus&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># Global color map</span>
+<span class="n">DEFAULT_CMAP</span> <span class="o">=</span> <span class="s1">&#39;viridis&#39;</span>
+
+
+<div class="viewcode-block" id="configure_plotting">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.configure_plotting">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">configure_plotting</span><span class="p">(</span><span class="n">style</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Configure global plotting style and color map.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        style (dict, optional): Custom style dictionary, will override default style.</span>
+<span class="sd">        cmap (str, optional): Custom color map name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">PLOT_STYLE</span><span class="p">,</span> <span class="n">DEFAULT_CMAP</span>
+
+    <span class="k">if</span> <span class="n">style</span><span class="p">:</span>
+        <span class="n">PLOT_STYLE</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">style</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">cmap</span><span class="p">:</span>
+        <span class="n">DEFAULT_CMAP</span> <span class="o">=</span> <span class="n">cmap</span></div>
+
+
+
+<div class="viewcode-block" id="save_figure">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.save_figure">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Save figure to specified directory.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        fig (matplotlib.figure.Figure): Figure object to save.</span>
+<span class="sd">        output_dir (str): Output directory path.</span>
+<span class="sd">        filename (str): File name, should include extension (e.g., .png, .pdf).</span>
+<span class="sd">        dpi (int, optional): Resolution, if None uses the setting in PLOT_STYLE.</span>
+<span class="sd">        bbox_inches (str, optional): Boundary box setting, default is &#39;tight&#39;.</span>
+<span class="sd">        **kwargs: Other parameters passed to plt.savefig.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Ensure output directory exists</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Use global DPI setting (if not specified)</span>
+    <span class="k">if</span> <span class="n">dpi</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;savefig.dpi&#39;</span> <span class="ow">in</span> <span class="n">PLOT_STYLE</span><span class="p">:</span>
+        <span class="n">dpi</span> <span class="o">=</span> <span class="n">PLOT_STYLE</span><span class="p">[</span><span class="s1">&#39;savefig.dpi&#39;</span><span class="p">]</span>
+
+    <span class="c1"># Save figure</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">filename</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">dpi</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="n">bbox_inches</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_training_rewards">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_training_rewards">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_training_rewards</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot reward changes during training.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+        <span class="c1"># Extract reward history from model</span>
+        <span class="n">rewards</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">r_train</span>
+
+        <span class="c1"># Calculate metrics</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">r_max</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">]</span>
+        <span class="n">r_avg</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">]</span>
+        <span class="n">r_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">accumulate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">r_max</span><span class="p">))</span>
+
+        <span class="c1"># Plot reward curves</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_best</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Best Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_max</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#F47E62&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-.&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Maximum Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_avg</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#4F8FBA&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Average Reward&#39;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Iteration Count&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Reward Value&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># If output directory is provided, save the figure</span>
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;training_rewards.png&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_reward_density">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_reward_density">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_reward_density</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">epochs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot reward density distribution.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        epochs (list, optional): List of specific epochs to plot.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">gaussian_kde</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+    <span class="n">configure_plotting</span><span class="p">()</span>
+
+    <span class="c1"># Get rewards for all epochs</span>
+    <span class="n">r_all</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">r_history</span>
+
+    <span class="c1"># If no epochs specified, select uniformly distributed epochs</span>
+    <span class="k">if</span> <span class="n">epochs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">num_epochs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">r_all</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_epochs</span> <span class="o">&lt;=</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="n">epochs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_epochs</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">epochs</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_epochs</span> <span class="o">//</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num_epochs</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">num_epochs</span> <span class="o">//</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num_epochs</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+    <span class="c1"># Create figure</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+    <span class="c1"># Set colors</span>
+    <span class="n">colors</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs</span><span class="p">)))</span>
+
+    <span class="c1"># Define x-axis range</span>
+    <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span>
+    <span class="n">x_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+
+    <span class="c1"># Plot density graph</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>
+        <span class="c1"># If too many epochs, use color map</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Normalize</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs</span><span class="p">))</span>
+        <span class="n">sm</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">ScalarMappable</span><span class="p">(</span><span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span><span class="p">,</span> <span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">)</span>
+        <span class="n">sm</span><span class="o">.</span><span class="n">set_array</span><span class="p">([])</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">epochs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">epoch</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">r_all</span><span class="p">):</span>
+                <span class="c1"># Filter out infinity and NaN values</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">r_all</span><span class="p">[</span><span class="n">epoch</span><span class="p">]</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">)]</span>
+
+                <span class="c1"># Ensure data is not empty and has enough unique values</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Use scipy&#39;s gaussian_kde to calculate kernel density estimation</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">kde</span> <span class="o">=</span> <span class="n">gaussian_kde</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                        <span class="n">density</span> <span class="o">=</span> <span class="n">kde</span><span class="p">(</span><span class="n">x_grid</span><span class="p">)</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+                        <span class="c1"># Fill area under curve</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">x_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Epoch </span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s2"> KDE calculation failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sm</span><span class="p">,</span> <span class="n">ticks</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+        <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs</span><span class="p">)])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Only plot specified epochs</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">epochs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">epoch</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">r_all</span><span class="p">):</span>
+                <span class="c1"># Filter out infinity and NaN values</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">r_all</span><span class="p">[</span><span class="n">epoch</span><span class="p">]</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">)]</span>
+
+                <span class="c1"># Ensure data is not empty and has enough unique values</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="c1"># Use scipy&#39;s gaussian_kde to calculate kernel density estimation</span>
+                        <span class="n">kde</span> <span class="o">=</span> <span class="n">gaussian_kde</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                        <span class="n">density</span> <span class="o">=</span> <span class="n">kde</span><span class="p">(</span><span class="n">x_grid</span><span class="p">)</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Epoch=</span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                        <span class="c1"># Fill area under curve</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">x_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Epoch </span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s2"> KDE calculation failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Reward Value&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Density&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
+
+    <span class="c1"># If output directory is provided, save the figure</span>
+    <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+        <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;reward_density.png&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_expression_tree">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_expression_tree">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_expression_tree</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot the best expression tree.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        graphviz.Digraph: Generated graph object, or matplotlib.figure.Figure if Graphviz is not installed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get the best program</span>
+    <span class="n">best_program</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">best_p</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Use existing tree_plot method to create graph</span>
+        <span class="n">graph</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">plotter</span><span class="o">.</span><span class="n">tree_plot</span><span class="p">(</span><span class="n">best_program</span><span class="p">)</span>
+
+        <span class="c1"># If output directory is provided, save the graph</span>
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">graph</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;expression_tree&#39;</span><span class="p">),</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">,</span> <span class="n">cleanup</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not render expression tree graph: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Make sure Graphviz is installed and on your system PATH.&quot;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;You can install Graphviz from: https://graphviz.org/download/&quot;</span><span class="p">)</span>
+                <span class="c1"># Create a simple text file with the expression as a fallback</span>
+                <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;expression_tree.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best expression: </span><span class="si">{</span><span class="n">best_program</span><span class="o">.</span><span class="n">str_expression</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">graph</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not create expression tree graph: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Make sure Graphviz is installed and on your system PATH.&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;You can install Graphviz from: https://graphviz.org/download/&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Create a simple text file with the expression as a fallback</span>
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;expression_tree.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best expression: </span><span class="si">{</span><span class="n">best_program</span><span class="o">.</span><span class="n">str_expression</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Create a better matplotlib figure as a fallback</span>
+        <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+            <span class="c1"># Parse the expression into a more readable format</span>
+            <span class="n">expr_str</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">str_expression</span>
+            
+            <span class="c1"># Create a figure with appropriate size</span>
+            <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+            
+            <span class="c1"># Set the title with the expression</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="s2">&quot;Best Expression&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="n">expr_str</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> 
+                   <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">))</span>
+            
+            <span class="c1"># Add reward information</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">best_program</span><span class="p">,</span> <span class="s1">&#39;r_ridge&#39;</span><span class="p">):</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Reward: </span><span class="si">{</span><span class="n">best_program</span><span class="o">.</span><span class="n">r_ridge</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> 
+                       <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+                       <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightgreen&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">))</span>
+            
+            <span class="c1"># Try to visualize the structure if possible</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Split the expression into components for a simple tree visualization</span>
+                <span class="n">terms</span> <span class="o">=</span> <span class="n">expr_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;(&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;)&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                <span class="n">unique_terms</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">terms</span><span class="p">))</span>
+                
+                <span class="c1"># Create a simple hierarchical layout</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_terms</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">10</span><span class="p">:</span>  <span class="c1"># Only attempt visualization for simpler expressions</span>
+                    <span class="c1"># Draw a simple tree structure</span>
+                    <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">&quot;Expression Structure:&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+                    
+                    <span class="c1"># Draw the unique terms in a circular layout</span>
+                    <span class="n">radius</span> <span class="o">=</span> <span class="mf">0.2</span>
+                    <span class="n">center_x</span><span class="p">,</span> <span class="n">center_y</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.2</span>
+                    
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">term</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">unique_terms</span><span class="p">):</span>
+                        <span class="n">angle</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">i</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_terms</span><span class="p">)</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">center_x</span> <span class="o">+</span> <span class="n">radius</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span>
+                        <span class="n">y</span> <span class="o">=</span> <span class="n">center_y</span> <span class="o">+</span> <span class="n">radius</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span>
+                        
+                        <span class="c1"># Count term frequency</span>
+                        <span class="n">count</span> <span class="o">=</span> <span class="n">terms</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">term</span><span class="p">)</span>
+                        <span class="n">size</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">count</span>  <span class="c1"># Size based on frequency</span>
+                        
+                        <span class="c1"># Draw the term</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">term</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+                               <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightyellow&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">))</span>
+                        
+                        <span class="c1"># Draw a line to the center</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">center_x</span><span class="p">,</span> <span class="n">x</span><span class="p">],</span> <span class="p">[</span><span class="n">center_y</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">,</span> <span class="n">y</span><span class="p">],</span> <span class="s1">&#39;k-&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="c1"># If visualization fails, just skip it</span>
+                <span class="k">pass</span>
+                
+            <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+                <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;expression_tree_fallback.png&#39;</span><span class="p">)</span>
+            
+            <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_best_expressions">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_best_expressions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_best_expressions</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">top_n</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">8</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot the top N best expressions by reward value.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        top_n (int, optional): Number of top expressions to plot.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+        <span class="c1"># Get top N expressions from priority queue</span>
+        <span class="n">expressions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">rewards</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># First, try to get the best expression directly from the model</span>
+        <span class="n">best_program</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">best_p</span>
+        <span class="k">if</span> <span class="n">best_program</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">expressions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">best_program</span><span class="o">.</span><span class="n">str_expression</span><span class="p">)</span>
+            <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">best_program</span><span class="o">.</span><span class="n">r_ridge</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">best_program</span><span class="p">,</span> <span class="s1">&#39;r_ridge&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">)</span>
+            
+            <span class="c1"># Add a note about the best expression</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best expression: </span><span class="si">{</span><span class="n">best_program</span><span class="o">.</span><span class="n">str_expression</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reward: </span><span class="si">{</span><span class="n">best_program</span><span class="o">.</span><span class="n">r_ridge</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nb">hasattr</span><span class="p">(</span><span class="n">best_program</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;r_ridge&#39;</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;N/A&#39;</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Try to get additional expressions if needed</span>
+        <span class="k">if</span> <span class="n">top_n</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Try to get expressions from the priority queue</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">item_id</span><span class="p">,</span> <span class="n">program</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">pq</span><span class="o">.</span><span class="n">iter_in_order</span><span class="p">()):</span>
+                    <span class="c1"># Skip the first one if we already have the best program</span>
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                        
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">top_n</span><span class="p">:</span>
+                        <span class="k">break</span>
+                        
+                    <span class="c1"># Try different ways to extract expression and reward</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">program</span><span class="p">,</span> <span class="s1">&#39;str_expression&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">program</span><span class="p">,</span> <span class="s1">&#39;r_ridge&#39;</span><span class="p">):</span>
+                        <span class="n">expressions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">program</span><span class="o">.</span><span class="n">str_expression</span><span class="p">)</span>
+                        <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">program</span><span class="o">.</span><span class="n">r_ridge</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">program</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s1">&#39;str_expression&#39;</span> <span class="ow">in</span> <span class="n">program</span> <span class="ow">and</span> <span class="s1">&#39;r_ridge&#39;</span> <span class="ow">in</span> <span class="n">program</span><span class="p">:</span>
+                        <span class="n">expressions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">program</span><span class="p">[</span><span class="s1">&#39;str_expression&#39;</span><span class="p">])</span>
+                        <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">program</span><span class="p">[</span><span class="s1">&#39;r_ridge&#39;</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Generate placeholder for missing expressions</span>
+                        <span class="n">expr_num</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+                        <span class="n">expressions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expression </span><span class="si">{</span><span class="n">expr_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Error extracting additional expressions: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                
+        <span class="c1"># If we still don&#39;t have enough expressions, generate placeholders</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">top_n</span><span class="p">:</span>
+            <span class="n">expr_num</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">expressions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expression </span><span class="si">{</span><span class="n">expr_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+            
+        <span class="c1"># Make sure we have at least one expression</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">expressions</span><span class="p">:</span>
+            <span class="n">expressions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;No expressions available&quot;</span><span class="p">]</span>
+            <span class="n">rewards</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]</span>
+
+        <span class="c1"># Plot horizontal bar chart</span>
+        <span class="n">y_pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">expressions</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">barh</span><span class="p">(</span><span class="n">y_pos</span><span class="p">,</span> <span class="n">rewards</span><span class="p">,</span> <span class="n">align</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;skyblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="n">y_pos</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">expressions</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">invert_yaxis</span><span class="p">()</span>  <span class="c1"># Labels read from top to bottom</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Reward Value&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Top Expressions by Reward Value&#39;</span><span class="p">)</span>
+
+        <span class="c1"># If output directory is provided, save the figure</span>
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;best_expressions.png&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_simulated_annealing_metrics">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_simulated_annealing_metrics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_simulated_annealing_metrics</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot simulated annealing optimization metrics.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object, or None if no simulated annealing data is available.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Check if simulated annealing data is available</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;temperature_history&#39;</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No simulated annealing data available&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+            
+        <span class="c1"># Check if temperature_history exists and is not empty</span>
+        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Temperature history is None&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+            
+        <span class="c1"># Check if it&#39;s a list or numpy array and not empty</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Temperature history is empty&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Temperature history is empty&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Temperature history has unknown type&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+            <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">,</span> <span class="n">ax3</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">,</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            
+            <span class="c1"># Extract simulated annealing metrics</span>
+            <span class="n">temperatures</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">temperature_history</span><span class="p">)</span>
+            <span class="n">iterations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            
+            <span class="c1"># 检查是否存在接受率历史数据</span>
+            <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;acceptance_rate_history&#39;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">acceptance_rate_history</span><span class="p">)</span>
+            
+            <span class="c1"># 检查是否存在扰动大小历史数据</span>
+            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;perturbation_size_history&#39;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">perturbation_size_history</span><span class="p">)</span>
+
+            <span class="c1"># Plot temperature curve</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iterations</span><span class="p">,</span> <span class="n">temperatures</span><span class="p">,</span> <span class="s1">&#39;r-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Temperature&#39;</span><span class="p">)</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Simulated Annealing Optimization Metrics&#39;</span><span class="p">)</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+            <span class="c1"># If acceptance rate data is available, plot acceptance rate</span>
+            <span class="k">if</span> <span class="n">acceptance_rates</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># 确保 acceptance_rates 是一维数组</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                    <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="n">acceptance_rates</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                
+                <span class="c1"># 确保长度匹配</span>
+                <span class="n">plot_iterations</span> <span class="o">=</span> <span class="n">iterations</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+                    <span class="n">plot_iterations</span> <span class="o">=</span> <span class="n">iterations</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="p">)]</span>
+                <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">acceptance_rates</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+                    <span class="n">acceptance_rates</span> <span class="o">=</span> <span class="n">acceptance_rates</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">)]</span>
+                
+                <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_iterations</span><span class="p">,</span> <span class="n">acceptance_rates</span><span class="p">,</span> <span class="s1">&#39;b-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Acceptance Rate&#39;</span><span class="p">)</span>
+                <span class="n">ax2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+                
+                <span class="c1"># 添加水平线表示最小和最大接受率阈值（根据记忆中的信息）</span>
+                <span class="n">ax2</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Min Acceptance Rate&#39;</span><span class="p">)</span>
+                <span class="n">ax2</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Max Acceptance Rate&#39;</span><span class="p">)</span>
+                <span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+            <span class="c1"># If perturbation size data is available, plot perturbation size</span>
+            <span class="k">if</span> <span class="n">perturbation_sizes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># 如果扰动大小是一个列表的列表（分层扰动），则分别绘制每一层</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Check if the first element is also a list/tuple/array (indicating layered perturbation)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+                        <span class="c1"># 分层扰动大小</span>
+                        <span class="n">perturbation_layers</span> <span class="o">=</span> <span class="p">[]</span>
+                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">[</span><span class="mi">0</span><span class="p">])):</span>
+                            <span class="n">layer_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+                            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)):</span>
+                                <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">[</span><span class="n">j</span><span class="p">]):</span>
+                                    <span class="n">layer_sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+                            <span class="n">perturbation_layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">layer_sizes</span><span class="p">)</span>
+                        
+                        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;CNN Layer&#39;</span><span class="p">,</span> <span class="s1">&#39;LSTM Layer&#39;</span><span class="p">,</span> <span class="s1">&#39;Linear Layer&#39;</span><span class="p">]</span>
+                        <span class="n">colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;purple&#39;</span><span class="p">]</span>
+                        
+                        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">layer_sizes</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">perturbation_layers</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">colors</span><span class="p">)):</span>
+                            <span class="k">if</span> <span class="n">layer_sizes</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">layer_sizes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># 确保不是空列表</span>
+                                <span class="n">plot_iter</span> <span class="o">=</span> <span class="n">iterations</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">layer_sizes</span><span class="p">)]</span>
+                                <span class="n">ax3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_iter</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">)</span>
+                        
+                        <span class="n">ax3</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># 单一扰动大小</span>
+                        <span class="c1"># 确保 perturbation_sizes 是一维数组</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="n">perturbation_sizes</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                        
+                        <span class="c1"># 确保长度匹配</span>
+                        <span class="n">plot_iterations</span> <span class="o">=</span> <span class="n">iterations</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+                            <span class="n">plot_iterations</span> <span class="o">=</span> <span class="n">iterations</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)]</span>
+                        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">perturbation_sizes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+                            <span class="n">perturbation_sizes</span> <span class="o">=</span> <span class="n">perturbation_sizes</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">iterations</span><span class="p">)]</span>
+                        
+                        <span class="n">ax3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_iterations</span><span class="p">,</span> <span class="n">perturbation_sizes</span><span class="p">,</span> <span class="s1">&#39;g-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                
+                <span class="n">ax3</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Perturbation Size&#39;</span><span class="p">)</span>
+                <span class="n">ax3</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Iteration Count&#39;</span><span class="p">)</span>
+                <span class="n">ax3</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+            <span class="c1"># 添加初始温度和冷却率的注释（根据记忆中的信息）</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Initial Temp: 80.0</span><span class="se">\n</span><span class="s1">Cooling Rate: 0.97</span><span class="se">\n</span><span class="s1">Inner Loop: 15&#39;</span><span class="p">,</span> 
+                        <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.85</span><span class="p">),</span> <span class="n">xycoords</span><span class="o">=</span><span class="s1">&#39;axes fraction&#39;</span><span class="p">,</span>
+                        <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s2">&quot;round,pad=0.3&quot;</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">ec</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">))</span>
+            
+            <span class="c1"># Add reference lines for different layers&#39; perturbation sizes</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mf">0.002</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mf">0.0015</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">iterations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.002</span><span class="p">,</span> <span class="s1">&#39;CNN Layer (0.002)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;g&#39;</span><span class="p">)</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">iterations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="s1">&#39;LSTM Layer (0.001)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;b&#39;</span><span class="p">)</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">iterations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0015</span><span class="p">,</span> <span class="s1">&#39;Linear Layer (0.0015)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">)</span>
+
+            <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+            
+            <span class="c1"># If output directory is provided, save the figure</span>
+            <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+                <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;simulated_annealing_metrics.png&#39;</span><span class="p">)</span>
+                
+            <span class="k">return</span> <span class="n">fig</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not generate simulated annealing metrics plot: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="compare_models">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.compare_models">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compare_models</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">8</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compare the training performance of multiple models.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        models (list): List of trained DeepRL models.</span>
+<span class="sd">        labels (list): List of labels corresponding to the models.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figure.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+        <span class="c1"># Plot the best reward for each model</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">model</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">models</span><span class="p">):</span>
+            <span class="n">rewards</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">r_train</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">r_max</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">]</span>
+            <span class="n">r_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">accumulate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">r_max</span><span class="p">))</span>
+
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_best</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Iteration Count&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Best Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># If output directory is provided, save the figure</span>
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">save_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="s1">&#39;model_comparison.png&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_all_metrics">
+<a class="viewcode-back" href="../../../api.html#kd.viz.deeprl_viz.plot_all_metrics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_all_metrics</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate all available metrics plots.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained DeepRL model.</span>
+<span class="sd">        output_dir (str, optional): Directory path to save the figures.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: Dictionary of generated figure objects.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">figures</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># If output directory is not provided, create it</span>
+    <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Generate all plots</span>
+    <span class="n">figures</span><span class="p">[</span><span class="s1">&#39;training_rewards&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plot_training_rewards</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">)</span>
+    <span class="n">figures</span><span class="p">[</span><span class="s1">&#39;reward_density&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plot_reward_density</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">)</span>
+
+    <span class="c1"># Try to generate expression tree, but don&#39;t fail if it&#39;s not possible</span>
+    <span class="n">expression_tree</span> <span class="o">=</span> <span class="n">plot_expression_tree</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">expression_tree</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">figures</span><span class="p">[</span><span class="s1">&#39;expression_tree&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">expression_tree</span>
+
+    <span class="n">figures</span><span class="p">[</span><span class="s1">&#39;best_expressions&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plot_best_expressions</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">)</span>
+
+    <span class="c1"># If simulated annealing data is available, generate simulated annealing plot</span>
+    <span class="n">sa_plot</span> <span class="o">=</span> <span class="n">plot_simulated_annealing_metrics</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sa_plot</span><span class="p">:</span>
+        <span class="n">figures</span><span class="p">[</span><span class="s1">&#39;simulated_annealing&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sa_plot</span>
+
+    <span class="k">return</span> <span class="n">figures</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

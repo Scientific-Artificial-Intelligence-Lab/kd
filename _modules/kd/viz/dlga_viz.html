@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.viz.dlga_viz &#8212; KD 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.viz.dlga_viz</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Visualization module for DLGA results (v0.2).</span>
+
+<span class="sd">This module provides visualization tools for analyzing and plotting results </span>
+<span class="sd">from Deep Learning Genetic Algorithm (DLGA) model runs.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">griddata</span>
+
+<span class="c1"># Global plot configuration</span>
+<span class="n">PLOT_STYLE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;figure.titlesize&#39;</span><span class="p">:</span> <span class="mi">14</span><span class="p">,</span>
+    <span class="s1">&#39;axes.labelsize&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;xtick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;ytick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;axes.prop_cycle&#39;</span><span class="p">:</span> <span class="n">plt</span><span class="o">.</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span> <span class="s1">&#39;#2ca02c&#39;</span><span class="p">]),</span>
+    <span class="s1">&#39;savefig.dpi&#39;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+    <span class="s1">&#39;savefig.bbox&#39;</span><span class="p">:</span> <span class="s1">&#39;tight&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;figure.constrained_layout.use&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s1">&#39;figure.constrained_layout.h_pad&#39;</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>
+    <span class="s1">&#39;figure.constrained_layout.w_pad&#39;</span><span class="p">:</span> <span class="mf">0.1</span>
+<span class="p">}</span>
+
+<span class="n">DEFAULT_CMAP</span> <span class="o">=</span> <span class="s1">&#39;viridis&#39;</span>
+
+
+<div class="viewcode-block" id="configure_plotting">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.configure_plotting">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">configure_plotting</span><span class="p">(</span><span class="n">style</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">cmap</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configure global plotting settings.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        style: Custom style dictionary</span>
+<span class="sd">        cmap: Default colormap name</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">style</span> <span class="ow">or</span> <span class="n">PLOT_STYLE</span><span class="p">)</span>
+    <span class="k">global</span> <span class="n">DEFAULT_CMAP</span>
+    <span class="k">if</span> <span class="n">cmap</span><span class="p">:</span>
+        <span class="n">DEFAULT_CMAP</span> <span class="o">=</span> <span class="n">cmap</span></div>
+
+
+
+<div class="viewcode-block" id="plot_training_loss">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_training_loss">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_training_loss</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot training loss curve.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: DLGA model containing train_loss_history</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Configure style</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">train_loss_history</span><span class="p">,</span>
+             <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span>
+             <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Training Epoch&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Training Loss (MSE)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+        <span class="c1"># Create directory</span>
+        <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+        <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;training_loss.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_validation_loss">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_validation_loss">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_validation_loss</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot validation loss curve.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: DLGA model containing val_loss_history</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">val_loss_history</span><span class="p">,</span>
+             <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span>
+             <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+             <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Training Epoch&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Validation Loss (MSE)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+        <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+        <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;validation_loss.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_residual_analysis">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_residual_analysis">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_residual_analysis</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">u_true</span><span class="p">,</span> <span class="n">u_pred</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Visualize residual analysis including training points and overall distribution.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: DLGA model instance</span>
+<span class="sd">        X_train: Training data coordinates</span>
+<span class="sd">        y_train: Training data values  </span>
+<span class="sd">        u_true: True solution array</span>
+<span class="sd">        u_pred: Predicted solution array</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+    <span class="c1"># Left plot: Training points residuals</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">121</span><span class="p">)</span>
+    <span class="c1"># Calculate training point predictions</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="n">train_pred</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">Net</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    <span class="n">train_residuals</span> <span class="o">=</span> <span class="n">y_train</span> <span class="o">-</span> <span class="n">train_pred</span>
+
+    <span class="n">sc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">X_train</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>  <span class="c1"># Time coordinates</span>
+                     <span class="n">X_train</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>  <span class="c1"># Space coordinates</span>
+                     <span class="n">c</span><span class="o">=</span><span class="n">train_residuals</span><span class="p">,</span>
+                     <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;coolwarm&#39;</span><span class="p">,</span>
+                     <span class="n">s</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                     <span class="n">edgecolors</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">,</span>
+                     <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Residual&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">outline</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Training Points Residual&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="c1"># Right plot: Overall residual distribution</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">122</span><span class="p">)</span>
+    <span class="n">residual</span> <span class="o">=</span> <span class="n">u_true</span> <span class="o">-</span> <span class="n">u_pred</span>
+    <span class="n">n</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">patches</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                                <span class="n">bins</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+                                <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span>
+                                <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="c1"># Color patches to match coolwarm colormap</span>
+    <span class="n">cmap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">get_cmap</span><span class="p">(</span><span class="s1">&#39;coolwarm&#39;</span><span class="p">)</span>
+    <span class="n">bin_centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">bins</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">bins</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">bin_centers</span><span class="p">,</span> <span class="n">patches</span><span class="p">):</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">setp</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s1">&#39;facecolor&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="p">((</span><span class="n">c</span> <span class="o">-</span> <span class="n">bin_centers</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="n">bin_centers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">bin_centers</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
+
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Residual Value&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Probability Density&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Residual Distribution&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+        <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+        <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s1">&#39;residual_analysis.png&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_pde_comparison">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_pde_comparison">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_pde_comparison</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">u_true</span><span class="p">,</span> <span class="n">u_pred</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare true and predicted PDE solutions.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        x: Spatial coordinates</span>
+<span class="sd">        t: Time coordinates</span>
+<span class="sd">        u_true: True solution array</span>
+<span class="sd">        u_pred: Predicted solution array</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Apply global configuration</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">T</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">u_true</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">u_pred</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">u_true</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">u_pred</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mf">5.5</span><span class="p">),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># True solution</span>
+        <span class="n">mesh1</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">u_true</span><span class="p">,</span>
+                               <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;gouraud&#39;</span><span class="p">,</span>
+                               <span class="n">cmap</span><span class="o">=</span><span class="n">DEFAULT_CMAP</span><span class="p">,</span>
+                               <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Exact Solution&#39;</span><span class="p">,</span> <span class="n">xlabel</span><span class="o">=</span><span class="s1">&#39;Time&#39;</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">mesh1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;u(x,t)&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Predicted solution</span>
+        <span class="n">mesh2</span> <span class="o">=</span> <span class="n">ax2</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">u_pred</span><span class="p">,</span>
+                               <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;gouraud&#39;</span><span class="p">,</span>
+                               <span class="n">cmap</span><span class="o">=</span><span class="n">DEFAULT_CMAP</span><span class="p">,</span>
+                               <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Predicted Solution&#39;</span><span class="p">,</span> <span class="n">xlabel</span><span class="o">=</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">mesh2</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;u(x,t)&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s1">&#39;pde_comparison.png&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_equation_terms">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_equation_terms">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_equation_terms</span><span class="p">(</span>
+        <span class="n">metadata</span><span class="p">,</span>
+        <span class="n">terms</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">color_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;u_t&#39;</span><span class="p">,</span>
+        <span class="n">equation_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;PDE&quot;</span><span class="p">,</span>
+        <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;equation_terms_analysis.png&quot;</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Visualize relationships between equation terms.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        metadata: Dictionary containing equation term values </span>
+<span class="sd">        terms: Dictionary defining terms to visualize</span>
+<span class="sd">        color_var: Variable name for coloring</span>
+<span class="sd">        equation_name: Name of equation for title</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">        filename: Output filename</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="c1"># Extract and calculate terms</span>
+        <span class="n">x_vars</span> <span class="o">=</span> <span class="n">terms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x_term&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;vars&#39;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="n">y_vars</span> <span class="o">=</span> <span class="n">terms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;y_term&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;vars&#39;</span><span class="p">,</span> <span class="p">[])</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">x_vars</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">y_vars</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: Insufficient terms specified, cannot plot&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Dynamically calculate term products</span>
+        <span class="n">x_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">([</span><span class="n">metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">x_vars</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">y_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">([</span><span class="n">metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">y_vars</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Get labels</span>
+        <span class="n">x_label</span> <span class="o">=</span> <span class="n">terms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x_term&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">,</span> <span class="s1">&#39;-&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">x_vars</span><span class="p">))</span>
+        <span class="n">y_label</span> <span class="o">=</span> <span class="n">terms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;y_term&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">,</span> <span class="s1">&#39;-&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">y_vars</span><span class="p">))</span>
+
+        <span class="c1"># Create figure</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+        <span class="c1"># Subplot 1: Term relationship scatter plot</span>
+        <span class="n">sc</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+            <span class="n">x_values</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+            <span class="n">y_values</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+            <span class="n">c</span><span class="o">=</span><span class="n">metadata</span><span class="p">[</span><span class="n">color_var</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="k">if</span> <span class="n">color_var</span> <span class="ow">in</span> <span class="n">metadata</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">cmap</span><span class="o">=</span><span class="n">DEFAULT_CMAP</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+            <span class="n">s</span><span class="o">=</span><span class="mi">10</span>
+        <span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">xlabel</span><span class="o">=</span><span class="n">x_label</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="n">y_label</span><span class="p">,</span>
+                <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">equation_name</span><span class="si">}</span><span class="s1"> Term Relationship&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">color_var</span><span class="p">)</span>
+
+        <span class="c1"># Subplot 2: Time derivative distribution</span>
+        <span class="k">if</span> <span class="n">color_var</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">:</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="n">color_var</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">bins</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">xlabel</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">color_var</span><span class="si">}</span><span class="s1"> Value&#39;</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="s1">&#39;Density&#39;</span><span class="p">,</span>
+                    <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">color_var</span><span class="si">}</span><span class="s1"> Distribution&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="n">filename</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_evolution">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_evolution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_evolution</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Visualize the evolution process of genetic algorithm.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: DLGA model with evolution history</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="c1"># Check data availability</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;evolution_history&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No evolution history data available, ensure evolution() method has been run&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Create figure and subplots</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">constrained_layout</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_gridspec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Extract data</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">))</span>
+        <span class="n">fitness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;fitness&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">])</span>
+        <span class="n">complexity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;complexity&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">])</span>
+
+        <span class="c1"># 1. Fitness evolution curve</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">fitness</span><span class="p">,</span>
+                 <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span>
+                 <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                 <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span>
+                 <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                 <span class="n">markeredgecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span>
+                 <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">xlabel</span><span class="o">=</span><span class="s1">&#39;Generation&#39;</span><span class="p">,</span>
+                <span class="n">ylabel</span><span class="o">=</span><span class="s1">&#39;Best Fitness (Lower is Better)&#39;</span><span class="p">,</span>
+                <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Evolution of Best Fitness&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="c1"># 2. Equation complexity evolution</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">complexity</span><span class="p">,</span>
+                 <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span>
+                 <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                 <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;s&#39;</span><span class="p">,</span>
+                 <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                 <span class="n">markeredgecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span>
+                 <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">xlabel</span><span class="o">=</span><span class="s1">&#39;Generation&#39;</span><span class="p">,</span>
+                <span class="n">ylabel</span><span class="o">=</span><span class="s1">&#39;Equation Complexity&#39;</span><span class="p">,</span>
+                <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Evolution of Equation Complexity&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;evolution_analysis.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># Print evolution statistics</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Evolution Analysis Summary:&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial fitness: </span><span class="si">{</span><span class="n">fitness</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final fitness: </span><span class="si">{</span><span class="n">fitness</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Improvement: </span><span class="si">{</span><span class="p">((</span><span class="n">fitness</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">fitness</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">fitness</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial complexity: </span><span class="si">{</span><span class="n">complexity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final complexity: </span><span class="si">{</span><span class="n">complexity</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_optimization_analysis">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_optimization_analysis">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_optimization_analysis</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Analyze optimization metrics including population diversity.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: DLGA model with optimization history</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create figure and subplots</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">constrained_layout</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">gs</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_gridspec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="c1"># 1. Left plot: Population diversity analysis</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">))</span>
+        <span class="n">fitness_history</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;fitness&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">])</span>
+        <span class="n">pop_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;population_size&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">]</span>
+        <span class="n">unique_modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;unique_modules&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">evolution_history</span><span class="p">]</span>
+
+        <span class="c1"># Plot population diversity trend - using dual y-axis</span>
+        <span class="n">ax1_twin</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">twinx</span><span class="p">()</span>
+
+        <span class="n">l1</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">pop_sizes</span><span class="p">,</span>
+                      <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Population Size&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span>
+                      <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">l2</span> <span class="o">=</span> <span class="n">ax1_twin</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">unique_modules</span><span class="p">,</span>
+                           <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Unique Modules&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span>
+                           <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;s&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Generation&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Population Size&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">)</span>
+        <span class="n">ax1_twin</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Unique Modules&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ff7f0e&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Population Diversity Analysis&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="c1"># Merge legends of both y-axes</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="n">l1</span> <span class="o">+</span> <span class="n">l2</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="n">l</span><span class="o">.</span><span class="n">get_label</span><span class="p">()</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">]</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">lines</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper right&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Dynamically set y-axis ranges</span>
+        <span class="n">pop_min</span><span class="p">,</span> <span class="n">pop_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">pop_sizes</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">pop_sizes</span><span class="p">)</span>
+        <span class="n">mod_min</span><span class="p">,</span> <span class="n">mod_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">unique_modules</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">unique_modules</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">pop_min</span> <span class="o">-</span> <span class="mi">50</span><span class="p">,</span> <span class="n">pop_max</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>
+        <span class="n">ax1_twin</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">mod_min</span> <span class="o">-</span> <span class="mi">5</span><span class="p">,</span> <span class="n">mod_max</span> <span class="o">+</span> <span class="mi">5</span><span class="p">)</span>
+
+        <span class="c1"># 2. Right plot: Fitness evolution analysis</span>
+        <span class="n">fitness_changes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">fitness_history</span><span class="p">))</span>
+
+        <span class="c1"># Calculate cumulative changes and find major change interval</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fitness_changes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">cumsum_changes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">fitness_changes</span><span class="p">)</span>
+            <span class="n">total_change</span> <span class="o">=</span> <span class="n">cumsum_changes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="c1"># Find interval containing 80% of changes (adjust threshold as needed)</span>
+            <span class="n">threshold</span> <span class="o">=</span> <span class="mf">0.8</span> <span class="o">*</span> <span class="n">total_change</span>
+            <span class="n">significant_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">cumsum_changes</span><span class="p">,</span> <span class="n">threshold</span><span class="p">)</span>
+            <span class="n">show_gens</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">significant_idx</span> <span class="o">+</span> <span class="mi">5</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">fitness_history</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># Plot overall trend (lower opacity)</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">fitness_history</span><span class="p">,</span>
+                     <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                     <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+
+            <span class="c1"># Highlight major change interval</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">[:</span><span class="n">show_gens</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="n">fitness_history</span><span class="p">[:</span><span class="n">show_gens</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span>
+                     <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                     <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                     <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Major changes (first </span><span class="si">{</span><span class="n">show_gens</span><span class="si">}</span><span class="s1"> gen)&#39;</span><span class="p">)</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># If no changes, plot full curve only</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">generations</span><span class="p">,</span> <span class="n">fitness_history</span><span class="p">,</span>
+                     <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                     <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Generation&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Fitness Value&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Fitness Evolution&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;optimization_analysis.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># Print detailed analysis summary (avoid index out of range)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Optimization Analysis Summary:&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial fitness: </span><span class="si">{</span><span class="n">fitness_history</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final fitness: </span><span class="si">{</span><span class="n">fitness_history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Major improvements occurred in first </span><span class="si">{</span><span class="n">show_gens</span><span class="si">}</span><span class="s2"> generations&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">show_gens</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">early_improvement</span> <span class="o">=</span> <span class="p">((</span><span class="n">fitness_history</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">fitness_history</span><span class="p">[</span><span class="n">show_gens</span><span class="p">])</span> <span class="o">/</span> <span class="n">fitness_history</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Improvement in major change period: </span><span class="si">{</span><span class="n">early_improvement</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">total_improvement</span> <span class="o">=</span> <span class="p">((</span><span class="n">fitness_history</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">fitness_history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="n">fitness_history</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total improvement: </span><span class="si">{</span><span class="n">total_improvement</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average population size: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">pop_sizes</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average unique modules: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">unique_modules</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Diversity ratio: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">unique_modules</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">pop_sizes</span><span class="p">)</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_time_slices">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_time_slices">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_time_slices</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">u_true</span><span class="p">,</span> <span class="n">u_pred</span><span class="p">,</span> <span class="n">slice_times</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot solution comparisons at different time slices.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        x: Spatial coordinates</span>
+<span class="sd">        t: Time coordinates</span>
+<span class="sd">        u_true: True solution array </span>
+<span class="sd">        u_pred: Predicted solution array</span>
+<span class="sd">        slice_times: List of relative time points for slicing</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">slice_times</span><span class="p">),</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span><span class="n">axes</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">t_slice</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">slice_times</span><span class="p">):</span>
+            <span class="c1"># Convert relative time to index</span>
+            <span class="n">t_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">t_slice</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+
+            <span class="c1"># Debug info</span>
+            <span class="c1"># print(f&quot;\nPlotting time slice {i+1}:&quot;)</span>
+            <span class="c1"># print(f&quot;Time index: {t_idx} (t = {t[t_idx]:.3f})&quot;)</span>
+            <span class="c1"># print(f&quot;x shape: {x.shape}&quot;)</span>
+            <span class="c1"># print(f&quot;u_true shape: {u_true.shape}&quot;)</span>
+            <span class="c1"># print(f&quot;Slice shape: {u_true[:, t_idx].shape}&quot;)</span>
+
+            <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u_true</span><span class="p">[:,</span> <span class="n">t_idx</span><span class="p">],</span> <span class="s1">&#39;b-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Exact&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">u_pred</span><span class="p">[:,</span> <span class="n">t_idx</span><span class="p">],</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Prediction&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;t = </span><span class="si">{</span><span class="n">t</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;u(x,t)&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">slice_times</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;time_slices_comparison.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_derivative_relationships">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dlga_viz.plot_derivative_relationships">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_derivative_relationships</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Analyze relationships between different order derivatives.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        metadata: Dictionary containing derivative terms</span>
+<span class="sd">        output_dir: Output directory path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">constrained_layout</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_gridspec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+        <span class="c1"># 1. u_t vs u_x</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">sc1</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                          <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_t&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                          <span class="n">c</span><span class="o">=</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>  <span class="c1"># Color by u value</span>
+                          <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span>
+                          <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+                          <span class="n">s</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;u_x&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;u_t&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;First Order Derivatives&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;u&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="c1"># 2. Combined Term (u*u_x)</span>
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+        <span class="n">combined_term</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="o">*</span> <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">sc2</span> <span class="o">=</span> <span class="n">ax2</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">combined_term</span><span class="p">,</span>
+                          <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_t&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                          <span class="n">c</span><span class="o">=</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_xxx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>  <span class="c1"># Color by third order derivative</span>
+                          <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;plasma&#39;</span><span class="p">,</span>
+                          <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+                          <span class="n">s</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;u*u_x&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;u_t&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Nonlinear Term vs Time Derivative&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc2</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;u_xxx&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="c1"># 3. Third Order Term</span>
+        <span class="n">ax3</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+        <span class="n">sc3</span> <span class="o">=</span> <span class="n">ax3</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_xxx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                          <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;u_t&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+                          <span class="n">c</span><span class="o">=</span><span class="n">combined_term</span><span class="p">,</span>  <span class="c1"># Color by nonlinear term</span>
+                          <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;coolwarm&#39;</span><span class="p">,</span>
+                          <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+                          <span class="n">s</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+        <span class="n">ax3</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;u_xxx&#39;</span><span class="p">)</span>
+        <span class="n">ax3</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;u_t&#39;</span><span class="p">)</span>
+        <span class="n">ax3</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Third Order Term vs Time Derivative&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc3</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax3</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;u*u_x&#39;</span><span class="p">)</span>
+        <span class="n">ax3</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">output_dir</span><span class="p">:</span>
+            <span class="n">viz_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span>
+            <span class="n">viz_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">viz_dir</span> <span class="o">/</span> <span class="s2">&quot;derivative_relationships.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
