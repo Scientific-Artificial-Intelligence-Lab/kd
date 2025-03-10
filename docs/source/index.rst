@@ -1,17 +1,14 @@
-.. kd documentation master file, created by
-   sphinx-quickstart on Tue Jan 14 15:17:49 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+Welcome to KD's Documentation
+============================
 
-Welcome to kd's documentation!
-==============================
+KD (Knowledge Discovery) is a Python package for discovering governing equations 
+of PDEs using deep learning and symbolic regression approaches.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-   
-   api
 
+   api
 
 Indices and tables
 ==================
