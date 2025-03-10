@@ -1,4 +1,8 @@
-"""DLGA可视化模块 (v0.2)"""
+"""Visualization module for DLGA results (v0.2).
+
+This module provides visualization tools for analyzing and plotting results 
+from Deep Learning Genetic Algorithm (DLGA) model runs.
+"""
 
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -6,7 +10,7 @@ import torch
 import numpy as np
 from scipy.interpolate import griddata
 
-# 在模块顶部添加全局配置
+# Global plot configuration
 PLOT_STYLE = {
     'font.size': 12,
     'figure.titlesize': 14,
@@ -25,11 +29,11 @@ DEFAULT_CMAP = 'viridis'
 
 
 def configure_plotting(style: dict = None, cmap: str = None):
-    """全局绘图配置函数
-    
-    参数:
-        style: 自定义样式字典
-        cmap: 默认颜色映射
+    """Configure global plotting settings.
+
+    Args:
+        style: Custom style dictionary
+        cmap: Default colormap name
     """
     plt.rcParams.update(style or PLOT_STYLE)
     global DEFAULT_CMAP
@@ -38,14 +42,13 @@ def configure_plotting(style: dict = None, cmap: str = None):
 
 
 def plot_training_loss(model, output_dir: str = None):
-    """
-    绘制训练损失曲线
+    """Plot training loss curve.
     
-    参数:
-        model: 包含train_loss_history的DLGA模型
-        output_dir: 输出目录，默认当前目录下的.plot_output
+    Args:
+        model: DLGA model containing train_loss_history
+        output_dir: Output directory path
     """
-    # 配置样式
+    # Configure style
     plt.figure(figsize=(10, 5))
     plt.plot(model.train_loss_history,
              color='#1f77b4',
@@ -55,7 +58,7 @@ def plot_training_loss(model, output_dir: str = None):
     plt.grid(True, linestyle='--', alpha=0.5)
 
     if output_dir:
-        # 创建目录
+        # Create directory
         viz_dir = Path(output_dir)
         viz_dir.mkdir(exist_ok=True)
         plt.savefig(viz_dir / "training_loss.png", dpi=300)
@@ -65,12 +68,11 @@ def plot_training_loss(model, output_dir: str = None):
 
 
 def plot_validation_loss(model, output_dir: str = None):
-    """
-    绘制验证损失曲线
+    """Plot validation loss curve.
     
-    参数:
-        model: 包含val_loss_history的DLGA模型
-        output_dir: 输出目录，默认当前目录下的.plot_output
+    Args:
+        model: DLGA model containing val_loss_history
+        output_dir: Output directory path
     """
     plt.figure(figsize=(10, 5))
     plt.plot(model.val_loss_history,
@@ -91,28 +93,27 @@ def plot_validation_loss(model, output_dir: str = None):
 
 
 def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: str = None):
-    """
-    残差分析可视化
+    """Visualize residual analysis including training points and overall distribution.
     
-    参数:
-        model: DLGA模型实例
-        X_train: 训练数据坐标
-        y_train: 训练数据真实值
-        u_true: 完整真实解
-        u_pred: 完整预测解
-        output_dir: 输出目录
+    Args:
+        model: DLGA model instance
+        X_train: Training data coordinates
+        y_train: Training data values  
+        u_true: True solution array
+        u_pred: Predicted solution array
+        output_dir: Output directory path
     """
     plt.figure(figsize=(10, 4))
 
-    # 左图：训练点残差
+    # Left plot: Training points residuals
     plt.subplot(121)
-    # 计算训练点预测值
+    # Calculate training point predictions
     with torch.no_grad():
         train_pred = model.Net(torch.tensor(X_train, dtype=torch.float32)).numpy().flatten()
     train_residuals = y_train - train_pred
 
-    sc = plt.scatter(X_train[:, 1],  # 时间坐标
-                     X_train[:, 0],  # 空间坐标
+    sc = plt.scatter(X_train[:, 1],  # Time coordinates
+                     X_train[:, 0],  # Space coordinates
                      c=train_residuals,
                      cmap='coolwarm',
                      s=10,
@@ -123,7 +124,7 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
     plt.ylabel('Space', fontsize=10)
     plt.title('Training Points Residual', pad=10)
 
-    # 右图：整体残差分布
+    # Right plot: Overall residual distribution
     plt.subplot(122)
     residual = u_true - u_pred
     n, bins, patches = plt.hist(residual.flatten(),
@@ -131,7 +132,7 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
                                 density=True,
                                 edgecolor='black',
                                 linewidth=0.5)
-    # 染色以匹配coolwarm配色
+    # Color patches to match coolwarm colormap
     cmap = plt.get_cmap('coolwarm')
     bin_centers = 0.5 * (bins[:-1] + bins[1:])
     for c, p in zip(bin_centers, patches):
@@ -151,8 +152,16 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
 
 
 def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
-    """PDE解对比可视化"""
-    # 应用全局配置
+    """Compare true and predicted PDE solutions.
+    
+    Args:
+        x: Spatial coordinates
+        t: Time coordinates
+        u_true: True solution array
+        u_pred: Predicted solution array
+        output_dir: Output directory path
+    """
+    # Apply global configuration
     with plt.style.context(PLOT_STYLE):
         T, X = np.meshgrid(t, x)
         vmin = min(u_true.min(), u_pred.min())
@@ -160,7 +169,7 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5.5), sharey=True)
 
-        # 真实解
+        # True solution
         mesh1 = ax1.pcolormesh(T, X, u_true,
                                shading='gouraud',
                                cmap=DEFAULT_CMAP,
@@ -168,7 +177,7 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
         ax1.set(title='Exact Solution', xlabel='Time', ylabel='Space')
         fig.colorbar(mesh1, ax=ax1, label='u(x,t)')
 
-        # 预测解
+        # Predicted solution
         mesh2 = ax2.pcolormesh(T, X, u_pred,
                                shading='gouraud',
                                cmap=DEFAULT_CMAP,
@@ -193,60 +202,37 @@ def plot_equation_terms(
         output_dir: str = None,
         filename: str = "equation_terms_analysis.png"
 ):
-    """
-    通用方程项关系可视化
+    """Visualize relationships between equation terms.
     
-    参数:
-        metadata: 包含各方程项值的字典
-        terms: 要可视化的方程项字典，格式为 {'x轴项': {'vars': [变量列表], 'label': '显示标签'}, 
-                                      'y轴项': {'vars': [变量列表], 'label': '显示标签'}}
-        color_var: 用于着色的变量名
-        equation_name: 方程名称（用于标题）
-        output_dir: 输出目录
-        filename: 输出文件名
-    
-    示例:
-        # KdV方程: u_t + 6uu_x + u_xxx = 0
-        plot_equation_terms(
-            metadata,
-            terms={
-                'x_term': {'vars': ['u', 'u_x'], 'label': '6uu_x'},
-                'y_term': {'vars': ['u_xxx'], 'label': '-u_xxx'}
-            },
-            equation_name="KdV Equation"
-        )
-        
-        # Burgers方程: u_t + uu_x - νu_xx = 0
-        plot_equation_terms(
-            metadata,
-            terms={
-                'x_term': {'vars': ['u', 'u_x'], 'label': 'uu_x'},
-                'y_term': {'vars': ['u_xx'], 'label': 'νu_xx'}
-            },
-            equation_name="Burgers Equation"
-        )
+    Args:
+        metadata: Dictionary containing equation term values 
+        terms: Dictionary defining terms to visualize
+        color_var: Variable name for coloring
+        equation_name: Name of equation for title
+        output_dir: Output directory path
+        filename: Output filename
     """
     with plt.style.context(PLOT_STYLE):
-        # 提取和计算各项
+        # Extract and calculate terms
         x_vars = terms.get('x_term', {}).get('vars', [])
         y_vars = terms.get('y_term', {}).get('vars', [])
 
         if not x_vars or not y_vars:
-            print("警告: 未指定足够的方程项，无法绘制")
+            print("Warning: Insufficient terms specified, cannot plot")
             return
 
-        # 动态计算各项乘积
+        # Dynamically calculate term products
         x_values = np.prod([metadata[key] for key in x_vars], axis=0)
         y_values = np.prod([metadata[key] for key in y_vars], axis=0)
 
-        # 获取标签
+        # Get labels
         x_label = terms.get('x_term', {}).get('label', '-'.join(x_vars))
         y_label = terms.get('y_term', {}).get('label', '-'.join(y_vars))
 
-        # 创建图像
+        # Create figure
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        # 子图1: 项关系散点图
+        # Subplot 1: Term relationship scatter plot
         sc = ax1.scatter(
             x_values.flatten(),
             y_values.flatten(),
@@ -259,7 +245,7 @@ def plot_equation_terms(
                 title=f'{equation_name} Term Relationship')
         fig.colorbar(sc, ax=ax1, label=color_var)
 
-        # 子图2: 时间导数分布
+        # Subplot 2: Time derivative distribution
         if color_var in metadata:
             ax2.hist(metadata[color_var].flatten(), bins=50, density=True)
             ax2.set(xlabel=f'{color_var} Value', ylabel='Density',
@@ -275,24 +261,29 @@ def plot_equation_terms(
 
 
 def plot_evolution(model, output_dir: str = None):
-    """绘制进化过程的可视化图"""
+    """Visualize the evolution process of genetic algorithm.
+    
+    Args:
+        model: DLGA model with evolution history
+        output_dir: Output directory path
+    """
     with plt.style.context(PLOT_STYLE):
-        # 检查数据可用性
+        # Check data availability
         if not hasattr(model, 'evolution_history') or not model.evolution_history:
-            raise ValueError("没有可用的进化历史数据，请确保已运行evolution()方法")
+            raise ValueError("No evolution history data available, ensure evolution() method has been run")
 
-        # 创建图形和子图
+        # Create figure and subplots
         fig = plt.figure(figsize=(12, 5), constrained_layout=True)
         gs = fig.add_gridspec(1, 2)
         ax1 = fig.add_subplot(gs[0, 0])
         ax2 = fig.add_subplot(gs[0, 1])
 
-        # 提取数据
+        # Extract data
         generations = range(len(model.evolution_history))
         fitness = np.array([x['fitness'] for x in model.evolution_history])
         complexity = np.array([x['complexity'] for x in model.evolution_history])
 
-        # 1. 适应度进化曲线
+        # 1. Fitness evolution curve
         ax1.plot(generations, fitness,
                  color='#1f77b4',
                  linewidth=2,
@@ -305,7 +296,7 @@ def plot_evolution(model, output_dir: str = None):
                 title='Evolution of Best Fitness')
         ax1.grid(True, linestyle='--', alpha=0.5)
 
-        # 2. 方程复杂度变化
+        # 2. Equation complexity evolution
         ax2.plot(generations, complexity,
                  color='#ff7f0e',
                  linewidth=2,
@@ -326,7 +317,7 @@ def plot_evolution(model, output_dir: str = None):
             plt.show()
         plt.close()
 
-        # 打印演化统计信息
+        # Print evolution statistics
         print("\nEvolution Analysis Summary:")
         print(f"Initial fitness: {fitness[0]:.4f}")
         print(f"Final fitness: {fitness[-1]:.4f}")
@@ -336,21 +327,26 @@ def plot_evolution(model, output_dir: str = None):
 
 
 def plot_optimization_analysis(model, output_dir: str = None):
-    """Visualize optimization metrics including weight changes and population diversity."""
-    # 创建图形和子图
+    """Analyze optimization metrics including population diversity.
+    
+    Args:
+        model: DLGA model with optimization history
+        output_dir: Output directory path
+    """
+    # Create figure and subplots
     fig = plt.figure(figsize=(12, 5), constrained_layout=True)
     gs = fig.add_gridspec(1, 2)
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[0, 1])
 
     with plt.style.context(PLOT_STYLE):
-        # 1. 左图：种群多样性分析
+        # 1. Left plot: Population diversity analysis
         generations = range(len(model.evolution_history))
         fitness_history = np.array([x['fitness'] for x in model.evolution_history])
         pop_sizes = [x.get('population_size', 0) for x in model.evolution_history]
         unique_modules = [x.get('unique_modules', 0) for x in model.evolution_history]
 
-        # 绘制种群多样性趋势 - 使用双y轴
+        # Plot population diversity trend - using dual y-axis
         ax1_twin = ax1.twinx()
 
         l1 = ax1.plot(generations, pop_sizes,
@@ -366,43 +362,43 @@ def plot_optimization_analysis(model, output_dir: str = None):
         ax1.set_title('Population Diversity Analysis')
         ax1.grid(True, linestyle='--', alpha=0.5)
 
-        # 合并两个y轴的图例
+        # Merge legends of both y-axes
         lines = l1 + l2
         labels = [l.get_label() for l in lines]
         ax1.legend(lines, labels, loc='upper right')
 
-        # 动态设置y轴范围
+        # Dynamically set y-axis ranges
         pop_min, pop_max = min(pop_sizes), max(pop_sizes)
         mod_min, mod_max = min(unique_modules), max(unique_modules)
         ax1.set_ylim(pop_min - 50, pop_max + 50)
         ax1_twin.set_ylim(mod_min - 5, mod_max + 5)
 
-        # 2. 右图：适应度变化分析
+        # 2. Right plot: Fitness evolution analysis
         fitness_changes = np.abs(np.diff(fitness_history))
 
-        # 计算累积变化并找到主要变化区间
+        # Calculate cumulative changes and find major change interval
         if len(fitness_changes) > 0:
             cumsum_changes = np.cumsum(fitness_changes)
             total_change = cumsum_changes[-1]
 
-            # 找到包含80%变化的区间（改为更合理的阈值）
+            # Find interval containing 80% of changes (adjust threshold as needed)
             threshold = 0.8 * total_change
             significant_idx = np.searchsorted(cumsum_changes, threshold)
             show_gens = min(significant_idx + 5, len(fitness_history) - 1)
 
-            # 绘制整体趋势（透明度降低）
+            # Plot overall trend (lower opacity)
             ax2.plot(generations, fitness_history,
                      color='#2ca02c', linewidth=1,
                      marker='o', markersize=2, alpha=0.3)
 
-            # 突出显示主要变化区间
+            # Highlight major change interval
             ax2.plot(generations[:show_gens + 1], fitness_history[:show_gens + 1],
                      color='#2ca02c', linewidth=2,
                      marker='o', markersize=4, alpha=0.8,
                      label=f'Major changes (first {show_gens} gen)')
             ax2.legend()
         else:
-            # 如果没有变化，仅绘制完整曲线
+            # If no changes, plot full curve only
             ax2.plot(generations, fitness_history,
                      color='#2ca02c', linewidth=2,
                      marker='o', markersize=3)
@@ -420,7 +416,7 @@ def plot_optimization_analysis(model, output_dir: str = None):
             plt.show()
         plt.close()
 
-        # 打印更详细的分析总结（避免索引越界）
+        # Print detailed analysis summary (avoid index out of range)
         print("\nOptimization Analysis Summary:")
         print(f"Initial fitness: {fitness_history[0]:.4f}")
         print(f"Final fitness: {fitness_history[-1]:.4f}")
@@ -436,14 +432,15 @@ def plot_optimization_analysis(model, output_dir: str = None):
 
 
 def plot_time_slices(x, t, u_true, u_pred, slice_times, output_dir: str = None):
-    """绘制时间切片对比图
+    """Plot solution comparisons at different time slices.
     
     Args:
-        x: 空间坐标数组 (nx,)
-        t: 时间坐标数组 (nt,)
-        u_true: 真实解数组 (nx, nt)
-        u_pred: 预测解数组 (nx, nt)
-        slice_times: 时间切片列表，值应在0到1之间
+        x: Spatial coordinates
+        t: Time coordinates
+        u_true: True solution array 
+        u_pred: Predicted solution array
+        slice_times: List of relative time points for slicing
+        output_dir: Output directory path
     """
 
     with plt.style.context(PLOT_STYLE):
@@ -452,10 +449,10 @@ def plot_time_slices(x, t, u_true, u_pred, slice_times, output_dir: str = None):
             axes = [axes]
 
         for i, t_slice in enumerate(slice_times):
-            # 将相对时间转换为索引
+            # Convert relative time to index
             t_idx = int(t_slice * (len(t) - 1))
 
-            # Debug信息
+            # Debug info
             # print(f"\nPlotting time slice {i+1}:")
             # print(f"Time index: {t_idx} (t = {t[t_idx]:.3f})")
             # print(f"x shape: {x.shape}")
@@ -484,11 +481,11 @@ def plot_time_slices(x, t, u_true, u_pred, slice_times, output_dir: str = None):
 
 
 def plot_derivative_relationships(metadata, output_dir: str = None):
-    """分析和可视化不同阶导数之间的关系
+    """Analyze relationships between different order derivatives.
     
     Args:
-        metadata: 包含各导数项的字典，必须包含 'u', 'u_x', 'u_xxx', 'u_t' 等键
-        output_dir: 输出目录
+        metadata: Dictionary containing derivative terms
+        output_dir: Output directory path
     """
 
     with plt.style.context(PLOT_STYLE):
@@ -499,7 +496,7 @@ def plot_derivative_relationships(metadata, output_dir: str = None):
         ax1 = fig.add_subplot(gs[0, 0])
         sc1 = ax1.scatter(metadata['u_x'].flatten(),
                           metadata['u_t'].flatten(),
-                          c=metadata['u'].flatten(),  # 按u值着色
+                          c=metadata['u'].flatten(),  # Color by u value
                           cmap='viridis',
                           alpha=0.6,
                           s=20)
@@ -514,7 +511,7 @@ def plot_derivative_relationships(metadata, output_dir: str = None):
         combined_term = metadata['u'].flatten() * metadata['u_x'].flatten()
         sc2 = ax2.scatter(combined_term,
                           metadata['u_t'].flatten(),
-                          c=metadata['u_xxx'].flatten(),  # 按三阶导着色
+                          c=metadata['u_xxx'].flatten(),  # Color by third order derivative
                           cmap='plasma',
                           alpha=0.6,
                           s=20)
@@ -528,7 +525,7 @@ def plot_derivative_relationships(metadata, output_dir: str = None):
         ax3 = fig.add_subplot(gs[0, 2])
         sc3 = ax3.scatter(metadata['u_xxx'].flatten(),
                           metadata['u_t'].flatten(),
-                          c=combined_term,  # 按非线性项着色
+                          c=combined_term,  # Color by nonlinear term
                           cmap='coolwarm',
                           alpha=0.6,
                           s=20)

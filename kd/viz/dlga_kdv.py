@@ -1,4 +1,8 @@
-"""Visualization module for KdV equation specific analysis in DLGA framework."""
+"""Specialized visualization module for KdV equation analysis in DLGA framework.
+
+This module provides visualization tools specifically designed for analyzing 
+the KdV (Korteweg-de Vries) equation results from DLGA model.
+"""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +12,14 @@ from .dlga_viz import PLOT_STYLE
 from scipy.interpolate import griddata
 
 def plot_metadata_plane(metadata, x, t, output_dir: str = None):
-    """Visualize the KdV equation residual distribution and term magnitudes on the x-t plane."""
+    """Visualize KdV equation characteristics on the x-t plane.
+    
+    Args:
+        metadata: Dictionary containing equation terms and derivatives
+        x: Spatial coordinates
+        t: Time coordinates 
+        output_dir: Output directory path
+    """
     
     with plt.style.context(PLOT_STYLE):
         # 创建图形
