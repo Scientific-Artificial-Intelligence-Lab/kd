@@ -17,6 +17,7 @@ from tqdm import tqdm
 import pickle
 import matplotlib.pyplot as plt
 
+from ..viz import equation_renderer
 
 class BaseGa(BaseEstimator, metaclass=ABCMeta):
     """Abstract base class for genetic algorithm based models."""
@@ -65,7 +66,7 @@ class DLGA(BaseGa):
     
     _parameter: dict = {}
 
-    def __init__(self, epi, input_dim):
+    def __init__(self, epi, input_dim, max_iter=50000):
         """Initialize DLGA model.
         
         Args:
@@ -97,6 +98,8 @@ class DLGA(BaseGa):
             Batch_Norm=False,
         )
 
+        self.max_iter = max_iter
+        self.eq_latex = ""
         self.epi = epi
         self.fitness_history = []  # Track best fitness per generation
         self.train_loss_history = []  # 训练损失历史
@@ -151,8 +154,8 @@ class DLGA(BaseGa):
 
         print("===============train Net=================")
 
-        # Training loop (与 dlga_old.py 保持一致，使用 50000 次迭代)
-        for iter in range(50000):
+        # Training loop
+        for iter in range(self.max_iter):
             NN_optimizer.zero_grad()
             prediction = self.Net(X_train)
             prediction_validate = self.Net(X_valid)
@@ -487,7 +490,7 @@ class DLGA(BaseGa):
             raise
 
     def evolution(self):
-        """Run genetic algorithm evolution following dlga_old.py strategy."""
+        """Run genetic algorithm evolution following old strategy."""
         self.Chrom = []
         self.Fitness = []
         # Initialize population
@@ -575,6 +578,15 @@ class DLGA(BaseGa):
             
             equation = self.convert_chrom_to_eq(Chrom, name, coef)
             print(f"equation form: {equation}")
+
+
+            if equation_renderer: # 检查导入是否成功
+                self.eq_latex = equation_renderer.dlga_eq2latex(
+                    chromosome=Chrom,
+                    coefficients=coef,
+                    lhs_name_str=name
+                )
+            
         except Exception as e:
             print(f"Error in fit: {str(e)}")
             raise

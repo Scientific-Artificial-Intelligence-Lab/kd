@@ -1,5 +1,13 @@
+dlga_cases = [
+    "u_t=-0.9901*u*ux+-0.0025*uxxx",
+    "u_t=0.1231*ux+-0.6359*u*ux+-0.0026*ux*uxx+-0.0*ux*uxxx*uxxx+-0.0013*uxxx+0.0003*u*u*uxxx",
+    "u_t=-0.0*uxxx*uxxx+-0.0011*ux*uxx+-0.8526*u*ux+0.1806*ux+-0.0015*uxxx",
+    "u_t=0.1498*ux+-0.6168*u*ux+-0.0013*uxxx+-0.0*u*ux*uxx*uxx+-0.0012*ux*uxx+0.0002*u*uxxx",
+    "u_t=-0.0022*uxxx+-0.8956*u*ux"
+]
 
-dprlpinn_pde_cases = [
+
+dprlpinn_cases = [
     "-0.9048 * mul_t(u1,diff_t(u1,x1)) + 0.0898 * diff2_t(u1,x1)",
     "0.0029 * diff2_t(mul_t(u1,n2_t(x1)),x1) + -0.1084 * n2_t(u1) + -0.3331 * diff_t(u1,x1)",
     "-0.0454 * u1 + -0.3350 * diff_t(u1,x1)",
@@ -27,7 +35,7 @@ dprlpinn_pde_cases = [
     "-0.3436 * diff_t(u1,x1) + -0.1542 * n2_t(diff_t(mul_t(n2_t(n2_t(u1)),u1),x1))",
 ]
 
-dprl_pde_cases = [
+dprl_cases = [
     "0.0984 * diff2(u1,x1) + -0.5002 * diff(n2(u1),x1)",
     "0.0327 * diff2(mul(u1,n2(x1)),x1) + -0.0003 * diff2(mul(n2(n2(x1)),u1),x1) + -0.0422 * u1",
     "0.1912 * mul(u1,mul(diff(n2(u1),x1),x1))",
@@ -35,5 +43,3 @@ dprl_pde_cases = [
     "0.0985 * diff2(u1,x1) + -0.5007 * diff(n2(u1),x1) + -0.0001 * diff2(mul(n2(x1),u1),x1)",
     "-0.0009 * u1 + 0.0981 * diff2(u1,x1) + -0.4989 * diff(n2(u1),x1)",
 ]
-
-# TODO
