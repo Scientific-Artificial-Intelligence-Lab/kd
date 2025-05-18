@@ -14,14 +14,15 @@ from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
 
 
-from kd.viz.equation_renderer import (
+from kd.viz.dlga_eq2latex import (
     _module_to_latex_base_term,
     _format_full_latex_term,
     chromosome_to_latex,
-    render_latex_to_image,
     DLGA_INTERNAL_TERM_NAMES,  # 导入模块中定义的常量
     DEFAULT_LATEX_STYLE_MAP
 )
+
+from kd.viz.equation_renderer import render_latex_to_image
 
 TERMS_FOR_TESTING = DLGA_INTERNAL_TERM_NAMES
 LATEX_MAP_FOR_TESTING = DEFAULT_LATEX_STYLE_MAP
