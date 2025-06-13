@@ -1,9 +1,3 @@
-"""
-Deep Reinforcement Learning Visualization Module
-
-This module provides functions for visualizing the training process and results of deep reinforcement learning models.
-"""
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,11 +5,34 @@ import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib as mpl
 
+
+def plot_expression_tree(model, output_dir: str = None):
+
+    graph = model.searcher.plotter.tree_plot(model.searcher.best_p)
+
+    if output_dir is None:
+        return graph
+
+    pass
+
+
+def plot_density(model, epoches = None, output_dir: str = None):
+
+    model.plot(fig_type='density', epoches=epoches)
+
+
+
+
+# def plot_evolution(model, output_dir: str = None):
+#     model.plot(fig_type='evolution')
+
+
+
+
 # Set font that supports both English and Chinese characters
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Arial']
 plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
 
-# Global plotting style configuration
 PLOT_STYLE = {
     'font.size': 12,
     'figure.titlesize': 14,
@@ -29,57 +46,13 @@ PLOT_STYLE = {
     'axes.unicode_minus': False,
 }
 
-# Global color map
-DEFAULT_CMAP = 'viridis'
-
-
-def configure_plotting(style=None, cmap=None):
-    """
-    Configure global plotting style and color map.
-    
-    Parameters:
-        style (dict, optional): Custom style dictionary, will override default style.
-        cmap (str, optional): Custom color map name.
-    """
-    global PLOT_STYLE, DEFAULT_CMAP
-
-    if style:
-        PLOT_STYLE.update(style)
-
-    if cmap:
-        DEFAULT_CMAP = cmap
-
-
-def save_figure(fig, output_dir, filename, dpi=None, bbox_inches='tight', **kwargs):
-    """
-    Save figure to specified directory.
-    
-    Parameters:
-        fig (matplotlib.figure.Figure): Figure object to save.
-        output_dir (str): Output directory path.
-        filename (str): File name, should include extension (e.g., .png, .pdf).
-        dpi (int, optional): Resolution, if None uses the setting in PLOT_STYLE.
-        bbox_inches (str, optional): Boundary box setting, default is 'tight'.
-        **kwargs: Other parameters passed to plt.savefig.
-    """
-    # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Use global DPI setting (if not specified)
-    if dpi is None and 'savefig.dpi' in PLOT_STYLE:
-        dpi = PLOT_STYLE['savefig.dpi']
-
-    # Save figure
-    fig.savefig(os.path.join(output_dir, filename), dpi=dpi, bbox_inches=bbox_inches, **kwargs)
-
-
-def plot_training_rewards(model, output_dir=None, figsize=(10, 6)):
+# TODO
+def plot_evolution(model, figsize=(10, 6)):
     """
     Plot reward changes during training.
     
     Parameters:
         model: Trained DeepRL model.
-        output_dir (str, optional): Directory path to save the figure.
         figsize (tuple, optional): Figure size.
         
     Returns:
@@ -107,536 +80,189 @@ def plot_training_rewards(model, output_dir=None, figsize=(10, 6)):
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.legend(loc='best', frameon=False)
 
-        # If output directory is provided, save the figure
-        if output_dir:
-            save_figure(fig, output_dir, 'training_rewards.png')
+        plt.show()
 
-        return fig
+        plt.close()
 
 
-def plot_reward_density(model, epochs=None, output_dir=None, figsize=(10, 6)):
+
+# --- 内部辅助函数 ---
+def _finite_difference(y, x, order=1):
+    """使用中心差分计算导数。"""
+    if len(y.shape) > 1: y = y.flatten()
+    if len(x.shape) > 1: x = x.flatten()
+    dx = x[1] - x[0]
+    if order == 1: return np.gradient(y, dx, edge_order=2)
+    elif order == 2: return np.gradient(np.gradient(y, dx, edge_order=2), dx, edge_order=2)
+    else: raise ValueError("只支持1阶或2阶导数。")
+
+def _evaluate_term_recursively(node, u_snapshot, x_coords):
+    """递归地计算一个符号树(Node)的数值。"""
+    if not node.children:
+        if node.val == 'u1': return u_snapshot
+        elif node.val == 'x1': return x_coords
+        else: raise ValueError(f"未知的叶子节点: {node.val}")
+    child_values = [_evaluate_term_recursively(child, u_snapshot, x_coords) for child in node.children]
+    op_name = node.val
+    if op_name == 'add': return child_values[0] + child_values[1]
+    elif op_name == 'sub': return child_values[0] - child_values[1]
+    elif op_name == 'mul': return child_values[0] * child_values[1]
+    elif op_name == 'div': return child_values[0] / (child_values[1] + 1e-8)
+    elif op_name == 'n2': return child_values[0]**2
+    elif op_name == 'n3': return child_values[0]**3
+    elif op_name == 'sin': return np.sin(child_values[0])
+    elif op_name == 'cos': return np.cos(child_values[0])
+    elif op_name == 'diff': return _finite_difference(child_values[0], x_coords, order=1)
+    elif op_name == 'diff2': return _finite_difference(child_values[0], x_coords, order=2)
+    else: raise ValueError(f"未知的操作: {op_name}")
+
+def _calculate_pde_fields(model, best_program):
     """
-    Plot reward density distribution.
+    一个私有的核心计算函数，供所有绘图函数调用。
+    它负责计算所有必要的场数据并返回一个字典。
+    """
+    # 1. 获取信息和数据
+    data_dict = model.data_class.get_data()
+    final_symbolic_terms = best_program.STRidge.terms
+    w_best = best_program.w
+    u_trimmed = data_dict['u']
+    ut_trimmed = data_dict['ut']
+    x_axis = data_dict['X'][0].flatten()
+
+    # 2. 计算 Theta 矩阵
+    num_space_points, num_timesteps_trimmed = u_trimmed.shape
+    Theta_final = np.zeros((u_trimmed.size, len(final_symbolic_terms)))
+    for i, term_node in enumerate(final_symbolic_terms):
+        term_values_grid = np.zeros_like(u_trimmed)
+        for t_idx in range(num_timesteps_trimmed):
+            u_snapshot = u_trimmed[:, t_idx]
+            term_values_grid[:, t_idx] = _evaluate_term_recursively(term_node, u_snapshot, x_axis)
+        Theta_final[:, i] = term_values_grid.flatten()
     
-    Parameters:
-        model: Trained DeepRL model.
-        epochs (list, optional): List of specific epochs to plot.
-        output_dir (str, optional): Directory path to save the figure.
-        figsize (tuple, optional): Figure size.
-        
-    Returns:
-        matplotlib.figure.Figure: Generated figure object.
-    """
-    from scipy.stats import gaussian_kde
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    configure_plotting()
-
-    # Get rewards for all epochs
-    r_all = model.searcher.r_history
-
-    # If no epochs specified, select uniformly distributed epochs
-    if epochs is None:
-        num_epochs = len(r_all)
-        if num_epochs <= 5:
-            epochs = list(range(num_epochs))
-        else:
-            epochs = [0, num_epochs // 4, num_epochs // 2, 3 * num_epochs // 4, num_epochs - 1]
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Set colors
-    colors = plt.cm.viridis(np.linspace(0, 1, len(epochs)))
-
-    # Define x-axis range
-    x_min, x_max = 0.0, 1.0
-    x_grid = np.linspace(x_min, x_max, 1000)
-
-    # Plot density graph
-    if len(epochs) > 10:
-        # If too many epochs, use color map
-        norm = plt.Normalize(1, len(epochs))
-        sm = plt.cm.ScalarMappable(cmap=plt.cm.viridis, norm=norm)
-        sm.set_array([])
-
-        for i, epoch in enumerate(epochs):
-            if epoch < len(r_all):
-                # Filter out infinity and NaN values
-                data = r_all[epoch]
-                data = data[~np.isinf(data) & ~np.isnan(data)]
-
-                # Ensure data is not empty and has enough unique values
-                if len(data) > 5 and len(np.unique(data)) > 1:
-                    # Use scipy's gaussian_kde to calculate kernel density estimation
-                    try:
-                        kde = gaussian_kde(data)
-                        density = kde(x_grid)
-                        ax.plot(x_grid, density, color=colors[i], alpha=0.7)
-                        # Fill area under curve
-                        ax.fill_between(x_grid, density, alpha=0.2, color=colors[i])
-                    except Exception as e:
-                        print(f"Epoch {epoch} KDE calculation failed: {str(e)}")
-
-        cbar = fig.colorbar(sm, ticks=[0, 0.5, 1], ax=ax)
-        cbar.ax.set_yticklabels([1, '', len(epochs)])
+    # 3. 计算 RHS 和残差
+    if Theta_final.shape[1] == len(w_best) - 1:
+        y_hat_rhs = Theta_final @ w_best[:-1] + w_best[-1]
     else:
-        # Only plot specified epochs
-        for i, epoch in enumerate(epochs):
-            if epoch < len(r_all):
-                # Filter out infinity and NaN values
-                data = r_all[epoch]
-                data = data[~np.isinf(data) & ~np.isnan(data)]
-
-                # Ensure data is not empty and has enough unique values
-                if len(data) > 5 and len(np.unique(data)) > 1:
-                    try:
-                        # Use scipy's gaussian_kde to calculate kernel density estimation
-                        kde = gaussian_kde(data)
-                        density = kde(x_grid)
-                        ax.plot(x_grid, density, color=colors[i], label=f'Epoch={epoch}')
-                        # Fill area under curve
-                        ax.fill_between(x_grid, density, alpha=0.3, color=colors[i])
-                    except Exception as e:
-                        print(f"Epoch {epoch} KDE calculation failed: {str(e)}")
-
-        ax.legend(loc='best', frameon=False)
-
-    ax.set_xlabel('Reward Value')
-    ax.set_ylabel('Density')
-    ax.set_xlim(x_min, x_max)
-
-    # If output directory is provided, save the figure
-    if output_dir:
-        save_figure(fig, output_dir, 'reward_density.png')
-
-    return fig
-
-
-def plot_expression_tree(model, output_dir=None):
-    """
-    Plot the best expression tree.
+        y_hat_rhs = Theta_final @ w_best
+    physical_residual = ut_trimmed.flatten() - y_hat_rhs.flatten()
     
-    Parameters:
-        model: Trained DeepRL model.
-        output_dir (str, optional): Directory path to save the figure.
-        
-    Returns:
-        graphviz.Digraph: Generated graph object, or matplotlib.figure.Figure if Graphviz is not installed.
+    # 4. 构建绘图坐标
+    t_axis_trimmed = np.arange(num_timesteps_trimmed)
+    X_grid, T_grid = np.meshgrid(x_axis, t_axis_trimmed, indexing='ij')
+    coords_for_plot = np.stack([X_grid.flatten(), T_grid.flatten()], axis=1)
+
+    # 5. 将所有计算结果打包成字典返回
+    return {
+        "residual": physical_residual,
+        "coords": coords_for_plot,
+        "ut_grid": ut_trimmed,
+        "y_hat_grid": y_hat_rhs.reshape(num_space_points, num_timesteps_trimmed),
+        "x_axis": x_axis,
+        "t_axis": t_axis_trimmed
+    }
+
+def plot_pde_residual_analysis(model, best_program, show_plot=True):
     """
-    # Get the best program
-    best_program = model.searcher.best_p
-
-    try:
-        # Use existing tree_plot method to create graph
-        graph = model.searcher.plotter.tree_plot(best_program)
-
-        # If output directory is provided, save the graph
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-            try:
-                graph.render(os.path.join(output_dir, 'expression_tree'), format='png', cleanup=True)
-            except Exception as e:
-                print(f"Warning: Could not render expression tree graph: {str(e)}")
-                print("Make sure Graphviz is installed and on your system PATH.")
-                print("You can install Graphviz from: https://graphviz.org/download/")
-                # Create a simple text file with the expression as a fallback
-                if output_dir:
-                    with open(os.path.join(output_dir, 'expression_tree.txt'), 'w') as f:
-                        f.write(f"Best expression: {best_program.str_expression}")
-
-        return graph
-    except Exception as e:
-        print(f"Warning: Could not create expression tree graph: {str(e)}")
-        print("Make sure Graphviz is installed and on your system PATH.")
-        print("You can install Graphviz from: https://graphviz.org/download/")
-        
-        # Create a simple text file with the expression as a fallback
-        if output_dir:
-            with open(os.path.join(output_dir, 'expression_tree.txt'), 'w') as f:
-                f.write(f"Best expression: {best_program.str_expression}")
-        
-        # Create a better matplotlib figure as a fallback
-        with plt.style.context(PLOT_STYLE):
-            # Parse the expression into a more readable format
-            expr_str = best_program.str_expression
-            
-            # Create a figure with appropriate size
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Set the title with the expression
-            ax.text(0.5, 0.9, "Best Expression", ha='center', va='center', fontsize=14, fontweight='bold')
-            ax.text(0.5, 0.8, expr_str, ha='center', va='center', fontsize=12, 
-                   bbox=dict(facecolor='lightblue', alpha=0.5, boxstyle='round,pad=0.5'))
-            
-            # Add reward information
-            if hasattr(best_program, 'r_ridge'):
-                ax.text(0.5, 0.6, f"Reward: {best_program.r_ridge:.4f}", 
-                       ha='center', va='center', fontsize=12,
-                       bbox=dict(facecolor='lightgreen', alpha=0.5, boxstyle='round,pad=0.5'))
-            
-            # Try to visualize the structure if possible
-            try:
-                # Split the expression into components for a simple tree visualization
-                terms = expr_str.replace('(', ' ').replace(')', ' ').replace(',', ' ').split()
-                unique_terms = sorted(set(terms))
-                
-                # Create a simple hierarchical layout
-                if len(unique_terms) <= 10:  # Only attempt visualization for simpler expressions
-                    # Draw a simple tree structure
-                    ax.text(0.5, 0.4, "Expression Structure:", ha='center', va='center', fontsize=12)
-                    
-                    # Draw the unique terms in a circular layout
-                    radius = 0.2
-                    center_x, center_y = 0.5, 0.2
-                    
-                    for i, term in enumerate(unique_terms):
-                        angle = 2 * np.pi * i / len(unique_terms)
-                        x = center_x + radius * np.cos(angle)
-                        y = center_y + radius * np.sin(angle)
-                        
-                        # Count term frequency
-                        count = terms.count(term)
-                        size = 10 + 2 * count  # Size based on frequency
-                        
-                        # Draw the term
-                        ax.text(x, y, term, ha='center', va='center', fontsize=size,
-                               bbox=dict(facecolor='lightyellow', alpha=0.7, boxstyle='round,pad=0.3'))
-                        
-                        # Draw a line to the center
-                        ax.plot([center_x, x], [center_y + 0.1, y], 'k-', alpha=0.3)
-            except:
-                # If visualization fails, just skip it
-                pass
-                
-            ax.axis('off')
-            
-            if output_dir:
-                save_figure(fig, output_dir, 'expression_tree_fallback.png')
-            
-            return fig
-
-
-def plot_best_expressions(model, top_n=5, output_dir=None, figsize=(12, 8)):
+    计算并可视化物理残差
     """
-    Plot the top N best expressions by reward value.
+    # 调用核心函数获取所有计算结果
+    fields = _calculate_pde_fields(model, best_program)
+
+    if show_plot:
+        physical_residual = fields["residual"]
+        coords_for_plot = fields["coords"]
+        
+        plt.figure(figsize=(12, 5))
+        plt.subplot(1, 2, 1)
+        sc = plt.scatter(coords_for_plot[:, 1], coords_for_plot[:, 0], c=physical_residual, cmap='coolwarm', s=15, alpha=0.8)
+        plt.colorbar(sc, label='Physical Residual ($u_t$ - RHS)')
+        plt.xlabel('Time (trimmed, index)')
+        plt.ylabel('Space')
+        plt.title('Spatiotemporal Distribution of Residuals')
+        plt.subplot(1, 2, 2)
+        plt.hist(physical_residual, bins=50, density=True, edgecolor='black', alpha=0.7)
+        plt.xlabel('Residual Value')
+        plt.ylabel('Probability Density')
+        plt.title('Residual Distribution')
+        plt.tight_layout()
+        plt.show()
+    else:
+        return fields["residual"], fields["coords"]
     
-    Parameters:
-        model: Trained DeepRL model.
-        top_n (int, optional): Number of top expressions to plot.
-        output_dir (str, optional): Directory path to save the figure.
-        figsize (tuple, optional): Figure size.
-        
-    Returns:
-        matplotlib.figure.Figure: Generated figure object.
+
+def plot_field_comparison(model, best_program, show_plot=True):
     """
-    with plt.style.context(PLOT_STYLE):
-        fig, ax = plt.subplots(figsize=figsize)
-
-        # Get top N expressions from priority queue
-        expressions = []
-        rewards = []
-
-        # First, try to get the best expression directly from the model
-        best_program = model.searcher.best_p
-        if best_program is not None:
-            expressions.append(best_program.str_expression)
-            rewards.append(best_program.r_ridge if hasattr(best_program, 'r_ridge') else 0.0)
-            
-            # Add a note about the best expression
-            print(f"Best expression: {best_program.str_expression}")
-            print(f"Reward: {best_program.r_ridge if hasattr(best_program, 'r_ridge') else 'N/A'}")
-
-        # Try to get additional expressions if needed
-        if top_n > 1:
-            try:
-                # Try to get expressions from the priority queue
-                for i, (item_id, program) in enumerate(model.searcher.pq.iter_in_order()):
-                    # Skip the first one if we already have the best program
-                    if i == 0 and len(expressions) > 0:
-                        continue
-                        
-                    if len(expressions) >= top_n:
-                        break
-                        
-                    # Try different ways to extract expression and reward
-                    if hasattr(program, 'str_expression') and hasattr(program, 'r_ridge'):
-                        expressions.append(program.str_expression)
-                        rewards.append(program.r_ridge)
-                    elif isinstance(program, dict) and 'str_expression' in program and 'r_ridge' in program:
-                        expressions.append(program['str_expression'])
-                        rewards.append(program['r_ridge'])
-                    else:
-                        # Generate placeholder for missing expressions
-                        expr_num = len(expressions) + 1
-                        expressions.append(f"Expression {expr_num}")
-                        rewards.append(0.0)
-            except Exception as e:
-                print(f"Warning: Error extracting additional expressions: {str(e)}")
-                
-        # If we still don't have enough expressions, generate placeholders
-        while len(expressions) < top_n:
-            expr_num = len(expressions) + 1
-            expressions.append(f"Expression {expr_num}")
-            rewards.append(0.0)
-            
-        # Make sure we have at least one expression
-        if not expressions:
-            expressions = ["No expressions available"]
-            rewards = [0.0]
-
-        # Plot horizontal bar chart
-        y_pos = np.arange(len(expressions))
-        ax.barh(y_pos, rewards, align='center', color='skyblue', alpha=0.8)
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(expressions)
-        ax.invert_yaxis()  # Labels read from top to bottom
-        ax.set_xlabel('Reward Value')
-        ax.set_title('Top Expressions by Reward Value')
-
-        # If output directory is provided, save the figure
-        if output_dir:
-            save_figure(fig, output_dir, 'best_expressions.png')
-
-        return fig
-
-
-def plot_simulated_annealing_metrics(model, output_dir=None, figsize=(12, 10)):
+    计算并可视化“预测场”与“真实场”的对比图。
     """
-    Plot simulated annealing optimization metrics.
+    # 同样调用核心函数获取所有计算结果
+    fields = _calculate_pde_fields(model, best_program)
+
+    ut_grid = fields["ut_grid"]
+    y_hat_grid = fields["y_hat_grid"]
+    x_axis = fields["x_axis"]
+    t_axis = fields["t_axis"]
+
+    if show_plot:
+        # 计算通用的颜色范围
+        vmin = min(ut_grid.min(), y_hat_grid.min())
+        vmax = max(ut_grid.max(), y_hat_grid.max())
+
+        # 创建包含两个子图的图表
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+        fig.suptitle('Predicted Field vs. True Field Comparison', fontsize=16)
+
+        # 绘制左图：真实场
+        ax0 = axes[0]
+        im0 = ax0.pcolormesh(t_axis, x_axis, ut_grid, cmap='viridis', vmin=vmin, vmax=vmax, shading='gouraud')
+        fig.colorbar(im0, ax=ax0, label='Value')
+        ax0.set_title("True Field ($u_t$)", fontsize=14)
+        ax0.set_xlabel("Time (trimmed, index)", fontsize=12)
+        ax0.set_ylabel("Space", fontsize=12)
+
+        # 绘制右图：预测场
+        ax1 = axes[1]
+        im1 = ax1.pcolormesh(t_axis, x_axis, y_hat_grid, cmap='viridis', vmin=vmin, vmax=vmax, shading='gouraud')
+        fig.colorbar(im1, ax=ax1, label='Value')
+        ax1.set_title("Predicted Field (RHS)", fontsize=14)
+        ax1.set_xlabel("Time (trimmed, index)", fontsize=12)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+    else:
+        return ut_grid, y_hat_grid, x_axis, t_axis
     
-    Parameters:
-        model: Trained DeepRL model.
-        output_dir (str, optional): Directory path to save the figure.
-        figsize (tuple, optional): Figure size.
-        
-    Returns:
-        matplotlib.figure.Figure: Generated figure object, or None if no simulated annealing data is available.
+
+def plot_actual_vs_predicted(model, best_program):
     """
-    try:
-        # Check if simulated annealing data is available
-        if not hasattr(model.searcher, 'temperature_history'):
-            print("No simulated annealing data available")
-            return None
-            
-        # Check if temperature_history exists and is not empty
-        if model.searcher.temperature_history is None:
-            print("Temperature history is None")
-            return None
-            
-        # Check if it's a list or numpy array and not empty
-        if isinstance(model.searcher.temperature_history, (list, tuple)):
-            if len(model.searcher.temperature_history) == 0:
-                print("Temperature history is empty")
-                return None
-        elif isinstance(model.searcher.temperature_history, np.ndarray):
-            if model.searcher.temperature_history.size == 0:
-                print("Temperature history is empty")
-                return None
-        else:
-            print("Temperature history has unknown type")
-            return None
-
-        with plt.style.context(PLOT_STYLE):
-            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=figsize, sharex=True)
-            
-            # Extract simulated annealing metrics
-            temperatures = np.array(model.searcher.temperature_history)
-            iterations = np.arange(1, len(temperatures) + 1)
-            
-            # 检查是否存在接受率历史数据
-            acceptance_rates = None
-            if hasattr(model.searcher, 'acceptance_rate_history'):
-                if model.searcher.acceptance_rate_history is not None:
-                    if isinstance(model.searcher.acceptance_rate_history, np.ndarray):
-                        if model.searcher.acceptance_rate_history.size > 0:
-                            acceptance_rates = model.searcher.acceptance_rate_history
-                    elif isinstance(model.searcher.acceptance_rate_history, (list, tuple)):
-                        if len(model.searcher.acceptance_rate_history) > 0:
-                            acceptance_rates = np.array(model.searcher.acceptance_rate_history)
-            
-            # 检查是否存在扰动大小历史数据
-            perturbation_sizes = None
-            if hasattr(model.searcher, 'perturbation_size_history'):
-                if model.searcher.perturbation_size_history is not None:
-                    if isinstance(model.searcher.perturbation_size_history, np.ndarray):
-                        if model.searcher.perturbation_size_history.size > 0:
-                            perturbation_sizes = model.searcher.perturbation_size_history
-                    elif isinstance(model.searcher.perturbation_size_history, (list, tuple)):
-                        if len(model.searcher.perturbation_size_history) > 0:
-                            perturbation_sizes = np.array(model.searcher.perturbation_size_history)
-
-            # Plot temperature curve
-            ax1.plot(iterations, temperatures, 'r-', linewidth=2)
-            ax1.set_ylabel('Temperature')
-            ax1.set_title('Simulated Annealing Optimization Metrics')
-            ax1.grid(True, linestyle='--', alpha=0.5)
-
-            # If acceptance rate data is available, plot acceptance rate
-            if acceptance_rates is not None:
-                # 确保 acceptance_rates 是一维数组
-                if isinstance(acceptance_rates, (list, tuple)):
-                    acceptance_rates = np.array(acceptance_rates)
-                if len(acceptance_rates.shape) > 1:
-                    acceptance_rates = acceptance_rates.flatten()
-                
-                # 确保长度匹配
-                plot_iterations = iterations
-                if len(acceptance_rates) < len(iterations):
-                    plot_iterations = iterations[:len(acceptance_rates)]
-                elif len(acceptance_rates) > len(iterations):
-                    acceptance_rates = acceptance_rates[:len(iterations)]
-                
-                ax2.plot(plot_iterations, acceptance_rates, 'b-', linewidth=2)
-                ax2.set_ylabel('Acceptance Rate')
-                ax2.grid(True, linestyle='--', alpha=0.5)
-                
-                # 添加水平线表示最小和最大接受率阈值（根据记忆中的信息）
-                ax2.axhline(y=0.2, color='r', linestyle='--', alpha=0.5, label='Min Acceptance Rate')
-                ax2.axhline(y=0.5, color='g', linestyle='--', alpha=0.5, label='Max Acceptance Rate')
-                ax2.legend()
-
-            # If perturbation size data is available, plot perturbation size
-            if perturbation_sizes is not None:
-                # 如果扰动大小是一个列表的列表（分层扰动），则分别绘制每一层
-                if isinstance(perturbation_sizes, (list, tuple)) and len(perturbation_sizes) > 0:
-                    # Check if the first element is also a list/tuple/array (indicating layered perturbation)
-                    if len(perturbation_sizes) > 0 and isinstance(perturbation_sizes[0], (list, tuple, np.ndarray)):
-                        # 分层扰动大小
-                        perturbation_layers = []
-                        for i in range(len(perturbation_sizes[0])):
-                            layer_sizes = []
-                            for j in range(len(perturbation_sizes)):
-                                if i < len(perturbation_sizes[j]):
-                                    layer_sizes.append(perturbation_sizes[j][i])
-                            perturbation_layers.append(layer_sizes)
-                        
-                        labels = ['CNN Layer', 'LSTM Layer', 'Linear Layer']
-                        colors = ['g', 'b', 'purple']
-                        
-                        for i, (layer_sizes, label, color) in enumerate(zip(perturbation_layers, labels, colors)):
-                            if layer_sizes and len(layer_sizes) > 0:  # 确保不是空列表
-                                plot_iter = iterations[:len(layer_sizes)]
-                                ax3.plot(plot_iter, layer_sizes, color=color, linewidth=2, label=label)
-                        
-                        ax3.legend()
-                    else:
-                        # 单一扰动大小
-                        # 确保 perturbation_sizes 是一维数组
-                        if isinstance(perturbation_sizes, (list, tuple)):
-                            perturbation_sizes = np.array(perturbation_sizes)
-                        if len(perturbation_sizes.shape) > 1:
-                            perturbation_sizes = perturbation_sizes.flatten()
-                        
-                        # 确保长度匹配
-                        plot_iterations = iterations
-                        if len(perturbation_sizes) < len(iterations):
-                            plot_iterations = iterations[:len(perturbation_sizes)]
-                        elif len(perturbation_sizes) > len(iterations):
-                            perturbation_sizes = perturbation_sizes[:len(iterations)]
-                        
-                        ax3.plot(plot_iterations, perturbation_sizes, 'g-', linewidth=2)
-                
-                ax3.set_ylabel('Perturbation Size')
-                ax3.set_xlabel('Iteration Count')
-                ax3.grid(True, linestyle='--', alpha=0.5)
-
-            # 添加初始温度和冷却率的注释（根据记忆中的信息）
-            ax1.annotate(f'Initial Temp: 80.0\nCooling Rate: 0.97\nInner Loop: 15', 
-                        xy=(0.02, 0.85), xycoords='axes fraction',
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
-            
-            # Add reference lines for different layers' perturbation sizes
-            ax3.axhline(y=0.002, color='g', linestyle='--', alpha=0.5)
-            ax3.axhline(y=0.001, color='b', linestyle='--', alpha=0.5)
-            ax3.axhline(y=0.0015, color='purple', linestyle='--', alpha=0.5)
-            ax3.text(iterations[-1] * 0.02, 0.002, 'CNN Layer (0.002)', fontsize=8, color='g')
-            ax3.text(iterations[-1] * 0.02, 0.001, 'LSTM Layer (0.001)', fontsize=8, color='b')
-            ax3.text(iterations[-1] * 0.02, 0.0015, 'Linear Layer (0.0015)', fontsize=8, color='purple')
-
-            plt.tight_layout()
-            
-            # If output directory is provided, save the figure
-            if output_dir:
-                save_figure(fig, output_dir, 'simulated_annealing_metrics.png')
-                
-            return fig
-    except Exception as e:
-        print(f"Warning: Could not generate simulated annealing metrics plot: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
-def compare_models(models, labels, output_dir=None, figsize=(12, 8)):
-    """
-    Compare the training performance of multiple models.
+    Plots an "Actual vs. Predicted" scatter plot with a 45-degree reference line.
     
-    Parameters:
-        models (list): List of trained DeepRL models.
-        labels (list): List of labels corresponding to the models.
-        output_dir (str, optional): Directory path to save the figure.
-        figsize (tuple, optional): Figure size.
-        
-    Returns:
-        matplotlib.figure.Figure: Generated figure object.
+    Args:
+        model: The trained DeepRL model instance.
+        best_program: The final Program object discovered by the model.
     """
-    with plt.style.context(PLOT_STYLE):
-        fig, ax = plt.subplots(figsize=figsize)
-
-        # Plot the best reward for each model
-        for i, model in enumerate(models):
-            rewards = model.searcher.r_train
-            x = np.arange(1, len(rewards) + 1)
-            r_max = [np.max(r) for r in rewards]
-            r_best = np.maximum.accumulate(np.array(r_max))
-
-            ax.plot(x, r_best, linewidth=2, label=labels[i])
-
-        ax.set_xlabel('Iteration Count')
-        ax.set_ylabel('Best Reward')
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.legend(loc='best', frameon=False)
-
-        # If output directory is provided, save the figure
-        if output_dir:
-            save_figure(fig, output_dir, 'model_comparison.png')
-
-        return fig
-
-
-def plot_all_metrics(model, output_dir=None):
-    """
-    Generate all available metrics plots.
+    print("Generating 'Actual vs. Predicted' plot...")
+    # Call the helper function to get all computed fields
+    fields = _calculate_pde_fields(model, best_program)
     
-    Parameters:
-        model: Trained DeepRL model.
-        output_dir (str, optional): Directory path to save the figures.
-        
-    Returns:
-        dict: Dictionary of generated figure objects.
-    """
-    figures = {}
+    y_true = fields["ut_grid"]
+    y_pred = fields["y_hat_grid"]
 
-    # If output directory is not provided, create it
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-
-    # Generate all plots
-    figures['training_rewards'] = plot_training_rewards(model, output_dir)
-    figures['reward_density'] = plot_reward_density(model, output_dir=output_dir)
-
-    # Try to generate expression tree, but don't fail if it's not possible
-    expression_tree = plot_expression_tree(model, output_dir)
-    if expression_tree is not None:
-        figures['expression_tree'] = expression_tree
-
-    figures['best_expressions'] = plot_best_expressions(model, output_dir=output_dir)
-
-    # If simulated annealing data is available, generate simulated annealing plot
-    sa_plot = plot_simulated_annealing_metrics(model, output_dir)
-    if sa_plot:
-        figures['simulated_annealing'] = sa_plot
-
-    return figures
+    plt.figure(figsize=(8, 8))
+    plt.scatter(y_true, y_pred, alpha=0.3, s=10, label='Predicted Points')
+    
+    min_val = min(y_true.min(), y_pred.min())
+    max_val = max(y_true.max(), y_pred.max())
+    margin = 0.1 * (max_val - min_val) if (max_val - min_val) > 0 else 0.1
+    plot_limit = (min_val - margin, max_val + margin)
+    
+    plt.plot(plot_limit, plot_limit, 'r--', label='Perfect Prediction (y=x)')
+    
+    plt.xlabel('True Values (Ground Truth, $u_t$)')
+    plt.ylabel('Predicted Values (RHS)')
+    plt.title('Actual vs. Predicted')
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlim(plot_limit)
+    plt.ylim(plot_limit)
+    plt.show()

@@ -9,7 +9,7 @@ DEEPRL_SYMBOLS_FOR_SYMPY = {
 
 # ... (imports, DEEPRL_SYMBOLS_FOR_SYMPY, DEBUG_RENDERER_MODE) ...
 
-DEBUG_RENDERER_MODE = True # 是否启用调试模式
+DEBUG_RENDERER_MODE = False # 是否启用调试模式
 
 # Node -> LaTeX
 def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None):
@@ -103,9 +103,8 @@ def discover_program_to_latex(program_object, # lhs_name_str,
             term_node,
             local_sympy_symbols=current_sympy_symbols
         )
-        
-        # 如果基础项转换出错，base_term_latex 会包含错误信息
-        # 我们依然尝试格式化它，以便错误能显示在最终方程中
+
+        # 如果基础项转换出错，base_term_latex 会包含错误信息 我们依然尝试格式化它，以便错误能显示在最终方程中
         if DEBUG_RENDERER_MODE and "\\text{Error" in base_term_latex:
             print(f"[渲染器警告] 基础项 {repr(term_node)} 转换为LaTeX时出错，内容为: {base_term_latex}")
 

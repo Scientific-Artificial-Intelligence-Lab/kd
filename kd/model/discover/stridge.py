@@ -259,6 +259,8 @@ class STRidge(object):
         self.add_const = const
         self.cut_ratio = cut_ratio
         # self.results = []
+
+        self.full_sized_terms = []
         
     @classmethod
     def clear_cache(cls):
@@ -448,6 +450,9 @@ class STRidge(object):
             # result = result[2:-2,1:] #RRE
             if invalid:
                 return 0,[0],invalid,error_node,error_type,None
+            
+            self.full_sized_terms.append(result.copy())
+            
             # import pdb;pdb.set_trace()
             if torch.is_tensor(result):
                 result = tensor2np(result)

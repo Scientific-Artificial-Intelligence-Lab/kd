@@ -48,9 +48,14 @@ def prepare_data():
 
 x,y,lb,ub = prepare_data()
 model.import_inner_data(dataset='Burgers', data_type='regular')
-step_output = model.train(n_epochs=50)
+step_output = model.train(n_epochs=51)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 # model.plot(fig_type ='tree').view()
 # model.plot(fig_type='evolution')
 
-render_latex_to_image(discover_program_to_latex(step_output['program']))
+# render_latex_to_image(discover_program_to_latex(step_output['program']))
+
+# from log.deeprl_viz import plot_expression_tree
+
+# plot_expression_tree(model)
+
