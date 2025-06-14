@@ -9,7 +9,7 @@ DEEPRL_SYMBOLS_FOR_SYMPY = {
 
 # ... (imports, DEEPRL_SYMBOLS_FOR_SYMPY, DEBUG_RENDERER_MODE) ...
 
-DEBUG_RENDERER_MODE = False # 是否启用调试模式
+DEBUG_RENDERER_MODE = True # 是否启用调试模式
 
 # Node -> LaTeX
 def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None):

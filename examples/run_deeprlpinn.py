@@ -12,6 +12,10 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module='numpy.*')
 warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow.*')
 from kd.model import DeepRL_Pinn
+from kd.viz.discover_eq2latex import discover_program_to_latex 
+from kd.viz.equation_renderer import render_latex_to_image
+from kd.viz.deeprl_viz import *
+
 
 model = DeepRL_Pinn(
     n_samples_per_batch = 1000, # Number of generated traversals by agent per batch
@@ -48,4 +52,11 @@ x,y,lb,ub = prepare_data()
 
 step_output = model.fit(x,y,[lb,ub],n_epochs=2)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
-model.plot(fig_type ='tree').view()
+
+
+plot_pinn_residual_analysis(model, step_output['program'])
+
+plot_pinn_field_comparison(model, step_output['program'])
+
+
+plot_pinn_actual_vs_predicted(model, step_output['program'])

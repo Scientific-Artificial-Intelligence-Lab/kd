@@ -98,45 +98,50 @@ class Node(object):
         # 递归步骤：获取所有子节点的 SymPy 字符串表示
         child_sympy_strings = [child.to_sympy_string() for child in self.children]
 
+        # 例如 "add_t" 会变成 "add", "diff" 依然是 "diff"
+        base_op_name = node_op_name.removesuffix('_t')
+
         # --- 根据 DeepRL 的操作名 (node_op_name) 映射到 SymPy 的函数调用字符串格式 ---
-        if node_op_name == "add":  # SymPy 的 parse_expr 可以理解 "Add(arg1, arg2)"
+        if base_op_name == "add":  # SymPy 的 parse_expr 可以理解 "Add(arg1, arg2)"
             return f"Add({child_sympy_strings[0]}, {child_sympy_strings[1]})"
-        elif node_op_name == "mul": # SymPy 的 parse_expr 可以理解 "Mul(arg1, arg2)"
+        elif base_op_name == "mul": # SymPy 的 parse_expr 可以理解 "Mul(arg1, arg2)"
             return f"Mul({child_sympy_strings[0]}, {child_sympy_strings[1]})"
-        elif node_op_name == "sub": # sub(a,b) 对应 SymPy 的 Add(a, Mul(b, -1))
+        elif base_op_name == "sub": # sub(a,b) 对应 SymPy 的 Add(a, Mul(b, -1))
             return f"Add({child_sympy_strings[0]}, Mul({child_sympy_strings[1]}, -1))"
-        elif node_op_name == "div": # div(a,b) 对应 SymPy 的 Mul(a, Pow(b, -1))
+        elif base_op_name == "div": # div(a,b) 对应 SymPy 的 Mul(a, Pow(b, -1))
             return f"Mul({child_sympy_strings[0]}, Pow({child_sympy_strings[1]}, -1))"
-        elif node_op_name == "n2": # n2(a) 对应 SymPy 的 Pow(a, 2)
+        elif base_op_name == "n2": # n2(a) 对应 SymPy 的 Pow(a, 2)
             return f"Pow({child_sympy_strings[0]}, 2)"
-        elif node_op_name == "n3": # n3(a) 对应 SymPy 的 Pow(a, 3)
+        elif base_op_name == "n3": # n3(a) 对应 SymPy 的 Pow(a, 3)
             return f"Pow({child_sympy_strings[0]}, 3)"
         
         # 处理导数 (SymPy 使用 "Derivative")
-        elif node_op_name == "diff": # DeepRL 的 diff(f, x) 对应 SymPy 的 Derivative(f, x)
+        elif base_op_name == "diff": # DeepRL 的 diff(f, x) 对应 SymPy 的 Derivative(f, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]})"
-        elif node_op_name == "diff2": # DeepRL 的 diff2(f, x) 对应 SymPy 的 Derivative(f, x, x)
+        elif base_op_name == "diff2": # DeepRL 的 diff2(f, x) 对应 SymPy 的 Derivative(f, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
-        elif node_op_name == "diff3": # DeepRL 的 diff3(f, x) 对应 SymPy 的 Derivative(f, x, x, x)
+        elif base_op_name == "diff3": # DeepRL 的 diff3(f, x) 对应 SymPy 的 Derivative(f, x, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
+        elif base_op_name == "diff4": # DeepRL 的 diff4(f, x) 对应 SymPy 的 Derivative(f, x, x, x, x)
+            return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
         
         # 可以根据 Program.library 中定义的其他函数继续添加 elif 分支
         # 例如，如果库中有 "sin", "cos", "exp" 等标准数学函数:
         # SymPy 的 parse_expr 通常能直接识别小写的标准数学函数名。
-        elif node_op_name in ["sin", "cos", "tan", "exp", "log", "sqrt", "abs"]: # 等等
+        elif base_op_name in ["sin", "cos", "tan", "exp", "log", "sqrt", "abs"]: # 等等
             if len(child_sympy_strings) == 1: # 假设这些都是一元函数
-                return f"{node_op_name}({child_sympy_strings[0]})"
+                return f"{base_op_name}({child_sympy_strings[0]})"
             else: # 元数不匹配的防御性处理
                 args_str = ", ".join(child_sympy_strings)
                 print(f"[Node.to_sympy_string Warning] 函数 '{node_op_name}' 的参数数量与预期不符 尝试通用格式。")
                 return f"{node_op_name.capitalize()}({args_str})" # 尝试大写，或保持原样
 
-        # 对于未在上面显式处理的函数名（例如您自定义的函数）
+        # 对于未在上面显式处理的函数名（例如自定义的函数）
         else:
             args_str = ", ".join(child_sympy_strings)
             # SymPy 的 parse_expr 对于不认识的函数名 FuncName(args) 会尝试创建 Function('FuncName')(args)
             # 这通常能在后续的 sympy.latex() 中正确显示为 FuncName(args)
-            print(f"[Node.to_sympy_string Warning] 未显式映射的节点操作名 '{node_op_name}' 将使用 '{node_op_name}({args_str})' 作为其SymPy字符串。")
+            print(f"[Node.to_sympy_string Warning] 未知的基础操作名 '{base_op_name}' (来自 '{node_op_name}') 将使用通用格式")
             return f"{node_op_name}({args_str})"
 
 def build_tree(traversal):
@@ -451,7 +456,12 @@ class STRidge(object):
             if invalid:
                 return 0,[0],invalid,error_node,error_type,None
             
-            self.full_sized_terms.append(result.copy())
+            if torch.is_tensor(result):
+            # 如果结果是 Tensor，安全地转换为 NumPy 数组后再添加
+                self.full_sized_terms.append(result.cpu().detach().numpy())
+            else:
+            # 如果结果已经是 NumPy 数组，照常使用 copy()
+                self.full_sized_terms.append(result.copy())
             
             # import pdb;pdb.set_trace()
             if torch.is_tensor(result):
