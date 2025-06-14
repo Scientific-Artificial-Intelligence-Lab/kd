@@ -430,7 +430,7 @@ def plot_pinn_residual_analysis(model, best_program):
 
 def plot_pinn_actual_vs_predicted(model, best_program):
     """
-    为 DeepRL_Pinn 模型绘制“真值 vs. 预测值”的45度线图。
+    为 DeepRL_Pinn 模型绘制“真值 vs. 预测值”的45度线图
     """
     print("Generating 'Actual vs. Predicted' plot for PINN model...")
     fields = _calculate_pinn_fields(model, best_program)
@@ -461,7 +461,7 @@ def plot_pinn_actual_vs_predicted(model, best_program):
 def plot_pinn_field_comparison(model, best_program):
     """
     为 DeepRL_Pinn 模型计算并可视化“预测场”与“真实场”的对比图。
-    注意：此函数使用三角剖分来可视化稀疏散点数据。
+    注意：此函数使用三角剖分来可视化稀疏散点数据
     """
     print("Generating field comparison plot for PINN model...")
     fields = _calculate_pinn_fields(model, best_program)

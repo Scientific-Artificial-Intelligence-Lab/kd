@@ -58,5 +58,4 @@ plot_pinn_residual_analysis(model, step_output['program'])
 
 plot_pinn_field_comparison(model, step_output['program'])
 
-
 plot_pinn_actual_vs_predicted(model, step_output['program'])

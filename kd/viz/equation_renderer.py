@@ -32,7 +32,7 @@ def render_latex_to_image(latex_str, output_path = None, font_size=16, dpi=300, 
         print(f"  错误的 LaTeX 内容可能是: {latex_str}")
     finally:
         if 'fig' in locals(): # 确保 fig 变量存在
-            plt.close(fig) # 关闭图形，释放内存
+            plt.close(fig)
 
 
 

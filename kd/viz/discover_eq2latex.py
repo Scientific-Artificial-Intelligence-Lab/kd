@@ -53,7 +53,7 @@ def discover_program_to_latex(program_object, # lhs_name_str,
     # 1. 处理 LHS
     # current_lhs_map = custom_lhs_latex_map if custom_lhs_latex_map else DEFAULT_LATEX_STYLE_MAP
     # lhs_latex = current_lhs_map.get(lhs_name_str, lhs_name_str)
-    lhs_latex = "u_t"
+    lhs_latex = "u_t" # 我们目前 LHS 始终是 "u_t"
 
     # 2. 检查 program_object 是否有效且包含所需属性
     if not (program_object and \
