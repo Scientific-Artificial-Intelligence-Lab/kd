@@ -117,11 +117,11 @@ class PDEPINNTask(PDETask):
         n = len(w)
         if p.invalid:
             # print(p.tokens)
-            return self.invalid_reward, [0]
+            return self.invalid_reward, [0], None, None
 
         # Compute metric
         r = self.metric(self.ut, y_hat,n)
-        return r, w
+        return r, w, y_hat, y_right
 
     def evaluate(self, p):
 

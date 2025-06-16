@@ -28,13 +28,23 @@ Models
    :show-inheritance:
 
 Visualization
--------------
-.. automodule:: kd.vizr.vizr
+------------
+.. automodule:: kd.viz.dlga_viz
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.vizr.pde_comparison
+.. automodule:: kd.viz.dlga_kdv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.viz.deeprl_viz
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.viz.deeprl_kdv
    :members:
    :undoc-members:
    :show-inheritance:

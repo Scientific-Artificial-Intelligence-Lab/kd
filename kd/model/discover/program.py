@@ -577,7 +577,11 @@ class Program(object):
             warnings.simplefilter("ignore")
             # warnings.filterwarnings('ignore', 'Intel MKL ERROR')
             self.optimize_inner_constant()
-            result, self.w = self.task.reward_function(self)
+            # 调用我们修改后的 reward_function，并接收所有4个返回值
+            result, w, y_hat, y_right = self.task.reward_function(self)
+            self.w = w
+            self.y_hat_rhs = y_hat   # 存储预测的RHS
+            self.Theta = y_right # 存储Theta矩阵
             return result
                 
     @cached_property

@@ -111,7 +111,7 @@ tomli==2.2.1
 torch==2.5.1
 torchaudio==2.5.1
 torchvision==0.20.1
-tornado==6.4.2
+tornado==6.5.0
 tqdm==4.67.1
 traitlets==5.14.3
 typing_extensions==4.12.2

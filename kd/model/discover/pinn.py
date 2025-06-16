@@ -27,8 +27,6 @@ from .utils import  print_model_summary, eval_result, tensor2np, l2_error
 
 from .loss import mse_loss, pinn_loss
 
-from kd.vizr.vizr import *
-
 logger=logging.getLogger(__name__)
 logging.basicConfig(format="%(asctime)s-%(name)s-%(levelname)s-%(message)s",level=logging.INFO)
 
@@ -113,7 +111,6 @@ class PINN_model:
         self.cache['path'] = prefix
         self.cache['noise'] = self.noise
         self.pretrain_path_load = config_pinn.get('pretrain_path', None)
-        self.vizr = Vizr("PINN Training Progress", nrows=1, ncols=2)
         
     
     def import_outter_data(self, data):
@@ -230,8 +227,6 @@ class PINN_model:
         if self.pretrain_path_load is not None:
             self.load_model(self.pretrain_path_load)
         else:
-            self.vizr.add(LinePlot, "loss_train", id=0, color="red")
-            self.vizr.add(LinePlot, "loss_val", id=1, color="blue")
             for i in range(self.pretrain_epoch):
                 # train 
                 self.optimizer_pretrain.zero_grad()
@@ -255,9 +250,6 @@ class PINN_model:
                 
                 if (i+1) % 500 == 0:      
                     logging.info(f'epoch: {i+1}, loss_u: {loss.item()} , loss_val:{loss_val.item()}' )
-                    self.vizr.update("loss_train", i, loss.item(), 0).update(
-                        "loss_val", i, loss_val.item(), 1
-                    ).render()
      
                 loss.backward()
                 self.optimizer_pretrain.step()

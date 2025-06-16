@@ -372,7 +372,6 @@ class DeepRL_Pinn(DeepRL):
             self.config_task['dataset'],
             device
         )
-        model.vizr.realtime = self.is_realtime
         return model
     
     def setup(self):

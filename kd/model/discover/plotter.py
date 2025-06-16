@@ -80,7 +80,7 @@ class Plotter:
         name_arites = program.library.name_arites
         preorder_traversal = [str(s) for s in program.traversal]
         graph = tree_visualization(preorder_traversal, name_arites)
-        return graph  
+        return graph
 
 
 

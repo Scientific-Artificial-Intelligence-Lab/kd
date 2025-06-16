@@ -143,18 +143,19 @@ class PDETask(HierarchicalTask):
         
         
     def reward_function(self,p):
-        y_hat, _, w = p.execute(self.u, self.x, self.ut)
+        # 需要额外获取 y_right
+        y_hat, y_right, w = p.execute(self.u, self.x, self.ut)
         n = len(w)
         if p.invalid:
             # print(p.tokens)
             
-            return self.invalid_reward, [0]
+            return self.invalid_reward, [0], None, None # 也注意修改
         
         r = self.metric(self.ut, y_hat,n)
 
-        return r, w
-    
-    
+        return r, w, y_hat, y_right # 多拿俩返回值
+
+
     def mse_function(self,p):
         """
         task function utilized to calculate mse for coeffcients
