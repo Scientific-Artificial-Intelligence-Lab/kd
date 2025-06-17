@@ -1,7 +1,8 @@
 # equation_renderer.py
 
 import matplotlib.pyplot as plt
-import os
+from .dlga_eq2latex import dlga_eq2latex
+from .discover_eq2latex import discover_program_to_latex
 
 
 def render_latex_to_image(latex_str, output_path = None, font_size=16, dpi=300, background_color='white',

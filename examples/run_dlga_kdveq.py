@@ -46,8 +46,7 @@ model.fit(X_train, y_train)
 print("\nGenerating predictions...")
 
 # Create full grid for visualization
-xx, tt = np.meshgrid(x, t, indexing='ij')
-X_full = np.hstack([xx.reshape(-1,1), tt.reshape(-1,1)])
+X_full = kdv_data.mesh()
 
 # Convert to tensor and predict
 X_tensor = torch.from_numpy(X_full.astype(np.float32)).to(model.device)

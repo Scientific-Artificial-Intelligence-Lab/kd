@@ -342,41 +342,57 @@ class PDEDataset(MetaData):
         Returns the dataset information as a dictionary.
         """
         return {'x': self.x, 't': self.t, 'usol': self.usol}
-    
-    def sample(self, n_samples: int, method: str = 'random') -> Dict[str, np.ndarray]:
+        
+    def sample(self, n_samples: Union[int, float], method: str = 'random') -> Tuple[np.ndarray, np.ndarray]:
         """
         Samples a subset of the data points using different sampling methods.
 
-        :param n_samples: Number of samples to draw.
+        :param n_samples: Number of samples to draw. If < 1, treated as a ratio.
         :param method: Sampling method to use ('random', 'uniform', 'spline').
-        :return: A dictionary containing the sampled x, t, and usol arrays.
+        :return: A tuple (sampled_points, sampled_usol), where:
+                - sampled_points is an array of shape (n, 2) with (x, t) pairs
+                - sampled_usol is an array of shape (n,) with corresponding solution values
         """
+        total_points = len(self.x) * len(self.t)
+        
+        # Convert ratio to absolute count if n_samples is a float < 1
+        if isinstance(n_samples, float) and 0 < n_samples < 1:
+            n_samples = int(total_points * n_samples)
+
+        if n_samples > total_points:
+            raise ValueError(f"Requested {n_samples} samples, but only {total_points} points available.")
+
         if method == 'random':
-            indices = np.random.choice(len(self.x) * len(self.t), n_samples, replace=False)
+            indices = np.random.choice(total_points, n_samples, replace=False)
             x_samples, t_samples = np.unravel_index(indices, self.usol.shape)
-            sampled_points = list(zip(self.x[x_samples], self.t[t_samples]))
+            sampled_points = np.column_stack((self.x[x_samples], self.t[t_samples]))
             sampled_usol = self.usol[x_samples, t_samples]
-        
+
         elif method == 'uniform':
-            x_indices = np.linspace(0, len(self.x) - 1, int(np.sqrt(n_samples)), dtype=int)
-            t_indices = np.linspace(0, len(self.t) - 1, int(np.sqrt(n_samples)), dtype=int)
+            grid_size = int(np.sqrt(n_samples))
+            x_indices = np.linspace(0, len(self.x) - 1, grid_size, dtype=int)
+            t_indices = np.linspace(0, len(self.t) - 1, grid_size, dtype=int)
             x_samples, t_samples = np.meshgrid(x_indices, t_indices)
-            sampled_points = list(zip(self.x[x_samples.flatten()], self.t[t_samples.flatten()]))
+            sampled_points = np.column_stack((
+                self.x[x_samples.flatten()],
+                self.t[t_samples.flatten()]
+            ))
             sampled_usol = self.usol[x_samples.flatten(), t_samples.flatten()]
-        
+
         elif method == 'spline':
-            x_new = np.linspace(self.x.min(), self.x.max(), int(np.sqrt(n_samples)))
-            t_new = np.linspace(self.t.min(), self.t.max(), int(np.sqrt(n_samples)))
+            grid_size = int(np.sqrt(n_samples))
+            x_new = np.linspace(self.x.min(), self.x.max(), grid_size)
+            t_new = np.linspace(self.t.min(), self.t.max(), grid_size)
             spline = interp2d(self.t, self.x, self.usol, kind='cubic')
             usol_new = spline(t_new, x_new)
             x_samples, t_samples = np.meshgrid(x_new, t_new)
-            sampled_points = list(zip(x_samples.flatten(), t_samples.flatten()))
+            sampled_points = np.column_stack((x_samples.flatten(), t_samples.flatten()))
             sampled_usol = usol_new.flatten()
-        
+
         else:
             raise ValueError(f"Unsupported sampling method: {method}")
-        
-        return np.array(sampled_points), sampled_usol
+
+        return sampled_points, sampled_usol.reshape(-1, 1)
     
     def mesh(self, indexing='ij') -> np.ndarray:
         """
@@ -387,6 +403,11 @@ class PDEDataset(MetaData):
         """
         X, T = np.meshgrid(self.x, self.t, indexing=indexing)
         return np.column_stack([X.ravel(), T.ravel()])
+
+    def mesh_bounds(self, indexing='ij') -> np.ndarray:
+        X, T = np.meshgrid(self.x, self.t, indexing=indexing)
+        mesh_data = np.column_stack([X.ravel(), T.ravel()])
+        return mesh_data.min(0), mesh_data.max(0)
     
     def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
         """ Returns the minimum and maximum values for x and t. """
@@ -458,7 +479,7 @@ def load_burgers_equation():
         Resource:DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm
         """
     )
-    file_path = resources.files(DATA_MODULE) / "Burgers_equation.mat"
+    file_path = resources.files(DATA_MODULE) / "burgers2.mat"
     pde_data = load_mat_file(file_path)
     return PDEDataset(
         equation_name = 'burgers equation',
