@@ -479,7 +479,14 @@ def load_burgers_equation():
         Resource:DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm
         """
     )
-    file_path = resources.files(DATA_MODULE) / "burgers2.mat"
+
+    try:
+        file_path = resources.files(DATA_MODULE) / "burgers2.mat"
+        pde_data = load_mat_file(file_path)
+    except Exception as e:
+        print(f"Warning: {e}\nFalling back to local file path.")
+        # Modify this to your actual data file path
+        file_path = "/Users/hao/Code/proj/kd/kd/dataset/data/burgers2.mat"
     pde_data = load_mat_file(file_path)
     return PDEDataset(
         equation_name = 'burgers equation',
@@ -499,8 +506,14 @@ def load_kdv_equation():
         Resource: PDE-READ: Human-readable Partial Differential Equation Discovery using Deep Learning, pp20
         """
     )
-    file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
+
+    try:
+        file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
+    except Exception as e:
+        print(f"Warning: {e}\nFalling back to local file path.")
+        file_path = "/Users/hao/Code/proj/kd/kd/dataset/data/KdV_equation.mat"
     pde_data = load_mat_file(file_path)
+
     return PDEDataset(
         equation_name = 'kdv equation',
         descr = descr,

@@ -109,9 +109,10 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
     plt.subplot(121)
     # Calculate training point predictions
     with torch.no_grad():
-        train_pred = model.Net(torch.tensor(X_train, dtype=torch.float32).to(model.device)).cpu().numpy().flatten()
-    train_residuals = y_train - train_pred
-
+        train_pred = model.Net(torch.tensor(X_train, dtype=torch.float32)).numpy().flatten()
+    # train_residuals = y_train - train_pred
+    train_residuals = y_train.flatten() - train_pred.flatten()
+    
     sc = plt.scatter(X_train[:, 1],  # Time coordinates
                      X_train[:, 0],  # Space coordinates
                      c=train_residuals,
