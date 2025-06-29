@@ -1,18 +1,6 @@
 """Example of running DLGA on real PDE data (KdV equation).
 """
 
-import os
-import sys
-import torch
-import matplotlib.pyplot as plt
-import numpy as np
-from pathlib import Path
-
-# Add project root to Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(kd_main_dir)
-
 from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
 from kd.viz.dlga_viz import *
@@ -24,7 +12,6 @@ from kd.viz.dlga_kdv import *
 
 # Load KdV equation data
 kdv_data = load_kdv_equation()
-x, t, u = kdv_data.x, kdv_data.t, kdv_data.usol
 
 # Extract data
 X_train, y_train = kdv_data.sample(n_samples=1000)
@@ -51,7 +38,7 @@ X_full = kdv_data.mesh()
 # Convert to tensor and predict
 X_tensor = torch.from_numpy(X_full.astype(np.float32)).to(model.device)
 with torch.no_grad():
-    u_pred = model.Net(X_tensor).cpu().numpy().reshape(u.shape)
+    u_pred = model.Net(X_tensor).cpu().numpy().reshape(kdv_data.u.shape)
 
 #####################################################################
 # 4. Visualizations
@@ -84,9 +71,9 @@ plot_evolution(model, output_dir=VIZ_DIR)
 #-------------------------------------------------------------------
 # 2.1 PDE解对比图
 plot_pde_comparison(
-    x=x,
-    t=t,
-    u_true=u,
+    x=kdv_data.x,
+    t=kdv_data.t,
+    u_true=kdv_data.u,
     u_pred=u_pred,
     output_dir=VIZ_DIR
 )
@@ -96,16 +83,16 @@ plot_residual_analysis(
     model=model,
     X_train=X_train,
     y_train=y_train,
-    u_true=u,
+    u_true=kdv_data.u,
     u_pred=u_pred,
     output_dir=VIZ_DIR
 )
 
 # 2.3 时间切片对比图
 plot_time_slices(
-    x=x,
-    t=t,
-    u_true=u,
+    x=kdv_data.x,
+    t=kdv_data.t,
+    u_true=kdv_data.u,
     u_pred=u_pred,
     slice_times=[0.25, 0.5, 0.75],  # 示例时间切片
     output_dir=VIZ_DIR
@@ -128,8 +115,8 @@ plot_equation_terms(
 # 3.2 元数据平面可视化（x-t平面上的方程残差分布）
 plot_metadata_plane(
     metadata=model.metadata,
-    x=x,
-    t=t,
+    x=kdv_data.x,
+    t=kdv_data.t,
     output_dir=VIZ_DIR
 )
 

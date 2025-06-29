@@ -11,7 +11,6 @@ from typing import Any, Dict, Union, Optional, Tuple
 from pathlib import Path
 from importlib import resources
 from abc import ABC, abstractmethod
-from ..utils import Attrdict
 from ._info import DatasetInfo
 from scipy.interpolate import interp2d
 

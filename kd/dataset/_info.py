@@ -1,7 +1,6 @@
 import dataclasses
 import copy
 from typing import Optional
-from importlib import resources
 from pathlib import Path
 
 @dataclasses.dataclass
@@ -59,7 +58,7 @@ class DatasetInfo:
         # Filter the dictionary and create a new instance by unpacking the matching key-value pairs
         return cls(**{k: v for k, v in dataset_info_dict.items() if k in field_names})
 
-    def load_descr(descr_file_name, *, encoding="utf-8"):
+    def load_descr(self, descr_file_name, *, encoding="utf-8"):
         """
         Load and read the content of a specified description file, supporting both absolute and relative file paths.
         

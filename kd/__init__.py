@@ -8,9 +8,11 @@ __version__ = '0.1.0'
 
 __pkg_name__ = 'KD'
 
-from . import base
-from . import data
-from . import model
-from . import utils
+from .dataset import load_burgers_equation, load_mat_file
 
-__all__ = ['base', 'data', 'model', 'utils']
+__all__ = [
+    "dataset",
+    "model",
+    "utils",
+    "viz",
+]
