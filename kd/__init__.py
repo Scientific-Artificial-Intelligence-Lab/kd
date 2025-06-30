@@ -9,10 +9,19 @@ __version__ = '0.1.0'
 __pkg_name__ = 'KD'
 
 from .dataset import load_burgers_equation, load_mat_file
+from . import viz
 
-__all__ = [
-    "dataset",
-    "model",
-    "utils",
-    "viz",
+_submodules = [
+    'dataset',
+    'model',
+    'viz'
+]
+
+__all__ = _submodules + [
+    "load_burgers_equation",
+    "load_mat_file",
+    "DLGA",
+    "DeepRL",
+    "DeepRL_Pinn",
+    "viz"
 ]

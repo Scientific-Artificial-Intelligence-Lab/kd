@@ -306,12 +306,12 @@ class PDEDataset(MetaData):
             # Assign data from the provided dictionary
             self.x = np.asarray(pde_data.get('x'), dtype=float).flatten()
             self.t = np.asarray(pde_data.get('t'), dtype=float).flatten()
-            self.usol = np.asarray(pde_data.get('usol'), dtype=float)
+            self.usol = np.real(np.asarray(pde_data.get('usol')))
         elif x is not None and t is not None and usol is not None:
             # Directly assign provided x, t, and usol arrays
             self.x = np.asarray(x, dtype=float).flatten()
             self.t = np.asarray(t, dtype=float).flatten()
-            self.usol = np.asarray(usol, dtype=float)
+            self.usol = np.real(np.asarray(usol))
         else:
             raise ValueError("Either `pde_data` or `x`, `t`, and `usol` must be provided.")
 
@@ -479,13 +479,7 @@ def load_burgers_equation():
         """
     )
 
-    try:
-        file_path = resources.files(DATA_MODULE) / "burgers2.mat"
-        pde_data = load_mat_file(file_path)
-    except Exception as e:
-        print(f"Warning: {e}\nFalling back to local file path.")
-        # Modify this to your actual data file path
-        file_path = "/Users/hao/Code/proj/kd/kd/dataset/data/burgers2.mat"
+    file_path = resources.files(DATA_MODULE) / "burgers2.mat"
     pde_data = load_mat_file(file_path)
     return PDEDataset(
         equation_name = 'burgers equation',
@@ -506,11 +500,7 @@ def load_kdv_equation():
         """
     )
 
-    try:
-        file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
-    except Exception as e:
-        print(f"Warning: {e}\nFalling back to local file path.")
-        file_path = "/Users/hao/Code/proj/kd/kd/dataset/data/KdV_equation.mat"
+    file_path = resources.files(DATA_MODULE) / "KdV_equation.mat"
     pde_data = load_mat_file(file_path)
 
     return PDEDataset(
