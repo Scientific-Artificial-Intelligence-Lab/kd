@@ -51,7 +51,7 @@ class BaseRL(BaseEstimator, metaclass=ABCMeta):
         """Make predictions."""
         pass
     
-class DeepRL(BaseRL):
+class KD_DSCV(BaseRL):
     """Deep Reinforcement Learning model for PDE discovery.
     
     This class implements a deep RL approach to discover governing equations
@@ -81,7 +81,7 @@ class DeepRL(BaseRL):
         config_out=None,
         seed=0,
         ):
-        """Initialize DeepRL model.
+        """Initialize KD_DSCV model.
         
         Args:
             n_iterations (int): Number of training iterations.
@@ -328,20 +328,20 @@ class DeepRL(BaseRL):
         """Make predictions (not implemented)."""
         pass
 
-class DeepRL_Pinn(DeepRL):
-    """DeepRL model with Physics-Informed Neural Networks.
+class KD_DSCV_Pinn(KD_DSCV):
+    """KD_DSCV model with Physics-Informed Neural Networks.
     
-    This class extends DeepRL with PINN capabilities for better
+    This class extends KD_DSCV with PINN capabilities for better
     equation discovery in sparse data settings.
     """
 
     def __init__(self, *args, config_out=None, **kwargs):
-        """Initialize DeepRL_Pinn model.
+        """Initialize KD_DSCV_Pinn model.
         
         Args:
-            *args: Positional arguments for DeepRL.
+            *args: Positional arguments for KD_DSCV.
             config_out: Optional output configuration.
-            **kwargs: Keyword arguments for DeepRL.
+            **kwargs: Keyword arguments for KD_DSCV.
         """
         super().__init__(*args, config_out=None, **kwargs)
         self.base_config_file = "./discover/config/config_pde_pinn.json"

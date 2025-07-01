@@ -11,11 +11,11 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module='numpy.*')
 warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow.*')
-from kd.model import DeepRL
+from kd.model import KD_DSCV
 from kd.viz.discover_eq2latex import discover_program_to_latex 
 from kd.viz.equation_renderer import render_latex_to_image
 
-model = DeepRL(
+model = KD_DSCV(
     n_samples_per_batch = 500, # Number of generated traversals by agent per batch
     binary_operators = ['add',"mul", "diff","diff2"],
     unary_operators = ['n2'],

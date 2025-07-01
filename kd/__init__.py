@@ -21,7 +21,7 @@ __all__ = _submodules + [
     "load_burgers_equation",
     "load_mat_file",
     "DLGA",
-    "DeepRL",
-    "DeepRL_Pinn",
+    "KD_DSCV",
+    "KD_DSCV_Pinn",
     "viz"
 ]

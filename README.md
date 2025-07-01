@@ -72,7 +72,7 @@ pip install -r requirements.txt
     - `fit(X, y)`：拟合模型。
     - `predict(X)`：使用拟合的模型进行预测。
    
-2. **DeepRL**：继承自 `BaseRL` 的强化学习具体实现类。包含 `_parameter` 属性用于存储参数配置。
+2. **KD_DSCV**：继承自 `BaseRL` 的强化学习具体实现类。包含 `_parameter` 属性用于存储参数配置。
 
 3. **BaseEstimator**：用于参数管理的基类，包含以下主要方法：
     - `get_params()`：获取当前参数。

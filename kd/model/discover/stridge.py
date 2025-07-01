@@ -87,7 +87,7 @@ class Node(object):
     # for viz
     def to_sympy_string(self):
         
-        node_op_name = self.val  # 这是 DeepRL 内部的原始操作名，如 "n2", "diff2", "add", "u1"
+        node_op_name = self.val  # 这是 KD_DSCV 内部的原始操作名，如 "n2", "diff2", "add", "u1"
 
         # 基本情况：叶子节点 (通常是变量如 "u1", "x1", 或已解析的常数)
         if not self.children: # 即 self.token.arity == 0
@@ -101,7 +101,7 @@ class Node(object):
         # 例如 "add_t" 会变成 "add", "diff" 依然是 "diff"
         base_op_name = node_op_name.removesuffix('_t')
 
-        # --- 根据 DeepRL 的操作名 (node_op_name) 映射到 SymPy 的函数调用字符串格式 ---
+        # --- 根据 KD_DSCV 的操作名 (node_op_name) 映射到 SymPy 的函数调用字符串格式 ---
         if base_op_name == "add":  # SymPy 的 parse_expr 可以理解 "Add(arg1, arg2)"
             return f"Add({child_sympy_strings[0]}, {child_sympy_strings[1]})"
         elif base_op_name == "mul": # SymPy 的 parse_expr 可以理解 "Mul(arg1, arg2)"
@@ -116,13 +116,13 @@ class Node(object):
             return f"Pow({child_sympy_strings[0]}, 3)"
         
         # 处理导数 (SymPy 使用 "Derivative")
-        elif base_op_name == "diff": # DeepRL 的 diff(f, x) 对应 SymPy 的 Derivative(f, x)
+        elif base_op_name == "diff": # KD_DSCV 的 diff(f, x) 对应 SymPy 的 Derivative(f, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]})"
-        elif base_op_name == "diff2": # DeepRL 的 diff2(f, x) 对应 SymPy 的 Derivative(f, x, x)
+        elif base_op_name == "diff2": # KD_DSCV 的 diff2(f, x) 对应 SymPy 的 Derivative(f, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
-        elif base_op_name == "diff3": # DeepRL 的 diff3(f, x) 对应 SymPy 的 Derivative(f, x, x, x)
+        elif base_op_name == "diff3": # KD_DSCV 的 diff3(f, x) 对应 SymPy 的 Derivative(f, x, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
-        elif base_op_name == "diff4": # DeepRL 的 diff4(f, x) 对应 SymPy 的 Derivative(f, x, x, x, x)
+        elif base_op_name == "diff4": # KD_DSCV 的 diff4(f, x) 对应 SymPy 的 Derivative(f, x, x, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
         
         # 可以根据 Program.library 中定义的其他函数继续添加 elif 分支
