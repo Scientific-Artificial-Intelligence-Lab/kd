@@ -1,8 +1,11 @@
 """Example of running DLGA on real PDE data (KdV equation).
 """
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from kd.dataset import load_kdv_equation
 from kd.model.dlga import DLGA
+from kd.model.kd_dlga import KD_DLGA
 from kd.viz.dlga_viz import *
 from kd.viz.dlga_kdv import *
 
@@ -21,7 +24,13 @@ X_train, y_train = kdv_data.sample(n_samples=1000)
 #####################################################################
 
 # Initialize model
-model = DLGA(epi=kdv_data.epi, input_dim=2)  # 2D input: (x,t)
+# model = DLGA(epi=kdv_data.epi, input_dim=2)  # 2D input: (x,t)
+model = KD_DLGA(
+    operators=['u', 'u_xx', 'u_xxx'],
+    epi=0.1,
+    input_dim=2,
+    max_iter=2000
+)
 
 # Train the model
 print("\nTraining DLGA model...")

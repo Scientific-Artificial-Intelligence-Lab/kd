@@ -222,6 +222,19 @@ def plot_equation_terms(
             print("Warning: Insufficient terms specified, cannot plot")
             return
 
+        # 1. 收集本次绘图所需的所有变量名
+        required_vars = set(x_vars + y_vars)
+        if color_var:
+            required_vars.add(color_var)
+        
+        # 2. 检查这些变量名是否都存在于 metadata 字典中
+        missing_vars = [var for var in required_vars if var not in metadata]
+        
+        # 3. 如果有任何缺失的变量，则打印清晰的错误信息并优雅地退出，而不是崩溃
+        if missing_vars:
+            print(f"警告: 无法绘制该图表，因为以下必需的项在元数据中缺失: {missing_vars}")
+            return
+
         # Dynamically calculate term products
         x_values = np.prod([metadata[key] for key in x_vars], axis=0)
         y_values = np.prod([metadata[key] for key in y_vars], axis=0)

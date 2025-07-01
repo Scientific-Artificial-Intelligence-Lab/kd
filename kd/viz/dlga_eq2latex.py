@@ -145,12 +145,27 @@ def chromosome_to_latex(chromosome, coefficients, lhs_name_str,
 
 
 
-def dlga_eq2latex(chromosome, coefficients, lhs_name_str) -> str:
+def dlga_eq2latex(
+    chromosome: list,
+    coefficients: np.ndarray,
+    lhs_name_str: str,
+    operator_names: list[str] = None  # 新参数默认值保持兼容性
+) -> str:
     """
     Receives and prints the core equation data passed from DLGA.
     This is the first step, used to verify the data flow.
     """
     print("\n[Equation Renderer INFO] Successfully received data from DLGA:")
+
+    if operator_names is not None:
+        name = operator_names
+        note = f"(Note: Using dynamic operator list for translation: {name})"
+    else:
+        name = DLGA_INTERNAL_TERM_NAMES
+        note = f"(Note: Using default, hardcoded operator list for translation: {name})"
+    print("\n[Equation Renderer INFO] " + note)
+
+
     print(f"  Original chromosome (list of modules, a module is a list of gene indices):")
     for i, module in enumerate(chromosome):
         print(f"    Term {i+1} - Module (gene indices): {module}")
