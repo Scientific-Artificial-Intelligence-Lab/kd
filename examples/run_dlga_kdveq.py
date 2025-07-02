@@ -3,11 +3,7 @@
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from kd.dataset import load_kdv_equation
-from kd.model.dlga import DLGA
-from kd.model.kd_dlga import KD_DLGA
-from kd.viz.dlga_viz import *
-from kd.viz.dlga_kdv import *
+import kd
 
 #####################################################################
 # 1. Load and prepare data

@@ -20,7 +20,9 @@ _submodules = [
 __all__ = _submodules + [
     "load_burgers_equation",
     "load_mat_file",
+    "load_kdv_equation", 
     "DLGA",
+    "KD_DLGA",
     "KD_DSCV",
     "KD_DSCV_Pinn",
     "viz"
