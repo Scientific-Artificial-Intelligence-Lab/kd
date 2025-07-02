@@ -3,7 +3,7 @@
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import kd
+from kd import *
 
 #####################################################################
 # 1. Load and prepare data
@@ -50,6 +50,7 @@ with torch.no_grad():
 #####################################################################
 print("\nCreating visualizations...")
 
+# 这俩改成默认参数, 不需要用户配置
 # 配置全局绘图样式
 configure_plotting(cmap='viridis')
 
