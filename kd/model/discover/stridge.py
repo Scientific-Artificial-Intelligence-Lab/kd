@@ -114,6 +114,10 @@ class Node(object):
             return f"Pow({child_sympy_strings[0]}, 2)"
         elif base_op_name == "n3": # n3(a) 对应 SymPy 的 Pow(a, 3)
             return f"Pow({child_sympy_strings[0]}, 3)"
+        elif base_op_name == "n4": # n4(a) 对应 SymPy 的 Pow(a, 4)
+            return f"Pow({child_sympy_strings[0]}, 4)"
+        elif base_op_name == "n5": # n5(a) 对应 SymPy 的 Pow(a, 5)
+            return f"Pow({child_sympy_strings[0]}, 5)"
         
         # 处理导数 (SymPy 使用 "Derivative")
         elif base_op_name == "diff": # KD_DSCV 的 diff(f, x) 对应 SymPy 的 Derivative(f, x)
@@ -125,6 +129,18 @@ class Node(object):
         elif base_op_name == "diff4": # KD_DSCV 的 diff4(f, x) 对应 SymPy 的 Derivative(f, x, x, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
         
+        elif base_op_name == "sigmoid":
+            # Sigmoid(x) 的数学表达式是 1 / (1 + exp(-x)) 我们将其翻译成等价的 SymPy 字符串格式
+            return f"1 / (1 + exp(-({child_sympy_strings[0]})))"
+        
+        elif base_op_name == "expneg":
+            # expneg(x) 对应 SymPy 的 exp(-x)
+            return f"exp(-({child_sympy_strings[0]}))"
+
+        elif base_op_name == "logabs":
+            # logabs(x) 对应 SymPy 的 log(Abs(x))
+            return f"log(Abs({child_sympy_strings[0]}))"
+
         # 可以根据 Program.library 中定义的其他函数继续添加 elif 分支
         # 例如，如果库中有 "sin", "cos", "exp" 等标准数学函数:
         # SymPy 的 parse_expr 通常能直接识别小写的标准数学函数名。
