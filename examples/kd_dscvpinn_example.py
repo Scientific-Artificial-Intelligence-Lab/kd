@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow.*')
 from kd.model import KD_DSCV_Pinn
 from kd.viz.discover_eq2latex import discover_program_to_latex 
 from kd.viz.equation_renderer import render_latex_to_image
-from kd.viz.deeprl_viz import *
+from kd.viz.dscv_viz import *
 
 
 model = KD_DSCV_Pinn(

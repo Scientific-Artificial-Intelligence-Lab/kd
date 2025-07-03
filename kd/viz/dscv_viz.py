@@ -4,18 +4,26 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib as mpl
+from PIL import Image
+import io
 
 from kd.model.discover.program import Program
 
+# TODO: 保存到文件
 
 def plot_expression_tree(model, output_dir: str = None):
 
     graph = model.searcher.plotter.tree_plot(model.searcher.best_p)
-
+    
     if output_dir is None:
-        return graph
-
-    pass
+        png_bytes = graph.pipe(format='png')
+        image = Image.open(io.BytesIO(png_bytes))
+        plt.imshow(image)
+        plt.axis('off')
+        plt.show()
+        plt.close()
+    else:
+        pass
 
 
 def plot_density(model, epoches = None, output_dir: str = None):

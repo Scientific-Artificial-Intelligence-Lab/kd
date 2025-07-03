@@ -62,7 +62,7 @@ def tree_visualization(preorder, arity):
 
     graph = Digraph()
     tree.draw_tree(root, graph)
-    graph.render('expression_tree', format='png', cleanup=True)
+    # graph.render('expression_tree', format='png', cleanup=True)
     return graph
 
 # preorder_traversal = ['+', '-', 'x', 'a', 'b', 'c']

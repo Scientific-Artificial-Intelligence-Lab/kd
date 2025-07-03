@@ -39,7 +39,7 @@ Visualization
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.viz.deeprl_viz
+.. automodule:: kd.viz.dscv_viz
    :members:
    :undoc-members:
    :show-inheritance:
