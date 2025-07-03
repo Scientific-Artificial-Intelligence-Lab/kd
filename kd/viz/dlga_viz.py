@@ -162,8 +162,10 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
         u_pred: Predicted solution array
         output_dir: Output directory path
     """
+
     # Apply global configuration
     with plt.style.context(PLOT_STYLE):
+
         T, X = np.meshgrid(t, x)
         vmin = min(u_true.min(), u_pred.min())
         vmax = max(u_true.max(), u_pred.max())
@@ -175,7 +177,7 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
                                shading='gouraud',
                                cmap=DEFAULT_CMAP,
                                vmin=vmin, vmax=vmax)
-        ax1.set(title='Exact Solution', xlabel='Time', ylabel='Space')
+        ax1.set(title='Exact Solution', xlabel='Time (Exact Solution)', ylabel='Space')
         fig.colorbar(mesh1, ax=ax1, label='u(x,t)')
 
         # Predicted solution
@@ -183,8 +185,10 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
                                shading='gouraud',
                                cmap=DEFAULT_CMAP,
                                vmin=vmin, vmax=vmax)
-        ax2.set(title='Predicted Solution', xlabel='Time')
+        ax2.set(title='Predicted Solution', xlabel='Time (Predicted Solution)')
         fig.colorbar(mesh2, ax=ax2, label='u(x,t)')
+
+
 
         if output_dir:
             viz_dir = Path(output_dir)
@@ -196,7 +200,7 @@ def plot_pde_comparison(x, t, u_true, u_pred, output_dir: str = None):
 
 
 def plot_equation_terms(
-        metadata,
+        model,
         terms: dict,
         color_var: str = 'u_t',
         equation_name: str = "PDE",
@@ -206,13 +210,14 @@ def plot_equation_terms(
     """Visualize relationships between equation terms.
     
     Args:
-        metadata: Dictionary containing equation term values 
+        model: DLGA model instance
         terms: Dictionary defining terms to visualize
         color_var: Variable name for coloring
         equation_name: Name of equation for title
         output_dir: Output directory path
         filename: Output filename
     """
+    metadata = model.metadata
     with plt.style.context(PLOT_STYLE):
         # Extract and calculate terms
         x_vars = terms.get('x_term', {}).get('vars', [])
@@ -230,7 +235,7 @@ def plot_equation_terms(
         # 2. 检查这些变量名是否都存在于 metadata 字典中
         missing_vars = [var for var in required_vars if var not in metadata]
         
-        # 3. 如果有任何缺失的变量，则打印清晰的错误信息并优雅地退出，而不是崩溃
+        # 3. 如果有任何缺失的变量，则打印清晰的错误信息并退出，而不是崩溃
         if missing_vars:
             print(f"警告: 无法绘制该图表，因为以下必需的项在元数据中缺失: {missing_vars}")
             return
@@ -384,7 +389,8 @@ def plot_optimization_analysis(model, output_dir: str = None):
         # Dynamically set y-axis ranges
         pop_min, pop_max = min(pop_sizes), max(pop_sizes)
         mod_min, mod_max = min(unique_modules), max(unique_modules)
-        ax1.set_ylim(pop_min - 50, pop_max + 50)
+        # ax1.set_ylim(pop_min - 50, pop_max + 50)
+        ax1.set_ylim(pop_min * 0.9, pop_max * 1.1) # adjusted for better visibility
         ax1_twin.set_ylim(mod_min - 5, mod_max + 5)
 
         # 2. Right plot: Fitness evolution analysis
@@ -494,65 +500,169 @@ def plot_time_slices(x, t, u_true, u_pred, slice_times, output_dir: str = None):
         plt.close()
 
 
-def plot_derivative_relationships(metadata, output_dir: str = None):
-    """Analyze relationships between different order derivatives.
-    
-    Args:
-        metadata: Dictionary containing derivative terms
-        output_dir: Output directory path
+# 假设其他 import 保持不变
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# 【最终修正】: 函数名恢复为 plot_derivative_relationships
+def plot_derivative_relationships(model, top_n_terms: int = 4, output_dir: str = None):
     """
+    Dynamically analyzes and visualizes the relationships between the discovered 
+    right-hand side (RHS) terms and the left-hand side (LHS) term of the PDE.
 
+    This function automatically parses the best equation found by the model and
+    plots the most significant terms, making it a general-purpose diagnostic tool.
+
+    Args:
+        model: The trained KD_DLGA model instance containing final results.
+        top_n_terms (int): The maximum number of most significant terms to plot.
+        output_dir (str): Optional. Directory path to save the plot.
+    """
+    # --- Step 1: Securely extract results from the trained model ---
+    if not hasattr(model, 'Chrom') or not model.Chrom or not model.Chrom[0]:
+        print("Warning: Model has not found a valid solution. Cannot generate term relationship plot.")
+        return
+
+    best_chrom = model.Chrom[0]
+    coefficients = model.coef[0]
+    operator_names = model.user_operators
+    lhs_name = model.name[0]
+    metadata = model.metadata
+
+    if lhs_name not in metadata:
+        print(f"Warning: LHS term '{lhs_name}' not found in metadata. Cannot generate plot.")
+        return
+    
+    lhs_values = metadata[lhs_name].flatten()
+
+    # --- Step 2: Parse the chromosome to identify and calculate RHS terms ---
+    discovered_terms = []
+    for i, module in enumerate(best_chrom):
+        if any(gene >= len(operator_names) for gene in module):
+            print(f"Warning: Invalid gene found in module {module}. Skipping this term.")
+            continue
+
+        term_label = ' * '.join([operator_names[gene] for gene in module])
+        term_values = np.prod([metadata[operator_names[gene]] for gene in module], axis=0).flatten()
+
+        discovered_terms.append({
+            'label': term_label,
+            'values': term_values,
+            'coeff': coefficients[i, 0]
+        })
+
+    # --- Step 3: Sort terms by coefficient magnitude to focus on the most significant ones ---
+    discovered_terms.sort(key=lambda x: abs(x['coeff']), reverse=True)
+    terms_to_plot = discovered_terms[:top_n_terms]
+
+    if not terms_to_plot:
+        print("Warning: Could not parse any valid terms from the solution to plot.")
+        return
+
+    # --- Step 4: Dynamically create subplot grid and generate plots ---
+    num_plots = len(terms_to_plot)
+    ncols = min(num_plots, 3)
+    nrows = int(np.ceil(num_plots / ncols))
+    
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 4.5), squeeze=False)
+    axes = axes.flatten()
+
+    fig.suptitle(f'Relationship of Discovered Terms with {lhs_name}', fontsize=16)
+
+    for i, term_info in enumerate(terms_to_plot):
+        ax = axes[i]
+        
+        ax.scatter(term_info['values'], lhs_values, alpha=0.3, s=15, c=term_info['values'])
+        
+        # 先准备好标签字符串，再将其放入 f-string，以避免语法错误
+        latex_label = term_info['label'].replace(' * ', r' \cdot ')
+        ax.set_xlabel(f"Term: ${latex_label}$")
+
+        ax.set_ylabel(lhs_name)
+        ax.set_title(f"Discovered Coefficient: {term_info['coeff']:.4f}")
+        ax.grid(True, linestyle='--', alpha=0.5)
+
+    for i in range(num_plots, len(axes)):
+        axes[i].set_visible(False)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(exist_ok=True)
+        plt.savefig(viz_dir / "derivative_relationships.png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_pde_parity(model, title: str = "Parity Plot for Discovered PDE", output_dir: str = None):
+    """
+    Generates a parity plot to visually validate the discovered PDE.
+
+    This function calculates the values of the equation's right-hand side (RHS)
+    based on the discovered coefficients and terms, and plots them against the 
+    true values of the left-hand side (LHS). A perfect match results in points
+    lying on the y=x diagonal.
+
+    Args:
+        model: The trained KD_DLGA model instance containing final results.
+        title (str): The title for the plot.
+        output_dir (str): Optional. Directory path to save the plot.
+    """
+    # Step 1: Securely extract results from the trained model
+    if not hasattr(model, 'Chrom') or not model.Chrom or not model.Chrom[0]:
+        print("Warning: Model has not found a valid solution. Cannot generate parity plot.")
+        return
+
+    best_chrom = model.Chrom[0]
+    coefficients = model.coef[0]
+    operator_names = model.user_operators
+    lhs_name = model.name[0]
+    metadata = model.metadata
+
+    if lhs_name not in metadata:
+        print(f"Warning: LHS term '{lhs_name}' not found in metadata. Cannot generate plot.")
+        return
+
+    # Step 2: Calculate the "true" LHS and "predicted" RHS values
+    # The "true" y-values are the numerical values of the LHS term (e.g., u_t)
+    y_true_pde = metadata[lhs_name]
+
+    # The "predicted" y-values are the sum of all discovered RHS terms,
+    # weighted by their discovered coefficients.
+    y_pred_pde = np.zeros_like(y_true_pde)
+    for i, module in enumerate(best_chrom):
+        # Calculate the numerical values of the current term (e.g., u*u_x)
+        term_values = np.prod([metadata[operator_names[gene]] for gene in module], axis=0)
+        # Add the weighted term to the total RHS value
+        y_pred_pde += coefficients[i, 0] * term_values
+
+    # Step 3: Create the parity plot
     with plt.style.context(PLOT_STYLE):
-        fig = plt.figure(figsize=(15, 5), constrained_layout=True)
-        gs = fig.add_gridspec(1, 3)
+        fig, ax = plt.subplots(figsize=(8, 8))
 
-        # 1. u_t vs u_x
-        ax1 = fig.add_subplot(gs[0, 0])
-        sc1 = ax1.scatter(metadata['u_x'].flatten(),
-                          metadata['u_t'].flatten(),
-                          c=metadata['u'].flatten(),  # Color by u value
-                          cmap='viridis',
-                          alpha=0.6,
-                          s=20)
-        ax1.set_xlabel('u_x')
-        ax1.set_ylabel('u_t')
-        ax1.set_title('First Order Derivatives')
-        plt.colorbar(sc1, ax=ax1, label='u')
-        ax1.grid(True, linestyle='--', alpha=0.5)
+        # Create a scatter plot of Predicted vs. True values
+        ax.scatter(y_pred_pde, y_true_pde, alpha=0.3, s=20, label='Model Prediction vs. True Value')
 
-        # 2. Combined Term (u*u_x)
-        ax2 = fig.add_subplot(gs[0, 1])
-        combined_term = metadata['u'].flatten() * metadata['u_x'].flatten()
-        sc2 = ax2.scatter(combined_term,
-                          metadata['u_t'].flatten(),
-                          c=metadata['u_xxx'].flatten(),  # Color by third order derivative
-                          cmap='plasma',
-                          alpha=0.6,
-                          s=20)
-        ax2.set_xlabel('u*u_x')
-        ax2.set_ylabel('u_t')
-        ax2.set_title('Nonlinear Term vs Time Derivative')
-        plt.colorbar(sc2, ax=ax2, label='u_xxx')
-        ax2.grid(True, linestyle='--', alpha=0.5)
+        # Add a y=x line for reference. Points on this line represent a perfect match.
+        perfect_fit_line = np.linspace(min(y_true_pde.min(), y_pred_pde.min()),
+                                       max(y_true_pde.max(), y_pred_pde.max()), 100)
+        ax.plot(perfect_fit_line, perfect_fit_line, 'r--', linewidth=2, label='Perfect Fit (y=x)')
 
-        # 3. Third Order Term
-        ax3 = fig.add_subplot(gs[0, 2])
-        sc3 = ax3.scatter(metadata['u_xxx'].flatten(),
-                          metadata['u_t'].flatten(),
-                          c=combined_term,  # Color by nonlinear term
-                          cmap='coolwarm',
-                          alpha=0.6,
-                          s=20)
-        ax3.set_xlabel('u_xxx')
-        ax3.set_ylabel('u_t')
-        ax3.set_title('Third Order Term vs Time Derivative')
-        plt.colorbar(sc3, ax=ax3, label='u*u_x')
-        ax3.grid(True, linestyle='--', alpha=0.5)
+        ax.set_xlabel('Predicted RHS Values (from discovered equation)')
+        ax.set_ylabel(f'True LHS Values ({lhs_name})')
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.5)
+        # Ensure the plot has a 1:1 aspect ratio
+        ax.set_aspect('equal', 'box')
 
         if output_dir:
             viz_dir = Path(output_dir)
             viz_dir.mkdir(exist_ok=True)
-            plt.savefig(viz_dir / "derivative_relationships.png", dpi=300)
+            plt.savefig(viz_dir / 'pde_parity_plot.png')
         else:
             plt.show()
         plt.close()

@@ -11,16 +11,16 @@ from pathlib import Path
 from .dlga_viz import PLOT_STYLE
 from scipy.interpolate import griddata
 
-def plot_metadata_plane(metadata, x, t, output_dir: str = None):
+def plot_metadata_plane(model, x, t, output_dir: str = None):
     """Visualize KdV equation characteristics on the x-t plane.
     
     Args:
-        metadata: Dictionary containing equation terms and derivatives
+        model: The trained model containing metadata
         x: Spatial coordinates
         t: Time coordinates 
         output_dir: Output directory path
     """
-    
+    metadata = model.metadata
     with plt.style.context(PLOT_STYLE):
         # 创建图形
         fig, axes = plt.subplots(1, 2, figsize=(15, 6), constrained_layout=True)
