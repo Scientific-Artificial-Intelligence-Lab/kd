@@ -260,3 +260,9 @@ class KD_DLGA(DLGA):
             import traceback
             traceback.print_exc()
             raise
+        
+    def predict(self, mesh_data):
+        X_tensor = torch.from_numpy(mesh_data.astype(np.float32)).to(self.device) # Convert to tensor and predict
+        with torch.no_grad():
+            u_pred = self.Net(X_tensor).cpu().numpy()
+        return u_pred

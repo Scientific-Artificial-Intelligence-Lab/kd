@@ -27,11 +27,9 @@ print("\nTraining DLGA model...")
 model.fit(X_train, y_train)                         # 这个过程将首先训练一个深度神经网络来学习数据的内在模式，然后运行遗传算法来搜索方程的符号形式，整个过程可能需要几分钟
 
 print("\nGenerating predictions...")
-# TODO 封装一下, model.predict(kdv_data) 
 X_full = kdv_data.mesh() # Create full grid for visualization
-X_tensor = torch.from_numpy(X_full.astype(np.float32)).to(model.device) # Convert to tensor and predict
-with torch.no_grad():
-    u_pred = model.Net(X_tensor).cpu().numpy().reshape(u.shape)
+u_pred = model.predict(X_full)
+u_pred = u_pred.cpu().numpy().reshape(kdv_data.get_size())
 
 
 # 绘制神经网络的 训练损失 曲线
