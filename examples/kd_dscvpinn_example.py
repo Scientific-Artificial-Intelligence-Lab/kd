@@ -27,12 +27,12 @@ lb, ub = burgers_data.mesh_bounds()
 # 实例化模型。此处定义的算子必须与PyTorch兼容（通常以'_t'结尾）
 model = KD_DSCV_Pinn(
     n_samples_per_batch = 1000, # Number of generated traversals by agent per batch
-    binary_operators = ["add_t", "mul_t", "div_t", "diff_t","diff2_t",],
+    binary_operators = ["add_t", "mul_t", "div_t", "diff_t", "diff2_t"],
     unary_operators = ['n2_t'],
 )
 
 
-step_output = model.fit(x, y, [lb,ub], n_epochs=2)
+step_output = model.fit(x, y, [lb, ub], n_epochs=2)
 
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 
