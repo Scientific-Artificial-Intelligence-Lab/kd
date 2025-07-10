@@ -29,7 +29,7 @@ model.fit(X_train, y_train)                         # 这个过程将首先训�
 print("\nGenerating predictions...")
 X_full = kdv_data.mesh() # Create full grid for visualization
 u_pred = model.predict(X_full)
-# u_pred = u_pred.cpu().numpy().reshape(kdv_data.get_size())
+
 u_pred = u_pred.reshape(kdv_data.get_size())
 
 # 绘制神经网络的 训练损失 曲线

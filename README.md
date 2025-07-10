@@ -1,9 +1,9 @@
 
-# kd
+# KD
 
 ## 项目简介
 
-**kd** 是一个面向科学计算与机器学习的开源框架，专注于偏微分方程（PDE）符号发现、数据驱动建模与高质量可视化。框架集成了强化学习、遗传算法、物理信息神经网络（PINN）等多种符号回归方法，支持灵活的数据加载、算子扩展和多维度可视化，适用于科研、工程和教学场景。
+**KD** 是一个面向科学计算与机器学习的开源框架，专注于偏微分方程（PDE）符号发现、数据驱动建模与高质量可视化。框架集成了强化学习、遗传算法、物理信息神经网络（PINN）等多种符号回归方法，支持灵活的数据加载、算子扩展和多维度可视化，适用于科研、工程和教学场景。
 
 本项目的核心目标是为用户提供一站式 PDE 发现与符号建模工具，涵盖数据预处理、模型训练、表达式搜索、方程可视化与物理一致性分析等全流程。通过模块化设计，用户可以方便地扩展算子库、集成自定义数据集，并对发现的方程进行多维度可视化和物理解释。
 
@@ -58,20 +58,66 @@ kd/
 
 ## 安装依赖
 
-在项目根目录下创建并激活虚拟环境，然后安装所需依赖：
+我们提供两种环境配置方式。对于科学计算项目，我们强烈推荐使用 Conda/Miniforge。
 
-```bash
-python -m venv env
-source env/bin/activate  # Linux/Mac
-# env\Scripts\activate   # Windows
-pip install -r requirements.txt
-```
+### 方式一：使用 venv 和 pip (通用方法)
 
-> **注意**：部分可视化功能依赖 [Graphviz](https://graphviz.gitlab.io/)，需提前安装系统依赖。
-> 
-> macOS: `brew install graphviz`
-> 
-> Ubuntu: `sudo apt install graphviz`
+这是适用于所有系统的基础 Python 环境配置方法。
+
+1.  在项目根目录下创建虚拟环境：
+    ```bash
+    python -m venv env
+    ```
+
+2.  激活虚拟环境：
+    * **macOS / Linux:**
+        ```bash
+        source env/bin/activate
+        ```
+    * **Windows:**
+        ```bash
+        env\Scripts\activate
+        ```
+
+3.  安装项目依赖：
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+> **注意**：此方法可能需要您手动安装一些非 Python 依赖。例如，部分可视化功能依赖 [Graphviz](https://graphviz.gitlab.io/)，需要您通过系统包管理器提前安装。
+>
+> * **macOS:** `brew install graphviz`
+> * **Ubuntu:** `sudo apt-get install graphviz`
+
+---
+
+### 方式二：使用 Conda / Miniforge (推荐)
+
+Conda 能够更好地管理复杂的科学计算包及其非 Python 依赖，是本项目推荐的环境管理工具。对于 Apple Silicon (M1/M2/M4 等) 用户，强烈建议使用 [**Miniforge**](https://github.com/conda-forge/miniforge)。
+
+1.  创建并激活 Conda 环境。以下命令会创建一个名为 `kd-env` 的新环境，并安装 Python 3.9：
+    ```bash
+    # 创建环境
+    conda create -n kd-env python=3.9
+
+    # 激活环境
+    conda activate kd-env
+    ```
+
+2.  在激活的环境中，使用 `pip` 安装所有 Python 依赖：
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  (可选但推荐) 使用 Conda 安装 `Graphviz`：
+    Conda 可以将 `Graphviz` 直接安装在虚拟环境中，实现更好的环境隔离。
+    ```bash
+    conda install python-graphviz
+    ```
+
+---
+
+您可以根据自己的偏好和操作系统选择其中一种方式进行安装。安装完成后，即可开始使用 **kd** 框架。
 
 ## 致谢
 
