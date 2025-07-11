@@ -278,7 +278,8 @@ class PDEDataset(MetaData):
     and analysis functionality.
     """
     
-    def __init__(self, equation_name: str,
+    def __init__(self, 
+                 equation_name: str,
                  pde_data: Optional[Dict[str, Any]],
                  domain: Optional[Dict[str, Tuple[float, float]]],
                  epi: float,
@@ -507,9 +508,72 @@ def load_kdv_equation():
         equation_name = 'kdv equation',
         descr = descr,
         pde_data = None,
-        x = pde_data['x'].flatten(),
-        t = pde_data['tt'].flatten(),
+        x = pde_data['x'],
+        t = pde_data['tt'],
         usol = pde_data['uu'],
         domain = {'x': (-16, 16), 't': (5, 35)},
         epi = 1e-3
     )
+
+
+def load_pde_dataset(
+    filename: str,
+    equation_name: str = 'PDE Dataset',
+    x_key: str = 'x',
+    t_key: str = 't',
+    u_key: str = 'usol',
+    domain: dict = None,
+    epi: float = 1e-3,
+    data_dir_module: str = "kd.dataset.data"
+):
+    """
+    一个通用的、用户友好的数据加载器，可以从指定的.mat文件加载PDE数据，
+    并允许用户自定义所有关键元信息。
+
+    Args:
+        filename (str): 要加载的 .mat 文件的名称 (例如: "my_data.mat")。
+        equation_name (str): 您为这个数据集赋予的名称 (例如: "My PDE")。
+        x_key (str, optional): .mat 文件中代表空间坐标的键。默认为 'x'。
+        t_key (str, optional): .mat 文件中代表时间坐标的键。默认为 't'。
+        u_key (str, optional): .mat 文件中代表解的键。默认为 'usol'。
+        domain (dict, optional): 定义分析子域，格式为 {'x':(min,max), 't':(min,max)}。默认为 None。
+        epi (float, optional): 为该数据集推荐的稀疏性惩罚项。默认为 1e-3。
+        data_dir_module (str, optional): 存储数据文件的模块路径。默认为 "kd.dataset.data"。
+
+    Returns:
+        一个功能完备的 PDEDataset 对象，可被所有 KD 模型使用。
+    """
+    try:
+        # 1. 自动构建文件的完整路径
+        file_path = resources.files(data_dir_module) / filename
+        
+        # 2. 使用底层的加载器读取 .mat 文件
+        pde_data = load_mat_file(file_path)
+
+        # 3. 使用用户指定的键名，从加载的字典中提取数据
+        x_data = pde_data[x_key]
+        t_data = pde_data[t_key]
+        u_data = pde_data[u_key]
+
+        # 4. 将所有信息送入 PDEDataset 进行标准化封装
+        dataset = PDEDataset(
+            equation_name=equation_name,
+            pde_data=None, 
+            x=x_data,
+            t=t_data,
+            usol=u_data,
+            domain=domain, 
+            epi=epi
+        )
+        print(f"成功加载数据集: {equation_name}，文件: {filename}")
+        return dataset
+
+    except FileNotFoundError:
+        print(f"错误: 在默认数据目录中未找到文件 {filename}")
+        return None
+    except KeyError as e:
+        print(f"错误: 文件 {filename} 中缺少必需的键: {e}。请检查您传入的 x_key, t_key, u_key 参数是否正确。")
+        return None
+    except Exception as e:
+        print(f"错误: 加载或处理文件时发生未知错误: {e}")
+        return None
