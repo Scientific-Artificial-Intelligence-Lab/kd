@@ -198,3 +198,6 @@ result/
 
 .log/
 
+.idea/
+
+examples/log/

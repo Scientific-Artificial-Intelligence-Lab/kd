@@ -175,6 +175,11 @@ def _calculate_pde_fields(model, best_program):
             term_values_grid[:, t_idx] = _evaluate_term_recursively(term_node, u_snapshot, x_axis)
         Theta_final[:, i] = term_values_grid.flatten()
     
+    if not np.isfinite(Theta_final).all():
+        print("\n[计算警告]: 发现的方程包含数值不稳定的项")
+        print("  后续的可视化可能会失败或显示不正确")
+        # return None
+
     # 3. 计算 RHS 和残差
     if Theta_final.shape[1] == len(w_best) - 1:
         y_hat_rhs = Theta_final @ w_best[:-1] + w_best[-1]

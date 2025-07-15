@@ -25,7 +25,7 @@ from kd.viz.equation_renderer import render_latex_to_image
 model = KD_DSCV(
     binary_operators=["add", "mul", "diff"],                    # 定义可用的二元算子 (add 必须存在)
     unary_operators=['n2'],                                     # 定义可用的一元算子
-    n_samples_per_batch=500,                                    # Agent每个批次生成的轨迹数量，影响训练效率与探索范围
+    n_samples_per_batch=500,                                    # 影响训练效率与探索范围
 )
 
 np.random.seed(42)

@@ -103,7 +103,7 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
         u_pred: Predicted solution array
         output_dir: Output directory path
     """
-    plt.figure(figsize=(10, 4))
+    plt.figure(figsize=(12, 5))
 
     # Left plot: Training points residuals
     plt.subplot(121)
@@ -120,10 +120,12 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
                      s=10,
                      edgecolors='w',
                      linewidths=0.5)
-    plt.colorbar(sc, label='Residual').outline.set_visible(False)
+    cbar = plt.colorbar(sc, label='Residual')
+    cbar.set_label('Residual', fontsize=9)
+    #.outline.set_visible(False)
     plt.xlabel('Time', fontsize=10)
     plt.ylabel('Space', fontsize=10)
-    plt.title('Training Points Residual', pad=10)
+    plt.title('Training Points Residual', pad=8)
 
     # Right plot: Overall residual distribution
     plt.subplot(122)
@@ -141,7 +143,7 @@ def plot_residual_analysis(model, X_train, y_train, u_true, u_pred, output_dir: 
 
     plt.xlabel('Residual Value', fontsize=10)
     plt.ylabel('Probability Density', fontsize=10)
-    plt.title('Residual Distribution', pad=10)
+    plt.title('Residual Distribution', pad=8)
 
     if output_dir:
         viz_dir = Path(output_dir)
