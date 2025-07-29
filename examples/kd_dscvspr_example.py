@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module='numpy.*')
 warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow.*')
 
 
-from kd.model import KD_DSCV_Pinn
+from kd.model import KD_DSCV_SPR
 from kd.viz.discover_eq2latex import discover_program_to_latex 
 from kd.viz.equation_renderer import render_latex_to_image
 from kd.viz.dscv_viz import *
@@ -29,14 +29,14 @@ lb, ub = burgers_data.mesh_bounds()
 
 # 实例化模型。此处定义的算子必须与PyTorch兼容（通常以'_t'结尾）
 # Instantiate the model. The operators defined here must be compatible with PyTorch (usually ending with '_t').
-model = KD_DSCV_Pinn(
+model = KD_DSCV_SPR(
     n_samples_per_batch = 100, # Number of generated traversals by agent per batch
     binary_operators = ["add_t", "mul_t", "div_t", "diff_t", "diff2_t"],
     unary_operators = ['n2_t'],
 )
 
 
-step_output = model.fit(x, y, [lb, ub], n_epochs=1)
+step_output = model.fit(x, y, [lb, ub], n_epochs=10)
 
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 
@@ -58,12 +58,12 @@ plot_evolution(model)
 
 # 分析由最终发现的PDE的残差
 # Analyzes the residuals of the PDE discovered by the final model.
-plot_pinn_residual_analysis(model, step_output['program'])
+plot_spr_residual_analysis(model, step_output['program'])
 
 # 将PINN预测的解场与真实的解场进行热图对比
 # Compares the predicted solution field by the PINN with the true solution field via heatmaps.
-plot_pinn_field_comparison(model, step_output['program'])
+plot_spr_field_comparison(model, step_output['program'])
 
 # 生成“奇偶图”，逐点对比PINN的预测值与真实值，以量化最终方程的预测精度
 # Generates a "scatter plot" to compare the PINN's predictions with the true values point by point, quantifying the prediction accuracy of the final equation.
-plot_pinn_actual_vs_predicted(model, step_output['program'])
+plot_spr_actual_vs_predicted(model, step_output['program'])

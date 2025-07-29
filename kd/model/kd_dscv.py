@@ -328,7 +328,7 @@ class KD_DSCV(BaseRL):
         """Make predictions (not implemented)."""
         pass
 
-class KD_DSCV_Pinn(KD_DSCV):
+class KD_DSCV_SPR(KD_DSCV):
     """KD_DSCV model with Physics-Informed Neural Networks.
     
     This class extends KD_DSCV with PINN capabilities for better

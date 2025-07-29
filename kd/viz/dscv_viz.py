@@ -399,7 +399,7 @@ def _calculate_pinn_fields(model, best_program):
         "y_pred": y_hat_rhs.flatten()
     }
 
-def plot_pinn_residual_analysis(model, best_program):
+def plot_spr_residual_analysis(model, best_program):
     """
     计算并可视化 KD_DSCV_Pinn 模型的物理残差。
     这个版本专门处理由 PINN 生成的稀疏/散点元数据。
@@ -441,7 +441,7 @@ def plot_pinn_residual_analysis(model, best_program):
     plt.show()
 
 
-def plot_pinn_actual_vs_predicted(model, best_program):
+def plot_spr_actual_vs_predicted(model, best_program):
     """
     为 KD_DSCV_Pinn 模型绘制“真值 vs. 预测值”的45度线图
     """
@@ -471,7 +471,7 @@ def plot_pinn_actual_vs_predicted(model, best_program):
     plt.ylim(plot_limit)
     plt.show()
 
-def plot_pinn_field_comparison(model, best_program):
+def plot_spr_field_comparison(model, best_program):
     """
     为 KD_DSCV_Pinn 模型计算并可视化“预测场”与“真实场”的对比图。
     注意：此函数使用三角剖分来可视化稀疏散点数据
