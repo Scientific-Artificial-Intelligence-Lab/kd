@@ -7,9 +7,9 @@ genetic algorithms to search for the symbolic form of equations.
 
 import os
 import random
-from abc import ABCMeta, abstractmethod
 import torch.utils.data
-from ..base import BaseEstimator
+
+from ._base import BaseGa
 from ..utils.utils_GA import *
 import numpy as np
 import heapq
@@ -18,21 +18,6 @@ import pickle
 import matplotlib.pyplot as plt
 
 from ..viz import equation_renderer
-
-class BaseGa(BaseEstimator, metaclass=ABCMeta):
-    """Abstract base class for genetic algorithm based models."""
-
-    @abstractmethod
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def fit(self, X, y):
-        """Fit model to data."""
-
-    def predict(self, X):
-        """Make predictions."""
-        pass
 
 
 class DLGA(BaseGa):

@@ -1,0 +1,20 @@
+DEBUG diagnostics: ut_origin.shape = (301, 200)
+DEBUG diagnostics: u_origin.shape = (301, 200)
+DEBUG diagnostics: ux_origin.shape = (301, 200)
+DEBUG diagnostics: uxx_origin.shape = (301, 200)
+DEBUG diagnostics: left_side_origin.shape = (301, 200)
+DEBUG diagnostics: right_side_origin.shape = (301, 200)
+DEBUG diagnostics: left_side_origin[0:2,0:2] = [[0.         0.        ]
+ [0.01815335 0.01778564]]
+DEBUG diagnostics: right_side_origin[0:2,0:2] = [[0.01794206 0.01768783]
+ [0.02413279 0.02367355]]
+DEBUG diagnostics: ut_origin.shape = (301, 200)
+DEBUG diagnostics: u_origin.shape = (301, 200)
+DEBUG diagnostics: ux_origin.shape = (301, 200)
+DEBUG diagnostics: uxx_origin.shape = (301, 200)
+DEBUG diagnostics: left_side_origin.shape = (301, 200)
+DEBUG diagnostics: right_side_origin.shape = (301, 200)
+DEBUG diagnostics: left_side_origin[0:2,0:2] = [[0.         0.        ]
+ [0.01815335 0.01778564]]
+DEBUG diagnostics: right_side_origin[0:2,0:2] = [[0.01794206 0.01768783]
+ [0.02413279 0.02367355]]

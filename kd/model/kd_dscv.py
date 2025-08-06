@@ -5,8 +5,7 @@ governing equations of PDEs. It supports both regular grid data and sparse
 sampling, and can be combined with Physics-Informed Neural Networks (PINN).
 """
 
-from abc import ABCMeta, abstractmethod
-from ..base import BaseEstimator
+
 import warnings
 import os
 import zlib
@@ -21,6 +20,7 @@ import commentjson as json
 import torch
 from scipy.stats import pearsonr
 
+from ._base import BaseRL
 from .discover.task import set_task
 from .discover.controller import Controller
 from .discover.dso.prior import make_prior
@@ -36,20 +36,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-class BaseRL(BaseEstimator, metaclass=ABCMeta):
-    """Abstract base class for reinforcement learning based models."""
-    
-    @abstractmethod
-    def __init__(self):
-        pass
 
-    @abstractmethod
-    def fit(self, X, y):
-        """Fit model to data."""
-
-    def predict(self, X):
-        """Make predictions."""
-        pass
     
 class KD_DSCV(BaseRL):
     """Deep Reinforcement Learning model for PDE discovery.
