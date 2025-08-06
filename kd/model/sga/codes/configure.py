@@ -5,18 +5,39 @@ import torch
 import torch.nn as nn
 import os
 
-problem = 'chafee-infante' # 'Burgers' # 'chafee-infante' # 'Kdv' #'PDE_divide' # 'PDE_compound'
-seed = 0
+# === 修复导入副作用 / Fix Import Side Effects ===
+# 将全局状态和计算封装到函数中，避免导入时执行
+# Encapsulate global state and computations in functions to avoid execution during import
 
-if torch.cuda.is_available():
-    device = torch.device('cuda:0')
-    print("Hardware: NVIDIA GPU detected. Using CUDA for acceleration.")
-elif torch.backends.mps.is_available():
-    device = torch.device('mps')
-    print("Hardware: Apple Silicon GPU detected. Using Metal (MPS) for acceleration.")
-else:
-    device = torch.device('cpu')
-    print("Hardware: No compatible GPU detected. Falling back to CPU (execution will be slow).")
+# 默认配置 / Default configuration
+_DEFAULT_PROBLEM = 'Burgers'
+_DEFAULT_SEED = 0
+
+# 全局状态（向后兼容）/ Global state (backward compatibility)
+problem = _DEFAULT_PROBLEM
+seed = _DEFAULT_SEED
+
+def get_device():
+    """获取可用的计算设备 / Get available compute device"""
+    if torch.cuda.is_available():
+        print("Hardware: NVIDIA GPU detected. Using CUDA for acceleration.")
+        return torch.device('cuda:0')
+    elif torch.backends.mps.is_available():
+        print("Hardware: Apple Silicon GPU detected. Using Metal (MPS) for acceleration.")
+        return torch.device('mps')
+    else:
+        print("Hardware: No compatible GPU detected. Falling back to CPU (execution will be slow).")
+        return torch.device('cpu')
+
+# 延迟初始化设备 / Lazy device initialization
+device = None
+
+def ensure_device():
+    """确保设备已初始化 / Ensure device is initialized"""
+    global device
+    if device is None:
+        device = get_device()
+    return device
 
 ###########################################################################################
 # Neural network
@@ -33,15 +54,16 @@ normal = True
 fine_ratio = 2 # 通过MetaData加密数据的倍数
 use_metadata = False
 delete_edges = False
-print('use_metadata =', use_metadata)
-print('delete_edges =', delete_edges)
 
 # AIC hyperparameter
 aic_ratio = 1  # lower this ratio, less important is the number of elements to AIC value
 
-
-print(path)
-print('fine_ratio = ',fine_ratio)
+def print_config():
+    """打印配置信息 / Print configuration info"""
+    print('use_metadata =', use_metadata)
+    print('delete_edges =', delete_edges)
+    print(path)
+    print('fine_ratio = ', fine_ratio)
 ###########################################################################################
 class Net(nn.Module):
     def __init__(self,n_feature,n_hidden,n_output):
@@ -62,74 +84,99 @@ def divide(up, down, eta=1e-10):
     while np.any(down == 0):
         down += eta
     return up/down
-# PDE-1: Ut= -Ux/x + 0.25Uxx
-if problem == 'PDE_divide':
-    _data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    u=np.load(os.path.join(_data_dir, "PDE_divide.npy")).T
-    nx = 100
-    nt = 251
-    x=np.linspace(1,2,nx)
-    t=np.linspace(0,1,nt)
-    right_side = 'right_side = -config.divide(ux, x) + 0.25*uxx'
-    left_side = 'left_side = ut'
-    right_side_origin = 'right_side_origin = -config.divide(ux_origin, x_all) + 0.25*uxx_origin'
-    # right_side_origin = 'right_side_origin = -0.9979*config.divide(ux_origin, x_all) + 0.2498*uxx_origin'
-    left_side_origin = 'left_side_origin = ut_origin'
 
-# PDE-3: Ut= d(uux)(x)
-if problem == 'PDE_compound':
-    _data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    u=np.load(os.path.join(_data_dir, "PDE_compound.npy")).T
-    nx = 100
-    nt = 251
-    x=np.linspace(1,2,nx)
-    t=np.linspace(0,0.5,nt)
-    right_side = 'right_side = u*uxx + ux*ux'
-    left_side = 'left_side = ut'
-    right_side_origin = 'right_side_origin = u_origin*uxx_origin + ux_origin*ux_origin'
-    # right_side_origin = 'right_side_origin = 0.9806*u_origin*uxx_origin + 0.9806*ux_origin*ux_origin'
-    left_side_origin = 'left_side_origin = ut_origin'
+def load_problem_data(problem_name):
+    """
+    [LEGACY] 加载指定问题的数据 / Load data for specified problem
     
+    WARNING: This function is LEGACY and will be deprecated in future versions.
+    Use kd.dataset.load_pde_dataset() instead for unified data loading.
     
-# Burgers -u*ux+0.1*uxx
-if problem == 'Burgers':
-    _data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    data = scio.loadmat(os.path.join(_data_dir, "burgers.mat"))
-    u=data.get("usol")
-    x=np.squeeze(data.get("x"))
-    t=np.squeeze(data.get("t").reshape(1,201))
-    right_side = 'right_side = -u*ux+0.1*uxx'
-    left_side = 'left_side = ut'
-    right_side_origin = 'right_side_origin = -1*u_origin*ux_origin+0.1*uxx_origin'
-    # right_side_origin = 'right_side_origin = -1.0011*u_origin*ux_origin+0.1024*uxx_origin'
-    left_side_origin = 'left_side_origin = ut_origin'
+    This legacy data loading approach is maintained for backward compatibility
+    with existing SGA-PDE code, but new code should use the unified KD dataset API.
+    """
+    # 使用统一的数据目录 / Use unified data directory
+    _data_dir = os.path.join(os.path.dirname(__file__), "../../../dataset/data")
+    
+    if problem_name == 'PDE_divide':
+        u = np.load(os.path.join(_data_dir, "PDE_divide.npy")).T
+        nx = 100
+        nt = 251
+        x = np.linspace(1, 2, nx)
+        t = np.linspace(0, 1, nt)
+        right_side = 'right_side = -config.divide(ux, x) + 0.25*uxx'
+        left_side = 'left_side = ut'
+        right_side_origin = 'right_side_origin = -config.divide(ux_origin, x_all) + 0.25*uxx_origin'
+        left_side_origin = 'left_side_origin = ut_origin'
+        
+    elif problem_name == 'PDE_compound':
+        u = np.load(os.path.join(_data_dir, "PDE_compound.npy")).T
+        nx = 100
+        nt = 251
+        x = np.linspace(1, 2, nx)
+        t = np.linspace(0, 0.5, nt)
+        right_side = 'right_side = u*uxx + ux*ux'
+        left_side = 'left_side = ut'
+        right_side_origin = 'right_side_origin = u_origin*uxx_origin + ux_origin*ux_origin'
+        left_side_origin = 'left_side_origin = ut_origin'
+        
+    elif problem_name == 'Burgers':
+        data = scio.loadmat(os.path.join(_data_dir, "burgers.mat"))
+        u = data.get("usol")
+        x = np.squeeze(data.get("x"))
+        t = np.squeeze(data.get("t").reshape(1, 201))
+        right_side = 'right_side = -u*ux+0.1*uxx'
+        left_side = 'left_side = ut'
+        right_side_origin = 'right_side_origin = -1*u_origin*ux_origin+0.1*uxx_origin'
+        left_side_origin = 'left_side_origin = ut_origin'
+        
+    elif problem_name == 'Kdv':
+        data = scio.loadmat(os.path.join(_data_dir, "KdV.mat"))
+        u = data.get("uu")
+        x = np.squeeze(data.get("x"))
+        t = np.squeeze(data.get("tt").reshape(1, 201))
+        right_side = 'right_side = -0.0025*uxxx-u*ux'
+        left_side = 'left_side = ut'
+        right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-u_origin*ux_origin'
+        left_side_origin = 'left_side_origin = ut_origin'
+        
+    elif problem_name == 'chafee-infante':
+        u = np.load(os.path.join(_data_dir, "chafee_infante_CI.npy"))
+        x = np.load(os.path.join(_data_dir, "chafee_infante_x.npy"))
+        t = np.load(os.path.join(_data_dir, "chafee_infante_t.npy"))
+        right_side = 'right_side = - 1.0008*u + 1.0004*u**3'
+        left_side = 'left_side = ut'
+        right_side_origin = 'right_side_origin = uxx_origin-u_origin+u_origin**3'
+        left_side_origin = 'left_side_origin = ut_origin'
+        
+    else:
+        raise ValueError(f"Unknown problem: {problem_name}")
+    
+    return {
+        'u': u, 'x': x, 't': t,
+        'right_side': right_side, 'left_side': left_side,
+        'right_side_origin': right_side_origin, 'left_side_origin': left_side_origin
+    }
 
-# # Kdv -0.0025uxxx-uux
-if problem == 'Kdv':
-    _data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    data = scio.loadmat(os.path.join(_data_dir, "KdV.mat"))
-    u=data.get("uu")
-    x=np.squeeze(data.get("x"))
-    t=np.squeeze(data.get("tt").reshape(1,201))
-    right_side = 'right_side = -0.0025*uxxx-u*ux'
-    # right_side = 'right_side = -0.5368*u + 0.0145*ux + -0.0091*uxx + 0.0064*(4*x*u + 5*x**2*ux + 8*x*ux + 4*u + 8*x**2*uxx + x**3*uxx + x**3*uxxx + 6*x*ux)'    #-0.5368u + 0.0145ux + -0.0091uxx + 0.0064((x * (((x * x) * u) d x)) d^2 x)
-    left_side = 'left_side = ut'
-    right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-u_origin*ux_origin'
-    # right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-1.0004*u_origin*ux_origin'
-    left_side_origin = 'left_side_origin = ut_origin'
+# 全局变量（向后兼容）/ Global variables (backward compatibility)
+# 这些变量将在首次访问时延迟加载 / These variables will be lazy-loaded on first access
+u = None
+x = None
+t = None
+right_side = None
+left_side = None
+right_side_origin = None
+left_side_origin = None
 
-# chafee-infante   u_t=u_xx-u+u**3
-if problem == 'chafee-infante': # 301*200的新数据
-    _data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    u = np.load(os.path.join(_data_dir, "chafee_infante_CI.npy"))
-    x = np.load(os.path.join(_data_dir, "chafee_infante_x.npy"))
-    t = np.load(os.path.join(_data_dir, "chafee_infante_t.npy")) 
-    # right_side = 'right_side = uxx-u+u**3'
-    # right_side = 'right_side = 1.0002*uxx - 1.0008*u + 1.0004*u**3'
-    right_side = 'right_side = - 1.0008*u + 1.0004*u**3'
-
-    # right_side = 'right_side = -1.0855*u + 0.9985*uxx + 0.0906*u**2 + 0.9801*u**3'  #-1.0855u + 0.9985uxx + 0.0906u^2 + 0.9801u^3
-    left_side = 'left_side = ut'
-    right_side_origin = 'right_side_origin = uxx_origin-u_origin+u_origin**3'
-    # right_side_origin = 'right_side_origin = 1.0002*uxx_origin-1.0008*u_origin+1.0004*u_origin**3'
-    left_side_origin = 'left_side_origin = ut_origin'
+def ensure_data_loaded():
+    """确保数据已加载 / Ensure data is loaded"""
+    global u, x, t, right_side, left_side, right_side_origin, left_side_origin
+    if u is None:
+        data = load_problem_data(problem)
+        u = data['u']
+        x = data['x']
+        t = data['t']
+        right_side = data['right_side']
+        left_side = data['left_side']
+        right_side_origin = data['right_side_origin']
+        left_side_origin = data['left_side_origin']

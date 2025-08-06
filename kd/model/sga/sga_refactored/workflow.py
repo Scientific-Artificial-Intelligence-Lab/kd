@@ -22,7 +22,7 @@ print("-" * 40)
 def inject_dependencies(workspace, symbol_library):
     """
     这是一个核心的“适配器”函数。
-    它负责将我们准备好的数据和符号库，“喂”给原始模块所期望的全局变量。
+    它负责将我们准备好的数据和符号库，传给原始模块所期望的全局变量。
     """
     print("   - Injecting dependencies into original modules...")
 

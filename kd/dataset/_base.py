@@ -516,9 +516,144 @@ def load_kdv_equation():
     )
 
 
+def load_chafee_infante_equation():
+    """
+    Load Chafee-Infante equation dataset.
+    u_t = u_xx - u + u^3
+    Compatible with both SGA and other KD models.
+    """
+    descr = DatasetInfo(
+        description="""
+        Dataset for Chafee-Infante equation
+        u_t = u_xx - u + u^3
+        Reaction-diffusion equation with cubic nonlinearity
+        Compatible with SGA-PDE and other KD models
+        """
+    )
+    
+    # Load from unified data directory
+    file_path_u = resources.files(DATA_MODULE) / "chafee_infante_CI.npy"
+    file_path_x = resources.files(DATA_MODULE) / "chafee_infante_x.npy"
+    file_path_t = resources.files(DATA_MODULE) / "chafee_infante_t.npy"
+    
+    with file_path_u.open('rb') as f:
+        u = np.load(f)
+    with file_path_x.open('rb') as f:
+        x = np.load(f)
+    with file_path_t.open('rb') as f:
+        t = np.load(f)
+    
+    return PDEDataset(
+        equation_name='chafee-infante equation',
+        descr=descr,
+        pde_data=None,
+        x=x,
+        t=t,
+        usol=u,
+        domain={'x': (-1, 1), 't': (0, 1)},
+        epi=1e-3
+    )
+
+
+def load_pde_divide_equation():
+    """
+    Load PDE divide equation dataset.
+    u_t = -u_x/x + 0.25*u_xx
+    Compatible with both SGA and other KD models.
+    """
+    descr = DatasetInfo(
+        description="""
+        Dataset for PDE divide equation
+        u_t = -u_x/x + 0.25*u_xx
+        Diffusion equation with singular coefficient
+        Compatible with SGA-PDE and other KD models
+        """
+    )
+    
+    try:
+        # Load from SGA data directory first
+        sga_data_module = "kd.model.sga.data"
+        file_path = resources.files(sga_data_module) / "PDE_divide.npy"
+        with file_path.open('rb') as f:
+            u = np.load(f).T  # SGA uses transposed format
+        
+    except (FileNotFoundError, ModuleNotFoundError):
+        # Fallback to main data directory
+        try:
+            file_path = resources.files(DATA_MODULE) / "PDE_divide.npy"
+            with file_path.open('rb') as f:
+                u = np.load(f).T
+        except FileNotFoundError:
+            raise FileNotFoundError("PDE_divide.npy not found in either SGA or main data directory")
+    
+    # Generate coordinate arrays (as per SGA configure.py)
+    nx, nt = 100, 251
+    x = np.linspace(1, 2, nx)
+    t = np.linspace(0, 1, nt)
+    
+    return PDEDataset(
+        equation_name='PDE divide equation',
+        descr=descr,
+        pde_data=None,
+        x=x,
+        t=t,
+        usol=u,
+        domain={'x': (1, 2), 't': (0, 1)},
+        epi=1e-3
+    )
+
+
+def load_pde_compound_equation():
+    """
+    Load PDE compound equation dataset.
+    u_t = u*u_xx + u_x*u_x
+    Compatible with both SGA and other KD models.
+    """
+    descr = DatasetInfo(
+        description="""
+        Dataset for PDE compound equation
+        u_t = u*u_xx + u_x*u_x
+        Nonlinear diffusion equation with compound terms
+        Compatible with SGA-PDE and other KD models
+        """
+    )
+    
+    try:
+        # Load from SGA data directory first
+        sga_data_module = "kd.model.sga.data"
+        file_path = resources.files(sga_data_module) / "PDE_compound.npy"
+        with file_path.open('rb') as f:
+            u = np.load(f).T  # SGA uses transposed format
+        
+    except (FileNotFoundError, ModuleNotFoundError):
+        # Fallback to main data directory
+        try:
+            file_path = resources.files(DATA_MODULE) / "PDE_compound.npy"
+            with file_path.open('rb') as f:
+                u = np.load(f).T
+        except FileNotFoundError:
+            raise FileNotFoundError("PDE_compound.npy not found in either SGA or main data directory")
+    
+    # Generate coordinate arrays (as per SGA configure.py)
+    nx, nt = 100, 251
+    x = np.linspace(1, 2, nx)
+    t = np.linspace(0, 0.5, nt)
+    
+    return PDEDataset(
+        equation_name='PDE compound equation',
+        descr=descr,
+        pde_data=None,
+        x=x,
+        t=t,
+        usol=u,
+        domain={'x': (1, 2), 't': (0, 0.5)},
+        epi=1e-3
+    )
+
+
 def load_pde_dataset(
-    filename: str,
-    equation_name: str = 'PDE Dataset',
+    filename: str = None,
+    equation_name: str = None,
     x_key: str = 'x',
     t_key: str = 't',
     u_key: str = 'usol',
@@ -527,53 +662,103 @@ def load_pde_dataset(
     data_dir_module: str = "kd.dataset.data"
 ):
     """
-    一个通用的、用户友好的数据加载器，可以从指定的.mat文件加载PDE数据，
-    并允许用户自定义所有关键元信息。
+    Enhanced universal PDE data loader that supports both predefined datasets and custom files.
+    Compatible with SGA-PDE and other KD models.
 
     Args:
-        filename (str): 要加载的 .mat 文件的名称 (例如: "my_data.mat")。
-        equation_name (str): 您为这个数据集赋予的名称 (例如: "My PDE")。
-        x_key (str, optional): .mat 文件中代表空间坐标的键。默认为 'x'。
-        t_key (str, optional): .mat 文件中代表时间坐标的键。默认为 't'。
-        u_key (str, optional): .mat 文件中代表解的键。默认为 'usol'。
-        domain (dict, optional): 定义分析子域，格式为 {'x':(min,max), 't':(min,max)}。默认为 None。
-        epi (float, optional): 为该数据集推荐的稀疏性惩罚项。默认为 1e-3。
-        data_dir_module (str, optional): 存储数据文件的模块路径。默认为 "kd.dataset.data"。
+        filename (str, optional): Name of the .mat/.npy file to load (e.g., "my_data.mat").
+                                 If None, uses equation_name to load predefined datasets.
+        equation_name (str, optional): Name of predefined equation or custom dataset name.
+                                     Supported: 'burgers', 'kdv', 'chafee-infante', 
+                                               'pde_divide', 'pde_compound'
+        x_key (str): Key for spatial coordinates in .mat files. Default: 'x'.
+        t_key (str): Key for temporal coordinates in .mat files. Default: 't'.
+        u_key (str): Key for solution data in .mat files. Default: 'usol'.
+        domain (dict, optional): Analysis subdomain {'x':(min,max), 't':(min,max)}.
+        epi (float): Recommended sparsity penalty for this dataset. Default: 1e-3.
+        data_dir_module (str): Module path for data files. Default: "kd.dataset.data".
 
     Returns:
-        一个功能完备的 PDEDataset 对象，可被所有 KD 模型使用。
-    """
-    try:
-        # 1. 自动构建文件的完整路径
-        file_path = resources.files(data_dir_module) / filename
+        PDEDataset: A fully functional PDEDataset object compatible with all KD models.
         
-        # 2. 使用底层的加载器读取 .mat 文件
-        pde_data = load_mat_file(file_path)
+    Examples:
+        # Load predefined datasets
+        >>> dataset = load_pde_dataset(equation_name='burgers')
+        >>> dataset = load_pde_dataset(equation_name='chafee-infante')
+        
+        # Load custom file
+        >>> dataset = load_pde_dataset(filename='my_data.mat', equation_name='My PDE')
+    """
+    
+    # Handle predefined datasets
+    if equation_name and not filename:
+        equation_name_lower = equation_name.lower().replace('_', '-').replace(' ', '-')
+        
+        if equation_name_lower in ['burgers', 'burgers-equation']:
+            return load_burgers_equation()
+        elif equation_name_lower in ['kdv', 'kdv-equation', 'korteweg-de-vries']:
+            return load_kdv_equation()
+        elif equation_name_lower in ['chafee-infante', 'chafee-infante-equation']:
+            return load_chafee_infante_equation()
+        elif equation_name_lower in ['pde-divide', 'pde_divide']:
+            return load_pde_divide_equation()
+        elif equation_name_lower in ['pde-compound', 'pde_compound']:
+            return load_pde_compound_equation()
+        else:
+            print(f"Warning: Unknown predefined equation '{equation_name}'. Available: burgers, kdv, chafee-infante, pde_divide, pde_compound")
+            return None
+    
+    # Handle custom file loading
+    if filename:
+        if not equation_name:
+            equation_name = f"PDE Dataset ({filename})"
+            
+        try:
+            # Build full file path
+            file_path = resources.files(data_dir_module) / filename
+            
+            # Load file based on extension
+            if filename.endswith('.mat'):
+                pde_data = load_mat_file(file_path)
+                x_data = pde_data[x_key]
+                t_data = pde_data[t_key]
+                u_data = pde_data[u_key]
+            elif filename.endswith('.npy'):
+                u_data = np.load(file_path)
+                # For .npy files, coordinates must be provided or generated
+                if domain:
+                    nx, nt = u_data.shape
+                    x_data = np.linspace(domain['x'][0], domain['x'][1], nx)
+                    t_data = np.linspace(domain['t'][0], domain['t'][1], nt)
+                else:
+                    raise ValueError("For .npy files, domain must be specified to generate coordinates")
+            else:
+                raise ValueError(f"Unsupported file format: {filename}")
 
-        # 3. 使用用户指定的键名，从加载的字典中提取数据
-        x_data = pde_data[x_key]
-        t_data = pde_data[t_key]
-        u_data = pde_data[u_key]
+            # Create PDEDataset
+            dataset = PDEDataset(
+                equation_name=equation_name,
+                pde_data=None, 
+                x=x_data,
+                t=t_data,
+                usol=u_data,
+                domain=domain, 
+                epi=epi
+            )
+            print(f"Successfully loaded dataset: {equation_name}, file: {filename}")
+            return dataset
 
-        # 4. 将所有信息送入 PDEDataset 进行标准化封装
-        dataset = PDEDataset(
-            equation_name=equation_name,
-            pde_data=None, 
-            x=x_data,
-            t=t_data,
-            usol=u_data,
-            domain=domain, 
-            epi=epi
-        )
-        print(f"成功加载数据集: {equation_name}，文件: {filename}")
-        return dataset
-
-    except FileNotFoundError:
-        print(f"错误: 在默认数据目录中未找到文件 {filename}")
-        return None
-    except KeyError as e:
-        print(f"错误: 文件 {filename} 中缺少必需的键: {e}。请检查您传入的 x_key, t_key, u_key 参数是否正确。")
-        return None
-    except Exception as e:
-        print(f"错误: 加载或处理文件时发生未知错误: {e}")
-        return None
+        except FileNotFoundError:
+            print(f"Error: File {filename} not found in data directory")
+            return None
+        except KeyError as e:
+            print(f"Error: Missing required key in file {filename}: {e}. Check x_key, t_key, u_key parameters.")
+            return None
+        except Exception as e:
+            print(f"Error: Unknown error loading file: {e}")
+            return None
+    
+    # If neither filename nor valid equation_name provided
+    print("Error: Either 'filename' or valid 'equation_name' must be provided.")
+    print("Available predefined equations: burgers, kdv, chafee-infante, pde_divide, pde_compound")
+    return None

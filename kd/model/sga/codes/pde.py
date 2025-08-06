@@ -1,7 +1,7 @@
 from .tree import *
 from .PDE_find import Train
 from .configure import aic_ratio
-from .setup import default_names, num_default, u
+from . import setup
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -40,6 +40,9 @@ class PDE:
         return name
 
     def concise_visualize(self): # 写出所有项的形式，包含固定候选集和SGA，且包含系数。会区分是来自于固定候选集的还是来自于SGA生成的候选集的。如果是来自于SGA生成的候选集，需要用inorder来写出可理解的项。
+        # 确保setup已初始化
+        setup.ensure_setup_initialized()
+        
         name = ''
         elements = copy.deepcopy(self.elements)
         elements, coefficients = evaluate_mse(elements, True)
@@ -51,19 +54,22 @@ class PDE:
             if i != 0 and name != '':
                 name += ' + '
             name += str(round(np.real(coefficients[i]), 4))
-            if i < num_default: # num_default中为一定包含的候选集
-                name += default_names[i]
+            if i < setup.num_default: # num_default中为一定包含的候选集
+                name += setup.default_names[i]
             else:
-                name += elements[i-num_default].inorder # element是SGA生成的候选集
+                name += elements[i-setup.num_default].inorder # element是SGA生成的候选集
         return name
 
 
 def evaluate_mse(a_pde, is_term=False):
+    # 确保setup已初始化
+    setup.ensure_setup_initialized()
+    
     if is_term:
         terms = a_pde
     else:
         terms = a_pde.elements
-    terms_values = np.zeros((u.shape[0] * u.shape[1], len(terms)))
+    terms_values = np.zeros((setup.u.shape[0] * setup.u.shape[1], len(terms)))
     delete_ix = []
     for ix, term in enumerate(terms):
         tree_list = term.tree
@@ -94,9 +100,9 @@ def evaluate_mse(a_pde, is_term=False):
                         if tree_list[-i][j].name in {'d', 'd^2'}:
                             what_is_denominator = child2.name
                             if what_is_denominator == 't':
-                                tmp = dt
+                                tmp = setup.dt
                             elif what_is_denominator == 'x':
-                                tmp = dx
+                                tmp = setup.dx
                             else:
                                 raise NotImplementedError()
 
@@ -109,7 +115,46 @@ def evaluate_mse(a_pde, is_term=False):
                         else:
                             if isfunction(child1.cache) or isfunction(child2.cache):
                                 pdb.set_trace()
-                            tree_list[-i][j].cache = tree_list[-i][j].cache(child1.cache, child2.cache)
+                            
+                            # === 修复广播错误 / Fix Broadcasting Error ===
+                            # 原始代码保留，添加形状兼容性处理
+                            # Original code preserved, adding shape compatibility handling
+                            try:
+                                # 原始逻辑 / Original logic
+                                tree_list[-i][j].cache = tree_list[-i][j].cache(child1.cache, child2.cache)
+                            except ValueError as e:
+                                if "operands could not be broadcast together" in str(e):
+                                    # 形状修复逻辑 / Shape fixing logic
+                                    c1, c2 = child1.cache, child2.cache
+                                    
+                                    # 确保两个操作数都是numpy数组
+                                    # Ensure both operands are numpy arrays
+                                    if not isinstance(c1, np.ndarray):
+                                        c1 = np.array(c1)
+                                    if not isinstance(c2, np.ndarray):
+                                        c2 = np.array(c2)
+                                    
+                                    # 形状对齐策略 / Shape alignment strategy
+                                    if c1.ndim != c2.ndim:
+                                        # 维度不匹配，尝试广播兼容的形状调整
+                                        # Dimension mismatch, try broadcast-compatible shape adjustment
+                                        if c1.ndim == 1 and c2.ndim == 2:
+                                            # 将1D扩展为2D的第一维匹配
+                                            # Expand 1D to match first dimension of 2D
+                                            if c1.shape[0] == c2.shape[0]:
+                                                c1 = c1.reshape(-1, 1)
+                                        elif c1.ndim == 2 and c2.ndim == 1:
+                                            # 将1D扩展为2D的第一维匹配
+                                            # Expand 1D to match first dimension of 2D
+                                            if c2.shape[0] == c1.shape[0]:
+                                                c2 = c2.reshape(-1, 1)
+                                    
+                                    # 重新尝试操作 / Retry operation
+                                    tree_list[-i][j].cache = tree_list[-i][j].cache(c1, c2)
+                                else:
+                                    # 其他类型的ValueError，重新抛出
+                                    # Other types of ValueError, re-raise
+                                    raise e
                         child1.cache, child2.cache = child1.var, child2.var  # 重置
 
                     else:
@@ -151,8 +196,8 @@ def evaluate_mse(a_pde, is_term=False):
 
     else:
         # 2D --> 1D
-        terms_values = np.hstack((default_terms, terms_values))
-        w, loss, mse, aic = Train(terms_values, ut.reshape(n * m, 1), 0, 1, aic_ratio)
+        terms_values = np.hstack((setup.default_terms, terms_values))
+        w, loss, mse, aic = Train(terms_values, setup.ut.reshape(setup.n * setup.m, 1), 0, 1, aic_ratio)
 
     if is_term:
         return terms, w

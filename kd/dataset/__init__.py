@@ -1,6 +1,9 @@
 from ._base import (PDEDataset,
                     load_burgers_equation,
                     load_kdv_equation,
+                    load_chafee_infante_equation,
+                    load_pde_divide_equation,
+                    load_pde_compound_equation,
                     load_pde_dataset,
                     load_mat_file)
 
@@ -9,6 +12,9 @@ __all__ = [
     "load_burgers_equation",
     "load_mat_file",
     "load_kdv_equation",
+    "load_chafee_infante_equation",
+    "load_pde_divide_equation", 
+    "load_pde_compound_equation",
     "load_pde_dataset",
     "Burgers_equation_shock",
     "KdV_equation",
