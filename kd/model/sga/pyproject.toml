@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sgapde"
+version = "0.1.0"
+description = "A package for PDE discovery using Symbolic Genetic Algorithms."
+requires-python = ">=3.8"
+
+# The 'packages' key is moved from [project] to here
+[tool.setuptools]
+packages = ["sgapde"]

@@ -1,0 +1,15 @@
+# Log files
+notes.log
+*.log
+
+# Model artifacts
+*.pkl
+models/
+
+# Python cache
+__pycache__/
+*.pyc
+
+.vscode/
+.pytest_cache/
+*.egg-info/
