@@ -40,7 +40,7 @@ class SGAPDE_Solver:
             tuple: (best_pde_string, best_score)
         """
         # Import necessary modules with context
-        from sgapde.pde import PDE, evaluate_mse
+        from .pde import PDE, evaluate_mse
         
         # Make context available globally for the old code
         # This is a temporary measure during refactoring
@@ -85,7 +85,7 @@ class SGA:
             pde_lib: PDE library list
             err_lib: Error library list
         """
-        from sgapde.pde import PDE, evaluate_mse
+        from .pde import PDE, evaluate_mse
         
         self.context = context
         self.num = num
@@ -158,7 +158,7 @@ class SGA:
     
     def cross_over(self, percentage=0.5):
         """Perform crossover operation on the population."""
-        from sgapde.pde import evaluate_mse
+        from .pde import evaluate_mse
         
         def cross_individual(pde1, pde2):
             new_pde1, new_pde2 = copy.deepcopy(pde1), copy.deepcopy(pde2)
@@ -207,7 +207,7 @@ class SGA:
     
     def change(self, p_mute=0.05, p_rep=0.3):
         """Perform mutation and replacement operations."""
-        from sgapde.pde import evaluate_mse
+        from .pde import evaluate_mse
         
         new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
         sorted_indices = np.argsort(new_mse)

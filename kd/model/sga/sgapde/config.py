@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn as nn
+import os
 
 
 class Net(nn.Module):
@@ -83,46 +84,51 @@ class SolverConfig:
         # Load problem-specific configuration
         self._load_problem_config()
         
+    def _find_data_file(self, filename):
+        # 1. 当前目录下的 ./data/
+        local_path = os.path.join(os.path.dirname(__file__), "data", filename)
+        if os.path.exists(local_path):
+            return local_path
+        # 2. 工程根目录下的 kd/dataset/data/
+        proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+        kd_data_path = os.path.join(proj_root, "kd", "dataset", "data", filename)
+        if os.path.exists(kd_data_path):
+            return kd_data_path
+        # 3. 直接用 filename（支持绝对路径）
+        if os.path.exists(filename):
+            return filename
+        raise FileNotFoundError(f"Cannot find data file: {filename}")
+
     def _load_problem_config(self):
         """Load problem-specific data and equations."""
         if self.problem_name == 'chafee-infante':
-            # Load data
-            self.u = np.load("./data/chafee_infante_CI.npy")
-            self.x = np.load("./data/chafee_infante_x.npy")
-            self.t = np.load("./data/chafee_infante_t.npy")
-            
-            # Define PDE equations for validation
+            self.u = np.load(self._find_data_file("chafee_infante_CI.npy"))
+            self.x = np.load(self._find_data_file("chafee_infante_x.npy"))
+            self.t = np.load(self._find_data_file("chafee_infante_t.npy"))
             self.right_side = 'right_side = - 1.0008*u + 1.0004*u**3'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = uxx_origin-u_origin+u_origin**3'
             self.left_side_origin = 'left_side_origin = ut_origin'
-            
         elif self.problem_name == 'burgers':
-            # Burgers equation: ut = -u*ux + 0.1*uxx
             import scipy.io as scio
-            data = scio.loadmat('./data/burgers.mat')
+            data = scio.loadmat(self._find_data_file("burgers.mat"))
             self.u = data.get("usol")
             self.x = np.squeeze(data.get("x"))
             self.t = np.squeeze(data.get("t").reshape(1, 201))
-            
             self.right_side = 'right_side = -u*ux+0.1*uxx'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -1*u_origin*ux_origin+0.1*uxx_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
-            
         elif self.problem_name == 'kdv':
-            # KdV equation: ut = -0.0025*uxxx - u*ux
             import scipy.io as scio
-            data = scio.loadmat('./data/KdV.mat')
+            data = scio.loadmat(self._find_data_file("KdV.mat"))
             self.u = data.get("uu")
             self.x = np.squeeze(data.get("x"))
             self.t = np.squeeze(data.get("tt").reshape(1, 201))
-            
             self.right_side = 'right_side = -0.0025*uxxx-u*ux'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-u_origin*ux_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
-            
         else:
             raise ValueError(f"Unknown problem: {self.problem_name}")
             
