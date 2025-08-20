@@ -9,7 +9,7 @@ from kd.model.kd_sga import KD_SGA
 
 # 1. 创建并配置参数
 # 所有在 __init__ 中定义的参数都可以在这里设置
-model = KD_SGA(sga_run=3, depth=3, seed=42) 
+model = KD_SGA(sga_run=100, depth=3, seed=42) 
 
 # 2. 加入数据（当前通过 problem_name）并训练
 model.fit(problem_name='chafee-infante')

@@ -7,7 +7,11 @@ import copy
 import random
 import warnings
 
+from .pde import evaluate_mse
+
 warnings.filterwarnings('ignore')
+
+from kd.utils.debug_utils import profile, print_obj_profile
 
 class SGAPDE_Solver:
     """Main solver class for SGA-PDE discovery."""
@@ -127,6 +131,7 @@ class SGA:
             self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
         self.mses, self.eqs = self.mses[0:num], self.eqs[0:num]
     
+    @profile
     def run(self, gen=100):
         """
         Run the genetic algorithm for specified generations.
@@ -148,6 +153,9 @@ class SGA:
             print('{} generation repeat cross over {} times and mutation {} times'.format(
                 i, self.repeat_cross, self.repeat_change))
             self.repeat_cross, self.repeat_change = 0, 0
+
+            # DEBUG INFO: 在每一代结束时，打印出内存中对象数量的增长情况
+            print_obj_profile()
         
         return self.the_best()
     
@@ -156,9 +164,9 @@ class SGA:
         argmin = np.argmin(self.mses)
         return self.eqs[argmin], self.mses[argmin]
     
+    @profile
     def cross_over(self, percentage=0.5):
         """Perform crossover operation on the population."""
-        from .pde import evaluate_mse
         
         def cross_individual(pde1, pde2):
             new_pde1, new_pde2 = copy.deepcopy(pde1), copy.deepcopy(pde2)
@@ -200,16 +208,24 @@ class SGA:
                 self.mses.append(b_err)
                 self.eqs.append(new_b)
         
-        new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        sorted_indices = np.argsort(new_mse)[0:self.num]
-        for i, ix in enumerate(sorted_indices):
-            self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
+        # new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
+        # sorted_indices = np.argsort(new_mse)[0:self.num]
+        # for i, ix in enumerate(sorted_indices):
+        #     self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
+
+        # 新的更高效的筛选方式
+        sorted_indices = np.argsort(self.mses)
+        self.eqs = [self.eqs[i] for i in sorted_indices[:self.num]]
+        self.mses = [self.mses[i] for i in sorted_indices[:self.num]]
     
+    @profile
     def change(self, p_mute=0.05, p_rep=0.3):
         """Perform mutation and replacement operations."""
-        from .pde import evaluate_mse
         
-        new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
+        # new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
+        new_eqs = self.eqs.copy() # 新：eqs列表本身是新的，但内部的PDE对象是引用
+        new_mse = self.mses.copy()
+
         sorted_indices = np.argsort(new_mse)
         for i, ix in enumerate(sorted_indices):
             self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
@@ -233,7 +249,12 @@ class SGA:
                 self.mses.append(a_err)
                 self.eqs.append(new_eqs[i])
         
-        new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        sorted_indices = np.argsort(new_mse)[0:self.num]
-        for i, ix in enumerate(sorted_indices):
-            self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
+        # new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
+        # sorted_indices = np.argsort(new_mse)[0:self.num]
+        # for i, ix in enumerate(sorted_indices):
+        #     self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
+
+        # 新的更高效的筛选方式:
+        sorted_indices = np.argsort(self.mses)
+        self.eqs = [self.eqs[i] for i in sorted_indices[:self.num]]
+        self.mses = [self.mses[i] for i in sorted_indices[:self.num]]

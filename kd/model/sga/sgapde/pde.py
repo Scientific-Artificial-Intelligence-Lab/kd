@@ -8,6 +8,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+
 class PDE:
     def __init__(self, context, depth, max_width, p_var):
         self.context = context
@@ -60,7 +61,7 @@ class PDE:
                 name += elements[i-context.num_default].inorder # element是SGA生成的候选集
         return name
 
-
+@profile
 def evaluate_mse(a_pde, context, is_term=False):
     if is_term:
         terms = a_pde
@@ -118,16 +119,19 @@ def evaluate_mse(a_pde, context, is_term=False):
                     else:
                         NotImplementedError()
 
+
         if not any(tree_list[0][0].cache.reshape(-1)):  # 如果全是0，无法收敛且无意义
             delete_ix.append(ix)
             tree_list[0][0].cache = tree_list[0][0].var  # 重置缓冲池
             # print('0')
             # pdb.set_trace()
+
         else:
             terms_values[:, ix:ix+1] = tree_list[0][0].cache.reshape(-1, 1)  # 把归并起来的该term记录下来
             tree_list[0][0].cache = tree_list[0][0].var  # 重置缓冲池
             # print('not 0')
             # pdb.set_trace()
+
 
     move = 0
     for ixx in delete_ix:

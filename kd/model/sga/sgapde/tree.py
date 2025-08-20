@@ -1,6 +1,8 @@
 import copy
 import numpy as np
 
+from kd.utils.debug_utils import profile
+
 class Node:
     """
         1. depth: 节点深度
@@ -14,6 +16,7 @@ class Node:
         9. status: 初始化为child_num，用于记录遍历状态
         10. full: 完整信息，以OP或VAR形式表示
     """
+    @profile
     def __init__(self, depth, idx, parent_idx, name, full, child_num, child_st, var):
         self.depth = depth
         self.idx = idx
@@ -25,7 +28,7 @@ class Node:
         self.status = self.child_num
         self.var = var
         self.full = full
-        self.cache = copy.deepcopy(var)
+        self.cache = copy.deepcopy(var) # self.cache = var
 
     def __str__(self): # 提供节点详情
         return self.name

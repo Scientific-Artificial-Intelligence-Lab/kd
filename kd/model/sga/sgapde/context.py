@@ -133,8 +133,9 @@ class ProblemContext:
         ], dtype=object)
         
         self.den = np.array([['x', 0, self.x]], dtype=object)
-        
-    def _cubic(self, inputs):
+    
+    @staticmethod # 最重要的修复! 一定要加这个... 不然第一个参数是 self 的话会爆炸 :(
+    def _cubic(inputs):
         """Cubic function."""
         return np.power(inputs, 3)
         
