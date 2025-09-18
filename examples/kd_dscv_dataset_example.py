@@ -21,9 +21,6 @@ model = KD_DSCV(
     unary_operators=['n2'],
 )
 
-# 3. 新接口：直接使用 PDEDataset
-model.import_dataset(pde_dataset)
-
-# 4. 运行少量迭代演示（真实任务建议调高 n_iterations）
-result = model.train(n_epochs=10, verbose=False)
+# 3. 新接口：直接使用 PDEDataset 并运行少量迭代（真实任务建议调高 n_iterations）
+result = model.fit_from_dataset(pde_dataset, n_epochs=10, verbose=False)
 print(f"Current best expression: {result['expression']}")

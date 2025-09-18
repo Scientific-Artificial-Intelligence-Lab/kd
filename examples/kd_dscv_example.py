@@ -11,6 +11,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module='numpy.*')
 warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow.*')
+from kd.dataset import load_pde
 from kd.model import KD_DSCV
 from kd.viz.dscv_viz import *
 from kd.viz.discover_eq2latex import discover_program_to_latex 
@@ -30,8 +31,14 @@ model = KD_DSCV(
 
 np.random.seed(42)
 
-model.import_inner_data(dataset='Burgers', data_type='regular')
 
+# 1. 通过统一入口加载数据集
+pde_dataset = load_pde('burgers')
+
+# 2. 使用新的 dataset 接口导入数据（仍保留旧入口以兼容原有脚本）
+model.import_dataset(pde_dataset)
+
+# 3. 训练模型
 step_output = model.train(n_epochs=11)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 

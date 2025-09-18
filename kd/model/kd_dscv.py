@@ -174,6 +174,7 @@ class KD_DSCV(BaseRL):
 
         adapter = DSCVRegularAdapter(dataset, sym_true=sym_true, n_input_dim=n_input_dim)
         self.data_class = adapter
+        self.dataset_ = dataset
 
         resolved_name = dataset_name or getattr(dataset, 'legacy_name', None) or \
             getattr(dataset, 'registry_name', None) or getattr(dataset, 'equation_name', None) or "custom_dataset"
@@ -186,6 +187,27 @@ class KD_DSCV(BaseRL):
 
         self.setup()
         return self
+
+    def fit_from_dataset(
+        self,
+        dataset,
+        *,
+        n_epochs=100,
+        verbose=True,
+        sym_true=None,
+        n_input_dim=None,
+        dataset_name=None,
+    ):
+        """High-level wrapper: import a :class:`~kd.dataset.PDEDataset` and train."""
+
+        self.import_dataset(
+            dataset,
+            sym_true=sym_true,
+            n_input_dim=n_input_dim,
+            dataset_name=dataset_name,
+        )
+
+        return self.train(n_epochs=n_epochs, verbose=verbose)
 
     def make_outter_data(self, x, y, domains, data_type):
         """Create data handler for external data.
@@ -402,6 +424,10 @@ class KD_DSCV_SPR(KD_DSCV):
         sample_ratio=0.1,
         colloc_num=None,
         random_state=None,
+        noise_level=None,
+        data_ratio=None,
+        spline_sample=False,
+        cut_quantile=None,
         dataset_name=None,
     ):
         """Import sparse/PINN data via :class:`~kd.dataset.PDEDataset`.
@@ -426,8 +452,13 @@ class KD_DSCV_SPR(KD_DSCV):
             sample_ratio=sample_ratio,
             colloc_num=colloc_num,
             random_state=random_state,
+            noise_level=noise_level or 0.0,
+            data_ratio=data_ratio,
+            spline_sample=spline_sample,
+            cut_quantile=cut_quantile,
         )
         self.data_class = adapter
+        self.dataset_ = dataset
 
         resolved_name = dataset_name or getattr(dataset, 'legacy_name', None) or \
             getattr(dataset, 'registry_name', None) or getattr(dataset, 'equation_name', None) or "custom_dataset"

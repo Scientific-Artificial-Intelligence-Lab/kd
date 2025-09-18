@@ -16,16 +16,12 @@ from kd.model import KD_DSCV_SPR
 from kd.viz.discover_eq2latex import discover_program_to_latex 
 from kd.viz.equation_renderer import render_latex_to_image
 from kd.viz.dscv_viz import *
-from kd.dataset import load_burgers_equation, load_pde_dataset
+from kd.dataset import load_pde
 
 np.random.seed(42)
 
-burgers_data = load_burgers_equation()
-
-# burgers_data = load_pde_dataset(filename="KdV_equation.mat", x_key='x', t_key='tt', u_key='uu')  
-
-x, y = burgers_data.sample(n_samples=0.1)
-lb, ub = burgers_data.mesh_bounds()
+# 1. 通过统一入口加载 Burgers 数据集
+pde_dataset = load_pde('burgers')
 
 # 实例化模型。此处定义的算子必须与PyTorch兼容（通常以'_t'结尾）
 # Instantiate the model. The operators defined here must be compatible with PyTorch (usually ending with '_t').
@@ -35,8 +31,15 @@ model = KD_DSCV_SPR(
     unary_operators = ['n2_t'],
 )
 
+# 2. 使用统一入口构建稀疏数据并运行训练
+model.import_dataset(
+    pde_dataset,
+    sample_ratio=0.1,
+    colloc_num=512,
+    random_state=42,
+)
 
-step_output = model.fit(x, y, [lb, ub], n_epochs=10)
+step_output = model.train(n_epochs=10, verbose=False)
 
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 

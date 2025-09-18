@@ -34,6 +34,12 @@ kd/
 - **dataset/**  
   内置 Burgers、KdV 等典型PDE数据集加载器，支持 `.npy`、`.mat` 格式和自定义数据导入，便于实验复现和算法对比。
 
+#### 数据加载与注意事项
+- 推荐使用 `kd.dataset.load_pde(name)` 统一加载数据集；返回值是 `PDEDataset` 对象，可直接传给 `KD_SGA.fit_dataset()`、`KD_DSCV.import_dataset()`、`KD_DSCV_SPR.import_dataset()` 等新接口。
+- 稀疏/Mode2 场景（如 `KD_DSCV_SPR`）请显式传入 `random_state`，确保抽样与 collocation 点可复现。
+- `import_dataset()` 会立即调用内部 `setup()` 并重建控制器、先验等组件。若需要调整超参数，请在调用 `import_dataset()` **之后** 进行设置，避免改动被覆盖。
+- 为兼容旧版 DISCOVER，框架仍会在找不到新目录文件时回退到 legacy 路径，并打印 `[DSCV data]` 调试提示；迁移数据时可借助此信息确认依赖情况。
+
 - **model/**  
   包含 KD_DSCV（基于强化学习）、KD_DLGA（基于遗传算法）、KD_DSCV_Pinn（结合PINN）等主力模型，均支持符号回归与PDE发现。核心算法实现位于 `discover/` 子目录，支持灵活的算子库扩展和表达式搜索策略定制。
 
