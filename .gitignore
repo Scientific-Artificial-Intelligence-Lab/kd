@@ -201,3 +201,8 @@ result/
 .idea/
 
 examples/log/
+
+
+workflow/
+
+agent.md

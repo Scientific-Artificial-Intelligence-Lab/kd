@@ -551,9 +551,13 @@ def load_pde_dataset(
         pde_data = load_mat_file(file_path)
 
         # 3. 使用用户指定的键名，从加载的字典中提取数据
-        x_data = pde_data[x_key]
-        t_data = pde_data[t_key]
-        u_data = pde_data[u_key]
+        x_data = np.asarray(pde_data[x_key], dtype=float).flatten()
+        t_data = np.asarray(pde_data[t_key], dtype=float).flatten()
+        u_data = np.asarray(pde_data[u_key])
+
+        # 确保 u_data 的形状与 (len(x), len(t)) 对齐
+        if u_data.shape == (len(t_data), len(x_data)):
+            u_data = u_data.T
 
         # 4. 将所有信息送入 PDEDataset 进行标准化封装
         dataset = PDEDataset(

@@ -135,7 +135,7 @@ class KD_DSCV(BaseRL):
         
     def import_inner_data(self, dataset, data_type='regular'):
         """Import data from predefined datasets.
-        
+
         Args:
             dataset (str): Name of dataset.
             data_type (str): Type of data ('regular' or 'sparse').
@@ -150,6 +150,42 @@ class KD_DSCV(BaseRL):
                                     "discover_{}_{}.csv".format(dataset, self.seed)
                 )            
         self.setup()
+
+    def import_dataset(self, dataset, *, sym_true=None, n_input_dim=None, dataset_name=None):
+        """Import data through a :class:`~kd.dataset.PDEDataset` instance.
+
+        This preserves向后兼容 by keeping :meth:`import_inner_data` untouched, while
+        allowing外部调用者通过统一的 ``load_pde`` 管道提供数据。
+
+        Args:
+            dataset: PDEDataset 对象。
+            sym_true: 可选地覆盖真实方程符号表达式。
+            n_input_dim: 可选地指定空间维度数。
+
+        Returns:
+            KD_DSCV: 便于链式调用。
+        """
+
+        from kd.dataset import PDEDataset  # 延迟导入以避免循环依赖
+        from .discover.adapter import DSCVRegularAdapter
+
+        if not isinstance(dataset, PDEDataset):
+            raise TypeError("dataset must be a PDEDataset instance")
+
+        adapter = DSCVRegularAdapter(dataset, sym_true=sym_true, n_input_dim=n_input_dim)
+        self.data_class = adapter
+
+        resolved_name = dataset_name or getattr(dataset, 'legacy_name', None) or \
+            getattr(dataset, 'registry_name', None) or getattr(dataset, 'equation_name', None) or "custom_dataset"
+        self.dataset = resolved_name
+        if self.out_path is not None:
+            self.out_path = os.path.join(
+                self.out_path,
+                f"discover_{resolved_name}_{self.seed}.csv"
+            )
+
+        self.setup()
+        return self
 
     def make_outter_data(self, x, y, domains, data_type):
         """Create data handler for external data.
@@ -350,13 +386,60 @@ class KD_DSCV_SPR(KD_DSCV):
 
     def set_config(self, config=None):
         """Set model configuration.
-        
+
         Args:
             config: Configuration dictionary or path.
         """
         super().set_config(config)
         self.config_pinn = self.config["pinn"]
         self.config_task['task_type'] = 'pde_pinn'
+
+    def import_dataset(
+        self,
+        dataset,
+        *,
+        sample=None,
+        sample_ratio=0.1,
+        colloc_num=None,
+        random_state=None,
+        dataset_name=None,
+    ):
+        """Import sparse/PINN data via :class:`~kd.dataset.PDEDataset`.
+
+        Args:
+            dataset: PDEDataset 实例。
+            sample: 抽样点数量（优先级高于 ``sample_ratio``）。
+            sample_ratio: 抽样比例 (0,1]，默认 0.1。
+            colloc_num: collocation 采样数量，留空则保持默认。
+            random_state: 随机种子，保证抽样可复现。
+        """
+
+        from kd.dataset import PDEDataset
+        from .discover.adapter import DSCVSparseAdapter
+
+        if not isinstance(dataset, PDEDataset):
+            raise TypeError("dataset must be a PDEDataset instance")
+
+        adapter = DSCVSparseAdapter(
+            dataset,
+            sample=sample,
+            sample_ratio=sample_ratio,
+            colloc_num=colloc_num,
+            random_state=random_state,
+        )
+        self.data_class = adapter
+
+        resolved_name = dataset_name or getattr(dataset, 'legacy_name', None) or \
+            getattr(dataset, 'registry_name', None) or getattr(dataset, 'equation_name', None) or "custom_dataset"
+        self.dataset = resolved_name
+        if self.out_path is not None:
+            self.out_path = os.path.join(
+                self.out_path,
+                f"discover_{resolved_name}_{self.seed}.csv"
+            )
+
+        self.setup()
+        return self
 
     def make_pinn_model(self):
         """Create PINN model.

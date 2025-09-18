@@ -1,6 +1,7 @@
 # kd/model/kd_sga.py
 
-import numpy as np
+from typing import Any, Dict, Optional, Type
+
 from ..base import BaseEstimator
 
 from .sga.sgapde.config import SolverConfig
@@ -11,7 +12,7 @@ from .sga.sgapde import visualizer as sga_visualizer
 
 class KD_SGA(BaseEstimator):
     """
-    一个使用符号遗传算法（SGA）发现偏微分方程（PDE）的模型。
+    一个使用符号遗传算法 SGA 发现偏微分方程 PDE 的模型。
     这是对 sgapde 库的一个封装，以适应 kd 框架。
 
     遵循 scikit-learn API 风格，通过 __init__ 设置参数，通过 fit 执行计算。
@@ -84,6 +85,75 @@ class KD_SGA(BaseEstimator):
         self.context_ = context # 保存完整的上下文，以备可视化使用
         self.config_ = config   # 保存此次运行的配置
         
+        print("\n--- SGA PDE Discovery Finished ---")
+        print(f"Best PDE Found: {self.best_pde_}")
+        print(f"AIC Score: {self.best_score_}")
+
+        return self
+
+    def fit_dataset(
+        self,
+        dataset: Any,
+        *,
+        problem_name: Optional[str] = None,
+        context_cls: Optional[Type] = None,
+        solver_cls: Optional[Type] = None,
+    ):
+        """
+        新增接口：直接使用 :class:`~kd.dataset.PDEDataset` 执行 SGA.
+
+        Args:
+            dataset: 由 ``kd.dataset.load_pde`` 返回的 PDEDataset 对象。
+            problem_name: 可选，覆盖用于 SolverConfig 的问题名称。
+            context_cls: 可选，注入自定义 ProblemContext 子类（测试用）。
+            solver_cls: 可选，注入自定义 SGAPDE_Solver 子类（测试用）。
+        """
+        from kd.dataset import PDEDataset  # 避免模块级循环依赖
+        from .sga.adapter import SGADataAdapter
+
+        if not isinstance(dataset, PDEDataset):
+            raise TypeError("dataset 必须是 PDEDataset 实例")
+
+        adapter = SGADataAdapter(dataset)
+        solver_kwargs: Dict[str, Any] = adapter.to_solver_kwargs()
+
+        inferred_name = solver_kwargs.pop("problem_name", None)
+        problem_label = problem_name or inferred_name or "custom_dataset"
+
+        actual_context_cls = context_cls or ProblemContext
+        actual_solver_cls = solver_cls or SGAPDE_Solver
+
+        print(
+            f"--- Starting SGA PDE Discovery for problem: {problem_label} (dataset mode) ---"
+        )
+
+        config = SolverConfig(
+            problem_name=problem_label,
+            sga_run=self.sga_run,
+            num=self.num,
+            depth=self.depth,
+            width=self.width,
+            p_var=self.p_var,
+            p_mute=self.p_mute,
+            p_cro=self.p_cro,
+            seed=self.seed,
+            use_autograd=self.use_autograd,
+            max_epoch=self.max_epoch,
+            use_metadata=self.use_metadata,
+            delete_edges=self.delete_edges,
+            **solver_kwargs,
+        )
+
+        context = actual_context_cls(config)
+        solver = actual_solver_cls(config)
+        best_pde, best_score = solver.run(context)
+
+        self.best_pde_ = best_pde
+        self.best_score_ = best_score
+        self.context_ = context
+        self.config_ = config
+        self.dataset_ = dataset
+
         print("\n--- SGA PDE Discovery Finished ---")
         print(f"Best PDE Found: {self.best_pde_}")
         print(f"AIC Score: {self.best_score_}")
