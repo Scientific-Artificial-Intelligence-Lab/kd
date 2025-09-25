@@ -54,3 +54,10 @@ def test_load_pde_fisher_mat_file():
     dataset = load_pde('fisher')
     assert dataset.usol.shape == (len(dataset.x), len(dataset.t))
     assert get_dataset_sym_true('fisher') is not None
+
+
+def test_dataset_aliases_and_names():
+    dataset = load_pde('burgers')
+    assert getattr(dataset, 'registry_name') == 'burgers'
+    assert dataset.aliases.get('legacy') == 'Burgers2'
+    assert dataset.legacy_name == 'Burgers2'

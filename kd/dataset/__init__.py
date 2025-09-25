@@ -14,13 +14,15 @@ from importlib import resources
 
 
 def _tag_dataset(dataset: Optional[PDEDataset], name: str) -> Optional[PDEDataset]:
-    """Attach registry metadata (registry_name / legacy_name) to dataset instances."""
+    """Attach registry metadata (registry_name / aliases) to dataset instances."""
     if dataset is None:
         return None
 
     setattr(dataset, 'registry_name', name)
     info = PDE_REGISTRY.get(name, {})
-    legacy_name = info.get('legacy_name', getattr(dataset, 'legacy_name', None))
+    aliases = info.get('aliases', {}) or {}
+    setattr(dataset, 'aliases', aliases)
+    legacy_name = aliases.get('legacy', getattr(dataset, 'legacy_name', None))
     if legacy_name is None:
         legacy_name = name
     setattr(dataset, 'legacy_name', legacy_name)
@@ -37,13 +39,6 @@ def load_pde(name: str, **kwargs) -> PDEDataset:
     Returns:
         PDEDataset对象
     """
-    # 检查是否为内置数据集（已有专用加载函数的）
-    if name == 'kdv':
-        return _tag_dataset(load_kdv_equation(), name)
-    elif name == 'burgers':
-        return _tag_dataset(load_burgers_equation(), name)
-    
-    # 使用注册表加载
     info = get_dataset_info(name)
     
     # 处理不同文件格式

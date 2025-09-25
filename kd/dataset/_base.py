@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 import matplotlib.pyplot as plt
+import warnings
 from typing import Any, Dict, Union, Optional, Tuple
 from pathlib import Path
 from importlib import resources
@@ -470,6 +471,7 @@ class PDEDataset(MetaData):
         
         
 def load_burgers_equation():    
+    warnings.warn("load_burgers_equation() 已弃用，请改用 load_pde('burgers')", DeprecationWarning, stacklevel=2)
     descr = DatasetInfo(
         description = """
         Dataset for high-viscosity Burgers equation 
@@ -491,6 +493,7 @@ def load_burgers_equation():
     )
     
 def load_kdv_equation():
+    warnings.warn("load_kdv_equation() 已弃用，请改用 load_pde('kdv')", DeprecationWarning, stacklevel=2)
     descr = DatasetInfo(
         description = """
         Dataset for Korteweg-De Vries (KdV) equation with sin initial condition, actually a standardized form of Kdv_equation dataset
