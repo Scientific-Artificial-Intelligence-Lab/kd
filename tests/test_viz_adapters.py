@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from kd.viz import ResidualPlotData
+from kd.viz import FieldComparisonData, OptimizationHistoryData, ResidualPlotData
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
 from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter
@@ -103,6 +103,55 @@ def test_residual_contract(tmp_path):
     assert np.allclose(residual.actual - residual.predicted, residual.residuals)
     summary = result.metadata['summary']
     assert summary['count'] == actual.size
+
+
+def test_optimization_contract(tmp_path):
+    register_dlga()
+    model = StubDLGA()
+
+    request = viz_core.VizRequest(
+        kind='optimization',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'dlga' / 'optimization_analysis.png'
+    assert path.exists()
+    data = result.metadata['optimization']
+    assert isinstance(data, OptimizationHistoryData)
+    assert data.steps.shape == data.objective.shape
+    assert result.metadata['summary']['final_objective'] == pytest.approx(float(data.objective[-1]))
+
+
+def test_field_comparison_contract(tmp_path):
+    register_dlga()
+    model = StubDLGA()
+
+    x = np.linspace(0, 1, 4)
+    t = np.linspace(0, 1, 3)
+    true_field = np.arange(12).reshape(4, 3)
+    pred_field = true_field * 0.9
+
+    request = viz_core.VizRequest(
+        kind='field_comparison',
+        target=model,
+        options={
+            'output_dir': tmp_path,
+            'x_coords': x,
+            't_coords': t,
+            'true_field': true_field,
+            'predicted_field': pred_field,
+        },
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'dlga' / 'field_comparison.png'
+    assert path.exists()
+    data = result.metadata['field_comparison']
+    assert isinstance(data, FieldComparisonData)
+    assert data.true_field.shape == (x.size, t.size)
+    assert np.allclose(data.residual_field, true_field - pred_field)
 
 
 def test_dscv_placeholder_warning():

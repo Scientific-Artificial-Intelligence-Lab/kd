@@ -8,7 +8,7 @@ from typing import Dict, Iterable, Optional, Tuple
 import numpy as np
 
 from . import dlga_viz
-from ._contracts import ResidualPlotData
+from ._contracts import FieldComparisonData, OptimizationHistoryData, ResidualPlotData
 from .core import VizResult
 from .dlga_eq2latex import dlga_eq2latex
 from .equation_renderer import render_latex_to_image
@@ -28,6 +28,8 @@ class DLGAVizAdapter:
         'search_evolution',
         'equation',
         'residual',
+        'optimization',
+        'field_comparison',
     }
 
     def __init__(self, *, subdir: str = 'dlga') -> None:
@@ -42,6 +44,8 @@ class DLGAVizAdapter:
             'search_evolution': self._search_evolution,
             'equation': self._equation,
             'residual': self._residual,
+            'optimization': self._optimization,
+            'field_comparison': self._field_comparison,
         }.get(kind)
         if handler is None:
             return VizResult(
@@ -81,6 +85,51 @@ class DLGAVizAdapter:
             paths=[path],
             metadata={'generations': len(history)},
         )
+
+    def _optimization(self, model, ctx) -> VizResult:
+        data = self._build_optimization_data(model)
+        if data is None:
+            return VizResult(intent='optimization', warnings=['No optimization history available.'])
+
+        fig = self._plot_optimization(data, ctx)
+        _, path = self._resolve_output(ctx, 'optimization_analysis.png')
+        fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        try:  # pragma: no cover - defensive cleanup
+            import matplotlib.pyplot as plt
+            plt.close(fig)
+        except Exception:
+            pass
+
+        metadata = {
+            'optimization': data,
+            'summary': {
+                'initial_objective': float(data.objective[0]),
+                'final_objective': float(data.objective[-1]),
+                'best_objective': float(np.min(data.objective)),
+            },
+        }
+        return VizResult(intent='optimization', paths=[path], metadata=metadata)
+
+    def _field_comparison(self, model, ctx) -> VizResult:
+        data = self._build_field_comparison_data(ctx)
+        if data is None:
+            return VizResult(intent='field_comparison', warnings=['Field comparison data is required.'])
+
+        _, path = self._resolve_output(ctx, 'field_comparison.png')
+        dlga_viz.plot_pde_comparison(
+            data.x_coords,
+            data.t_coords,
+            data.true_field,
+            data.predicted_field,
+            output_dir=str(path.parent),
+        )
+        produced = path.parent / 'pde_comparison.png'
+        if produced.exists() and not path.exists():
+            produced.rename(path)
+        metadata = {
+            'field_comparison': data,
+        }
+        return VizResult(intent='field_comparison', paths=[path], metadata=metadata)
 
     def _equation(self, model, ctx) -> VizResult:
         chrom = getattr(model, 'Chrom', None)
@@ -237,6 +286,134 @@ class DLGAVizAdapter:
         ax2.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
 
         return fig
+
+    def _build_optimization_data(self, model) -> Optional[OptimizationHistoryData]:
+        history = getattr(model, 'evolution_history', None)
+        if not history:
+            return None
+
+        steps = np.arange(len(history))
+        objective = []
+        complexity = []
+        population = []
+        unique = []
+
+        for entry in history:
+            value = entry.get('fitness')
+            if value is None:
+                value = entry.get('objective')
+            if value is None:
+                return None
+            objective.append(value)
+            complexity.append(entry.get('complexity'))
+            population.append(entry.get('population_size'))
+            unique.append(entry.get('unique_modules'))
+
+        def sanitize(values):
+            if any(v is None for v in values):
+                return None
+            return np.asarray(values)
+
+        return OptimizationHistoryData(
+            steps=steps,
+            objective=np.asarray(objective),
+            complexity=sanitize(complexity),
+            population_size=sanitize(population),
+            unique_modules=sanitize(unique),
+        )
+
+    def _plot_optimization(self, data: OptimizationHistoryData, ctx):
+        import matplotlib.pyplot as plt
+
+        fig, axes = plt.subplots(1, 2, figsize=ctx.options.get('figsize', (12, 5)))
+        ax_left, ax_right = axes
+
+        style_kwargs = {
+            'marker': 'o',
+            'markersize': 3,
+            'alpha': 0.7,
+        }
+
+        pop = data.population_size
+        unique = data.unique_modules
+        if pop is not None or unique is not None:
+            twin = ax_left.twinx()
+            lines = []
+            labels = []
+            if pop is not None:
+                l1 = ax_left.plot(
+                    data.steps,
+                    pop,
+                    color='#1f77b4',
+                    label='Population Size',
+                    **style_kwargs,
+                )
+                lines.extend(l1)
+                labels.append('Population Size')
+                ax_left.set_ylabel('Population Size', color='#1f77b4')
+            if unique is not None:
+                l2 = twin.plot(
+                    data.steps,
+                    unique,
+                    color='#ff7f0e',
+                    label='Unique Modules',
+                    **style_kwargs,
+                )
+                lines.extend(l2)
+                labels.append('Unique Modules')
+                twin.set_ylabel('Unique Modules', color='#ff7f0e')
+            ax_left.legend(lines, labels, loc='upper right')
+        else:
+            ax_left.plot(data.steps, data.objective, color='#1f77b4', **style_kwargs)
+
+        ax_left.set_xlabel('Step')
+        ax_left.set_title('Optimization Diversity')
+        ax_left.grid(True, linestyle='--', alpha=0.5)
+
+        ax_right.plot(
+            data.steps,
+            data.objective,
+            color='#2ca02c',
+            linewidth=2,
+            marker='o',
+            markersize=3,
+            alpha=0.8,
+        )
+        ax_right.set_xlabel('Step')
+        ax_right.set_ylabel('Objective')
+        ax_right.set_title('Objective Evolution')
+        ax_right.grid(True, linestyle='--', alpha=0.5)
+
+        fig.tight_layout()
+        return fig
+
+    def _build_field_comparison_data(self, ctx) -> Optional[FieldComparisonData]:
+        x_coords = ctx.options.get('x_coords')
+        t_coords = ctx.options.get('t_coords')
+        true_field = ctx.options.get('true_field')
+        if true_field is None:
+            true_field = ctx.options.get('u_true')
+        predicted_field = ctx.options.get('predicted_field')
+        if predicted_field is None:
+            predicted_field = ctx.options.get('u_pred')
+
+        if x_coords is None or t_coords is None or true_field is None or predicted_field is None:
+            return None
+
+        residual_field = ctx.options.get('residual_field')
+        metadata: Dict[str, Any] = {
+            'title': ctx.options.get('title', 'Field Comparison'),
+            'true_label': ctx.options.get('true_label', 'True Field'),
+            'pred_label': ctx.options.get('pred_label', 'Predicted Field'),
+        }
+        return FieldComparisonData(
+            x_coords=x_coords,
+            t_coords=t_coords,
+            true_field=true_field,
+            predicted_field=predicted_field,
+            residual_field=residual_field,
+            metadata=metadata,
+        )
 
 
 class DSCVVizAdapter:

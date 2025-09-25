@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from . import registry
-from ._contracts import ResidualPlotData
+from ._contracts import FieldComparisonData, OptimizationHistoryData, ResidualPlotData
 from ._helpers import resolve_output_path
 from ._style import VizConfig, configure as configure_style, get_config, style_context
 
@@ -91,6 +91,8 @@ def list_capabilities(target: Any) -> Iterable[str]:
 
 __all__ = [
     'ResidualPlotData',
+    'OptimizationHistoryData',
+    'FieldComparisonData',
     'VizRequest',
     'VizResult',
     'VizContext',

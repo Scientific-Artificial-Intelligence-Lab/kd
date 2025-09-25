@@ -19,6 +19,10 @@ def plot_search_evolution(model: Any, *, show_info: bool = True, **options: Any)
     return _dispatch('search_evolution', model, show_info=show_info, options=options)
 
 
+def plot_optimization(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    return _dispatch('optimization', model, show_info=show_info, options=options)
+
+
 def render_equation(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
     return _dispatch('equation', model, show_info=show_info, options=options)
 
@@ -38,6 +42,27 @@ def plot_residuals(
     if coordinates is not None:
         payload['coordinates'] = coordinates
     return _dispatch('residual', model, show_info=show_info, options=payload)
+
+
+def plot_field_comparison(
+    model: Any,
+    *,
+    x_coords: Any,
+    t_coords: Any,
+    true_field: Any,
+    predicted_field: Any,
+    residual_field: Optional[Any] = None,
+    show_info: bool = True,
+    **options: Any,
+) -> VizResult:
+    payload = dict(options)
+    payload['x_coords'] = x_coords
+    payload['t_coords'] = t_coords
+    payload['true_field'] = true_field
+    payload['predicted_field'] = predicted_field
+    if residual_field is not None:
+        payload['residual_field'] = residual_field
+    return _dispatch('field_comparison', model, show_info=show_info, options=payload)
 
 
 def _dispatch(kind: str, model: Any, *, show_info: bool, options: Dict[str, Any]) -> VizResult:
@@ -65,6 +90,8 @@ __all__ = [
     'plot_training_curve',
     'plot_validation_curve',
     'plot_search_evolution',
+    'plot_optimization',
     'plot_residuals',
+    'plot_field_comparison',
     'render_equation',
 ]

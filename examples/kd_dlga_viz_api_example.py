@@ -20,6 +20,8 @@ from kd.model.kd_dlga import KD_DLGA
 from kd.viz import (
     configure,
     list_capabilities,
+    plot_field_comparison,
+    plot_optimization,
     plot_residuals,
     plot_search_evolution,
     plot_training_curve,
@@ -51,6 +53,8 @@ model.fit(X_train, y_train)
 # Prepare reusable predictions for diagnostics
 print("Generating predictions for diagnostics...")
 y_pred_train = model.predict(X_train).reshape(-1)
+X_full = kdv_data.mesh()
+u_pred_field = model.predict(X_full).reshape(kdv_data.get_size())
 
 
 # --- Unified viz façade configuration -------------------------------------
@@ -62,22 +66,43 @@ print("\nDLGA adapter capabilities:", ", ".join(sorted(caps)))
 
 
 # --- Visualizations via helper functions ----------------------------------
-plot_training_curve(model)
-plot_validation_curve(model)
-plot_search_evolution(model)
-render_equation(model, font_size=14)
-plot_residuals(
-    model,
-    actual=y_train.reshape(-1),
-    predicted=y_pred_train,
-    coordinates=X_train,
-    bins=40,
+def _maybe_print_result(name, result):
+    if result.warnings:
+        print(f"[{name}] warnings: {'; '.join(result.warnings)}")
+    else:
+        paths = ', '.join(str(path) for path in result.paths)
+        print(f"[{name}] saved to: {paths}")
+
+
+_maybe_print_result('training_curve', plot_training_curve(model))
+_maybe_print_result('validation_curve', plot_validation_curve(model))
+_maybe_print_result('search_evolution', plot_search_evolution(model))
+_maybe_print_result('optimization', plot_optimization(model))
+_maybe_print_result('equation', render_equation(model, font_size=14))
+_maybe_print_result(
+    'residuals',
+    plot_residuals(
+        model,
+        actual=y_train.reshape(-1),
+        predicted=y_pred_train,
+        coordinates=X_train,
+        bins=40,
+    ),
+)
+_maybe_print_result(
+    'field_comparison',
+    plot_field_comparison(
+        model,
+        x_coords=kdv_data.x,
+        t_coords=kdv_data.t,
+        true_field=kdv_data.usol,
+        predicted_field=u_pred_field,
+    ),
 )
 
 
 # --- Additional analyses (not yet unified) --------------------------------
-# TODO: Integrate optimization analysis / parity plots when façade support lands.
-# TODO: Add PDE field comparisons via unified façade after helper alignment.
+# TODO: Integrate derivative relationships / parity plots into façade when ready.
 
 # Legacy helper calls retained as guidance for future integration.
 # ---------------------------------------------------------------------------

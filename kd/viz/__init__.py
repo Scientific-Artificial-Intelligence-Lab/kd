@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from . import core as _core
 from .core import (
+    FieldComparisonData,
+    OptimizationHistoryData,
     ResidualPlotData,
     VizContext,
     VizRequest,
@@ -19,6 +21,8 @@ from .registry import (
     unregister_adapter,
 )
 from .api import (
+    plot_optimization,
+    plot_field_comparison,
     plot_residuals,
     plot_search_evolution,
     plot_training_curve,
@@ -49,6 +53,8 @@ from . import discover_eq2latex  # noqa: E402,F401
 
 __all__ = [
     'ResidualPlotData',
+    'OptimizationHistoryData',
+    'FieldComparisonData',
     'VizContext',
     'VizRequest',
     'VizResult',
@@ -62,6 +68,8 @@ __all__ = [
     'plot_training_curve',
     'plot_validation_curve',
     'plot_search_evolution',
+    'plot_optimization',
+    'plot_field_comparison',
     'plot_residuals',
     'render_equation',
     'DLGAVizAdapter',
