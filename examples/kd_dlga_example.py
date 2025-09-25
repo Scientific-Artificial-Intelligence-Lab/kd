@@ -6,14 +6,14 @@ sys.path.append(kd_main_dir)
 
 
 # --- 依赖导入 / Dependency Imports ---
-from kd.dataset import load_kdv_equation, load_pde_dataset
+from kd.dataset import load_pde, load_pde_dataset
 from kd.model.kd_dlga import KD_DLGA
 from kd.viz.dlga_viz import *
 from kd.viz.equation_renderer import render_latex_to_image
 
 
 # --- 数据加载 / Data Loading ---
-kdv_data = load_kdv_equation()
+kdv_data = load_pde('kdv')
 
 # 可以直接从.mat文件加载数据, 注意：x_key, t_key, u_key 需要根据.mat文件的实际结构来指定。
 # load data directly from a .mat file. Note: x_key, t_key, u_key must be specified according to the actual structure.

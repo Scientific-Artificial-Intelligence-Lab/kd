@@ -201,3 +201,14 @@ result/
 .idea/
 
 examples/log/
+
+
+workflow/
+
+agent.md
+
+
+
+notes/*
+tests/mode2_burgers.json
+tests/reports/

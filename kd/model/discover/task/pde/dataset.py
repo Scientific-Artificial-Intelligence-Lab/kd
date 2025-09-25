@@ -5,9 +5,11 @@ load noisy and sparse data for the PINN traing
 import numpy as np
 import torch
 import scipy
+from pathlib import Path
+from importlib import resources
 from pyDOE import lhs
-import  matplotlib.pyplot as plt
-from discover.task.pde.utils_noise import np2tensor,tensor2np,load_PI_data
+import matplotlib.pyplot as plt
+from discover.task.pde.utils_noise import np2tensor, tensor2np, load_PI_data
 
 class Dataset():
     def __init__(self,
@@ -82,6 +84,24 @@ class Dataset():
         
         return x_list, t_list
 
+
+def _resolve_file(filename: str, legacy_dir: str) -> Path:
+    """Resolve data file path with preference on the centralized dataset directory."""
+    try:
+        candidate = resources.files('kd.dataset.data') / filename
+        print(f"[DSCV data] Using centralized data: {candidate}", flush=True)
+        if candidate.exists():
+            return candidate
+        with resources.as_file(candidate) as tmp_path:
+            return Path(tmp_path)
+    except FileNotFoundError:
+        primary = Path(legacy_dir) / filename
+        if primary.exists():
+            print(f"[DSCV data] Fallback to legacy path: {primary}", flush=True)
+            return primary
+        return primary
+
+
 def load_1d_data(dataset,
                  noise_level,
                  data_ratio,
@@ -91,43 +111,43 @@ def load_1d_data(dataset,
                  ):
  
     if dataset == 'Burgers2':
-        data = scipy.io.loadmat('./dso/task/pde/data_new/burgers2.mat')
+        data = scipy.io.loadmat(_resolve_file('burgers2.mat', './dso/task/pde/data_new'))
         t = np.real(data['t'].flatten()[:,None])
         x = np.real(data['x'].flatten()[:,None])
         Exact = np.real(data['usol']).T  # t first
     elif dataset == 'KS':
-        data = scipy.io.loadmat('./dso/task/pde/data/kuramoto_sivishinky.mat') # course temporal grid 
+        data = scipy.io.loadmat(_resolve_file('kuramoto_sivishinky.mat', './dso/task/pde/data')) # course temporal grid 
         t = np.real(data['t'].flatten()[:,None])
         x = np.real(data['x'].flatten()[:,None])
         Exact = np.real(data['u']).T
         
     elif dataset == 'KS_sine': 
-        data = scipy.io.loadmat('./dso/task/pde/data/KS_Sine.mat') # course temporal grid    
+        data = scipy.io.loadmat(_resolve_file('KS_Sine.mat', './dso/task/pde/data')) # course temporal grid    
         t = np.real(data['t'].flatten()[:,None])
         x = np.real(data['x'].flatten()[:,None])
         Exact = np.real(data['usol']).T
     elif dataset == 'KS2':
-        data = scipy.io.loadmat('./dso/task/pde/data/KS.mat') # course temporal grid    
+        data = scipy.io.loadmat(_resolve_file('KS.mat', './dso/task/pde/data')) # course temporal grid    
         t = np.real(data['t'].flatten()[:,None])
         x = np.real(data['x'].flatten()[:,None])
         Exact = np.real(data['usol']).T
         # import pdb;pdb.set_trace()
     elif dataset == 'fisher':
-        data=scipy.io.loadmat('./dso/task/pde/data_new/fisher_nonlin_groundtruth.mat')
+        data=scipy.io.loadmat(_resolve_file('fisher_nonlin_groundtruth.mat', './dso/task/pde/data_new'))
 
         x=np.squeeze(data['x'])[1:-1].reshape(-1,1)
         t=np.squeeze(data['t'])[1:-1].reshape(-1,1)
         Exact=data['U'][1:-1,1:-1]
         
     elif dataset == 'fisher_linear':
-        data=scipy.io.loadmat('./dso/task/pde/data_new/fisher_groundtruth.mat')
+        data=scipy.io.loadmat(_resolve_file('fisher_groundtruth.mat', './dso/task/pde/data_new'))
 
         x=np.squeeze(data['x'])[1:-1].reshape(-1,1)
         t=np.squeeze(data['t'])[1:-1].reshape(-1,1)
         Exact=data['U'][1:-1,1:-1]
 
     elif dataset == 'PDE_divide': 
-        Exact=np.load("./dso/task/pde/data/PDE_divide.npy")[1:-1,1:-1]
+        Exact=np.load(_resolve_file('PDE_divide.npy', './dso/task/pde/data'))[1:-1,1:-1]
         nx = 100
         nt = 251
         x=np.linspace(1,2,nx)[1:-1].reshape(-1,1)
