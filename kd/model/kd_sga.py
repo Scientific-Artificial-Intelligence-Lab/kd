@@ -44,7 +44,7 @@ class KD_SGA(BaseEstimator):
         
     def fit(self, problem_name: str):
         """
-        根据预设的问题名称加载数据，并执行PDE发现算法。
+        根据预设的问题名称加载数据并执行PDE发现算法。
 
         这是我们当前阶段的临时数据接口，未来可以扩展。
 
