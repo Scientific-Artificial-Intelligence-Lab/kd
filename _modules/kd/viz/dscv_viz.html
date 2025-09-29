@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.viz.dscv_viz &#8212; KD 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.viz.dscv_viz</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSegmentedColormap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mpl</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.model.discover.program</span><span class="w"> </span><span class="kn">import</span> <span class="n">Program</span>
+
+<span class="c1"># TODO: 保存到文件</span>
+
+<div class="viewcode-block" id="plot_expression_tree">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_expression_tree">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_expression_tree</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+
+    <span class="n">graph</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">plotter</span><span class="o">.</span><span class="n">tree_plot</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">best_p</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">output_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">png_bytes</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">png_bytes</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+
+
+<div class="viewcode-block" id="plot_density">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_density">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_density</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">epoches</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+
+    <span class="n">model</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">fig_type</span><span class="o">=</span><span class="s1">&#39;density&#39;</span><span class="p">,</span> <span class="n">epoches</span><span class="o">=</span><span class="n">epoches</span><span class="p">)</span></div>
+
+
+
+
+
+<span class="c1"># def plot_evolution(model, output_dir: str = None):</span>
+<span class="c1">#     model.plot(fig_type=&#39;evolution&#39;)</span>
+
+
+
+
+<span class="c1"># Set font that supports both English and Chinese characters</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;font.sans-serif&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;SimHei&#39;</span><span class="p">,</span> <span class="s1">&#39;DejaVu Sans&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial Unicode MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial&#39;</span><span class="p">]</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;axes.unicode_minus&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># Fix minus sign display</span>
+
+<span class="n">PLOT_STYLE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;figure.titlesize&#39;</span><span class="p">:</span> <span class="mi">14</span><span class="p">,</span>
+    <span class="s1">&#39;axes.labelsize&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="s1">&#39;xtick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;ytick.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="s1">&#39;axes.prop_cycle&#39;</span><span class="p">:</span> <span class="n">plt</span><span class="o">.</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span> <span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="s1">&#39;#d62728&#39;</span><span class="p">]),</span>
+    <span class="s1">&#39;savefig.dpi&#39;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+    <span class="s1">&#39;savefig.bbox&#39;</span><span class="p">:</span> <span class="s1">&#39;tight&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;font.sans-serif&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;SimHei&#39;</span><span class="p">,</span> <span class="s1">&#39;DejaVu Sans&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial Unicode MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;axes.unicode_minus&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># TODO</span>
+<div class="viewcode-block" id="plot_evolution">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_evolution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_evolution</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot reward changes during training.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        model: Trained KD_DSCV model.</span>
+<span class="sd">        figsize (tuple, optional): Figure size.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        matplotlib.figure.Figure: Generated figure object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">PLOT_STYLE</span><span class="p">):</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+        <span class="c1"># Extract reward history from model</span>
+        <span class="n">rewards</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">searcher</span><span class="o">.</span><span class="n">r_train</span>
+
+        <span class="c1"># Calculate metrics</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">r_max</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">]</span>
+        <span class="n">r_avg</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">]</span>
+        <span class="n">r_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">accumulate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">r_max</span><span class="p">))</span>
+
+        <span class="c1"># Plot reward curves</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_best</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Best Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_max</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#F47E62&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-.&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Maximum Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">r_avg</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#4F8FBA&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Average Reward&#39;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Iteration Count&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Reward Value&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+
+
+<span class="c1"># --- 内部辅助函数 ---</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_finite_difference</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;使用中心差分计算导数。&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span> <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span> <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    <span class="n">dx</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span> 
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span> 
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">dx</span><span class="p">,</span> <span class="n">edge_order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;只支持1-4阶导数, 但请求了 </span><span class="si">{order}</span><span class="s2"> 阶&quot;</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_evaluate_term_recursively</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">u_snapshot</span><span class="p">,</span> <span class="n">x_coords</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;递归地计算一个符号树(Node)的数值 &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">val</span> <span class="o">==</span> <span class="s1">&#39;u1&#39;</span><span class="p">:</span> 
+            <span class="k">return</span> <span class="n">u_snapshot</span>
+        <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">val</span> <span class="o">==</span> <span class="s1">&#39;x1&#39;</span><span class="p">:</span> 
+            <span class="k">return</span> <span class="n">x_coords</span>
+        <span class="k">try</span><span class="p">:</span> <span class="c1"># 尝试将叶子节点的值转换为浮点数 </span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;未知的叶子节点或无法转换为浮点数的常数: </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+    <span class="c1"># 递归步骤: 先计算所有子节点的值</span>
+    <span class="n">child_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">_evaluate_term_recursively</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">u_snapshot</span><span class="p">,</span> <span class="n">x_coords</span><span class="p">)</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">]</span>
+    <span class="n">op_name</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">val</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="s1">&#39;_t&#39;</span><span class="p">)</span> <span class="c1"># 统一处理带和不带_t的后缀</span>
+
+
+    <span class="k">if</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;add&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;sub&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;mul&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;div&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;n2&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;n3&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">**</span><span class="mi">3</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;n4&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">**</span><span class="mi">4</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;n5&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">**</span><span class="mi">5</span>
+
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;inv&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;neg&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="o">-</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;sin&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;cos&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;tan&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tan</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;diff&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">_finite_difference</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_coords</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;diff2&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">_finite_difference</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_coords</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;diff3&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">_finite_difference</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_coords</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">op_name</span> <span class="o">==</span> <span class="s1">&#39;diff4&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="n">_finite_difference</span><span class="p">(</span><span class="n">child_values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_coords</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;未知的操作: </span><span class="si">{</span><span class="n">op_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    一个私有的核心计算函数，供所有绘图函数调用。</span>
+<span class="sd">    它负责计算所有必要的场数据并返回一个字典。</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 1. 获取信息和数据</span>
+    <span class="n">data_dict</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">data_class</span><span class="o">.</span><span class="n">get_data</span><span class="p">()</span>
+    <span class="n">final_symbolic_terms</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">STRidge</span><span class="o">.</span><span class="n">terms</span>
+    <span class="n">w_best</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">w</span>
+    <span class="n">u_trimmed</span> <span class="o">=</span> <span class="n">data_dict</span><span class="p">[</span><span class="s1">&#39;u&#39;</span><span class="p">]</span>
+    <span class="n">ut_trimmed</span> <span class="o">=</span> <span class="n">data_dict</span><span class="p">[</span><span class="s1">&#39;ut&#39;</span><span class="p">]</span>
+    <span class="n">x_axis</span> <span class="o">=</span> <span class="n">data_dict</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+    <span class="c1"># 2. 计算 Theta 矩阵</span>
+    <span class="n">num_space_points</span><span class="p">,</span> <span class="n">num_timesteps_trimmed</span> <span class="o">=</span> <span class="n">u_trimmed</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">Theta_final</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">u_trimmed</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">final_symbolic_terms</span><span class="p">)))</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">term_node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">final_symbolic_terms</span><span class="p">):</span>
+        <span class="n">term_values_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">u_trimmed</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">t_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_timesteps_trimmed</span><span class="p">):</span>
+            <span class="n">u_snapshot</span> <span class="o">=</span> <span class="n">u_trimmed</span><span class="p">[:,</span> <span class="n">t_idx</span><span class="p">]</span>
+            <span class="n">term_values_grid</span><span class="p">[:,</span> <span class="n">t_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">_evaluate_term_recursively</span><span class="p">(</span><span class="n">term_node</span><span class="p">,</span> <span class="n">u_snapshot</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">)</span>
+        <span class="n">Theta_final</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">term_values_grid</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">Theta_final</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">[计算警告]: 发现的方程包含数值不稳定的项&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  后续的可视化可能会失败或显示不正确&quot;</span><span class="p">)</span>
+        <span class="c1"># return None</span>
+
+    <span class="c1"># 3. 计算 RHS 和残差</span>
+    <span class="k">if</span> <span class="n">Theta_final</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">w_best</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">y_hat_rhs</span> <span class="o">=</span> <span class="n">Theta_final</span> <span class="o">@</span> <span class="n">w_best</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">w_best</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">y_hat_rhs</span> <span class="o">=</span> <span class="n">Theta_final</span> <span class="o">@</span> <span class="n">w_best</span>
+    <span class="n">physical_residual</span> <span class="o">=</span> <span class="n">ut_trimmed</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="o">-</span> <span class="n">y_hat_rhs</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    
+    <span class="c1"># 4. 构建绘图坐标</span>
+    <span class="n">t_axis_trimmed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_timesteps_trimmed</span><span class="p">)</span>
+    <span class="n">X_grid</span><span class="p">,</span> <span class="n">T_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x_axis</span><span class="p">,</span> <span class="n">t_axis_trimmed</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+    <span class="n">coords_for_plot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">X_grid</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">T_grid</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># 5. 将所有计算结果打包成字典返回</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;residual&quot;</span><span class="p">:</span> <span class="n">physical_residual</span><span class="p">,</span>
+        <span class="s2">&quot;coords&quot;</span><span class="p">:</span> <span class="n">coords_for_plot</span><span class="p">,</span>
+        <span class="s2">&quot;ut_grid&quot;</span><span class="p">:</span> <span class="n">ut_trimmed</span><span class="p">,</span>
+        <span class="s2">&quot;y_hat_grid&quot;</span><span class="p">:</span> <span class="n">y_hat_rhs</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_space_points</span><span class="p">,</span> <span class="n">num_timesteps_trimmed</span><span class="p">),</span>
+        <span class="s2">&quot;x_axis&quot;</span><span class="p">:</span> <span class="n">x_axis</span><span class="p">,</span>
+        <span class="s2">&quot;t_axis&quot;</span><span class="p">:</span> <span class="n">t_axis_trimmed</span>
+    <span class="p">}</span>
+
+
+
+<div class="viewcode-block" id="plot_pde_residual_analysis">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_pde_residual_analysis">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_pde_residual_analysis</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">,</span> <span class="n">show_plot</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    计算并可视化物理残差</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 调用核心函数获取所有计算结果</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">show_plot</span><span class="p">:</span>
+        <span class="n">physical_residual</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;residual&quot;</span><span class="p">]</span>
+        <span class="n">coords_for_plot</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;coords&quot;</span><span class="p">]</span>
+        
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">sc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">coords_for_plot</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">coords_for_plot</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">c</span><span class="o">=</span><span class="n">physical_residual</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;coolwarm&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Physical Residual ($u_t$ - RHS)&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time (trimmed, index)&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Spatiotemporal Distribution of Residuals&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">physical_residual</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Residual Value&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Probability Density&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Residual Distribution&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;residual&quot;</span><span class="p">],</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;coords&quot;</span><span class="p">]</span></div>
+
+    
+
+<div class="viewcode-block" id="plot_field_comparison">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_field_comparison">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_field_comparison</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">,</span> <span class="n">show_plot</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    计算并可视化“预测场”与“真实场”的对比图。</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 同样调用核心函数获取所有计算结果</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+
+    <span class="n">ut_grid</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;ut_grid&quot;</span><span class="p">]</span>
+    <span class="n">y_hat_grid</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_hat_grid&quot;</span><span class="p">]</span>
+    <span class="n">x_axis</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;x_axis&quot;</span><span class="p">]</span>
+    <span class="n">t_axis</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;t_axis&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">show_plot</span><span class="p">:</span>
+        <span class="c1"># 计算通用的颜色范围</span>
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">ut_grid</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">y_hat_grid</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">ut_grid</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">y_hat_grid</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+
+        <span class="c1"># 创建包含两个子图的图表</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">&#39;Predicted Field vs. True Field Comparison&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+
+        <span class="c1"># 绘制左图：真实场</span>
+        <span class="n">ax0</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">im0</span> <span class="o">=</span> <span class="n">ax0</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">t_axis</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">,</span> <span class="n">ut_grid</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;gouraud&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im0</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax0</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">ax0</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;True Field ($u_t$)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+        <span class="n">ax0</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time (trimmed, index)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+        <span class="n">ax0</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Space&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+        <span class="c1"># 绘制右图：预测场</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">im1</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">t_axis</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">,</span> <span class="n">y_hat_grid</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;gouraud&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Predicted Field (RHS)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time (trimmed, index)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ut_grid</span><span class="p">,</span> <span class="n">y_hat_grid</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">,</span> <span class="n">t_axis</span></div>
+
+    
+
+<div class="viewcode-block" id="plot_actual_vs_predicted">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_actual_vs_predicted">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_actual_vs_predicted</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots an &quot;Actual vs. Predicted&quot; scatter plot with a 45-degree reference line.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        model: The trained KD_DSCV model instance.</span>
+<span class="sd">        best_program: The final Program object discovered by the model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Generating &#39;Actual vs. Predicted&#39; plot...&quot;</span><span class="p">)</span>
+    <span class="c1"># Call the helper function to get all computed fields</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+    
+    <span class="n">y_true</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;ut_grid&quot;</span><span class="p">]</span>
+    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_hat_grid&quot;</span><span class="p">]</span>
+
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Predicted Points&#39;</span><span class="p">)</span>
+    
+    <span class="n">min_val</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">y_true</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">y_pred</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+    <span class="n">max_val</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">y_true</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">y_pred</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="n">margin</span> <span class="o">=</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.1</span>
+    <span class="n">plot_limit</span> <span class="o">=</span> <span class="p">(</span><span class="n">min_val</span> <span class="o">-</span> <span class="n">margin</span><span class="p">,</span> <span class="n">max_val</span> <span class="o">+</span> <span class="n">margin</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">,</span> <span class="n">plot_limit</span><span class="p">,</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Perfect Prediction (y=x)&#39;</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;True Values (Ground Truth, $u_t$)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Predicted Values (RHS)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Actual vs. Predicted&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+
+
+
+<span class="c1"># --- 专为 KD_DSCV_Pinn 模型设计的可视化函数 ---</span>
+
+<span class="c1"># def _calculate_pinn_fields(model, best_program):</span>
+<span class="c1">#     &quot;&quot;&quot;</span>
+<span class="c1">#     一个专为 KD_DSCV_Pinn 模型设计的私有核心计算函数。</span>
+<span class="c1">#     &quot;&quot;&quot;</span>
+<span class="c1">#     # 1. 获取数据源</span>
+<span class="c1">#     task = Program.task</span>
+<span class="c1">#     final_symbolic_terms = best_program.STRidge.terms</span>
+<span class="c1">#     w_best = best_program.w</span>
+    
+<span class="c1">#     # 2. 从 task 对象中获取数据</span>
+<span class="c1">#     u_full = task.u[0]</span>
+<span class="c1">#     ut_full = task.ut</span>
+<span class="c1">#     x_coords_tensor = task.x[0] # 这是 Tensor</span>
+<span class="c1">#     t_coords_tensor = task.t     # 这也是 Tensor</span>
+
+<span class="c1">#     # 3. 明确地重组坐标</span>
+<span class="c1">#     x_coords_np = x_coords_tensor.cpu().detach().numpy()</span>
+<span class="c1">#     t_coords_np = t_coords_tensor.cpu().detach().numpy()</span>
+    
+<span class="c1">#     # 现在可以安全地使用 np.hstack</span>
+<span class="c1">#     coords_for_plot = np.hstack([x_coords_np, t_coords_np])</span>
+
+<span class="c1">#     # 4. 获取缓存的 Theta 矩阵</span>
+<span class="c1">#     if not hasattr(best_program, &#39;Theta&#39;) or best_program.Theta is None:</span>
+<span class="c1">#          raise AttributeError(&quot;best_program 对象中未找到缓存的 Theta 矩阵。&quot;)</span>
+<span class="c1">#     Theta_final = best_program.Theta</span>
+    
+<span class="c1">#     # 5. 计算 RHS 和残差</span>
+<span class="c1">#     if Theta_final.shape[1] == len(w_best) - 1:</span>
+<span class="c1">#         y_hat_rhs = Theta_final @ w_best[:-1] + w_best[-1]</span>
+<span class="c1">#     else:</span>
+<span class="c1">#         y_hat_rhs = Theta_final @ w_best</span>
+    
+<span class="c1">#     # ut_full 已经是 NumPy 数组，所以可以直接使用</span>
+<span class="c1">#     physical_residual = ut_full.flatten() - y_hat_rhs.flatten()</span>
+    
+<span class="c1">#     # 6. 将所有计算结果打包成字典返回</span>
+<span class="c1">#     return {</span>
+<span class="c1">#         &quot;residual&quot;: physical_residual,</span>
+<span class="c1">#         &quot;coords&quot;: coords_for_plot,</span>
+<span class="c1">#         &quot;y_true&quot;: ut_full.flatten(),</span>
+<span class="c1">#         &quot;y_pred&quot;: y_hat_rhs.flatten(),</span>
+<span class="c1">#     }</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    一个专为 KD_DSCV_Pinn 模型设计的、统一的私有核心计算函数。</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 1. 触发奖励计算以填充缓存</span>
+    <span class="n">_</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">r_ridge</span>
+
+    <span class="c1"># 2. 从缓存中获取已计算好的值</span>
+    <span class="n">y_hat_rhs</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">y_hat_rhs</span>
+    <span class="n">Theta</span> <span class="o">=</span> <span class="n">best_program</span><span class="o">.</span><span class="n">Theta</span>
+
+    <span class="k">if</span> <span class="n">y_hat_rhs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">Theta</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;best_program 对象中未找到缓存的 Theta 矩阵或 y_hat_rhs。请确保对 pde_pinn.py 和 program.py 的修改已生效。&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 3. 从 Program.task 获取对应的、已被裁剪的数据</span>
+    <span class="n">task</span> <span class="o">=</span> <span class="n">Program</span><span class="o">.</span><span class="n">task</span>
+    <span class="n">ut_full</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">ut</span>
+    <span class="n">x_coords_tensor</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> 
+    <span class="n">t_coords_tensor</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">t</span>     
+
+    <span class="c1"># 4. 将坐标从 Tensor 转换为 NumPy 数组</span>
+    <span class="n">x_coords_np</span> <span class="o">=</span> <span class="n">x_coords_tensor</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="n">t_coords_np</span> <span class="o">=</span> <span class="n">t_coords_tensor</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    
+    <span class="c1"># 5. 计算残差</span>
+    <span class="n">physical_residual</span> <span class="o">=</span> <span class="n">ut_full</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="o">-</span> <span class="n">y_hat_rhs</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    
+    <span class="c1"># 6. 安全地重组坐标，创建一个 (N, 2) 的数组</span>
+    <span class="n">coords_for_plot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">x_coords_np</span><span class="p">,</span> <span class="n">t_coords_np</span><span class="p">])</span>
+    
+    <span class="c1"># 7. 将所有需要的计算结果打包成一个完整的字典返回</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;residual&quot;</span><span class="p">:</span> <span class="n">physical_residual</span><span class="p">,</span>
+        <span class="s2">&quot;coords&quot;</span><span class="p">:</span> <span class="n">coords_for_plot</span><span class="p">,</span>
+        <span class="s2">&quot;coords_x&quot;</span><span class="p">:</span> <span class="n">x_coords_np</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+        <span class="s2">&quot;coords_t&quot;</span><span class="p">:</span> <span class="n">t_coords_np</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+        <span class="s2">&quot;y_true&quot;</span><span class="p">:</span> <span class="n">ut_full</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span>
+        <span class="s2">&quot;y_pred&quot;</span><span class="p">:</span> <span class="n">y_hat_rhs</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+    <span class="p">}</span>
+
+<div class="viewcode-block" id="plot_spr_residual_analysis">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_spr_residual_analysis">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_spr_residual_analysis</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    计算并可视化 KD_DSCV_Pinn 模型的物理残差。</span>
+<span class="sd">    这个版本专门处理由 PINN 生成的稀疏/散点元数据。</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model: 训练完成的 KD_DSCV_Pinn 模型实例。</span>
+<span class="sd">        best_program: 模型发现的最佳 Program 对象。</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c1"># 调用为 PINN 定制的辅助函数</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+
+    <span class="n">physical_residual</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;residual&quot;</span><span class="p">]</span>
+    <span class="n">coords_for_plot</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;coords&quot;</span><span class="p">]</span> <span class="c1"># 现在这个坐标是正确的 (N, 2) 格式</span>
+    
+    <span class="c1"># 检查维度是否匹配</span>
+    <span class="k">if</span> <span class="n">coords_for_plot</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">physical_residual</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;坐标点数量 (</span><span class="si">{</span><span class="n">coords_for_plot</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">) 与残差值数量 (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">physical_residual</span><span class="p">)</span><span class="si">}</span><span class="s2">) 不匹配。&quot;</span><span class="p">)</span>
+
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    
+    <span class="c1"># 左图: 残差时空分布图</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="c1"># coords_for_plot[:, 1] 是时间, coords_for_plot[:, 0] 是空间</span>
+    <span class="n">sc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">coords_for_plot</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">coords_for_plot</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">c</span><span class="o">=</span><span class="n">physical_residual</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;coolwarm&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Physical Residual ($u_t$ - RHS)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Spatiotemporal Distribution of Residuals (on meta-data points)&#39;</span><span class="p">)</span>
+    
+    <span class="c1"># 右图: 残差统计直方图</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">physical_residual</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Residual Value&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Probability Density&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Residual Distribution&#39;</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="plot_spr_actual_vs_predicted">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_spr_actual_vs_predicted">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_spr_actual_vs_predicted</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    为 KD_DSCV_Pinn 模型绘制“真值 vs. 预测值”的45度线图</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Generating &#39;Actual vs. Predicted&#39; plot for PINN model...&quot;</span><span class="p">)</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+    
+    <span class="n">y_true</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">]</span>
+    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">]</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Predicted Points&#39;</span><span class="p">)</span>
+    
+    <span class="n">min_val</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">y_true</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">y_pred</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+    <span class="n">max_val</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">y_true</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">y_pred</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="n">margin</span> <span class="o">=</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.1</span>
+    <span class="n">plot_limit</span> <span class="o">=</span> <span class="p">(</span><span class="n">min_val</span> <span class="o">-</span> <span class="n">margin</span><span class="p">,</span> <span class="n">max_val</span> <span class="o">+</span> <span class="n">margin</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">,</span> <span class="n">plot_limit</span><span class="p">,</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Perfect Prediction (y=x)&#39;</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;True Values (Ground Truth, $u_t$)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Predicted Values (RHS)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Actual vs. Predicted (for PINN model)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="n">plot_limit</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="plot_spr_field_comparison">
+<a class="viewcode-back" href="../../../api.html#kd.viz.dscv_viz.plot_spr_field_comparison">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_spr_field_comparison</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    为 KD_DSCV_Pinn 模型计算并可视化“预测场”与“真实场”的对比图。</span>
+<span class="sd">    注意：此函数使用三角剖分来可视化稀疏散点数据</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Generating field comparison plot for PINN model...&quot;</span><span class="p">)</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">best_program</span><span class="p">)</span>
+
+    <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">ut</span><span class="p">,</span> <span class="n">y_hat</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;coords_x&quot;</span><span class="p">],</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;coords_t&quot;</span><span class="p">],</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">],</span> <span class="n">fields</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">]</span>
+
+    <span class="c1"># 使用三角剖分来处理散点数据</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">griddata</span>
+    <span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="nb">min</span><span class="p">(</span><span class="n">x</span><span class="p">):</span><span class="nb">max</span><span class="p">(</span><span class="n">x</span><span class="p">):</span><span class="mi">100</span><span class="n">j</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">t</span><span class="p">):</span><span class="nb">max</span><span class="p">(</span><span class="n">t</span><span class="p">):</span><span class="mi">100</span><span class="n">j</span><span class="p">]</span>
+    
+    <span class="n">grid_ut</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">ut</span><span class="p">,</span> <span class="p">(</span><span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cubic&#39;</span><span class="p">)</span>
+    <span class="n">grid_yhat</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">y_hat</span><span class="p">,</span> <span class="p">(</span><span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cubic&#39;</span><span class="p">)</span>
+
+    <span class="c1"># 使用通用的颜色范围</span>
+    <span class="n">vmin</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">([</span><span class="n">grid_ut</span><span class="p">,</span> <span class="n">grid_yhat</span><span class="p">])</span>
+    <span class="n">vmax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">([</span><span class="n">grid_ut</span><span class="p">,</span> <span class="n">grid_yhat</span><span class="p">])</span>
+
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">&#39;Field Comparison (on Sparse Points)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+
+    <span class="c1"># 绘制左图：真实场</span>
+    <span class="n">ax0</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">im0</span> <span class="o">=</span> <span class="n">ax0</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">grid_ut</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="nb">max</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="nb">min</span><span class="p">(</span><span class="n">x</span><span class="p">),</span><span class="nb">max</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> 
+                     <span class="n">aspect</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im0</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax0</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+    <span class="n">ax0</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;True Field ($u_t$)&quot;</span><span class="p">)</span>
+    <span class="n">ax0</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time&quot;</span><span class="p">)</span>
+    <span class="n">ax0</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Space&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 绘制右图：预测场</span>
+    <span class="n">ax1</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">im1</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">grid_yhat</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="nb">max</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="nb">min</span><span class="p">(</span><span class="n">x</span><span class="p">),</span><span class="nb">max</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> 
+                     <span class="n">aspect</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Predicted Field (RHS)&quot;</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time&quot;</span><span class="p">)</span>
+
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
