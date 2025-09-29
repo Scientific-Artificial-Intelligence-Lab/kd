@@ -212,3 +212,5 @@ agent.md
 notes/*
 tests/mode2_burgers.json
 tests/reports/
+
+artifacts/

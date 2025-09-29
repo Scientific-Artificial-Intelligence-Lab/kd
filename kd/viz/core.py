@@ -7,7 +7,15 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from . import registry
-from ._contracts import FieldComparisonData, OptimizationHistoryData, ResidualPlotData
+from ._contracts import (
+    FieldComparisonData,
+    OptimizationHistoryData,
+    ParityPlotData,
+    ResidualPlotData,
+    RewardEvolutionData,
+    TermRelationshipData,
+    TimeSliceComparisonData,
+)
 from ._helpers import resolve_output_path
 from ._style import VizConfig, configure as configure_style, get_config, style_context
 
@@ -57,8 +65,15 @@ def configure(
 
 def render(request: VizRequest, *, backend: str = 'matplotlib') -> VizResult:
     adapter = registry.get_adapter(request.target)
+    requested_backend = None if backend == 'matplotlib' else backend
+
     config = get_config()
-    ctx = VizContext(config=config, backend=backend, options=request.options)
+    if requested_backend and requested_backend != config.backend:
+        configure_style(backend=requested_backend)
+        config = get_config()
+
+    active_backend = requested_backend or config.backend or 'matplotlib'
+    ctx = VizContext(config=config, backend=active_backend, options=request.options)
 
     if adapter is None:
         return VizResult(
@@ -93,6 +108,10 @@ __all__ = [
     'ResidualPlotData',
     'OptimizationHistoryData',
     'FieldComparisonData',
+    'TimeSliceComparisonData',
+    'TermRelationshipData',
+    'ParityPlotData',
+    'RewardEvolutionData',
     'VizRequest',
     'VizResult',
     'VizContext',

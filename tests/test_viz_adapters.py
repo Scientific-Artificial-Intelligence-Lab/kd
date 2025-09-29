@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from kd.viz import FieldComparisonData, OptimizationHistoryData, ResidualPlotData
+from kd.viz import (
+    FieldComparisonData,
+    OptimizationHistoryData,
+    ParityPlotData,
+    ResidualPlotData,
+    TermRelationshipData,
+    TimeSliceComparisonData,
+)
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
 from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter
@@ -15,10 +22,16 @@ class StubDLGA:
             {'fitness': 1.0, 'complexity': 5, 'population_size': 10, 'unique_modules': 4},
             {'fitness': 0.8, 'complexity': 4, 'population_size': 9, 'unique_modules': 5},
         ]
-        self.Chrom = [[[0]]]
-        self.coef = [np.array([[1.0]])]
+        self.Chrom = [[[0], [1]]]
+        self.coef = [np.array([[1.0], [0.5]])]
         self.name = ['u_t']
-        self.user_operators = ['u']
+        self.user_operators = ['u', 'u_x']
+        base = np.linspace(0.0, 1.0, 10)
+        self.metadata = {
+            'u_t': base.reshape(-1),
+            'u': (base + 1).reshape(-1),
+            'u_x': (base - 0.5).reshape(-1),
+        }
 
 
 class StubDSCV:
@@ -152,6 +165,72 @@ def test_field_comparison_contract(tmp_path):
     assert isinstance(data, FieldComparisonData)
     assert data.true_field.shape == (x.size, t.size)
     assert np.allclose(data.residual_field, true_field - pred_field)
+
+
+def test_time_slices_contract(tmp_path):
+    register_dlga()
+    model = StubDLGA()
+
+    x = np.linspace(0, 1, 4)
+    t = np.linspace(0, 1, 3)
+    true_field = np.arange(12).reshape(4, 3)
+    pred_field = true_field * 0.9
+
+    request = viz_core.VizRequest(
+        kind='time_slices',
+        target=model,
+        options={
+            'output_dir': tmp_path,
+            'x_coords': x,
+            't_coords': t,
+            'true_field': true_field,
+            'predicted_field': pred_field,
+            'slice_times': [0.0, 0.5, 1.0],
+        },
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'dlga' / 'time_slices_comparison.png'
+    assert path.exists()
+    data = result.metadata['time_slices']
+    assert isinstance(data, TimeSliceComparisonData)
+    assert np.allclose(data.true_field, true_field)
+
+
+def test_derivative_relationships(tmp_path):
+    register_dlga()
+    model = StubDLGA()
+
+    request = viz_core.VizRequest(
+        kind='derivative_relationships',
+        target=model,
+        options={'output_dir': tmp_path, 'top_n_terms': 2},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'dlga' / 'derivative_relationships.png'
+    assert path.exists()
+    data = result.metadata['term_relationships']
+    assert isinstance(data, TermRelationshipData)
+    assert len(data.terms) == 2
+
+
+def test_parity_plot(tmp_path):
+    register_dlga()
+    model = StubDLGA()
+
+    request = viz_core.VizRequest(
+        kind='parity',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'dlga' / 'pde_parity_plot.png'
+    assert path.exists()
+    data = result.metadata['parity']
+    assert isinstance(data, ParityPlotData)
+    assert data.actual_values.shape == data.predicted_values.shape
 
 
 def test_dscv_placeholder_warning():

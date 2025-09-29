@@ -15,10 +15,6 @@ from kd.viz.equation_renderer import render_latex_to_image
 # --- 数据加载 / Data Loading ---
 kdv_data = load_pde('kdv')
 
-# 可以直接从.mat文件加载数据, 注意：x_key, t_key, u_key 需要根据.mat文件的实际结构来指定。
-# load data directly from a .mat file. Note: x_key, t_key, u_key must be specified according to the actual structure.
-# kdv_data = load_pde_dataset(filename="KdV_equation.mat", x_key='x', t_key='tt', u_key='uu')
-
 # 从总数据集中随机抽取1000个样本点作为训练数据 / Randomly sample 1000 points from the dataset for training.
 X_train, y_train = kdv_data.sample(n_samples=1000)
 

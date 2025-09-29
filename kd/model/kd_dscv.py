@@ -423,7 +423,7 @@ class KD_DSCV_SPR(KD_DSCV):
         sample=None,
         sample_ratio=0.1,
         colloc_num=None,
-        random_state=None,
+        random_state=42,
         noise_level=None,
         data_ratio=None,
         spline_sample=False,

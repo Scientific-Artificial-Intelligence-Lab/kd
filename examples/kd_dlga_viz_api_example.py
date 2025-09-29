@@ -2,9 +2,8 @@
 
 This script mirrors ``examples/kd_dlga_example.py`` but routes visualization
 through the high-level helper functions (``kd.viz.plot_*`` and
-``kd.viz.render_equation``). Only the intents currently wired into
-``DLGAVizAdapter`` are invoked; future integrations can reuse the TODO
-placeholders at the bottom.
+``kd.viz.render_equation``), covering all intents exposed by
+``DLGAVizAdapter``.
 """
 
 import os
@@ -20,10 +19,13 @@ from kd.model.kd_dlga import KD_DLGA
 from kd.viz import (
     configure,
     list_capabilities,
+    plot_derivative_relationships,
     plot_field_comparison,
     plot_optimization,
+    plot_parity,
     plot_residuals,
     plot_search_evolution,
+    plot_time_slices,
     plot_training_curve,
     plot_validation_curve,
     render_equation,
@@ -46,12 +48,10 @@ model = KD_DLGA(
 
 
 # --- Training -------------------------------------------------------------
-print("\nTraining KD_DLGA model...")
 model.fit(X_train, y_train)
 
 
 # Prepare reusable predictions for diagnostics
-print("Generating predictions for diagnostics...")
 y_pred_train = model.predict(X_train).reshape(-1)
 X_full = kdv_data.mesh()
 u_pred_field = model.predict(X_full).reshape(kdv_data.get_size())
@@ -66,63 +66,54 @@ print("\nDLGA adapter capabilities:", ", ".join(sorted(caps)))
 
 
 # --- Visualizations via helper functions ----------------------------------
-def _maybe_print_result(name, result):
-    if result.warnings:
-        print(f"[{name}] warnings: {'; '.join(result.warnings)}")
-    else:
-        paths = ', '.join(str(path) for path in result.paths)
-        print(f"[{name}] saved to: {paths}")
+# 训练损失曲线
+plot_training_curve(model)
 
+# 验证损失曲线
+plot_validation_curve(model)
 
-_maybe_print_result('training_curve', plot_training_curve(model))
-_maybe_print_result('validation_curve', plot_validation_curve(model))
-_maybe_print_result('search_evolution', plot_search_evolution(model))
-_maybe_print_result('optimization', plot_optimization(model))
-_maybe_print_result('equation', render_equation(model, font_size=14))
-_maybe_print_result(
-    'residuals',
-    plot_residuals(
-        model,
-        actual=y_train.reshape(-1),
-        predicted=y_pred_train,
-        coordinates=X_train,
-        bins=40,
-    ),
-)
-_maybe_print_result(
-    'field_comparison',
-    plot_field_comparison(
-        model,
-        x_coords=kdv_data.x,
-        t_coords=kdv_data.t,
-        true_field=kdv_data.usol,
-        predicted_field=u_pred_field,
-    ),
+# 搜索/进化过程可视化
+plot_search_evolution(model)
+
+# 优化指标（复杂度/种群等）分析
+plot_optimization(model)
+
+# 方程渲染（LaTeX → PNG）
+render_equation(model, font_size=14)
+
+# 残差诊断（提供 actual/predicted 与可选坐标）
+plot_residuals(
+    model,
+    actual=y_train.reshape(-1),
+    predicted=y_pred_train,
+    coordinates=X_train,
+    bins=40,
 )
 
+# PDE 场对比（真实场 vs 预测场）
+plot_field_comparison(
+    model,
+    x_coords=kdv_data.x,
+    t_coords=kdv_data.t,
+    true_field=kdv_data.usol,
+    predicted_field=u_pred_field,
+)
 
-# --- Additional analyses (not yet unified) --------------------------------
-# TODO: Integrate derivative relationships / parity plots into façade when ready.
+# 时间切片对比
+plot_time_slices(
+    model,
+    x_coords=kdv_data.x,
+    t_coords=kdv_data.t,
+    true_field=kdv_data.usol,
+    predicted_field=u_pred_field,
+    slice_times=[0.25, 0.5, 0.75],
+)
 
-# Legacy helper calls retained as guidance for future integration.
-# ---------------------------------------------------------------------------
-# from kd.viz.dlga_viz import (
-#     plot_residual_analysis,
-#     plot_optimization_analysis,
-#     plot_pde_comparison,
-#     plot_time_slices,
-#     plot_derivative_relationships,
-#     plot_pde_parity,
-# )
-#
-# X_full = kdv_data.mesh()
-# u_pred = model.predict(X_full).reshape(kdv_data.get_size())
-#
-# plot_residual_analysis(model, X_train, y_train, kdv_data.usol, u_pred)
-# plot_optimization_analysis(model)
-# plot_pde_comparison(kdv_data.x, kdv_data.t, kdv_data.usol, u_pred)
-# plot_time_slices(kdv_data.x, kdv_data.t, kdv_data.usol, u_pred, slice_times=[0.25, 0.5, 0.75])
-# plot_derivative_relationships(model)
-# plot_pde_parity(model, title="Final Validation of Discovered Equation")
+# 导数项关系
+plot_derivative_relationships(model, top_n_terms=4)
+
+# 方程奇偶图
+plot_parity(model, title="Parity Plot of Discovered PDE")
+
 
 print("\nDone. Check the artifacts directory for generated figures.")

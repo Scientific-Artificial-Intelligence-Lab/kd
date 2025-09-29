@@ -115,3 +115,63 @@ def test_plot_field_comparison_dispatch(monkeypatch):
     assert captured['options']['true_field'] is true_field
     assert captured['options']['predicted_field'] is pred_field
     assert 'residual_field' not in captured['options']
+
+
+def test_plot_time_slices_dispatch(monkeypatch):
+    captured = {}
+
+    def fake_render(request):
+        captured['kind'] = request.kind
+        captured['options'] = request.options
+        return viz_core.VizResult(intent=request.kind)
+
+    monkeypatch.setattr(viz_api, 'render', fake_render)
+
+    x = [0.0, 0.5]
+    t = [0.0, 0.5, 1.0]
+    true_field = [[1.0, 2.0, 3.0], [1.5, 2.5, 3.5]]
+    pred_field = [[0.9, 1.8, 2.7], [1.4, 2.4, 3.4]]
+
+    viz_api.plot_time_slices(
+        object(),
+        x_coords=x,
+        t_coords=t,
+        true_field=true_field,
+        predicted_field=pred_field,
+        slice_times=[0.0, 1.0],
+    )
+
+    assert captured['kind'] == 'time_slices'
+    assert captured['options']['slice_times'] == [0.0, 1.0]
+
+
+def test_plot_derivative_relationships_dispatch(monkeypatch):
+    captured = {}
+
+    def fake_render(request):
+        captured['kind'] = request.kind
+        captured['options'] = request.options
+        return viz_core.VizResult(intent=request.kind)
+
+    monkeypatch.setattr(viz_api, 'render', fake_render)
+
+    viz_api.plot_derivative_relationships(object(), top_n_terms=5)
+
+    assert captured['kind'] == 'derivative_relationships'
+    assert captured['options']['top_n_terms'] == 5
+
+
+def test_plot_parity_dispatch(monkeypatch):
+    captured = {}
+
+    def fake_render(request):
+        captured['kind'] = request.kind
+        captured['options'] = request.options
+        return viz_core.VizResult(intent=request.kind)
+
+    monkeypatch.setattr(viz_api, 'render', fake_render)
+
+    viz_api.plot_parity(object(), title='Parity Title')
+
+    assert captured['kind'] == 'parity'
+    assert captured['options']['title'] == 'Parity Title'
