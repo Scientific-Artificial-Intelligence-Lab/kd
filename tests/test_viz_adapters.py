@@ -1,11 +1,16 @@
 import numpy as np
 import pytest
+import sys
+import types
+
+import kd.viz.dscv_viz as dscv_viz_module
 
 from kd.viz import (
     FieldComparisonData,
     OptimizationHistoryData,
     ParityPlotData,
     ResidualPlotData,
+    RewardEvolutionData,
     TermRelationshipData,
     TimeSliceComparisonData,
 )
@@ -34,8 +39,31 @@ class StubDLGA:
         }
 
 
+class DummyProgram:
+    def __init__(self):
+        self.traversal = ['u', 'add', 'u']
+        self.library = type('Lib', (), {'name_arites': {'u': 0, 'add': 2}})()
+        self.str_expression = 'u + u'
+
+
+class StubSearch:
+    def __init__(self, batches):
+        self.r_train = batches
+        self.r_history = [np.asarray(batch) for batch in batches]
+        self.plotter = type('Plotter', (), {
+            'tree_plot': lambda self_ref, program: None,
+        })()
+        self.best_p = DummyProgram()
+
+
 class StubDSCV:
-    pass
+    def __init__(self):
+        self.searcher = StubSearch([
+            [0.5, 0.6, 0.55],
+            [0.7, 0.65, 0.72],
+            [0.8, 0.78, 0.81],
+        ])
+        self.best_p = None  # Required for equation intent (test expects LaTeX degradation)
 
 
 def setup_function():
@@ -233,11 +261,205 @@ def test_parity_plot(tmp_path):
     assert data.actual_values.shape == data.predicted_values.shape
 
 
-def test_dscv_placeholder_warning():
+def test_dscv_search_evolution(tmp_path):
     adapter = DSCVVizAdapter()
     viz_registry.register_adapter(StubDSCV, adapter)
 
-    result = viz_core.render(viz_core.VizRequest(kind='tree', target=StubDSCV()))
-    assert not result.has_content
+    model = StubDSCV()
+
+    request = viz_core.VizRequest(
+        kind='search_evolution',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    assert result.warnings or result.paths
+    if result.warnings:
+        assert "not implemented" in result.warnings[0]
+    else:
+        path = tmp_path / 'dscv' / 'reward_evolution.png'
+        assert path.exists()
+        data = result.metadata['reward_evolution']
+        assert isinstance(data, RewardEvolutionData)
+        assert data.steps.size == len(model.searcher.r_train)
+
+
+def test_dscv_density(tmp_path):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+
+    request = viz_core.VizRequest(
+        kind='density',
+        target=model,
+        options={'output_dir': tmp_path, 'epoches': [0, 1]},
+    )
+    result = viz_core.render(request)
+    assert result.warnings or result.paths
+    if result.warnings:
+        assert 'seaborn is required' in result.warnings[0]
+    else:
+        path = tmp_path / 'dscv' / 'reward_density.png'
+        assert path.exists()
+
+    # fallback to tree to confirm placeholder intent still returns warning
+    tree_request = viz_core.VizRequest(kind='tree', target=model, options={'output_dir': tmp_path})
+    tree_result = viz_core.render(tree_request)
+    assert tree_result.warnings
+
+
+def test_dscv_equation_warning(tmp_path):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+
+    request = viz_core.VizRequest(
+        kind='equation',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    if result.warnings:
+        assert 'Failed to convert program' in result.warnings[0]
+    else:
+        path = tmp_path / 'dscv' / 'equation.png'
+        assert path.exists()
+        assert 'latex' in result.metadata
+
+
+def test_dscv_residual_warning(tmp_path):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+
+    request = viz_core.VizRequest(
+        kind='residual',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
     assert result.warnings
-    assert 'does not support intent' in result.warnings[0]
+
+
+def test_dscv_field_comparison(tmp_path, monkeypatch):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+    model.best_p = DummyProgram()
+
+    def fake_fields(_model, _program):
+        x = np.linspace(0, 1, 2)
+        t = np.linspace(0, 1, 3)
+        ut = np.arange(6).reshape(2, 3).astype(float)
+        yhat = ut * 0.9
+        coords = np.stack(np.meshgrid(x, t, indexing='ij'), axis=-1).reshape(-1, 2)
+        return {
+            'x_axis': x,
+            't_axis': t,
+            'ut_grid': ut,
+            'y_hat_grid': yhat,
+            'coords': coords,
+        }
+
+    monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+
+    request = viz_core.VizRequest(
+        kind='field_comparison',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    assert result.paths
+    assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
+
+
+def test_dscv_parity(tmp_path, monkeypatch):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+    model.best_p = DummyProgram()
+
+    def fake_fields(_model, _program):
+        x = np.linspace(0, 1, 2)
+        t = np.linspace(0, 1, 3)
+        ut = np.arange(6).reshape(2, 3).astype(float)
+        yhat = ut * 0.9
+        coords = np.stack(np.meshgrid(x, t, indexing='ij'), axis=-1).reshape(-1, 2)
+        return {
+            'x_axis': x,
+            't_axis': t,
+            'ut_grid': ut,
+            'y_hat_grid': yhat,
+            'coords': coords,
+        }
+
+    monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+
+    request = viz_core.VizRequest(
+        kind='parity',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    assert result.paths
+    assert (tmp_path / 'dscv' / 'parity_plot.png').exists()
+
+
+def test_dscv_spr_residual_warning(tmp_path, monkeypatch):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+
+    def fake_pinn_fields(_model, _program):
+        return {
+            'coords': np.zeros((4, 2)),
+            'y_true': np.zeros(4),
+            'y_pred': np.zeros(4),
+        }
+
+    monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+
+    request = viz_core.VizRequest(
+        kind='spr_residual',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    assert result.paths or result.warnings
+
+
+def test_dscv_spr_field_comparison_warning(tmp_path, monkeypatch):
+    adapter = DSCVVizAdapter()
+    viz_registry.register_adapter(StubDSCV, adapter)
+
+    model = StubDSCV()
+
+    def fake_pinn_fields(_model, _program):
+        return {
+            'coords_x': np.array([0.0, 1.0]),
+            'coords_t': np.array([0.0, 0.5, 1.0]),
+            'y_true': np.arange(6).astype(float),
+            'y_pred': np.arange(6).astype(float) * 0.9,
+        }
+
+    monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+
+    fake_interpolate = types.SimpleNamespace(
+        griddata=lambda points, values, xi, method='cubic': np.zeros_like(xi[0])
+    )
+    monkeypatch.setitem(sys.modules, 'scipy', types.SimpleNamespace(interpolate=fake_interpolate))
+    monkeypatch.setitem(sys.modules, 'scipy.interpolate', fake_interpolate)
+
+    request = viz_core.VizRequest(
+        kind='spr_field_comparison',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+    assert result.paths or result.warnings

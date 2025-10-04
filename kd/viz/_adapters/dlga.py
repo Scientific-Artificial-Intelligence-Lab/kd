@@ -208,7 +208,12 @@ class DLGAVizAdapter:
             operator_names=operators,
         )
         _, path = self._resolve_output(ctx, 'equation.png')
-        render_latex_to_image(latex, output_path=str(path), font_size=ctx.options.get('font_size', 16))
+        render_latex_to_image(
+            latex,
+            output_path=str(path),
+            font_size=ctx.options.get('font_size', 16),
+            show=False,
+        )
         return VizResult(intent='equation', paths=[path], metadata={'latex': latex, 'index': index})
 
     def _residual(self, model, ctx) -> VizResult:

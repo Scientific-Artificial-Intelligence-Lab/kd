@@ -5,9 +5,17 @@ from .dlga_eq2latex import dlga_eq2latex
 from .discover_eq2latex import discover_program_to_latex
 
 
-def render_latex_to_image(latex_str, output_path = None, font_size=16, dpi=300, background_color='white',
-                          base_figsize_width=8, base_figsize_height=2 # 这俩用于动态调整图片大小
-                          ):
+def render_latex_to_image(
+    latex_str,
+    output_path=None,
+    font_size=16,
+    dpi=300,
+    background_color='white',
+    base_figsize_width=8,
+    base_figsize_height=2,
+    *,
+    show=True,
+):
     try:
         # 动态调整图像宽度：基本宽度 + 每N个字符增加一点宽度 调整系数可能需要根据实际的LaTeX复杂度和字体大小进行微调
         # LaTeX 字符串中的 "$" 和空格等也会计入长度，但作为粗略估计可以接受
@@ -26,7 +34,8 @@ def render_latex_to_image(latex_str, output_path = None, font_size=16, dpi=300, 
             plt.savefig(output_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor=background_color)
             print(f"[Equation Renderer INFO] 图像已成功保存到: {output_path}")
         
-        plt.show()
+        if show:
+            plt.show()
         
     except Exception as e:
         print(f"[Equation Renderer Error] 渲染 LaTeX 到图像时发生错误: {e}")
@@ -34,6 +43,5 @@ def render_latex_to_image(latex_str, output_path = None, font_size=16, dpi=300, 
     finally:
         if 'fig' in locals(): # 确保 fig 变量存在
             plt.close(fig)
-
 
 
