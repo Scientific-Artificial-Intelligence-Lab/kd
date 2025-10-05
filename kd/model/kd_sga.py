@@ -7,6 +7,7 @@ from ..base import BaseEstimator
 from .sga.sgapde.config import SolverConfig
 from .sga.sgapde.context import ProblemContext
 from .sga.sgapde.solver import SGAPDE_Solver
+from .sga.sgapde.equation import sga_equation_to_latex
 from .sga.sgapde import visualizer as sga_visualizer
 
 
@@ -84,12 +85,30 @@ class KD_SGA(BaseEstimator):
         self.best_score_ = best_score
         self.context_ = context # 保存完整的上下文，以备可视化使用
         self.config_ = config   # 保存此次运行的配置
+        self.best_equation_details_ = getattr(solver, 'best_equation_details_', None)
         
         print("\n--- SGA PDE Discovery Finished ---")
         print(f"Best PDE Found: {self.best_pde_}")
         print(f"AIC Score: {self.best_score_}")
 
         return self
+
+    def equation_latex(
+        self,
+        *,
+        include_coefficients: bool = True,
+    ) -> str:
+        """Return the discovered equation formatted as LaTeX."""
+
+        details = getattr(self, 'best_equation_details_', None)
+        if details is None:
+            raise RuntimeError('Equation details are not available. Call fit() first.')
+        return sga_equation_to_latex(details, include_coefficients=include_coefficients)
+
+    def equation_structure_latex(self) -> str:
+        """Return the equation structure without coefficients."""
+
+        return self.equation_latex(include_coefficients=False)
 
     def fit_dataset(
         self,
@@ -155,6 +174,7 @@ class KD_SGA(BaseEstimator):
         self.context_ = context
         self.config_ = config
         self.dataset_ = dataset
+        self.best_equation_details_ = getattr(solver, 'best_equation_details_', None)
 
         print("\n--- SGA PDE Discovery Finished ---")
         print(f"Best PDE Found: {self.best_pde_}")

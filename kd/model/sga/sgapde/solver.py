@@ -8,6 +8,7 @@ import random
 import warnings
 
 from .pde import evaluate_mse
+from .equation import extract_equation_details
 
 warnings.filterwarnings('ignore')
 
@@ -32,7 +33,8 @@ class SGAPDE_Solver:
         # Initialize PDE and error libraries
         self.pde_lib = []
         self.err_lib = []
-        
+        self.best_equation_details_ = None
+
     def run(self, context):
         """
         Run the SGA algorithm to discover PDEs.
@@ -66,7 +68,12 @@ class SGAPDE_Solver:
         
         # Run the genetic algorithm
         best_eq, best_mse = sga.run(self.config.sga_run)
-        
+
+        try:
+            self.best_equation_details_ = extract_equation_details(best_eq, context)
+        except Exception:  # pragma: no cover - defensive to avoid breaking legacy flows
+            self.best_equation_details_ = None
+
         # Return the best PDE and its score
         return best_eq.visualize(), best_mse
 

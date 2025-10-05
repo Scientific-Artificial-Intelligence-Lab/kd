@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._adapters import DLGAVizAdapter, DSCVVizAdapter
+from ._adapters import DLGAVizAdapter, DSCVVizAdapter, SGAVizAdapter
 from .registry import register_adapter
 
 __all__ = [
@@ -26,3 +26,10 @@ def register_default_adapters() -> None:
         KD_DSCV = None  # type: ignore
     else:
         register_adapter(KD_DSCV, DSCVVizAdapter())
+
+    try:
+        from kd.model.kd_sga import KD_SGA  # type: ignore
+    except Exception:  # pragma: no cover
+        KD_SGA = None  # type: ignore
+    else:
+        register_adapter(KD_SGA, SGAVizAdapter())

@@ -2,5 +2,6 @@
 
 from .dlga import DLGAVizAdapter
 from .dscv import DSCVVizAdapter
+from .sga import SGAVizAdapter
 
-__all__ = ['DLGAVizAdapter', 'DSCVVizAdapter']
+__all__ = ['DLGAVizAdapter', 'DSCVVizAdapter', 'SGAVizAdapter']

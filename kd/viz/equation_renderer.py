@@ -5,6 +5,15 @@ from .dlga_eq2latex import dlga_eq2latex
 from .discover_eq2latex import discover_program_to_latex
 
 
+def _ensure_math_mode(latex_str: str) -> str:
+    if latex_str is None:
+        return '$$'
+    stripped = latex_str.strip()
+    if stripped.startswith('$') and stripped.endswith('$') and len(stripped) >= 2:
+        return latex_str
+    return f"${latex_str}$"
+
+
 def render_latex_to_image(
     latex_str,
     output_path=None,
@@ -17,6 +26,7 @@ def render_latex_to_image(
     show=True,
 ):
     try:
+        latex_str = _ensure_math_mode(str(latex_str))
         # 动态调整图像宽度：基本宽度 + 每N个字符增加一点宽度 调整系数可能需要根据实际的LaTeX复杂度和字体大小进行微调
         # LaTeX 字符串中的 "$" 和空格等也会计入长度，但作为粗略估计可以接受
         estimated_chars = len(latex_str)
@@ -43,5 +53,4 @@ def render_latex_to_image(
     finally:
         if 'fig' in locals(): # 确保 fig 变量存在
             plt.close(fig)
-
 

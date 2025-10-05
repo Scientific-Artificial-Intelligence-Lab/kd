@@ -16,7 +16,7 @@ from kd.viz import (
 )
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
-from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter
+from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter, SGAVizAdapter
 
 
 class StubDLGA:
@@ -64,6 +64,34 @@ class StubDSCV:
             [0.8, 0.78, 0.81],
         ])
         self.best_p = None  # Required for equation intent (test expects LaTeX degradation)
+
+
+from typing import Optional
+
+
+class DummySGAContext:
+    def __init__(self):
+        space = np.linspace(0.0, 1.0, 3)
+        time = np.linspace(0.0, 1.0, 4)
+        space_grid = np.tile(space.reshape(-1, 1), (1, time.size))
+        time_grid = np.tile(time.reshape(1, -1), (space.size, 1))
+
+        self.u = np.outer(space, np.ones_like(time))
+        self.u_origin = self.u + 0.1
+        self.x = space_grid
+        self.t = time_grid
+        self.x_origin = space_grid
+        self.t_origin = time_grid
+
+
+class StubSGA:
+    def __init__(self, latex: str = 'u_t = u_{xx}', structure: Optional[str] = None):
+        self._latex = latex
+        self._structure = structure or latex
+        self.context_ = DummySGAContext()
+
+    def equation_latex(self, *, include_coefficients: bool = True):
+        return self._latex if include_coefficients else self._structure
 
 
 def setup_function():
@@ -463,3 +491,66 @@ def test_dscv_spr_field_comparison_warning(tmp_path, monkeypatch):
     )
     result = viz_core.render(request)
     assert result.paths or result.warnings
+
+
+def test_sga_equation(tmp_path):
+    adapter = SGAVizAdapter()
+    viz_registry.register_adapter(StubSGA, adapter)
+
+    model = StubSGA('u_t = u_{xx} + u')
+    request = viz_core.VizRequest(
+        kind='equation',
+        target=model,
+        options={'output_dir': tmp_path, 'font_size': 12},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'sga' / 'equation.png'
+    structure_path = tmp_path / 'sga' / 'equation_structure.png'
+    assert path.exists()
+    assert structure_path.exists()
+    assert result.paths == [path, structure_path]
+    assert result.metadata['latex'] == 'u_t = u_{xx} + u'
+    assert result.metadata['structure_latex'] == 'u_t = u_{xx} + u'
+
+
+def test_sga_field_comparison(tmp_path):
+    adapter = SGAVizAdapter()
+    viz_registry.register_adapter(StubSGA, adapter)
+
+    model = StubSGA()
+    request = viz_core.VizRequest(
+        kind='field_comparison',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'sga' / 'field_comparison.png'
+    assert path.exists()
+    assert result.paths == [path]
+    field_data = result.metadata['field_comparison_data']
+    assert isinstance(field_data, FieldComparisonData)
+    assert field_data.predicted_field.shape == model.context_.u.shape
+    assert field_data.true_field.shape == model.context_.u_origin.shape
+
+
+def test_sga_time_slices(tmp_path):
+    adapter = SGAVizAdapter()
+    viz_registry.register_adapter(StubSGA, adapter)
+
+    model = StubSGA()
+    request = viz_core.VizRequest(
+        kind='time_slices',
+        target=model,
+        options={'output_dir': tmp_path, 'slice_times': [0.0, 0.5, 1.0]},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'sga' / 'time_slices_comparison.png'
+    assert path.exists()
+    time_data = result.metadata['time_slices_data']
+    assert isinstance(time_data, TimeSliceComparisonData)
+    summary = result.metadata['time_slices_summary']
+    assert np.allclose(summary['requested_slice_times'], [0.0, 0.5, 1.0])
+    assert np.allclose(time_data.slice_times, summary['actual_slice_times'])
