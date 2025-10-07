@@ -29,6 +29,7 @@ class SGAEquationDetails:
 
     lhs: str
     terms: Sequence[SGAEquationTerm]
+    predicted_rhs: np.ndarray | None = None
 
     def nonzero_terms(self) -> Iterable[SGAEquationTerm]:
         """Return terms whose coefficients are non-zero."""
@@ -54,10 +55,25 @@ def extract_equation_details(pde, context, *, coefficient_tol: float = _DEFAULT_
         raise ValueError('ProblemContext must not be None.')
 
     elements_copy = copy.deepcopy(getattr(pde, 'elements', []))
-    terms, coefficients = evaluate_mse(elements_copy, context, True)
+    terms, coefficients, feature_matrix = evaluate_mse(
+        elements_copy,
+        context,
+        True,
+        return_matrix=True,
+    )
 
     coeff_array = np.asarray(coefficients).reshape(-1)
     term_list: list[SGAEquationTerm] = []
+    predicted_rhs: np.ndarray | None = None
+
+    if feature_matrix is not None and feature_matrix.size and coeff_array.size:
+        try:
+            weights = np.asarray(coefficients).reshape(-1, 1)
+            prediction = feature_matrix.dot(weights)
+            prediction = prediction.reshape(context.ut.shape)
+            predicted_rhs = np.real_if_close(prediction)
+        except Exception:
+            predicted_rhs = None
 
     default_count = getattr(context, 'num_default', 0)
     default_names = list(getattr(context, 'default_names', []))
@@ -95,7 +111,7 @@ def extract_equation_details(pde, context, *, coefficient_tol: float = _DEFAULT_
         )
 
     lhs_label = _infer_lhs_label(getattr(context, 'config', None))
-    return SGAEquationDetails(lhs=lhs_label, terms=tuple(term_list))
+    return SGAEquationDetails(lhs=lhs_label, terms=tuple(term_list), predicted_rhs=predicted_rhs)
 
 
 def sga_equation_to_latex(

@@ -16,6 +16,7 @@ from kd.viz import (
 )
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
+from kd.model.sga.sgapde.equation import SGAEquationDetails, SGAEquationTerm
 from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter, SGAVizAdapter
 
 
@@ -82,6 +83,13 @@ class DummySGAContext:
         self.t = time_grid
         self.x_origin = space_grid
         self.t_origin = time_grid
+        self.ut = self.u * 0.5
+        self.ut_origin = self.u_origin * 0.5
+        self.right_side_full = self.ut - 0.02
+        self.right_side_full_origin = self.ut_origin - 0.01
+        self.default_terms = self.u.reshape(-1, 1)
+        self.default_names = ['u']
+        self.num_default = 1
 
 
 class StubSGA:
@@ -89,6 +97,11 @@ class StubSGA:
         self._latex = latex
         self._structure = structure or latex
         self.context_ = DummySGAContext()
+        self.best_equation_details_ = SGAEquationDetails(
+            lhs='u_t',
+            terms=[SGAEquationTerm(label='u', source='default', coefficient=1.0, tree=None)],
+            predicted_rhs=self.context_.ut.reshape(self.context_.ut.shape),
+        )
 
     def equation_latex(self, *, include_coefficients: bool = True):
         return self._latex if include_coefficients else self._structure
@@ -554,3 +567,45 @@ def test_sga_time_slices(tmp_path):
     summary = result.metadata['time_slices_summary']
     assert np.allclose(summary['requested_slice_times'], [0.0, 0.5, 1.0])
     assert np.allclose(time_data.slice_times, summary['actual_slice_times'])
+
+
+def test_sga_parity(tmp_path):
+    adapter = SGAVizAdapter()
+    viz_registry.register_adapter(StubSGA, adapter)
+
+    model = StubSGA()
+    request = viz_core.VizRequest(
+        kind='parity',
+        target=model,
+        options={'output_dir': tmp_path},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'sga' / 'parity_plot.png'
+    assert path.exists()
+    parity_data = result.metadata['parity']
+    assert isinstance(parity_data, ParityPlotData)
+    summary = result.metadata['summary']
+    assert summary['mode'] == 'metadata'
+    assert np.allclose(
+        parity_data.predicted_values.reshape(model.context_.ut.shape),
+        model.best_equation_details_.predicted_rhs,
+    )
+
+
+def test_sga_residual(tmp_path):
+    adapter = SGAVizAdapter()
+    viz_registry.register_adapter(StubSGA, adapter)
+
+    model = StubSGA()
+    request = viz_core.VizRequest(
+        kind='residual',
+        target=model,
+        options={'output_dir': tmp_path, 'bins': 10},
+    )
+    result = viz_core.render(request)
+
+    path = tmp_path / 'sga' / 'residual_analysis.png'
+    assert path.exists()
+    assert result.paths == [path]
+    assert result.metadata['residual_data'].actual.size == model.context_.ut_origin.size

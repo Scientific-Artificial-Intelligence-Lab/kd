@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Iterable, Tuple
 
@@ -9,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..equation_renderer import render_latex_to_image
-from ..core import FieldComparisonData, TimeSliceComparisonData, VizResult
+from ..core import FieldComparisonData, ParityPlotData, ResidualPlotData, TimeSliceComparisonData, VizResult
 
 
 class SGAVizAdapter:
@@ -17,6 +18,8 @@ class SGAVizAdapter:
         'equation',
         'field_comparison',
         'time_slices',
+        'parity',
+        'residual',
     }
 
     def __init__(self, *, subdir: str = 'sga') -> None:
@@ -27,6 +30,8 @@ class SGAVizAdapter:
             'equation': self._equation,
             'field_comparison': self._field_comparison,
             'time_slices': self._time_slices,
+            'parity': self._parity,
+            'residual': self._residual,
         }.get(request.kind)
 
         if handler is None:
@@ -253,6 +258,207 @@ class SGAVizAdapter:
             if arr.size == expected_size:
                 return arr
         return np.linspace(0.0, 1.0, expected_size)
+
+    def _parity(self, model, ctx) -> VizResult:
+        context = getattr(model, 'context_', None)
+        details = getattr(model, 'best_equation_details_', None)
+        if context is None or details is None:
+            return VizResult(intent='parity', warnings=['Equation details are unavailable; call fit() first.'])
+
+        prediction = self._evaluate_equation_prediction(details, context)
+        if prediction is None:
+            return VizResult(intent='parity', warnings=['Failed to reconstruct equation prediction.'])
+
+        compare_mode = ctx.options.get('compare', 'metadata')
+        if compare_mode == 'original':
+            target = getattr(context, 'ut_origin', None)
+            mode_label = 'original'
+        else:
+            target = getattr(context, 'ut', None)
+            mode_label = 'metadata'
+        if target is None:
+            return VizResult(intent='parity', warnings=[f"Context does not expose '{compare_mode}' ut field."])
+
+        target = np.asarray(target)
+        if target.shape != prediction.shape:
+            try:
+                target = np.asarray(context.ut)
+                mode_label = 'metadata'
+            except Exception:
+                return VizResult(intent='parity', warnings=['Shape mismatch between prediction and target arrays.'])
+            if target.shape != prediction.shape:
+                return VizResult(intent='parity', warnings=['Shape mismatch between prediction and target arrays.'])
+
+        actual_flat = target.reshape(-1)
+        predicted_flat = prediction.reshape(-1)
+
+        parity_data = ParityPlotData.from_actual_predicted(actual_flat, predicted_flat, metadata={'mode': mode_label})
+
+        fig, ax = plt.subplots(figsize=ctx.options.get('figsize', (7, 7)))
+        ax.scatter(predicted_flat, actual_flat, alpha=0.35, s=20, label='Prediction vs Actual')
+        min_val = float(np.min([actual_flat.min(), predicted_flat.min()]))
+        max_val = float(np.max([actual_flat.max(), predicted_flat.max()]))
+        ref = np.linspace(min_val, max_val, 100)
+        ax.plot(ref, ref, 'r--', linewidth=1.5, label='y = x')
+        ax.set_xlabel('Predicted RHS')
+        ax.set_ylabel('True u_t')
+        ax.set_title(ctx.options.get('title', 'Parity Plot'))
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.set_aspect('equal', 'box')
+
+        output_path = self._resolve_output(ctx, 'parity_plot.png')
+        fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        plt.close(fig)
+
+        residuals = actual_flat - predicted_flat
+        summary = {
+            'mode': mode_label,
+            'mean_residual': float(np.mean(residuals)),
+            'max_abs_residual': float(np.max(np.abs(residuals))),
+            'rmse': float(np.sqrt(np.mean(np.square(residuals)))),
+        }
+
+        metadata = {
+            'parity': parity_data,
+            'summary': summary,
+        }
+        return VizResult(intent='parity', paths=[output_path], metadata=metadata)
+
+    def _evaluate_equation_prediction(self, details, context):
+        cached_prediction = getattr(details, 'predicted_rhs', None)
+        if cached_prediction is not None:
+            prediction_arr = np.asarray(cached_prediction)
+            if prediction_arr.shape != context.ut.shape:
+                try:
+                    prediction_arr = prediction_arr.reshape(context.ut.shape)
+                except Exception:
+                    prediction_arr = None
+            if prediction_arr is not None:
+                return prediction_arr
+
+        try:
+            generated_terms = [deepcopy(term.tree) for term in details.terms if term.tree is not None]
+        except Exception:
+            generated_terms = None
+        try:
+            result = evaluate_mse(generated_terms or [], context, True, return_matrix=True)
+        except Exception:
+            result = None
+
+        prediction = None
+        if result is not None:
+            terms, weights, matrix = result
+            if matrix is not None and not isinstance(weights, int):
+                weights_arr = np.asarray(weights).reshape(-1, 1)
+                prediction = matrix.dot(weights_arr).reshape(context.ut.shape)
+
+        if prediction is None and hasattr(context, 'default_terms'):
+            try:
+                base_full = np.asarray(context.default_terms).reshape(-1, context.num_default)
+                prediction_flat = np.zeros((base_full.shape[0], 1))
+                for term in details.terms:
+                    if term.tree is None:
+                        if hasattr(context, 'default_names') and term.label in context.default_names:
+                            col_idx = context.default_names.index(term.label)
+                        else:
+                            col_idx = 0
+                        if col_idx < base_full.shape[1]:
+                            column = base_full[:, col_idx:col_idx + 1]
+                            prediction_flat += float(term.coefficient) * column
+                prediction = prediction_flat.reshape(context.ut.shape)
+            except Exception:
+                prediction = None
+
+        return prediction
+
+    def _residual(self, model, ctx) -> VizResult:
+        context = getattr(model, 'context_', None)
+        if context is None:
+            return VizResult(intent='residual', warnings=['Model context is unavailable; call fit() first.'])
+
+        try:
+            true_ut = np.asarray(context.ut_origin)
+            meta_ut = np.asarray(context.ut)
+            rhs_origin = np.asarray(context.right_side_full_origin)
+            rhs_meta = np.asarray(context.right_side_full)
+        except Exception as exc:
+            return VizResult(intent='residual', warnings=[f'Failed to access residual fields: {exc}'])
+
+        if true_ut.shape != rhs_origin.shape or meta_ut.shape != rhs_meta.shape:
+            return VizResult(intent='residual', warnings=['Context residual arrays have inconsistent shapes.'])
+
+        residual_origin = true_ut - rhs_origin
+        residual_meta = meta_ut - rhs_meta
+
+        residual_data = ResidualPlotData.from_actual_predicted(
+            actual=true_ut.reshape(-1),
+            predicted=rhs_meta.reshape(-1),
+            metadata={'mode': 'metadata_vs_groundtruth'},
+        )
+
+        bins = int(ctx.options.get('bins', 40))
+
+        fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
+
+        axes[0, 0].hist(
+            residual_meta.reshape(-1),
+            bins=bins,
+            color='#1f77b4',
+            alpha=0.7,
+            edgecolor='black',
+        )
+        axes[0, 0].set_title('Metadata Residual Distribution')
+        axes[0, 0].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 0].set_ylabel('Frequency')
+        axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        axes[0, 1].hist(
+            residual_origin.reshape(-1),
+            bins=bins,
+            color='#ff7f0e',
+            alpha=0.7,
+            edgecolor='black',
+        )
+        axes[0, 1].set_title('Original Residual Distribution')
+        axes[0, 1].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        im_meta = axes[1, 0].imshow(residual_meta, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 0].set_title('Metadata Residual Heatmap')
+        axes[1, 0].set_xlabel('Time index')
+        axes[1, 0].set_ylabel('Space index')
+        fig.colorbar(im_meta, ax=axes[1, 0], fraction=0.046, pad=0.04)
+
+        im_orig = axes[1, 1].imshow(residual_origin, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 1].set_title('Original Residual Heatmap')
+        axes[1, 1].set_xlabel('Time index')
+        fig.colorbar(im_orig, ax=axes[1, 1], fraction=0.046, pad=0.04)
+
+        fig.tight_layout()
+
+        output_path = self._resolve_output(ctx, 'residual_analysis.png')
+        fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        plt.close(fig)
+
+        residual_summary = {
+            'metadata': {
+                'mean': float(np.mean(residual_meta)),
+                'std': float(np.std(residual_meta)),
+                'max_abs': float(np.max(np.abs(residual_meta))),
+            },
+            'original': {
+                'mean': float(np.mean(residual_origin)),
+                'std': float(np.std(residual_origin)),
+                'max_abs': float(np.max(np.abs(residual_origin))),
+            },
+        }
+
+        metadata = {
+            'residual_data': residual_data,
+            'summary': residual_summary,
+        }
+        return VizResult(intent='residual', paths=[output_path], metadata=metadata)
 
 
 __all__ = ['SGAVizAdapter']

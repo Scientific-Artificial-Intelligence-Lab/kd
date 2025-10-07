@@ -1,69 +1,86 @@
+"""Minimal KD_SGA example using the unified dataset + viz façade.
+
+This mirrors the verification defaults documented in
+`notes/KD vs SGA Verification Report .md` so that teammates can
+reproduce the comparison quickly.
+"""
+
 import os
 import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(kd_main_dir)
+from pathlib import Path
 
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
 
 from kd.dataset import load_pde
 from kd.model.kd_sga import KD_SGA
-from kd.viz import configure, render_equation, render, VizRequest
+from kd.viz import VizRequest, configure, render, render_equation
 
-# 1. 通过统一入口加载数据集
-pde_dataset = load_pde('chafee-infante')
-
-# 2. 创建并配置参数 (所有在 SGA config 中定义的参数都已被兼容)
-model = KD_SGA(sga_run=2, depth=3)
-
-# 3. 使用新接口直接传入 PDEDataset
-model.fit_dataset(pde_dataset)
-
-# 4. 查看结果（字符串与 LaTeX）
-print(f"The discovered equation is: {model.best_pde_}")
-latex_with_coeff = model.equation_latex()
-latex_structure = model.equation_latex(include_coefficients=False)
-print(f"LaTeX form (with coefficients): {latex_with_coeff}")
-print(f"LaTeX form (structure only): {latex_structure}")
-
-# 5. 使用统一 façade 生成方程图
-configure(save_dir="artifacts/sga_viz")
-eq_result = render_equation(model)
-if eq_result.paths:
-    print("Equation figures:")
-    for path in eq_result.paths:
-        print(f"  - {path}")
-else:
-    print("Equation figures were not generated.")
-print(f"Equation metadata: {eq_result.metadata}")
-
-# 6. 调用 façade 的 SGA field comparison 意图
-field_request = VizRequest(kind='field_comparison', target=model, options={})
-field_result = render(field_request)
-if field_result.paths:
-    print("Field comparison figures:")
-    for path in field_result.paths:
-        print(f"  - {path}")
-else:
-    print("Field comparison figure was not generated.")
-
-field_summary = field_result.metadata.get('summary', {})
-print(f"Field comparison summary: {field_summary}")
-
-# 7. 展示时间切片（u, u_t, u_x, u_{xx}) 对比
-time_slice_request = VizRequest(
-    kind='time_slices',
-    target=model,
-    options={'slice_times': [0.0, 0.5, 1.0]},
+# ---------------------------------------------------------------------------
+# Configuration (kept simple on purpose)
+# ---------------------------------------------------------------------------
+DATASET_NAME = "burgers"  # Available: 'chafee-infante', 'burgers', 'kdv'
+SAVE_DIR = PROJECT_ROOT / "artifacts" / "sga_viz"
+SGA_PARAMS = dict(
+    num=20,
+    depth=4,
+    width=5,
+    p_var=0.5,
+    p_mute=0.3,
+    p_cro=0.5,
+    sga_run=100,
+    seed=0,
 )
-time_slice_result = render(time_slice_request)
-if time_slice_result.paths:
-    print("Time-slice comparison figures:")
-    for path in time_slice_result.paths:
-        print(f"  - {path}")
-else:
-    print("Time-slice comparison figure was not generated.")
-time_slice_summary = time_slice_result.metadata.get('time_slices_summary', {})
-print(f"Time-slice summary: {time_slice_summary}")
 
-# 8. 保留 legacy 图像输出（headless 已自动处理）
-model.plot_results()
+
+def main() -> None:
+    print(f"Loading dataset '{DATASET_NAME}' with kd.dataset.load_pde ...")
+    dataset = load_pde(DATASET_NAME)
+
+    print("Initialising KD_SGA with verification-aligned hyperparameters:")
+    for key, value in SGA_PARAMS.items():
+        print(f"  - {key} = {value}")
+    model = KD_SGA(**SGA_PARAMS)
+
+    model.fit_dataset(dataset)
+
+    print("\nDiscovered equation (raw string):")
+    print(f"  {model.best_pde_}")
+    latex_full = model.equation_latex()
+    latex_structure = model.equation_latex(include_coefficients=False)
+    print("LaTeX (with coefficients):")
+    print(f"  {latex_full}")
+    print("LaTeX (structure only):")
+    print(f"  {latex_structure}")
+
+    configure(save_dir=str(SAVE_DIR))
+
+    eq_result = render_equation(model)
+    if eq_result.paths:
+        print("\nEquation figures saved:")
+        for path in eq_result.paths:
+            print(f"  - {path}")
+
+    intents = [
+        ("field_comparison", {}),
+        ("time_slices", {"slice_times": [0.0, 0.5, 1.0]}),
+        ("residual", {"bins": 40}),
+        ("parity", {}),
+    ]
+    for intent, options in intents:
+        result = render(VizRequest(kind=intent, target=model, options=options))
+        if result.paths:
+            print(f"\n{intent.replace('_', ' ').title()} figures saved:")
+            for path in result.paths:
+                print(f"  - {path}")
+        if result.metadata:
+            print(f"{intent.title()} metadata: {result.metadata}")
+
+    print("\nCalling legacy visualizer (writes assets into the working directory)...")
+    model.plot_results()
+
+
+if __name__ == "__main__":
+    main()

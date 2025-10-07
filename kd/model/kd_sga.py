@@ -138,8 +138,9 @@ class KD_SGA(BaseEstimator):
 
         inferred_name = solver_kwargs.pop("problem_name", None)
         aliases = getattr(dataset, 'aliases', {}) if hasattr(dataset, 'aliases') else {}
+        sga_problem = aliases.get('sga_problem') if isinstance(aliases, dict) else None
         legacy_problem = aliases.get('legacy') if isinstance(aliases, dict) else None
-        problem_label = problem_name or legacy_problem or inferred_name or "custom_dataset"
+        problem_label = problem_name or sga_problem or legacy_problem or inferred_name or "custom_dataset"
 
         actual_context_cls = context_cls or ProblemContext
         actual_solver_cls = solver_cls or SGAPDE_Solver

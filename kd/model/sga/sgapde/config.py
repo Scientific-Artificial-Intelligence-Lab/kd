@@ -3,6 +3,7 @@ Configuration classes for the SGA-PDE solver.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -85,52 +86,106 @@ class SolverConfig:
         self._load_problem_config()
         
     def _find_data_file(self, filename):
-        # 1. 当前目录下的 ./data/
-        local_path = os.path.join(os.path.dirname(__file__), "data", filename)
-        if os.path.exists(local_path):
-            return local_path
-        # 2. 工程根目录下的 kd/dataset/data/
-        proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-        kd_data_path = os.path.join(proj_root, "kd", "dataset", "data", filename)
-        if os.path.exists(kd_data_path):
-            return kd_data_path
-        # 3. 直接用 filename（支持绝对路径）
-        if os.path.exists(filename):
-            return filename
-        raise FileNotFoundError(f"Cannot find data file: {filename}")
+        if isinstance(filename, (list, tuple, set)):
+            candidates = tuple(filename)
+        else:
+            candidates = (filename,)
+
+        base_dir = os.path.dirname(__file__)
+        proj_root = os.path.abspath(os.path.join(base_dir, "../../../.."))
+
+        for candidate in candidates:
+            local_path = os.path.join(base_dir, "data", candidate)
+            if os.path.exists(local_path):
+                return local_path
+
+            kd_data_path = os.path.join(proj_root, "kd", "dataset", "data", candidate)
+            if os.path.exists(kd_data_path):
+                return kd_data_path
+
+            if os.path.exists(candidate):
+                return candidate
+
+        raise FileNotFoundError(f"Cannot find data file: {candidates}")
 
     def _load_problem_config(self):
         """Load problem-specific data and equations."""
-        if self.problem_name == 'chafee-infante':
-            self.u = np.load(self._find_data_file("chafee_infante_CI.npy"))
-            self.x = np.load(self._find_data_file("chafee_infante_x.npy"))
-            self.t = np.load(self._find_data_file("chafee_infante_t.npy"))
+        has_inline_data = (
+            self.u_data is not None
+            and self.x_data is not None
+            and self.t_data is not None
+        )
+
+        normalized_name = self._normalize_problem_name(self.problem_name)
+
+        if normalized_name == 'chafee-infante':
+            if has_inline_data:
+                self.u = np.asarray(self.u_data)
+                self.x = np.asarray(self.x_data)
+                self.t = np.asarray(self.t_data)
+            else:
+                self.u = np.load(self._find_data_file("chafee_infante_CI.npy"))
+                self.x = np.load(self._find_data_file("chafee_infante_x.npy"))
+                self.t = np.load(self._find_data_file("chafee_infante_t.npy"))
             self.right_side = 'right_side = - 1.0008*u + 1.0004*u**3'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = uxx_origin-u_origin+u_origin**3'
             self.left_side_origin = 'left_side_origin = ut_origin'
-        elif self.problem_name == 'burgers':
+        elif normalized_name == 'burgers':
             import scipy.io as scio
-            data = scio.loadmat(self._find_data_file("burgers.mat"))
-            self.u = data.get("usol")
-            self.x = np.squeeze(data.get("x"))
-            self.t = np.squeeze(data.get("t").reshape(1, 201))
+
+            if has_inline_data:
+                self.u = np.asarray(self.u_data)
+                self.x = np.asarray(self.x_data)
+                self.t = np.asarray(self.t_data)
+            else:
+                data = scio.loadmat(self._find_data_file(("burgers.mat", "burgers2.mat")))
+                self.u = data.get("usol")
+                self.x = np.squeeze(data.get("x"))
+                self.t = np.squeeze(data.get("t").reshape(1, -1))
             self.right_side = 'right_side = -u*ux+0.1*uxx'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -1*u_origin*ux_origin+0.1*uxx_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
-        elif self.problem_name == 'kdv':
+        elif normalized_name == 'kdv':
             import scipy.io as scio
-            data = scio.loadmat(self._find_data_file("KdV.mat"))
-            self.u = data.get("uu")
-            self.x = np.squeeze(data.get("x"))
-            self.t = np.squeeze(data.get("tt").reshape(1, 201))
+
+            if has_inline_data:
+                self.u = np.asarray(self.u_data)
+                self.x = np.asarray(self.x_data)
+                self.t = np.asarray(self.t_data)
+            else:
+                data = scio.loadmat(self._find_data_file(("KdV.mat", "Kdv.mat", "KdV_equation.mat")))
+                self.u = data.get("uu")
+                self.x = np.squeeze(data.get("x"))
+                self.t = np.squeeze(data.get("tt").reshape(1, -1))
             self.right_side = 'right_side = -0.0025*uxxx-u*ux'
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-u_origin*ux_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
         else:
+            if has_inline_data:
+                raise ValueError(
+                    "SGA solver requires a known problem definition to obtain RHS templates. "
+                    f"Received '{self.problem_name}'"
+                )
             raise ValueError(f"Unknown problem: {self.problem_name}")
+
+    @staticmethod
+    def _normalize_problem_name(name: Optional[str]) -> Optional[str]:
+        if not name:
+            return name
+        slug = name.strip().lower().replace('_', '-').replace(' ', '-')
+        alias_map = {
+            'burgers2': 'burgers',
+            'burgers-equation': 'burgers',
+            'chafee-infante': 'chafee-infante',
+            'chafeeinfante': 'chafee-infante',
+            'kdv-equation': 'kdv',
+            'kdv_equation': 'kdv',
+            'kdv-equation-sine': 'kdv',
+        }
+        return alias_map.get(slug, slug)
             
     @staticmethod
     def divide(up, down, eta=1e-10):

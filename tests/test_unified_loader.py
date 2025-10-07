@@ -36,8 +36,12 @@ def test_unified_loader_dlga(monkeypatch):
     assert captured['y_shape'] == y_train.shape
 
 
-def test_unified_loader_sga(monkeypatch):
-    dataset = load_pde('chafee-infante')
+@pytest.mark.parametrize('dataset_name', ['chafee-infante', 'burgers', 'kdv'])
+def test_unified_loader_sga(monkeypatch, dataset_name):
+    if dataset_name != 'chafee-infante':
+        pytest.importorskip('scipy')
+
+    dataset = load_pde(dataset_name)
 
     class DummyContext:
         def __init__(self, config):
@@ -50,7 +54,7 @@ def test_unified_loader_sga(monkeypatch):
         def run(self, context):
             return "u_t = 0", 0.0
 
-    model = KD_SGA(sga_run=1, depth=1, width=1, num=1)
+    model = KD_SGA(sga_run=1, depth=1, width=1, num=1, seed=0)
     result = model.fit_dataset(dataset, context_cls=DummyContext, solver_cls=DummySolver)
 
     assert result is model
