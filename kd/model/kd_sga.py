@@ -43,55 +43,17 @@ class KD_SGA(BaseEstimator):
         self.use_metadata = use_metadata
         self.delete_edges = delete_edges
         
+    # 旧版 fit 方法，保留以兼容现有代码
     def fit(self, problem_name: str):
         """
-        根据预设的问题名称加载数据并执行PDE发现算法。
+        旧接口已废弃：请改用 fit_dataset(dataset)。
 
-        这是我们当前阶段的临时数据接口，未来可以扩展。
-
-        参数:
-            problem_name (str): 预设的数据集名称, 
-                                例如 'chafee-infante', 'burgers', 'kdv'。
+        这样可以统一从 kd.dataset.load_pde 入口加载数据，避免 legacy 文件路径依赖。
         """
-        print(f"--- Starting SGA PDE Discovery for problem: {problem_name} ---")
-
-        # 1. 根据 self 的属性和传入的 problem_name 创建 SolverConfig
-        # 我们没有传入 u_data, x_data, t_data，所以它会自动从文件加载
-        config = SolverConfig(
-            problem_name=problem_name,
-            sga_run=self.sga_run,
-            num=self.num,
-            depth=self.depth,
-            width=self.width,
-            p_var=self.p_var,
-            p_mute=self.p_mute,
-            p_cro=self.p_cro,
-            seed=self.seed,
-            use_autograd=self.use_autograd,
-            max_epoch=self.max_epoch,
-            use_metadata=self.use_metadata,
-            delete_edges=self.delete_edges
+        raise RuntimeError(
+            "KD_SGA.fit(problem_name) 已废弃，请改用 KD_SGA.fit_dataset(PDEDataset)。"
+            " 如需兼容旧脚本，请先通过 kd.dataset.load_pde(problem_name) 获取数据集。"
         )
-        
-        # 2. 创建数据上下文，完成所有数据预处理
-        context = ProblemContext(config)
-        
-        # 3. 创建并运行求解器
-        solver = SGAPDE_Solver(config)
-        best_pde, best_score = solver.run(context)
-        
-        # 4. 存储结果到模型的属性中（以后缀 _ 结尾）
-        self.best_pde_ = best_pde
-        self.best_score_ = best_score
-        self.context_ = context # 保存完整的上下文，以备可视化使用
-        self.config_ = config   # 保存此次运行的配置
-        self.best_equation_details_ = getattr(solver, 'best_equation_details_', None)
-        
-        print("\n--- SGA PDE Discovery Finished ---")
-        print(f"Best PDE Found: {self.best_pde_}")
-        print(f"AIC Score: {self.best_score_}")
-
-        return self
 
     def equation_latex(
         self,
@@ -102,7 +64,7 @@ class KD_SGA(BaseEstimator):
 
         details = getattr(self, 'best_equation_details_', None)
         if details is None:
-            raise RuntimeError('Equation details are not available. Call fit() first.')
+            raise RuntimeError('Equation details are not available. Call fit_dataset() first.')
         return sga_equation_to_latex(details, include_coefficients=include_coefficients)
 
     def equation_structure_latex(self) -> str:
@@ -188,7 +150,21 @@ class KD_SGA(BaseEstimator):
         调用 sgapde 自带的可视化工具来绘制结果和诊断图。
         """
         if not hasattr(self, 'context_'):
-            raise RuntimeError("You must call fit() before plotting results.")
-        
-        print("INFO: Generating visualization plots...")
+            raise RuntimeError("You must call fit_dataset() before plotting results.")
+
+        # legacy 可视化仅支持三种内置 benchmark，custom 数据会缺少解析模板
+        supported = {"chafee-infante", "burgers", "kdv"}
+        problem = getattr(self, "config_", None)
+        normalized_name = None
+        if problem is not None:
+            normalized_name = SolverConfig._normalize_problem_name(problem.problem_name)
+        has_ground_truth = getattr(problem, "has_ground_truth", False)
+        if normalized_name not in supported or not has_ground_truth:
+            print(
+                "INFO: legacy SGA visualizer 仅针对内置基准（chafee-infante/burgers/kdv），"
+                "已跳过 plot_figures。可使用 kd.viz 的 SGA 适配器进行可视化。"
+            )
+            return
+
+        print("INFO: Generating legacy visualization plots...")
         sga_visualizer.plot_figures(self.context_, self.config_)

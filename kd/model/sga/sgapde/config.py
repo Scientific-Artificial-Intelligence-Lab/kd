@@ -24,9 +24,30 @@ class Net(nn.Module):
         out = self.predict(out) 
         return out
 
+# god class. need to think about refactor later
 @dataclass
 class SolverConfig:
-    """Configuration for the SGA-PDE solver."""
+    """
+    Configuration for the SGA-PDE solver.
+
+    在原始 `sgapde` 库中, 这个类同时承担了两类职责:
+    1. 算法/运行配置: SGA 树结构、遗传算子、AIC 惩罚、是否使用 metadata / autograd 等。
+    2. 问题/数据配置: 通过 ``problem_name`` 在 `_load_problem_config` 中选择预置的
+       Chafee-Infante / Burgers / KdV 三个 benchmark, 并直接从本地文件加载 `u/x/t`,
+       以及对应的真 PDE 模板字符串、元数据网络路径等。
+
+    在 KD 集成中:
+    - 推荐入口是上层的 `KD_SGA.fit_dataset(PDEDataset, ...)`, 数据通常已经由
+      `PDEDataset` + `PDE_REGISTRY` 统一加载, 然后通过 `u_data/x_data/t_data`
+      传入本配置对象。
+    - 对这条“框架模式”数据流来说, `_load_problem_config` 中的文件加载逻辑基本不会
+      被使用, 主要意义是为少数内置 benchmark 提供 ground-truth PDE 模板和 legacy
+      可视化/误差评估所需的字段。
+    - 因此, 可以把 `_load_problem_config` 理解为 *仅服务三种内置问题的遗留分支*;
+      新增/自定义数据集应该只通过 `PDEDataset` + `fit_dataset` 接入, 而不是在这里
+      再增加新的 `problem_name` 分支。这一点在 `notes/dataloader/sga_work.md` 中有
+      更详细的设计说明。
+    """
     
     # Problem specification
     problem_name: str = 'chafee_infante'
@@ -72,6 +93,9 @@ class SolverConfig:
 
     train_ratio: float = 1.0
 
+    # 标记是否具备解析真解模板，用于误差/legacy 可视化
+    has_ground_truth: bool = False
+
     def __post_init__(self):
         """Post-initialization to set up derived attributes."""
         # Set random seed
@@ -109,7 +133,19 @@ class SolverConfig:
         raise FileNotFoundError(f"Cannot find data file: {candidates}")
 
     def _load_problem_config(self):
-        """Load problem-specific data and equations."""
+        """
+        Load problem-specific data and equations.
+
+        说明:
+        - 在原始 `sgapde` 使用方式下, 调用者只需要给出 `problem_name`, 这里会直接从
+          本地文件中加载对应的 `u/x/t` 数据, 并设置真 PDE 的左右端模板字符串等。
+        - 在 KD 集成的主路径中, 数据通常已经通过 `PDEDataset`+注册表加载完毕并以
+          `u_data/x_data/t_data` 形式传入; 此时 `ProblemContext._load_data` 会优先
+          使用这些 inline 数据, 而不是这里设置的 `self.u/self.x/self.t`。
+        - 因此, 这里对 `chafee-infante` / `burgers` / `kdv` 的分支可以视为对原论文
+          三个 benchmark 的兼容支持; 不建议在此处为新数据集继续扩展硬编码分支,
+          新增数据应通过 KD 的 dataloader/registry 体系进入, 再由上层传入 `u_data`。
+        """
         has_inline_data = (
             self.u_data is not None
             and self.x_data is not None
@@ -131,6 +167,7 @@ class SolverConfig:
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = uxx_origin-u_origin+u_origin**3'
             self.left_side_origin = 'left_side_origin = ut_origin'
+            self.has_ground_truth = True
         elif normalized_name == 'burgers':
             import scipy.io as scio
 
@@ -147,6 +184,7 @@ class SolverConfig:
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -1*u_origin*ux_origin+0.1*uxx_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
+            self.has_ground_truth = True
         elif normalized_name == 'kdv':
             import scipy.io as scio
 
@@ -163,13 +201,23 @@ class SolverConfig:
             self.left_side = 'left_side = ut'
             self.right_side_origin = 'right_side_origin = -0.0025*uxxx_origin-u_origin*ux_origin'
             self.left_side_origin = 'left_side_origin = ut_origin'
+            self.has_ground_truth = True
         else:
             if has_inline_data:
-                raise ValueError(
-                    "SGA solver requires a known problem definition to obtain RHS templates. "
-                    f"Received '{self.problem_name}'"
-                )
-            raise ValueError(f"Unknown problem: {self.problem_name}")
+                # custom 模式：允许任意 u/x/t，跳过解析模板
+                self.u = np.asarray(self.u_data)
+                self.x = np.asarray(self.x_data)
+                self.t = np.asarray(self.t_data)
+                self.right_side = None
+                self.left_side = None
+                self.right_side_origin = None
+                self.left_side_origin = None
+                self.has_ground_truth = False
+                return
+            raise ValueError(
+                "SGA solver requires a known problem definition to obtain RHS templates. "
+                f"Received '{self.problem_name}' without inline data."
+            )
 
     @staticmethod
     def _normalize_problem_name(name: Optional[str]) -> Optional[str]:

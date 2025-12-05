@@ -287,6 +287,17 @@ class ProblemContext:
         self.default_names = ['u']
         self.num_default = self.default_terms.shape[1]
 
+        # 若无解析模板或显式标记为无真解，则跳过 ground-truth 误差计算
+        if (
+            not getattr(self.config, "has_ground_truth", False)
+            or self.config.right_side is None
+            or self.config.left_side is None
+            or self.config.right_side_origin is None
+            or self.config.left_side_origin is None
+        ):
+            print("\tINFO: No analytic PDE template; skipping ground-truth error computation.")
+            return
+
         # 计算 right_side, right_side_full, right_side_origin, right_side_full_origin
         # 动态执行 config 的表达式
         local_vars = {

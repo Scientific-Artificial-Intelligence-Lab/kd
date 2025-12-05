@@ -42,7 +42,7 @@ model.import_dataset(
     random_state=42,
 )
 
-step_output = model.train(n_epochs=10, verbose=False)
+step_output = model.train(n_epochs=100, verbose=False)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 
 

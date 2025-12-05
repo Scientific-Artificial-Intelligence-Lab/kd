@@ -1,6 +1,15 @@
 """
 PDE数据集注册表
 根据旧代码分析得出的映射关系
+
+说明 (与 SGA 相关):
+- SGA backend 自带的 `SolverConfig._load_problem_config` 内部仍保留了对
+  `'chafee-infante'` / `'burgers'` / `'kdv'` 三个 benchmark 的硬编码加载逻辑,
+  以及对应的真 PDE 模板, 主要用于兼容原始 `sgapde` 论文代码。
+- 在 KD 的主数据流中, SGA 更推荐通过 `PDEDataset` + `KD_SGA.fit_dataset` 使用。
+  这时数据文件/键名等信息以本注册表为准, 然后通过 `u_data/x_data/t_data` 注入
+  给 SGA; `_load_problem_config` 对新数据集不再扩展, 仅作为那三个内置问题的
+  legacy 支持。
 """
 
 # Example registry entry (pseudo-JSON):
