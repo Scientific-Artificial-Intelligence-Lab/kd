@@ -39,8 +39,10 @@ model = KD_DSCV(
 )
 
 np.random.seed(42)
-model.import_dataset(pde_dataset)
 
+# 推荐入口：fit_dataset，可以一步完成导入 + 训练；
+# 这里保持与旧示例一致，显式展示 import_dataset + train 的组合。
+model.import_dataset(pde_dataset)
 step_output = model.train(n_epochs=11, verbose=False)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 

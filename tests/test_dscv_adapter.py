@@ -279,7 +279,7 @@ def test_kd_dscv_fit_from_dataset(monkeypatch):
 
     monkeypatch.setattr(Searcher, 'search', fake_search, raising=False)
 
-    result = model.fit_from_dataset(dataset, n_epochs=1, verbose=False)
+    result = model.fit_dataset(dataset, n_epochs=1, verbose=False)
 
     assert result['expression'] == 'u_t = 0'
     assert model.dataset_ is dataset
@@ -337,3 +337,15 @@ def test_kd_dscv_spr_train_integration(monkeypatch):
     model.import_dataset(dataset, sample=50, colloc_num=64, random_state=0)
     result = model.train(n_epochs=1, verbose=False)
     assert result['expression'] == 'u_t = 0'
+
+
+def test_kd_dscv_gp_aggregator_is_disabled_in_kd(monkeypatch):
+    """run_gp_agg=True 时在 KD 中应被忽略，仅发出 warning 并返回 None。"""
+
+    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model.config_gp_agg['run_gp_agg'] = True
+
+    with pytest.warns(RuntimeWarning):
+        agg = model.make_gp_aggregator()
+
+    assert agg is None

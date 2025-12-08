@@ -166,18 +166,25 @@ class DLGA(BaseGa):
             loss.backward()
             NN_optimizer.step()
 
+            # 原始实现仅在每 500 步记录一次验证误差，这会导致 max_iter < 500 时 validate_error 为空。
+            # 为了兼容较小迭代数，这里保留 500 步的默认行为，并在训练结束后做一次兜底处理。
             if (iter + 1) % 500 == 0:
                 validate_error.append(loss_validate)
                 torch.save(self.Net.state_dict(), f"model_save/Net_{iter + 1}.pkl")
                 print(
                     "iter_num: %d      loss: %.8f    loss_validate: %.8f"
                     % (iter + 1, loss, loss_validate)
-                )
+            )
 
             self.train_loss_history.append(float(loss))
             self.val_loss_history.append(float(loss_validate))
 
-        self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
+        # 若没有任何 checkpoint（例如 max_iter < 500），则直接使用最后一次权重作为“最佳”
+        if not validate_error:
+            torch.save(self.Net.state_dict(), f"model_save/Net_{self.max_iter}.pkl")
+            self.best_epoch = self.max_iter
+        else:
+            self.best_epoch = (validate_error.index(min(validate_error)) + 1) * 500
         return self.Net, self.best_epoch
 
     def generate_meta_data(self, X):

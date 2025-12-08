@@ -266,3 +266,54 @@ class KD_DLGA(DLGA):
         with torch.no_grad():
             u_pred = self.Net(X_tensor).cpu().numpy()
         return u_pred
+
+    def fit_dataset(
+        self,
+        dataset,
+        *,
+        sample=None,
+        sample_method: str = "random",
+        Xy_from: str = "sample",
+    ):
+        """
+        使用统一的 :class:`PDEDataset` 接口训练 DLGA 模型。
+
+        参数:
+            dataset: 由 ``kd.dataset.load_pde(name)`` 返回的 PDEDataset 实例。
+            sample: 采样策略：
+                - int: 抽取固定数量的样本点；
+                - float(0<r<=1): 按比例抽样；
+                - None: 使用完整网格上的所有点。
+            sample_method: 透传给 ``PDEDataset.sample(method=...)``，默认 'random'。
+            Xy_from: 目前支持：
+                - 'sample': 使用 ``sample`` / ``sample_method`` 从数据集中采样；
+                - 'mesh': 忽略 ``sample``，直接使用完整网格。
+        """
+        from kd.dataset import PDEDataset  # 避免循环依赖
+
+        if not isinstance(dataset, PDEDataset):
+            raise TypeError("KD_DLGA.fit_dataset 目前仅接受 PDEDataset 实例，请先通过 kd.dataset.load_pde(name) 获取数据集。")
+
+        if dataset.usol.ndim != 2:
+            raise ValueError("KD_DLGA 目前仅支持 1D 空间 + 时间的 PDE(usol 必须是二维网格）")
+
+        if Xy_from not in {"sample", "mesh"}:
+            raise ValueError(f"Unsupported Xy_from='{Xy_from}'. Expected 'sample' or 'mesh'.")
+
+        if Xy_from == "mesh" or sample is None:
+            # 使用完整网格上的所有点
+            X = dataset.mesh()
+            y = dataset.usol.reshape(-1, 1)
+        else:
+            # 通过 PDEDataset.sample 抽取训练点
+            X, y = dataset.sample(n_samples=sample, method=sample_method)
+
+        if X.shape[1] != 2:
+            raise ValueError(f"KD_DLGA 期望特征维度为 2(x,t) 但收到 X.shape={X.shape}")
+
+        # 记录数据集引用，便于后续可视化或诊断
+        self.dataset_ = dataset
+
+        # 保持专家入口 fit(X, y) 行为不变，但对外始终返回 self，方便链式调用与测试断言
+        self.fit(X, y)
+        return self

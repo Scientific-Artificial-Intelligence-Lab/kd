@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import os
 from kd.model.kd_dlga import KD_DLGA
+from kd.dataset import PDEDataset
 
 # The original DLGA class depends on an NN class. For testing purposes,
 # we need a placeholder that mimics the original structure.
@@ -144,3 +145,72 @@ def test_convert_chrom_to_eq_uses_custom_operators():
     assert "2.5*u_xx" in equation_str
     assert "-1.0*u" in equation_str
     assert "u_t=" in equation_str
+
+
+def _make_toy_pdedataset():
+    x = np.linspace(0.0, 1.0, 4)
+    t = np.linspace(0.0, 1.0, 5)
+    xx, tt = np.meshgrid(x, t, indexing="ij")
+    usol = np.sin(xx) * np.cos(tt)
+    return PDEDataset(
+        equation_name="toy",
+        pde_data=None,
+        domain=None,
+        epi=0.0,
+        x=x,
+        t=t,
+        usol=usol,
+    )
+
+
+def test_fit_dataset_uses_sample_and_calls_fit(monkeypatch):
+    dataset = _make_toy_pdedataset()
+    model = KD_DLGA(operators=["u", "u_x"], epi=0.01, input_dim=2, max_iter=10)
+
+    called = {}
+
+    def fake_fit(self, X, y):
+        called["X"] = X
+        called["y"] = y
+        return self
+
+    monkeypatch.setattr(KD_DLGA, "fit", fake_fit, raising=False)
+
+    result = model.fit_dataset(dataset, sample=5, sample_method="random")
+
+    assert result is model
+    assert model.dataset_ is dataset
+    assert "X" in called and "y" in called
+    assert called["X"].shape[0] == 5
+    assert called["X"].shape[1] == 2
+    assert called["y"].shape[0] == 5
+
+
+def test_fit_dataset_sample_none_uses_full_mesh(monkeypatch):
+    dataset = _make_toy_pdedataset()
+    total_points = len(dataset.x) * len(dataset.t)
+
+    model = KD_DLGA(operators=["u"], epi=0.01, input_dim=2, max_iter=10)
+
+    called = {}
+
+    def fake_fit(self, X, y):
+        called["X"] = X
+        called["y"] = y
+        return self
+
+    monkeypatch.setattr(KD_DLGA, "fit", fake_fit, raising=False)
+
+    result = model.fit_dataset(dataset, sample=None)
+
+    assert result is model
+    assert model.dataset_ is dataset
+    assert called["X"].shape[0] == total_points
+    assert called["X"].shape[1] == 2
+    assert called["y"].shape[0] == total_points
+
+
+def test_fit_dataset_requires_pdedataset():
+    model = KD_DLGA(operators=["u"], epi=0.01, input_dim=2, max_iter=10)
+    with pytest.raises(TypeError):
+        model.fit_dataset("not-a-dataset")  # type: ignore[arg-type]

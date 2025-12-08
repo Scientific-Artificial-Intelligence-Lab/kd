@@ -36,9 +36,10 @@ np.random.seed(42)
 pde_dataset = load_pde('burgers')
 
 # 2. 使用新的 dataset 接口导入数据（仍保留旧入口以兼容原有脚本）
+#    推荐：直接调用 fit_dataset(dataset, n_epochs=...) 一步完成导入+训练。
 model.import_dataset(pde_dataset)
 
-# 3. 训练模型
+# 3. 训练模型（等价用法：model.fit_dataset(pde_dataset, n_epochs=11)）
 step_output = model.train(n_epochs=11)
 print(f"Current best expression is {step_output['expression']} and its reward is {step_output['r']}")
 

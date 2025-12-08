@@ -40,8 +40,6 @@ def test_kd_dlga_smoke(dataset_name: str, info: dict):
     torch = pytest.importorskip('torch', reason='KD_DLGA depends on torch')
     dataset = load_pde(dataset_name)
     nx, nt = dataset.get_size()
-    sample_count = min(256, nx * nt)
-    X_train, y_train = dataset.sample(sample_count)
 
     model = KD_DLGA(
         operators=['u', 'u_x', 'u_xx', 'u_xxx'],
@@ -50,10 +48,12 @@ def test_kd_dlga_smoke(dataset_name: str, info: dict):
         verbose=False,
         max_iter=200,
     )
-    result = model.fit(X_train, y_train)
+    sample_count = min(256, nx * nt)
+    result = model.fit_dataset(dataset, sample=sample_count)
 
     assert result is model
-    assert getattr(model, 'best_equation_', None) is not None or getattr(model, 'equations_', None)
+    # eq_latex 对新版 KD_DLGA 是主要出口；旧字段保作后备
+    assert getattr(model, 'eq_latex', None) or getattr(model, 'best_equation_', None) or getattr(model, 'equations_', None)
 
 
 @pytest.mark.parametrize('dataset_name, info', SGA_DATASETS)

@@ -76,7 +76,7 @@ def test_unified_loader_dscv(monkeypatch):
     monkeypatch.setattr(Searcher, 'search', fake_search, raising=False)
     monkeypatch.setattr(Searcher, 'search_one_step', fake_search_one_step, raising=False)
 
-    result = model.fit_from_dataset(dataset, n_epochs=1, verbose=False)
+    result = model.fit_dataset(dataset, n_epochs=1, verbose=False)
 
     assert result['expression'] == 'u_t = 0'
     assert model.dataset_ is dataset

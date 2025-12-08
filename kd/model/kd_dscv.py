@@ -188,27 +188,6 @@ class KD_DSCV(BaseRL):
         self.setup()
         return self
 
-    def fit_from_dataset(
-        self,
-        dataset,
-        *,
-        n_epochs=100,
-        verbose=True,
-        sym_true=None,
-        n_input_dim=None,
-        dataset_name=None,
-    ):
-        """High-level wrapper: import a :class:`~kd.dataset.PDEDataset` and train."""
-
-        self.import_dataset(
-            dataset,
-            sym_true=sym_true,
-            n_input_dim=n_input_dim,
-            dataset_name=dataset_name,
-        )
-
-        return self.train(n_epochs=n_epochs, verbose=verbose)
-
     def make_outter_data(self, x, y, domains, data_type):
         """Create data handler for external data.
         
@@ -222,19 +201,45 @@ class KD_DSCV(BaseRL):
             AssertionError: If data type is not 'regular'.
         """
         assert data_type == 'regular', "only regular form of dataset is supported in current mode"
-        # Todo: Implement other data types
+        # Todo (KD 1.x): legacy path, kept only for upstream compatibility.
+        # 在 KD 中推荐使用 PDEDataset + import_dataset/fit_from_dataset/fit_dataset。
 
     def fit(self, X, y, domains=[], data_type='Sparse'):
-        """Fit model to data.
-        
-        Args:
-            X: Input features.
-            y: Target values.
-            domains (list): Domain boundaries.
-            data_type (str): Type of data.
+        """Deprecated external-data入口 (KD 1.0 中不再支持)
+
+        KD 中推荐使用:
+
+            - import_dataset(PDEDataset)
+            - fit_from_dataset(PDEDataset, ...)
+            - fit_dataset(PDEDataset, ...)
+
+        如需直接使用 X/y/domains 形式的数据，请参考原生 DISCOVER / PDETask 的用法。
         """
-        self.make_outter_data(X, y, domains, data_type)
-        self.setup()
+        raise RuntimeError(
+            "KD_DSCV.fit(X, y, ...) 在 KD 1.0 中已废弃，不再支持 direct array 入口。"
+            " 请使用 import_dataset / fit_from_dataset / fit_dataset 与 PDEDataset 搭配。"
+        )
+
+    def fit_dataset(
+        self,
+        dataset,
+        *,
+        n_epochs: int = 100,
+        verbose: bool = True,
+        sym_true=None,
+        n_input_dim=None,
+        dataset_name=None,
+    ):
+        """与 SGA/DLGA 对齐的语法糖：直接从 PDEDataset 训练 DSCV (Local PDE 模式)。"""
+
+        # 真实实现路径：导入 PDEDataset 并启动 searcher
+        self.import_dataset(
+            dataset,
+            sym_true=sym_true,
+            n_input_dim=n_input_dim,
+            dataset_name=dataset_name,
+        )
+        return self.train(n_epochs=n_epochs, verbose=verbose)
 
     def train_one_step(self, epoch=0, verbose=True):
         """Train model for one step.
@@ -315,14 +320,15 @@ class KD_DSCV(BaseRL):
         Returns:
             GPAggregator or None: GP aggregator object.
         """
-        if self.config_gp_agg.pop("run_gp_agg", False):
-            from discover.aggregator import gpAggregator
-            gp_aggregator = gpAggregator(self.prior,
-                                         self.pool,
-                                         self.config_gp_agg)
-        else:
-            gp_aggregator = None
-        return gp_aggregator
+        # KD 1.x 中禁用 GP aggregator / 多进程聚合逻辑，避免 self.pool / import 路径等历史问题。
+        # 即使配置中设置了 run_gp_agg=True，也只给出一次性告警并返回 None。
+        run_gp_agg = bool(self.config_gp_agg.get("run_gp_agg", False))
+        if run_gp_agg:
+            warnings.warn(
+                "KD_DSCV: GP aggregator (run_gp_agg=True) 在 KD 1.x 中不受支持，将被忽略。",
+                RuntimeWarning,
+            )
+        return None
     
     def make_searcher(self):
         """Create searcher.
@@ -632,3 +638,35 @@ class KD_DSCV_SPR(KD_DSCV):
     def predict(self, x):
         """Make predictions (not implemented)."""
         pass
+
+    def fit_dataset(
+        self,
+        dataset,
+        *,
+        n_epochs: int = 20,
+        verbose: bool = True,
+        sample=None,
+        sample_ratio: float = 0.1,
+        colloc_num=None,
+        random_state: int = 42,
+        noise_level=None,
+        data_ratio=None,
+        spline_sample: bool = False,
+        cut_quantile=None,
+        dataset_name=None,
+    ):
+        """与 Local PDE 保持风格一致的语法糖：PDEDataset → Sparse+PINN 训练。"""
+
+        self.import_dataset(
+            dataset,
+            sample=sample,
+            sample_ratio=sample_ratio,
+            colloc_num=colloc_num,
+            random_state=random_state,
+            noise_level=noise_level,
+            data_ratio=data_ratio,
+            spline_sample=spline_sample,
+            cut_quantile=cut_quantile,
+            dataset_name=dataset_name,
+        )
+        return self.train(n_epochs=n_epochs, verbose=verbose)

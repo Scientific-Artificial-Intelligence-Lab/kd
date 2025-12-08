@@ -36,8 +36,8 @@ def render_latex_to_image(
 
         fig, ax = plt.subplots(figsize=(adjusted_width, base_figsize_height), facecolor=background_color)
         
-        # textprops = {'fontsize': font_size} # 如果需要进一步控制文本属性
-        ax.text(0.5, 0.5, latex_str, size=font_size, ha='center', va='center', color="black", wrap=True)
+        # 使用 mathtext 渲染 LaTeX；不启用 wrap，以避免复杂表达式在 matplotlib 中退化为原始文本。
+        ax.text(0.5, 0.5, latex_str, size=font_size, ha='center', va='center', color="black")
         ax.axis('off') # 关闭坐标轴和边框
         
         if output_path is not None:
@@ -53,4 +53,3 @@ def render_latex_to_image(
     finally:
         if 'fig' in locals(): # 确保 fig 变量存在
             plt.close(fig)
-

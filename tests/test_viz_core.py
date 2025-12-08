@@ -5,6 +5,8 @@ import pytest
 
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
+from kd.viz.equation_renderer import render_latex_to_image
+import matplotlib.pyplot as plt
 
 
 class DummyModel:
@@ -119,3 +121,33 @@ def test_list_capabilities_reflects_registry():
 
     viz_registry.unregister_adapter(DummyModel)
     assert list(viz_core.list_capabilities(DummyModel())) == []
+
+
+def test_render_latex_to_image_does_not_use_wrap(monkeypatch, tmp_path):
+    """Guard against reintroducing wrap=True, which breaks mathtext on complex expressions."""
+
+    calls = {}
+
+    class DummyAx:
+        def text(self, *args, **kwargs):
+            calls['text_args'] = args
+            calls['text_kwargs'] = kwargs
+
+        def axis(self, *args, **kwargs):  # pragma: no cover - trivial
+            pass
+
+    class DummyFig:
+        def savefig(self, *args, **kwargs):  # pragma: no cover - trivial
+            pass
+
+    def fake_subplots(*args, **kwargs):
+        return DummyFig(), DummyAx()
+
+    monkeypatch.setattr(plt, 'subplots', fake_subplots)
+
+    out_path = tmp_path / "eq.png"
+    latex = r"$u_t = -0.0026 \left(\frac{d}{d x_{1}}\right)^{2} - 0.6277 x_{1} \frac{d}{d x_{1}} u_{1} + 0.1075 \frac{d}{d x_{1}} u_{1}$"
+    render_latex_to_image(latex, output_path=str(out_path), show=False)
+
+    # 确认我们没有向 ax.text 传入 wrap=True（否则容易触发 mathtext 退化为原始文本）
+    assert 'wrap' not in calls.get('text_kwargs', {})
