@@ -176,8 +176,8 @@ def _calculate_pde_fields(model, best_program):
         Theta_final[:, i] = term_values_grid.flatten()
     
     if not np.isfinite(Theta_final).all():
-        print("\n[计算警告]: 发现的方程包含数值不稳定的项")
-        print("  后续的可视化可能会失败或显示不正确")
+        print("\n[DSCV WARNING] Discovered equation contains numerically unstable terms.")
+        print("  Subsequent visualizations may fail or look incorrect.")
         # return None
 
     # 3. 计算 RHS 和残差

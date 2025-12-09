@@ -12,6 +12,12 @@ authors = [
 dependencies = [
 ]
 
+[project.optional-dependencies]
+# PySR 为可选依赖：只有在需要 KD_PySR 时才安装。
+pysr = [
+  "pysr"
+]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"

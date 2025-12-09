@@ -23,8 +23,8 @@ def train_and_save_model(config: SolverConfig):
     torch.cuda.manual_seed_all(config.seed)
     print(f"Random seed set to: {config.seed}")
     
-    # 从配置加载数据
-    # 注意：这里的加载逻辑是为了让此脚本可以独立运行
+    # Load data from configuration.
+    # Note: this loading logic allows the script to run standalone.
     try:
         print(f"Loading data for problem: {config.problem_name}")
         if config.problem_name == 'chafee-infante':
@@ -38,7 +38,10 @@ def train_and_save_model(config: SolverConfig):
             x = np.squeeze(data.get("x"))
             t = np.squeeze(data.get("t") or data.get("tt"))
     except FileNotFoundError:
-        print(f"❌ 错误: 找不到用于训练的数据文件 for problem '{config.problem_name}'")
+        print(
+            "[MetaNN ERROR] Training data file not found "
+            f"for problem '{config.problem_name}'."
+        )
         return
 
     # 数据准备和归一化

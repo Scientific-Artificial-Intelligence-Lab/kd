@@ -353,12 +353,15 @@ class ProblemContext:
     def _generate_metadata(self):
         """Generate high-resolution metadata using a pre-trained model."""
         print("INFO: Generating high-resolution metadata from pre-trained model (with normalization)...")
-        # 加载预训练模型
+        # Load pre-trained model
         model = Net(self.config.num_feature, self.config.hidden_dim, 1)
         try:
             model.load_state_dict(torch.load(self.config.model_path, map_location=self.device))
         except FileNotFoundError:
-            print(f"❌ 错误：元数据生成失败，因为找不到预训练模型：{self.config.model_path}")
+            print(
+                "[SGA Metadata ERROR] Failed to generate metadata because the "
+                f"pretrained model was not found: {self.config.model_path}"
+            )
             sys.exit(1)
         model.to(self.device)
 
