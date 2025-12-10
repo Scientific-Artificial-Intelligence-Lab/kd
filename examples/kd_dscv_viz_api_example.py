@@ -4,16 +4,13 @@ This mirrors ``examples/kd_dscv_example.py`` but routes plotting through
 ``kd.viz.render`` so the new adapter can be exercised incrementally.
 """
 
-import os
-import sys
 from pathlib import Path
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(kd_main_dir)
-
 import numpy as np
 import warnings
+
+from _bootstrap import ensure_project_root_on_syspath
+
+PROJECT_ROOT = ensure_project_root_on_syspath()
 
 from kd.dataset import load_pde
 from kd.model import KD_DSCV

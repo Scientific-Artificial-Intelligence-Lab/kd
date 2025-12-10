@@ -1,15 +1,18 @@
 """
-PDE数据集注册表
-根据旧代码分析得出的映射关系
+PDE dataset registry and metadata mapping.
 
-说明 (与 SGA 相关):
-- SGA backend 自带的 `SolverConfig._load_problem_config` 内部仍保留了对
-  `'chafee-infante'` / `'burgers'` / `'kdv'` 三个 benchmark 的硬编码加载逻辑,
-  以及对应的真 PDE 模板, 主要用于兼容原始 `sgapde` 论文代码。
-- 在 KD 的主数据流中, SGA 更推荐通过 `PDEDataset` + `KD_SGA.fit_dataset` 使用。
-  这时数据文件/键名等信息以本注册表为准, 然后通过 `u_data/x_data/t_data` 注入
-  给 SGA; `_load_problem_config` 对新数据集不再扩展, 仅作为那三个内置问题的
-  legacy 支持。
+Notes (SGA-related):
+
+* The upstream SGA backend still keeps hard-coded loading logic and analytic
+  PDE templates for the three benchmarks ``'chafee-infante'``, ``'burgers'``
+  and ``'kdv'`` inside ``SolverConfig._load_problem_config`` for historical
+  compatibility with the original ``sgapde`` code.
+* In KD's main data flow, SGA is expected to be used via
+  :class:`PDEDataset` + :meth:`KD_SGA.fit_dataset`. In that case data files
+  and key names are governed by this registry, and we inject
+  ``u_data/x_data/t_data`` into SGA. ``_load_problem_config`` is no longer
+  extended for new problems and is kept only as legacy support for those
+  three built-in benchmarks.
 """
 
 # Example registry entry (pseudo-JSON):

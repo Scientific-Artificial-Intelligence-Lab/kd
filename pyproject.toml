@@ -1,12 +1,12 @@
 [project]
 name = "kd"
-version = "0.1.0"
+version = "1.0.0"
 description = "Knowledge discover and plotting framework"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 authors = [
-  { name="Your Name", email="your@email.com" }
+  { name = "S.A.I.L." }
 ]
 
 dependencies = [

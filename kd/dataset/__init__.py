@@ -29,15 +29,16 @@ def _tag_dataset(dataset: Optional[PDEDataset], name: str) -> Optional[PDEDatase
     return dataset
 
 def load_pde(name: str, **kwargs) -> PDEDataset:
-    """
-    统一的PDE数据集加载入口
-    
+    """Unified entry point for loading PDE benchmark datasets.
+
     Args:
-        name: 数据集名称 ('kdv', 'burgers', 'chafee-infante'等)
-        **kwargs: 额外参数传递给PDEDataset
-        
+        name: Dataset name (e.g. ``"kdv"``, ``"burgers"``,
+            ``"chafee-infante"``).
+        **kwargs: Additional keyword arguments forwarded to
+            :class:`PDEDataset`.
+
     Returns:
-        PDEDataset对象
+        PDEDataset: The loaded dataset instance.
     """
     info = get_dataset_info(name)
     

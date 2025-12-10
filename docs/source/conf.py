@@ -16,7 +16,8 @@ copyright = '2025, Scientific-Artificial-Intelligence-Lab'
 author = 'Scientific-Artificial-Intelligence-Lab'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+# Keep in sync with ``pyproject.toml``.
+release = '1.0.0'
 
 
 # -- General configuration ---------------------------------------------------

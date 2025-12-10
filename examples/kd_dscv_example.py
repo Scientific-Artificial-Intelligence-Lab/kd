@@ -1,10 +1,10 @@
 import numpy as np
 
-import sys
+from _bootstrap import ensure_project_root_on_syspath
+
+PROJECT_ROOT = ensure_project_root_on_syspath()
+
 import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(kd_main_dir)
 
 import scipy
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'

@@ -1,4 +1,4 @@
-"""PySR 可视化适配器：equation / parity / residual."""
+"""PySR visualisation adapter: equation / parity / residual."""
 
 from __future__ import annotations
 
@@ -14,12 +14,13 @@ from ..equation_renderer import render_latex_to_image
 
 
 class PySRVizAdapter:
-    """最小 PySR 可视化适配器。
+    """Minimal visualisation adapter for PySR.
 
-    支持的 intent：
-        - 'equation'  : 渲染 LaTeX 方程图；
-        - 'parity'    : y_true vs y_pred 散点图；
-        - 'residual'  : 残差直方图。
+    Supported intents:
+
+    * ``'equation'``  – render a LaTeX equation figure;
+    * ``'parity'``    – scatter plot of ``y_true`` vs ``y_pred``;
+    * ``'residual'``  – residual histogram.
     """
 
     capabilities: Iterable[str] = {
@@ -54,11 +55,12 @@ class PySRVizAdapter:
     # 工具
     # ------------------------------------------------------------------
     def _resolve_output(self, ctx, filename: str) -> Tuple[Path, Path]:
-        """与其它 adapter 保持一致的输出路径逻辑。
+        """Resolve a save directory consistent with other adapters.
 
-        优先使用 ctx.options['output_dir']，否则使用 ctx.save_path，并在其中
-        追加适配器自己的子目录（如 'pysr/'），从而在 save_dir 为空时也能安全地
-        回落到 CWD/artifacts。
+        It prefers ``ctx.options['output_dir']`` when provided, otherwise
+        falls back to ``ctx.save_path`` and appends the adapter-specific
+        subdirectory (e.g. ``'pysr/'``). When no explicit save directory is
+        configured, this ultimately falls back to ``CWD/artifacts``.
         """
         base = ctx.options.get("output_dir")
         if base is not None:
@@ -73,7 +75,7 @@ class PySRVizAdapter:
         return path.parent, path
 
     def _get_training_data(self, model, ctx):
-        """从模型或请求中拿到 (X, y)。"""
+        """Retrieve training ``(X, y)`` either from the model or the request."""
         X = ctx.options.get("X", None)
         y = ctx.options.get("y", None)
         if X is None or y is None:

@@ -1,56 +1,83 @@
 API Documentation
 =================
 
-Base Module
------------
+Core Modules
+------------
+
+Base
+~~~~
+
 .. automodule:: kd.base
    :members:
    :undoc-members:
    :show-inheritance:
 
-Data Module
------------
+Data and datasets
+~~~~~~~~~~~~~~~~~
+
 .. automodule:: kd.data
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.dataset
    :members:
    :undoc-members:
    :show-inheritance:
 
 Models
 ------
-.. automodule:: kd.model.deeprl
+
+High-level wrappers
+~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: kd.model.kd_sga
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.model.dlga
+.. automodule:: kd.model.kd_dlga
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.model.kd_dscv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: kd.model.kd_pysr
    :members:
    :undoc-members:
    :show-inheritance:
 
 Visualization
-------------
-.. automodule:: kd.viz.dlga_viz
+-------------
+
+Unified façade
+~~~~~~~~~~~~~~
+
+.. automodule:: kd.viz.api
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.viz.dlga_kdv
+Adapters and helpers
+~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: kd.viz.adapters
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.viz.dscv_viz
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: kd.viz.deeprl_kdv
+.. automodule:: kd.viz.equation_renderer
    :members:
    :undoc-members:
    :show-inheritance:
 
 Utils
 -----
+
 .. automodule:: kd.utils
    :members:
    :undoc-members:

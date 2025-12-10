@@ -536,23 +536,29 @@ def load_pde_dataset(
     domain: dict = None,
     epi: float = 1e-3,
     data_dir_module: str = "kd.dataset.data"
-):
+    ):
     """
-    一个通用的、用户友好的数据加载器，可以从指定的.mat文件加载PDE数据，
-    并允许用户自定义所有关键元信息。
+    Convenience loader for PDE data stored in a MATLAB ``.mat`` file.
+
+    This helper constructs the full file path, reads the ``.mat`` file into a
+    dictionary, extracts the coordinate and solution arrays using the provided
+    keys, normalises shapes, and wraps everything into a :class:`PDEDataset`.
 
     Args:
-        filename (str): 要加载的 .mat 文件的名称 (例如: "my_data.mat")。
-        equation_name (str): 您为这个数据集赋予的名称 (例如: "My PDE")。
-        x_key (str, optional): .mat 文件中代表空间坐标的键。默认为 'x'。
-        t_key (str, optional): .mat 文件中代表时间坐标的键。默认为 't'。
-        u_key (str, optional): .mat 文件中代表解的键。默认为 'usol'。
-        domain (dict, optional): 定义分析子域，格式为 {'x':(min,max), 't':(min,max)}。默认为 None。
-        epi (float, optional): 为该数据集推荐的稀疏性惩罚项。默认为 1e-3。
-        data_dir_module (str, optional): 存储数据文件的模块路径。默认为 "kd.dataset.data"。
+        filename: Name of the ``.mat`` file to load (e.g. ``\"my_data.mat\"``).
+        equation_name: Human-readable name for this dataset.
+        x_key: Key for the spatial coordinate in the ``.mat`` dictionary,
+            default is ``\"x\"``.
+        t_key: Key for the temporal coordinate, default is ``\"t\"``.
+        u_key: Key for the solution field, default is ``\"usol\"``.
+        domain: Optional analysis domain, e.g. ``{'x': (min_x, max_x), 't': (min_t, max_t)}``.
+        epi: Recommended sparsity penalty for this dataset, default ``1e-3``.
+        data_dir_module: Module path where data files are stored, default
+            ``\"kd.dataset.data\"``.
 
     Returns:
-        一个功能完备的 PDEDataset 对象，可被所有 KD 模型使用。
+        PDEDataset: A fully initialised dataset object that can be used by all
+        KD models.
     """
     try:
         # 1. 自动构建文件的完整路径

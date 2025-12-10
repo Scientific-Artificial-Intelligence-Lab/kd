@@ -154,19 +154,21 @@ class KD_DSCV(BaseRL):
     def import_dataset(self, dataset, *, sym_true=None, n_input_dim=None, dataset_name=None):
         """Import data through a :class:`~kd.dataset.PDEDataset` instance.
 
-        This preserves向后兼容 by keeping :meth:`import_inner_data` untouched, while
-        allowing外部调用者通过统一的 ``load_pde`` 管道提供数据。
+        This keeps the legacy :meth:`import_inner_data` path untouched while
+        allowing external callers to provide data via the unified
+        :func:`kd.dataset.load_pde` / :class:`PDEDataset` pipeline.
 
         Args:
-            dataset: PDEDataset 对象。
-            sym_true: 可选地覆盖真实方程符号表达式。
-            n_input_dim: 可选地指定空间维度数。
+            dataset: A :class:`kd.dataset.PDEDataset` instance.
+            sym_true: Optional override for the ground-truth symbolic equation.
+            n_input_dim: Optional override for the number of spatial input
+                dimensions.
 
         Returns:
-            KD_DSCV: 便于链式调用。
+            KD_DSCV: The estimator instance (for chaining).
         """
 
-        from kd.dataset import PDEDataset  # 延迟导入以避免循环依赖
+        from kd.dataset import PDEDataset  # lazy import to avoid circular dependency
         from .discover.adapter import DSCVRegularAdapter
 
         if not isinstance(dataset, PDEDataset):
@@ -202,22 +204,22 @@ class KD_DSCV(BaseRL):
         """
         assert data_type == 'regular', "only regular form of dataset is supported in current mode"
         # Todo (KD 1.x): legacy path, kept only for upstream compatibility.
-        # 在 KD 中推荐使用 PDEDataset + import_dataset/fit_from_dataset/fit_dataset。
+        # In KD it is recommended to use PDEDataset + import_dataset/fit_from_dataset/fit_dataset.
 
     def fit(self, X, y, domains=[], data_type='Sparse'):
-        """Deprecated external-data入口 (KD 1.0 中不再支持)
+        """Deprecated external ``(X, y)`` entry point (disabled in KD 1.0).
 
-        KD 中推荐使用:
+        Use :meth:`import_dataset`, :meth:`fit_from_dataset` or
+        :meth:`fit_dataset` together with :class:`kd.dataset.PDEDataset`
+        instead of calling :meth:`fit` with raw arrays.
 
-            - import_dataset(PDEDataset)
-            - fit_from_dataset(PDEDataset, ...)
-            - fit_dataset(PDEDataset, ...)
-
-        如需直接使用 X/y/domains 形式的数据，请参考原生 DISCOVER / PDETask 的用法。
+        Users who need full control over ``X``/``y``/``domains`` should refer
+        to the native DISCOVER ``PDETask`` examples.
         """
         raise RuntimeError(
-            "KD_DSCV.fit(X, y, ...) 在 KD 1.0 中已废弃，不再支持 direct array 入口。"
-            " 请使用 import_dataset / fit_from_dataset / fit_dataset 与 PDEDataset 搭配。"
+            "KD_DSCV.fit(X, y, ...) is deprecated and no longer supported in KD 1.0. "
+            "Please use import_dataset / fit_from_dataset / fit_dataset together "
+            "with a kd.dataset.PDEDataset instance."
         )
 
     def fit_dataset(
@@ -230,7 +232,11 @@ class KD_DSCV(BaseRL):
         n_input_dim=None,
         dataset_name=None,
     ):
-        """与 SGA/DLGA 对齐的语法糖：直接从 PDEDataset 训练 DSCV (Local PDE 模式)。"""
+        """Train DSCV (local PDE mode) directly from a :class:`PDEDataset`.
+
+        This is a convenience wrapper aligned with :class:`KD_SGA` and
+        :class:`KD_DLGA`, using the unified dataset-based entry point.
+        """
 
         # 真实实现路径：导入 PDEDataset 并启动 searcher
         self.import_dataset(
@@ -439,11 +445,14 @@ class KD_DSCV_SPR(KD_DSCV):
         """Import sparse/PINN data via :class:`~kd.dataset.PDEDataset`.
 
         Args:
-            dataset: PDEDataset 实例。
-            sample: 抽样点数量（优先级高于 ``sample_ratio``）。
-            sample_ratio: 抽样比例 (0,1]，默认 0.1。
-            colloc_num: collocation 采样数量，留空则保持默认。
-            random_state: 随机种子，保证抽样可复现。
+            dataset: A :class:`kd.dataset.PDEDataset` instance.
+            sample: Absolute number of training samples (takes precedence
+                over ``sample_ratio`` when provided).
+            sample_ratio: Fraction of available points to sample in ``(0, 1]``,
+                default ``0.1``.
+            colloc_num: Number of collocation points for PINN training; if
+                ``None``, the default configured value is used.
+            random_state: Random seed for reproducible sampling.
         """
 
         from kd.dataset import PDEDataset
@@ -655,7 +664,11 @@ class KD_DSCV_SPR(KD_DSCV):
         cut_quantile=None,
         dataset_name=None,
     ):
-        """与 Local PDE 保持风格一致的语法糖：PDEDataset → Sparse+PINN 训练。"""
+        """Convenience wrapper for Sparse+PINN training from :class:`PDEDataset`.
+
+        This mirrors the style of the local PDE ``fit_dataset`` entry point
+        while targeting the sparse/PINN DISCOVER task.
+        """
 
         self.import_dataset(
             dataset,

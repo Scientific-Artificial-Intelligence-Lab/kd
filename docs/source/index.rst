@@ -1,13 +1,16 @@
-Welcome to KD's Documentation
-============================
+Knowledge Discovery (KD)
+========================
 
-KD (Knowledge Discovery) is a Python package for discovering governing equations 
-of PDEs using deep learning and symbolic regression approaches.
+Knowledge Discovery (KD) is a Python toolkit for symbolic modelling and
+equation discovery, with a strong focus on PDEs but not limited to them.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   getting_started
+   pde_backends
+   viz
    api
 
 Indices and tables

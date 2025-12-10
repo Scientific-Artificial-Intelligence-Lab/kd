@@ -8,18 +8,22 @@ from .core import VizRequest, VizResult, render
 
 
 def plot_training_curve(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    """Plot the training loss curve for a model, if available."""
     return _dispatch('training_curve', model, show_info=show_info, options=options)
 
 
 def plot_validation_curve(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    """Plot the validation loss curve for a model, if available."""
     return _dispatch('validation_curve', model, show_info=show_info, options=options)
 
 
 def plot_search_evolution(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    """Visualise the symbolic search or evolution history for a model."""
     return _dispatch('search_evolution', model, show_info=show_info, options=options)
 
 
 def plot_optimization(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    """Visualise optimisation history (e.g. objective vs. iteration)."""
     return _dispatch('optimization', model, show_info=show_info, options=options)
 
 
@@ -34,6 +38,7 @@ def plot_time_slices(
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
+    """Plot time slices of a 2D field at selected times."""
     payload = dict(options)
     payload['x_coords'] = x_coords
     payload['t_coords'] = t_coords
@@ -45,6 +50,7 @@ def plot_time_slices(
 
 
 def render_equation(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
+    """Render the discovered equation as a LaTeX image."""
     return _dispatch('equation', model, show_info=show_info, options=options)
 
 
@@ -57,6 +63,7 @@ def plot_residuals(
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
+    """Plot residuals between ``actual`` and ``predicted`` values."""
     payload = dict(options)
     payload['actual'] = actual
     payload['predicted'] = predicted
@@ -76,6 +83,7 @@ def plot_field_comparison(
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
+    """Compare true and predicted 2D fields, optionally with residuals."""
     payload = dict(options)
     payload['x_coords'] = x_coords
     payload['t_coords'] = t_coords
@@ -93,6 +101,7 @@ def plot_derivative_relationships(
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
+    """Plot relationships between derivative terms for PDE models."""
     payload = dict(options)
     payload['top_n_terms'] = top_n_terms
     return _dispatch('derivative_relationships', model, show_info=show_info, options=payload)
@@ -105,6 +114,7 @@ def plot_parity(
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
+    """Generate a parity plot comparing predictions and targets."""
     payload = dict(options)
     if title is not None:
         payload['title'] = title

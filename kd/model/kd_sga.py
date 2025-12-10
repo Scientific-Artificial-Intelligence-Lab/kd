@@ -12,24 +12,24 @@ from .sga.sgapde import visualizer as sga_visualizer
 
 
 class KD_SGA(BaseEstimator):
-    """
-    一个使用符号遗传算法 SGA 发现偏微分方程 PDE 的模型。
-    这是对 sgapde 库的一个封装，以适应 kd 框架。
+    """KD wrapper around the SGA-PDE solver.
 
-    遵循 scikit-learn API 风格，通过 __init__ 设置参数，通过 fit 执行计算。
+    This class exposes a scikit-learn–style interface around the upstream
+    ``sgapde`` implementation for discovering PDEs of the form
+    ``u_t = N(u, u_x, ...)``.
     """
     
     def __init__(self, sga_run=100, num=20, depth=4, width=5, 
                  p_var=0.5, p_mute=0.3, p_cro=0.5, seed=0, 
-                 use_autograd=False, max_epoch=100000, 
+                 use_autograd=False, max_epoch=100000,
                  use_metadata=False, delete_edges=False):
-        """
-        初始化 KD_SGA 模型。
+        """Initialise a KD_SGA solver.
 
-        所有参数都直接对应 sgapde.config.SolverConfig 中的配置项。
+        All parameters correspond directly to fields in
+        :class:`sgapde.config.SolverConfig`.
         """
-        # BaseEstimator 的 __init__ 会自动帮我们处理参数赋值
-        # 但为了清晰，我们在这里也显式声明
+        # BaseEstimator.__init__ will help manage parameters,
+        # but we keep explicit attributes for clarity.
         self.sga_run = sga_run
         self.num = num
         self.depth = depth
@@ -45,10 +45,10 @@ class KD_SGA(BaseEstimator):
         
     # 旧版 fit 方法，保留以兼容现有代码
     def fit(self, problem_name: str):
-        """
-        旧接口已废弃：请改用 fit_dataset(dataset)。
+        """Deprecated legacy entry point, kept for backwards compatibility.
 
-        这样可以统一从 kd.dataset.load_pde 入口加载数据，避免 legacy 文件路径依赖。
+        Use :meth:`fit_dataset` together with :func:`kd.dataset.load_pde`
+        instead of ``fit(problem_name)``.
         """
         raise RuntimeError(
             "KD_SGA.fit(problem_name) 已废弃，请改用 KD_SGA.fit_dataset(PDEDataset)。"
@@ -80,14 +80,19 @@ class KD_SGA(BaseEstimator):
         context_cls: Optional[Type] = None,
         solver_cls: Optional[Type] = None,
     ):
-        """
-        新增接口：直接使用 :class:`~kd.dataset.PDEDataset` 执行 SGA.
+        """Run SGA directly on a :class:`kd.dataset.PDEDataset` instance.
 
         Args:
-            dataset: 由 ``kd.dataset.load_pde`` 返回的 PDEDataset 对象。
-            problem_name: 可选，覆盖用于 SolverConfig 的问题名称。
-            context_cls: 可选，注入自定义 ProblemContext 子类（测试用）。
-            solver_cls: 可选，注入自定义 SGAPDE_Solver 子类（测试用）。
+            dataset: Dataset returned by :func:`kd.dataset.load_pde`.
+            problem_name: Optional override for the problem name used inside
+                :class:`SolverConfig`.
+            context_cls: Optional custom :class:`ProblemContext` subclass,
+                typically used for testing.
+            solver_cls: Optional custom :class:`SGAPDE_Solver` subclass,
+                typically used for testing.
+
+        Returns:
+            KD_SGA: The fitted estimator instance.
         """
         from kd.dataset import PDEDataset  # 避免模块级循环依赖
         from .sga.adapter import SGADataAdapter
@@ -146,8 +151,11 @@ class KD_SGA(BaseEstimator):
         return self
 
     def plot_results(self):
-        """
-        调用 sgapde 自带的可视化工具来绘制结果和诊断图。
+        """Invoke the legacy ``sgapde`` visualiser for built-in benchmarks.
+
+        This is kept for backwards compatibility and only works for the three
+        supported benchmarks (Chafee–Infante, Burgers, KdV). For new and
+        custom datasets, prefer the unified :mod:`kd.viz` façade.
         """
         if not hasattr(self, 'context_'):
             raise RuntimeError("You must call fit_dataset() before plotting results.")

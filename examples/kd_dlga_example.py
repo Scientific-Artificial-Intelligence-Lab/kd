@@ -1,69 +1,125 @@
-import os
-import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-kd_main_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(kd_main_dir)
+from _bootstrap import ensure_project_root_on_syspath
 
+PROJECT_ROOT = ensure_project_root_on_syspath()
 
 # --- 依赖导入 / Dependency Imports ---
-from kd.dataset import load_pde, load_pde_dataset
+from kd.dataset import load_pde
 from kd.model.kd_dlga import KD_DLGA
-from kd.viz.dlga_viz import *
-from kd.viz.equation_renderer import render_latex_to_image
-
-
-# --- 数据加载 / Data Loading ---
-kdv_data = load_pde('kdv')
-
-# 从总数据集中随机抽取1000个样本点作为训练数据 / Randomly sample 1000 points from the dataset for training.
-X_train, y_train = kdv_data.sample(n_samples=1000)
-
-
-# --- 模型初始化 / Model Initialization ---
-model = KD_DLGA(
-    operators=['u', 'u_x', 'u_xx', 'u_xxx'],        # 定义候选算子库 / Define the candidate operator library.
-    epi=0.1,                                        # 方程的简洁度惩罚项 / Simplicity penalty for the equation.
-    input_dim=2,                                    # 输入数据的维度，须与X_train列数匹配 / Input dimension, must match X_train's columns.
-    verbose=False,                                  # 是否在进化中打印每代的最优解 / Whether to print the best solution in each generation.
-    max_iter=9000                                   # 内部神经网络的最大训练迭代次数 / Max training iterations for the internal NN.
+from kd.viz import (
+    configure,
+    render_equation,
+    plot_training_curve,
+    plot_validation_curve,
+    plot_search_evolution,
+    plot_optimization,
+    plot_field_comparison,
+    plot_residuals,
+    plot_time_slices,
+    plot_parity,
+    plot_derivative_relationships,
 )
 
 
-# --- 模型训练与预测 / Model Training & Prediction ---
-print("\nTraining DLGA model...")
-model.fit(X_train, y_train)
-
-print("\nGenerating predictions...")
-X_full = kdv_data.mesh()                            # 创建用于可视化的完整网格 / Create a full grid for visualization.
-u_pred = model.predict(X_full)
-u_pred = u_pred.reshape(kdv_data.get_size())
+# --- 数据加载 / Data Loading ---
+# 使用统一入口加载 KdV 方程数据集。
+# Load the KdV PDE dataset via the unified loader.
+kdv_data = load_pde("kdv")
 
 
-# --- 结果可视化 / Results Visualization ---
-render_latex_to_image(model.eq_latex)               # 将发现的最佳方程渲染成图片 / Render the best discovered equation to an image.
-plot_training_loss(model)                           # 绘制训练损失曲线 / Plot the training loss curve.
-plot_validation_loss(model)                         # 绘制验证损失曲线 / Plot the validation loss curve.
+# --- 模型初始化 / Model Initialization ---
+# 初始化 KD_DLGA 模型：
+#   - operators: 候选算子库（这里使用常见的 u, u_x, u_xx, u_xxx）
+#   - epi: 控制方程稀疏度/简洁度的惩罚系数
+#   - input_dim: 输入维度，这里是 (x, t) → 2
+#   - max_iter: 内部神经网络训练迭代次数
+model = KD_DLGA(
+    operators=["u", "u_x", "u_xx", "u_xxx"],  # 候选算子库 / Candidate operator library.
+    epi=0.1,  # 方程简洁度惩罚项 / Sparsity penalty for equation.
+    input_dim=2,  # 输入维度，与 (x,t) 一致 / Input dimension, matches (x, t).
+    verbose=False,
+    max_iter=9000,
+)
 
-# 绘制最优解的适应度与复杂度随代数进化的曲线
-# Plot the evolution of fitness and complexity of the best solution over generations.
-plot_optimization_analysis(model)
 
-# 将真实解 u 与预测解 u_pred 进行热图比较 
-# Compare true (u) and predicted (u_pred) solutions via heatmaps.
-plot_pde_comparison(kdv_data.x, kdv_data.t, kdv_data.usol, u_pred)
+# --- 可视化配置 / Visualization configuration ---
+# 设置可视化输出目录；所有由 kd.viz 生成的图像都会写入此目录。
+# Configure the viz façade so that all generated figures are written under this directory.
+OUTPUT_ROOT = PROJECT_ROOT / "artifacts" / "dlga_example"
+configure(save_dir=OUTPUT_ROOT)
 
-# 绘制训练点上的残差分布图，以及在整个求解域上的残差统计直方图
-# Plot the residual distribution on training points and a histogram of residuals over the entire domain.
-plot_residual_analysis(model, X_train, y_train, kdv_data.usol, u_pred)
 
-# 在特定时间点，绘制真实解与预测解的横截面对比图。
-# Plot cross-section comparisons of true and predicted solutions at specific times.
-plot_time_slices(kdv_data.x, kdv_data.t, kdv_data.usol, u_pred, slice_times=[0.25, 0.5, 0.75])
+# --- 模型训练 / Model Training ---
+# 使用统一的 fit_dataset 入口训练 DLGA：
+#   - sample=1000: 从网格上随机抽取 1000 个样本点进行训练；
+#   - sample_method='random': 使用随机采样策略；
+#   - Xy_from='sample': 明确表示使用样本点而不是完整网格。
+print("\n[KD_DLGA Example] Training DLGA model with fit_dataset(PDEDataset)...")
+model.fit_dataset(
+    kdv_data,
+    sample=1000,
+    sample_method="random",
+    Xy_from="sample",
+)
 
-# 此函数会自动解析模型中的最优解，并为最重要的项生成关系图, 核心思想是：关键的RHS项与LHS之间应该存在简单的（通常是线性的）关系。
-# This function automatically parses the best solution and plots the relationships between key terms.
-# The core idea is that a key RHS term should have a simple (usually linear) relationship with the LHS.
-plot_derivative_relationships(model)
 
-# 生成最终发现方程的奇偶图 / Generate a parity plot for the final discovered equation.
-plot_pde_parity(model, title="Final Validation of Discovered Equation")
+# --- 预测生成 / Prediction on full grid ---
+# 在完整 (x, t) 网格上生成预测解 u_pred，用于后续场对比与残差分析。
+print("\n[KD_DLGA Example] Generating predictions on full (x, t) grid...")
+X_full = kdv_data.mesh()  # 创建用于可视化的完整网格 / Full grid for field visualisation.
+u_pred_field = model.predict(X_full).reshape(kdv_data.get_size())
+
+
+# --- 结果可视化（统一 kd.viz façade） / Results visualisation via kd.viz ---
+
+# 方程渲染（LaTeX → PNG）
+# Render the discovered PDE as a LaTeX equation image.
+render_equation(model)
+
+# 训练/验证损失曲线
+# Training and validation loss curves.
+plot_training_curve(model)
+plot_validation_curve(model)
+
+# 遗传算法搜索过程与优化诊断
+# GA search evolution and optimization diagnostics.
+plot_search_evolution(model)
+plot_optimization(model)
+
+# PDE 场对比（真实场 vs 预测场）
+# PDE field comparison: true solution vs DLGA-predicted solution.
+plot_field_comparison(
+    model,
+    x_coords=kdv_data.x,
+    t_coords=kdv_data.t,
+    true_field=kdv_data.usol,
+    predicted_field=u_pred_field,
+)
+
+# 残差诊断（u_t - RHS）——这里使用完整网格上的点。
+# Residual diagnostics (u_t - RHS) on the full grid.
+plot_residuals(
+    model,
+    actual=kdv_data.usol.reshape(-1),
+    predicted=u_pred_field.reshape(-1),
+    coordinates=X_full,
+    bins=40,
+)
+
+# 时间切片对比
+# Time-slice comparison of u(x, t) at several representative times.
+plot_time_slices(
+    model,
+    x_coords=kdv_data.x,
+    t_coords=kdv_data.t,
+    true_field=kdv_data.usol,
+    predicted_field=u_pred_field,
+    slice_times=[0.25, 0.5, 0.75],
+)
+
+# 导数项关系（自动解析最重要的 RHS 项）
+# Derivative-term relationships: automatically focuses on the most significant RHS terms.
+plot_derivative_relationships(model, top_n_terms=4)
+
+# 方程奇偶图
+# Parity plot comparing predicted PDE RHS vs true LHS.
+plot_parity(model, title="Final Validation of Discovered PDE")

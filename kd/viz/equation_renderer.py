@@ -50,4 +50,9 @@ def render_latex_to_image(
         print(f"  Offending LaTeX content: {latex_str}")
     finally:
         if 'fig' in locals():
-            plt.close(fig)
+            try:
+                plt.close(fig)
+            except TypeError:
+                # 在测试环境中, plt.subplots 可能被 monkeypatch 成返回非 Figure 对象
+                # 此时直接忽略关闭错误, 以避免干扰调用方。
+                plt.close()

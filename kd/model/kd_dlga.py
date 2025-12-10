@@ -9,8 +9,10 @@ from tqdm import tqdm
 from kd.model.dlga import DLGA
 
 class KD_DLGA(DLGA):
-    """
-    DLGA 模型的一个用户友好封装版本。
+    """User-friendly KD wrapper around the DLGA model.
+
+    This class exposes a scikit-learn–style interface and integrates
+    with KD's dataset and visualisation utilities.
     """
 
     def __init__(self, operators: list[str], epi: float, input_dim: int, verbose: bool = True, **kwargs):
@@ -23,6 +25,7 @@ class KD_DLGA(DLGA):
 
 
     def generate_meta_data(self, X):
+        """Build the feature library (Theta) and metadata from the trained network."""
         X_tensor = torch.from_numpy(X.astype(np.float32)).to(self.device)
         X_tensor.requires_grad_(True)
         self.Net.load_state_dict(
@@ -221,9 +224,7 @@ class KD_DLGA(DLGA):
         return self.Chrom, self.Fitness, self.coef, self.name
     
     def fit(self, X, y):
-        """
-        重写 fit 方法，以确保在调用渲染器时传递正确的动态算子列表
-        """
+        """Fit DLGA on raw ``(X, y)`` samples."""
         self.Net, self.best_epoch = self.train_NN(X, y)
         self.Theta = self.generate_meta_data(X)
         
@@ -262,7 +263,8 @@ class KD_DLGA(DLGA):
             raise
         
     def predict(self, mesh_data):
-        X_tensor = torch.from_numpy(mesh_data.astype(np.float32)).to(self.device) # Convert to tensor and predict
+        """Predict the solution field on a given mesh."""
+        X_tensor = torch.from_numpy(mesh_data.astype(np.float32)).to(self.device)  # Convert to tensor and predict
         with torch.no_grad():
             u_pred = self.Net(X_tensor).cpu().numpy()
         return u_pred
@@ -275,19 +277,22 @@ class KD_DLGA(DLGA):
         sample_method: str = "random",
         Xy_from: str = "sample",
     ):
-        """
-        使用统一的 :class:`PDEDataset` 接口训练 DLGA 模型。
+        """Train DLGA using the unified :class:`kd.dataset.PDEDataset` interface.
 
-        参数:
-            dataset: 由 ``kd.dataset.load_pde(name)`` 返回的 PDEDataset 实例。
-            sample: 采样策略：
-                - int: 抽取固定数量的样本点；
-                - float(0<r<=1): 按比例抽样；
-                - None: 使用完整网格上的所有点。
-            sample_method: 透传给 ``PDEDataset.sample(method=...)``，默认 'random'。
-            Xy_from: 目前支持：
-                - 'sample': 使用 ``sample`` / ``sample_method`` 从数据集中采样；
-                - 'mesh': 忽略 ``sample``，直接使用完整网格。
+        Args:
+            dataset: A :class:`kd.dataset.PDEDataset` instance, typically
+                returned by :func:`kd.dataset.load_pde`.
+            sample: Sampling strategy. If an ``int``, draws a fixed number of
+                samples; if a ``float`` in ``(0, 1]``, draws a fraction of all
+                points; if ``None``, uses all points on the full mesh.
+            sample_method: Sampling method forwarded to
+                :meth:`PDEDataset.sample`, default is ``"random"``.
+            Xy_from: Source of training pairs. ``"sample"`` uses sampled
+                points according to ``sample`` / ``sample_method``;
+                ``"mesh"`` ignores ``sample`` and uses the full mesh.
+
+        Returns:
+            KD_DLGA: The fitted estimator instance.
         """
         from kd.dataset import PDEDataset  # 避免循环依赖
 

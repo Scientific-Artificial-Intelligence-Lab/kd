@@ -1,10 +1,12 @@
-"""PySR 封装：KD 中的通用符号回归后端。
+"""PySR integration: generic symbolic regression backend for KD.
 
-本模块为 PySR 提供一个轻量级、可选依赖的 KD 封装：
+This module provides a lightweight, optional wrapper around PySR:
 
-- 不强绑定 PDE，只作为通用 `fit(X, y)` 风格的符号回归器；
-- 未安装 `pysr` 时，KD 其它功能完全不受影响；
-- 已安装 `pysr` 时，可以通过 :class:`KD_PySR` 进行回归并导出方程与 LaTeX。
+* It does not assume any PDE structure and only exposes a generic
+  ``fit(X, y)`` style symbolic regressor.
+* If ``pysr`` is not installed, all other KD features remain fully usable.
+* When ``pysr`` is available, :class:`KD_PySR` can be used to fit models and
+  export equations and LaTeX strings.
 """
 
 from __future__ import annotations
@@ -22,13 +24,15 @@ except Exception:  # pragma: no cover - 在未安装 pysr 的环境下走这里
 
 
 class KD_PySR(BaseEstimator):
-    """KD 中对 PySR 的最小封装，用于通用符号回归。
+    """Minimal KD wrapper around PySR for generic symbolic regression.
 
-    设计要点：
+    Key design points:
 
-    - 接口保持 scikit-learn 风格：``fit`` / ``predict``；
-    - 提供 ``best_equation_`` 与 ``equation_latex``，方便与 KD 其它后端对齐；
-    - 不在 KD 1.x 中强行加入 PDE 相关接口（如 ``fit_dataset``），只聚焦通用 SR。
+    * Exposes a scikit-learn–style interface (``fit`` / ``predict``).
+    * Provides ``best_equation_`` and :meth:`equation_latex` for alignment
+      with other KD backends.
+    * Does not introduce PDE-specific interfaces such as ``fit_dataset`` in
+      KD 1.x, focusing on generic regression instead.
     """
 
     def __init__(
@@ -39,17 +43,22 @@ class KD_PySR(BaseEstimator):
         unary_operators: Optional[List[str]] = None,
         extra_model_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """构造 KD_PySR。
+        """Create a KD_PySR estimator.
 
-        参数基本直接透传给 :class:`pysr.PySRRegressor`：
+        Parameters are forwarded almost directly to
+        :class:`pysr.PySRRegressor`.
 
         Args:
-            niterations: PySR 迭代次数，对应 PySRRegressor 的 ``niterations``。
-            binary_operators: 二元算子列表，传给 ``binary_operators``。
-            unary_operators: 一元算子列表，传给 ``unary_operators``。
-            extra_model_kwargs: 其余需要传给 PySRRegressor 的关键字参数。
+            niterations: Number of PySR optimisation iterations (``niterations``).
+            binary_operators: List of binary operators passed to
+                ``binary_operators``.
+            unary_operators: List of unary operators passed to
+                ``unary_operators``.
+            extra_model_kwargs: Additional keyword arguments forwarded to the
+                underlying :class:`pysr.PySRRegressor`.
         """
-        # 不调用 BaseEstimator.__init__，避免其对未初始化属性做 get_params。
+        # Do not call BaseEstimator.__init__ to avoid accessing attributes
+        # before they are initialised.
         self.niterations = int(niterations)
         self.binary_operators = list(binary_operators) if binary_operators is not None else None
         self.unary_operators = list(unary_operators) if unary_operators is not None else None
@@ -135,14 +144,14 @@ class KD_PySR(BaseEstimator):
     # 公共 API
     # ------------------------------------------------------------------
     def fit(self, X, y):
-        """在给定的 ``(X, y)`` 上拟合符号回归模型。
+        """Fit a symbolic regression model on the given ``(X, y)`` pairs.
 
         Args:
-            X: 形状为 ``(n_samples, n_features)`` 的特征矩阵。
-            y: 形状为 ``(n_samples,)`` 或 ``(n_samples, 1)`` 的目标值。
+            X: Feature matrix of shape ``(n_samples, n_features)``.
+            y: Target array of shape ``(n_samples,)`` or ``(n_samples, 1)``.
 
         Returns:
-            KD_PySR: 自身实例，便于链式调用。
+            KD_PySR: The fitted estimator instance.
         """
         X_arr = np.asarray(X)
         y_arr = np.asarray(y).reshape(-1)
@@ -163,22 +172,34 @@ class KD_PySR(BaseEstimator):
         return self
 
     def predict(self, X):
-        """使用已训练的 PySR 模型进行预测。"""
+        """Predict with the fitted PySR model."""
         if self._model is None:
-            raise RuntimeError("KD_PySR.predict 在模型尚未 fit 时被调用。请先调用 fit(X, y)。")
+            raise RuntimeError(
+                "KD_PySR.predict was called before the model was fitted. "
+                "Call fit(X, y) first."
+            )
         X_arr = np.asarray(X)
         return self._model.predict(X_arr)
 
     def equation_latex(self, lhs: str = "y") -> str:
-        """返回当前模型学到的最佳方程的 LaTeX 表达形式。
+        """Return the best learned equation in LaTeX form.
 
-        优先使用 PySR 自带的 ``latex()`` 接口；若不可用，则使用 SymPy 表达式
-        转换；若仍失败，则退化为 ``best_equation_`` 的字符串形式。
+        The method tries, in order:
 
-        注意：返回值**不包含** ``$`` 包裹，渲染时由上层 viz 统一处理。
+        * PySR's own ``latex()`` method (if available),
+        * conversion from the cached SymPy expression,
+        * a plain string representation of ``best_equation_`` or the model.
+
+        Note:
+            The returned string does *not* include surrounding ``$`` markers;
+            rendering layers (such as :mod:`kd.viz`) are responsible for
+            wrapping it appropriately.
         """
         if self._model is None:
-            raise RuntimeError("KD_PySR.equation_latex 在模型尚未 fit 时被调用。请先调用 fit(X, y)。")
+            raise RuntimeError(
+                "KD_PySR.equation_latex was called before the model was fitted. "
+                "Call fit(X, y) first."
+            )
 
         # 1. 尝试使用 PySR 自带的 latex()（如果有的话）
         latex_str: Optional[str] = None
