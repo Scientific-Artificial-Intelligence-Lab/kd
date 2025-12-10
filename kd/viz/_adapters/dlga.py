@@ -259,12 +259,15 @@ class DLGAVizAdapter:
             squeeze=False,
         )
         axes_flat = axes.flatten()
-        fig.suptitle(ctx.options.get('title', f'Relationship of Terms with {data.lhs_label}'), fontsize=16)
+        fig.suptitle(
+            ctx.options.get('title', f'LHS vs RHS Terms ({data.lhs_label})'),
+            fontsize=16,
+        )
 
         for ax, term in zip(axes_flat, terms):
             sc = ax.scatter(term.values, data.lhs_values, alpha=0.35, s=20, c=term.values)
-            ax.set_xlabel(f"Term: {term.label}")
-            ax.set_ylabel(data.lhs_label)
+            ax.set_xlabel(ctx.options.get('term_label', f"RHS term: {term.label}"))
+            ax.set_ylabel(ctx.options.get('lhs_axis_label', data.lhs_label))
             ax.set_title(f"Coefficient: {term.coefficient:.4f}")
             ax.grid(True, linestyle='--', alpha=0.5)
             fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
@@ -300,9 +303,9 @@ class DLGAVizAdapter:
         ax.plot(ref, ref, 'r--', linewidth=1.5, label='y = x')
 
         lhs_label = data.metadata.get('lhs_label', 'LHS')
-        ax.set_xlabel(ctx.options.get('predicted_label', 'Predicted RHS Values'))
-        ax.set_ylabel(ctx.options.get('actual_label', f'True LHS Values ({lhs_label})'))
-        ax.set_title(ctx.options.get('title', 'Parity Plot'))
+        ax.set_xlabel(ctx.options.get('predicted_label', 'RHS'))
+        ax.set_ylabel(ctx.options.get('actual_label', f'LHS ({lhs_label})'))
+        ax.set_title(ctx.options.get('title', 'LHS–RHS Parity'))
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.set_aspect('equal', 'box')
@@ -349,8 +352,8 @@ class DLGAVizAdapter:
         coords = ctx.options.get('coordinates')
         residuals = ctx.options.get('residuals')
         metadata: Dict[str, str] = {
-            'title': ctx.options.get('title', 'Residual and Parity Analysis'),
-            'parity_title': ctx.options.get('parity_title', 'Parity Plot'),
+            'title': ctx.options.get('title', 'Residual Analysis'),
+            'parity_title': ctx.options.get('parity_title', 'Prediction vs Target'),
             'residual_title': ctx.options.get('residual_title', 'Residual Distribution'),
         }
         if residuals is None:
@@ -402,9 +405,9 @@ class DLGAVizAdapter:
         max_val = float(np.max(np.concatenate([actual, predicted])))
         ax1.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)
         ax1.set(
-            xlabel=ctx.options.get('actual_label', 'Actual'),
-            ylabel=ctx.options.get('predicted_label', 'Predicted'),
-            title=data.metadata.get('parity_title', 'Parity Plot'),
+            xlabel=ctx.options.get('actual_label', 'Target'),
+            ylabel=ctx.options.get('predicted_label', 'Model Output'),
+            title=data.metadata.get('parity_title', 'Prediction vs Target'),
         )
 
         ax2 = fig.add_subplot(1, 2, 2)

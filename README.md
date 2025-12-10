@@ -73,7 +73,7 @@ model.fit_dataset(dataset)
 print(model.best_equation_latex_)
 ```
 
-To generate basic diagnostics with the unified visualization façade:
+To generate basic diagnostics and figures with the unified visualization façade:
 
 ```python
 configure(save_dir="artifacts/run-1")

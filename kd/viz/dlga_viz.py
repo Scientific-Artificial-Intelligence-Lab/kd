@@ -653,8 +653,8 @@ def plot_pde_parity(model, title: str = "Parity Plot for Discovered PDE", output
                                        max(y_true_pde.max(), y_pred_pde.max()), 100)
         ax.plot(perfect_fit_line, perfect_fit_line, 'r--', linewidth=2, label='Perfect Fit (y=x)')
 
-        ax.set_xlabel('Predicted RHS Values (from discovered equation)')
-        ax.set_ylabel(f'True LHS Values ({lhs_name})')
+        ax.set_xlabel('RHS (from discovered equation)')
+        ax.set_ylabel(f'LHS ({lhs_name})')
         ax.set_title(title)
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.5)
