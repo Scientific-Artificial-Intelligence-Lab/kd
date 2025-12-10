@@ -91,18 +91,24 @@ plot_field_comparison(
 Each helper returns a `VizResult` containing saved paths, warnings, and the
 normalized contract data (`ResidualPlotData`, `OptimizationHistoryData`,
 `FieldComparisonData`). See `notes/viz/viz_helpers.md` for intent details and
-adapter status.
+adapter status. After fitting a model, a few such helpers are usually enough
+to produce PNG figures for equations, fields and residuals under the configured
+`save_dir` (for example `artifacts/...`).
 
-## Repository layout
+## Package layout
+
+The core library is provided by the :mod:`kd` package:
 
 ```
 kd/
-├── dataset/    # built-in PDE datasets and loaders
-├── model/      # DSCV, DLGA, SGA, PySR wrappers and discover/ core
-├── viz/        # unified façade, adapters, legacy helpers
-├── tests/      # automated tests (pytest)
-└── examples/   # runnable tutorials (see examples/README.md)
+├── base.py      # shared estimator base class and helpers
+├── dataset/     # PDEDataset, registry, PDE loaders (load_pde, etc.)
+├── model/       # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR and related backends
+├── viz/         # kd.viz façade, adapters, legacy visualisers
+└── utils.py     # general utilities
 ```
+
+Runnable scripts live under `examples/`, and automated tests under `tests/`.
 
 
 ## Acknowledgements
