@@ -207,6 +207,13 @@ workflow/
 
 agent.md
 
+## Local-only developer materials (repo is public)
+scripts/
+AGENTS.md
+REPO_MAP.md
+RUNBOOK.md
+TASK_SPEC.md
+
 
 
 notes/*

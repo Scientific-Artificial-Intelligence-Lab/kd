@@ -90,10 +90,10 @@ plot_field_comparison(
 
 Each helper returns a `VizResult` containing saved paths, warnings, and the
 normalized contract data (`ResidualPlotData`, `OptimizationHistoryData`,
-`FieldComparisonData`). See `notes/viz/viz_helpers.md` for intent details and
-adapter status. After fitting a model, a few such helpers are usually enough
-to produce PNG figures for equations, fields and residuals under the configured
-`save_dir` (for example `artifacts/...`).
+`FieldComparisonData`). After fitting a model, a few such helpers are usually
+enough to produce PNG figures for equations, fields and residuals under the
+configured `save_dir` (for example `artifacts/...`). For runnable usage, see
+`examples/README.md` and the helper functions in `kd/viz/api.py`.
 
 ## Package layout
 
