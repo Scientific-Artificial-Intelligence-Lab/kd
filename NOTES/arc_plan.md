@@ -107,6 +107,17 @@ kd2/
 | **数据拓扑** | Grid 优先 | Phase 1 定义 topology 字段，MVP 只实现 Grid，Scattered 留 Phase 5 |
 | **Checkpointing** | Phase 3 纳入 | 插件 `get_state/set_state` + ExperimentManager 保存/恢复 |
 | **结果档案** | 简化版 ResultArchive | 收集结果 + 后处理提取 Pareto 前沿 (Phase 3) |
+| **导数表示** | 混合 + 约束消别名 | `u_x` (terminal, 预计算) + `diff` (operator, open-form)；约束禁止 `diff(terminal, axis)` |
+| **评估模式** | LINEAR 默认 | split_terms → STRidge 为主；DIRECT 模式供 PySR 等 opt-out |
+| **常数策略** | ξ 优先，θ 延后 | Phase 1-3 仅线性系数 ξ；Phase 4 引入非线性常数 θ (BFGS) |
+| **缓存隔离** | 复合键 + 分桶目录 | `{dataset_fp}/{deriv_config}/` 目录结构，避免跨实验污染 |
+| **dataset_fp** | 元信息 + 采样 hash | 含 lhs_field/lhs_axis/topology；大数据集采样 hash |
+| **归一化** | ScaleHandler (Phase 2) | Phase 1 无归一化；导数尺度因子 = field_scale / coord_scale^order |
+| **导数命名** | 显示 + canonical 双格式 | `u_xx` 显示；`deriv:u:x:2` 内部；MVP 单轴 |
+| **计算图保留** | 默认关闭 + 可选开启 | `requires_grad=False` 性能优先；PINN 等设 `True` |
+| **额外基函数** | 可配置列表，默认空 | `extra_basis=[]`；常数项用 `["1"]`；支持 PDE-FIND 风格 |
+| **Term 缓存** | 内存 LRU | 实验级作用域，实验结束释放 |
+| **评估指标** | 可插拔 Metric | 内置 AIC/BIC；k=非零系数数；支持自定义 |
 
 ---
 
