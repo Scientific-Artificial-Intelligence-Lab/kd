@@ -1,6 +1,6 @@
 # kd2 符号回归平台 - 实现计划
 
-> **状态**：待教授讨论确认
+> **状态**：待讨论确认
 > **关联文档**：[arc_final.md](arc_final.md) - 完整架构设计
 
 ---
@@ -249,7 +249,7 @@ print(f"发现的方程: {result.best_expression}")
 | DISCOVER TF1 依赖 | PyTorch 重写，保留算法逻辑 |
 | 万级候选评估瓶颈 | DiskCache + canonical hash 去重 |
 | 数值不稳定 | safety.py 统一护栏 (safe_div, NaN/Inf 检测) |
-| 配置管理复杂 | Hydra 优雅管理 |
+| 配置管理复杂 | Hydra 管理 |
 
 ---
 
