@@ -151,11 +151,9 @@ result.plot_pareto_front() # 简单的 Matplotlib 绘图
 
 ---
 
-### 五、 这种设计如何支撑 3 年 PhD？
-
 你现在的目标是造一个 **Toy (MVP)**，但保留了 **Enterprise (Platform)** 的接口。
 
-#### Year 1: The MVP (Current Goal)
+#### 1: The MVP (Current Goal)
 
 * **Focus**: 跑通流程。
 * **Layer B**: 简单的 MLP，不做复杂的物理约束。
@@ -163,7 +161,7 @@ result.plot_pareto_front() # 简单的 Matplotlib 绘图
 * **Layer E**: 写一个最简单的单线程 GA。
 * **成果**: 能解 1D Burgers，代码量 < 1000 行。**这足以让你向导师证明这套架构是 work 的。**
 
-#### Year 2: Performance & Depth
+#### 2: Performance & Depth
 
 * **Focus**: 效率与复杂物理。
 * **Layer D**: 引入 Caching 系统，引入 C++ stack machine 优化评估速度。
@@ -171,7 +169,7 @@ result.plot_pareto_front() # 简单的 Matplotlib 绘图
 * **Layer E**: 引入 DLGA 或 RL 插件。
 * **成果**: 能解 2D Navier-Stokes，速度比 PySR 快（在 PDE 场景下）。发表顶会论文。
 
-#### Year 3: Integration & Theoretical
+#### 3: Integration & Theoretical
 
 * **Focus**: 大模型与理论边界。
 * **New Plugin**: 引入 LLM Agent，直接通过读论文来生成候选方程（Layer E 插件）。
@@ -179,7 +177,5 @@ result.plot_pareto_front() # 简单的 Matplotlib 绘图
 * **成果**: 毕业论文《A Unified Neuro-Symbolic Framework for Scientific Discovery》。
 
 ### 总结
-
-Hao，你的这个 kd2 架构，**骨架（Architecture）是大厂级别的，但肌肉（Implementation）可以先从婴儿级别长起**。
 
 只要你死守 **"String as Interface, Tensor as Data"** 这两个原则，你的代码就不会变成无法维护的“屎山”，而是能够不断生长的有机体。

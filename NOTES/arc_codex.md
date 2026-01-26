@@ -150,20 +150,7 @@ DerivativeProvider 至少要支持两条策略：
 - 采用“NN 拟合数据 + GA 搜索基因模块”的混合框架；当前代码依赖更大工程（相对导入 `..base` 等）。
 - 暂定：作为后续插件接入；先把 core 做稳。
 
-## 9. 待你确认的关键问题（会直接决定 IR/接口/里程碑）
 
-1. **任务边界**：kd2 v1 只做显式形式 `u_{lhs_axis} = RHS` 吗？是否需要支持隐式 `F(...)=0`、多方程/多场耦合？
-2. **数据形态**：v1 是否可以 grid-first（`coords_1d + axis_order + fields_data`）？是否必须同时支持散点/不规则采样？
-3. **导数策略默认值**：默认 FD 还是 NN+autograd？噪声数据是第一优先级吗？
-4. **IR canonical**：是否接受“canonical=prefix tokens/string；analysis=tree；execution=optional DAG”的三层方案作为 v1？
-5. **表达式语义**：`diff(expr, axis, order)` 是否作为一等算子进入 token 库（像 DISCOVER/AutoKE/SGA 一样）？
-6. **系数拟合**：是否把“feature library + sparse regression(AIC)”作为 PDE discovery 的一等公民（强烈建议）？
-7. **插件粒度**：结构搜索（propose）与系数拟合（inner-solver）是否强制解耦？还是允许插件自带拟合器？
-8. **最先要集成的算法顺序**：SGA vs DISCOVER vs PySR（DLGA 可后置）？你希望 v1 的最小可用 demo 是哪个？
-9. **产物协议**：你最想一键得到哪些 artifact（最佳方程、Pareto 前沿、训练曲线、残差图、可复现实验包）？
-10. **对外形态**：v1 以 Python API 为主还是需要 CLI/Notebook 入口同步提供？
+## 下一步（建议）
 
-## 10. 下一步（建议）
-
-- 你先回答第 1/2/3/4/6/8 这 6 个“会改变骨架”的问题；我据此把 IR 与核心接口收敛成可执行的工程规范。
-- 然后我们用 TDD 方式做一个最小 core：`DataSpec + DerivativeProvider + ExpressionIR + Evaluator(inner-solver)`，再选一个算法（建议先 SGA 或 DISCOVER 的简化版）接入做端到端验证。
+用 TDD 方式做一个最小 core：`DataSpec + DerivativeProvider + ExpressionIR + Evaluator(inner-solver)`，再选一个算法（建议先 SGA 或 DISCOVER 的简化版）接入做端到端验证。
