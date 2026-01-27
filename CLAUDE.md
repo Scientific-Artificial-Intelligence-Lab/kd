@@ -29,7 +29,10 @@ scripts/          # Dev scripts
 ## Commands
 
 ```bash
-# Tests (when ready)
+# Environment
+conda activate kd2-env   # Python 3.11, required before all commands
+
+# Tests
 pytest tests/ -v
 pytest -m smoke        # Quick validation
 mypy src/
