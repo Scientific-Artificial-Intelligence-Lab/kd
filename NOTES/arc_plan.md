@@ -7,8 +7,8 @@
 
 ## 一、项目概述
 
-kd2 是一个符号回归领域（特别是 PDE 发现）的通用实验平台，具有以下核心目标：
-- **数据层**：统一处理 PDE/ODE 数据，支持多种导数计算方式
+kd2 是一个符号回归领域（特别是 PDE 发现）的infra, 具有以下核心目标：
+- **数据层**：统一处理数据，支持多种导数计算方式
 - **通用 IR**：两层中间表示（GenIR + AnalysisIR），解耦算法与执行
 - **插件化算法**：DISCOVER、SGA、DLGA、PySR 等作为可插拔插件
 - **灵活评估**：支持多种评估指标，可定制
@@ -100,7 +100,7 @@ kd2/
 | **插件接口** | `propose()/update()` | 平台统一控制评估，便于缓存和并行 |
 | **缓存方案** | DiskCache | 无需运维，单机科研友好 |
 | **哈希策略** | 可交换算子子节点排序后哈希 | `a+b` 与 `b+a` 共享缓存 |
-| **实验追踪** | WandB + Hydra | 科研标配，配置管理优雅 |
+| **实验追踪** | WandB + Hydra | 配置管理方便 |
 | **DISCOVER 集成** | PyTorch 重写 | TF1 不兼容，保留算法逻辑 |
 | **技术栈** | Python 3.11+ | 使用最新语法特性，PyTorch 2.x |
 | **Web 兼容** | 核心零 UI 依赖 | Pydantic DTO、可视化双模式、Callback 机制预留 |
@@ -109,7 +109,7 @@ kd2/
 | **结果档案** | 简化版 ResultArchive | 收集结果 + 后处理提取 Pareto 前沿 (Phase 3) |
 | **导数表示** | 混合 + 约束消别名 | `u_x` (terminal, 预计算) + `diff` (operator, open-form)；约束禁止 `diff(terminal, axis)` |
 | **评估模式** | LINEAR 默认 | split_terms → STRidge 为主；DIRECT 模式供 PySR 等 opt-out |
-| **常数策略** | ξ 优先，θ 延后 | Phase 1-3 仅线性系数 ξ；Phase 4 引入非线性常数 θ (BFGS) |
+| **常数策略** | ξ 优先，θ 延后 | Phase 1-3 仅线性系数 ξ；Phase 4 引入非线性常数 θ (BFGS) (可选)|
 | **缓存隔离** | 复合键 + 分桶目录 | `{dataset_fp}/{deriv_config}/` 目录结构，避免跨实验污染 |
 | **dataset_fp** | 元信息 + 采样 hash | 含 lhs_field/lhs_axis/topology；大数据集采样 hash |
 | **归一化** | ScaleHandler (Phase 2) | Phase 1 无归一化；导数尺度因子 = field_scale / coord_scale^order |
@@ -274,3 +274,4 @@ print(f"发现的方程: {result.best_expression}")
 6. **n 维支持，禁止硬编码坐标名**
 7. **接口优先，实现渐进（批量化、CSE 留给后续）**
 8. **核心零 UI 依赖，结果可序列化**
+9. **INFRA 思路**
