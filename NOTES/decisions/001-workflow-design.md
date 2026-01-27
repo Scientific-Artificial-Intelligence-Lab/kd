@@ -100,6 +100,20 @@ port           # 算法移植工作流 [保留]
 
 **理由**: "理论先行，实践复盘" — 学习效果最佳。
 
+### 9. 外部 Agent 协作
+
+**决定**: 外部 agent（Codex、ChatGPT 等）的反馈记录在 `NOTES/explorations/` 下，使用 `TEMPLATE-ext-review.md` 模板。
+
+**流程**: 记录问题描述 → 粘贴外部意见 → 我方评估（正确性、适用性、冲突性）→ 决定采纳/拒绝。如导致设计变更，用 `/record` 写正式决策。
+
+**理由**: 外部意见需要结构化评估，避免盲目采纳；explorations/ 本身就是探索性内容的存放处。
+
+### 10. /learn 产出位置
+
+**决定**: `/learn` 提取的模式存放在 `NOTES/concepts/` 而非 `~/.claude/skills/learned/`。
+
+**理由**: 项目知识应留在项目仓库内，跟随 git 版本控制，方便所有 agent 和人类访问。
+
 ## Consequences
 
 - NOTES/ 中现有文档的路径变化，需更新引用（CLAUDE.md, AGENTS.md, SPEC.md）

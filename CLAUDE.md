@@ -50,7 +50,7 @@ ruff check src/
 - 使用中文和用户对话
 - Numerical safety: use safe_div, safe_exp, safe_log
 - Per-layer test coverage targets (see `.claude/rules/testing.md`)
-- See `AGENTS.md` for agent roles, `.claude/rules/` for coding standards
+- See `NOTES/AGENTS.md` for multi-agent setup (按需查阅), `.claude/rules/` for coding standards
 
 ## Workflow
 
