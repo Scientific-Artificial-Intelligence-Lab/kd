@@ -29,9 +29,10 @@ ruff check src/
 ## Rules
 
 - Type hints required
+- 使用中文和用户对话
 - Numerical safety: use safe_div, safe_exp, safe_log
-- 80%+ test coverage
-- See `.claude/rules/` for details
+- Per-layer test coverage targets (see `.claude/rules/testing.md`)
+- See `AGENTS.md` for universal rules, `.claude/rules/` for Claude Code details
 
 ## Workflow
 
