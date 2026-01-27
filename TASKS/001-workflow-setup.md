@@ -1,6 +1,6 @@
 # Task: 001 - 重构多 Agent 工作流与项目文档结构
 
-> Status: `ready`
+> Status: `done`
 > Parent: SPEC.md Phase 1
 > Assignee: claude (Architect session)
 
