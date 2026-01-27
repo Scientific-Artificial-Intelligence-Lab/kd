@@ -35,20 +35,13 @@ Symbolic regression platform for PDE discovery.
 
 ## Starting Sessions
 
-### Option A: tmux (one command)
 ```bash
-./scripts/start-dev.sh
-```
-Opens 4 panes: Architect, Tester, Dev, Porter.
-
-### Option B: Manual
-```bash
-# Each in a separate terminal
-claude --prompt "You are the Architect agent. Read .claude/agents/architect.md for your role. 使用中文对话。"
-claude --prompt "You are the Tester agent. Read .claude/agents/tester.md for your role. 使用中文对话。"
-claude --prompt "You are the Dev agent. Read .claude/agents/dev.md for your role. 使用中文对话。"
-claude --prompt "You are the Porter agent. Read .claude/agents/porter.md for your role. 使用中文对话。"
-claude --prompt "You are the Mentor Dev agent. Read .claude/agents/mentor_dev.md for your role. 使用中文对话。"
+# Start with a specific agent role
+claude --agent architect
+claude --agent tester
+claude --agent dev
+claude --agent porter
+claude --agent mentor_dev
 ```
 
 ## Slash Commands

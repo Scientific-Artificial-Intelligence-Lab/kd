@@ -23,7 +23,6 @@ TASKS/            # Task documents
   agents/         # 6 agent prompts
   commands/       # 10 slash commands
   rules/          # Coding standards
-scripts/          # Dev scripts
 ```
 
 ## Commands
