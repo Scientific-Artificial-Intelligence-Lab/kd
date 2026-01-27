@@ -1,6 +1,6 @@
 # Task: 000 - Project Environment Setup
 
-> Status: `ready`
+> Status: `done`
 > Parent: SPEC.md Phase 1
 > Assignee: claude
 
