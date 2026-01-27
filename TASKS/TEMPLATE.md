@@ -54,14 +54,17 @@ _Small, verifiable steps. Each should be completable in one session._
 1. [ ] **Step 1**: [Description]
    - Files: `path/to/file.py`
    - Test: `pytest tests/... -k "test_name"`
+   - Agent: Tester / Dev / Porter
 
 2. [ ] **Step 2**: [Description]
    - Files: `path/to/file.py`
    - Test: `pytest tests/... -k "test_name"`
+   - Agent: Tester / Dev / Porter
 
 3. [ ] **Step 3**: [Description]
    - Files: `path/to/file.py`
    - Test: `pytest tests/... -k "test_name"`
+   - Agent: Tester / Dev / Porter
 
 ## Acceptance criteria
 
@@ -129,6 +132,8 @@ Before marking as `done`:
 - [ ] All implementation steps completed
 - [ ] All acceptance criteria met
 - [ ] Tests written and passing
-- [ ] Code reviewed (self or peer)
+- [ ] Code reviewed (`/code-review`)
 - [ ] No TODOs left in code
+- [ ] Decisions recorded (`/record`)
+- [ ] `/wrap-up` completed (Teacher code walkthrough)
 - [ ] SPEC.md updated if needed
