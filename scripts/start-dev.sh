@@ -28,10 +28,10 @@ tmux split-window -v -t "$SESSION:0.0" -c "$PROJECT_DIR"
 tmux send-keys -t "$SESSION:0.2" \
   "echo '=== Dev ===' && claude --prompt 'You are the Dev agent. Read .claude/agents/dev.md for your role. 使用中文对话。'" C-m
 
-# Pane 3: Porter (bottom-right)
+# Pane 3: Mentor (bottom-right)
 tmux split-window -v -t "$SESSION:0.1" -c "$PROJECT_DIR"
 tmux send-keys -t "$SESSION:0.3" \
-  "echo '=== Porter ===' && claude --prompt 'You are the Porter agent. Read .claude/agents/porter.md for your role. 使用中文对话。'" C-m
+  "echo '=== Mentor Dev ===' && claude --prompt 'You are the Mentor Dev agent. Read .claude/agents/mentor_dev.md for your role. 使用中文对话。'" C-m
 
 # Select Architect pane
 tmux select-pane -t "$SESSION:0.0"
