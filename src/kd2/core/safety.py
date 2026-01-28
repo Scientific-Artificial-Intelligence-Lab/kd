@@ -26,7 +26,7 @@ def safe_div(a: Tensor, b: Tensor, eps: float = 1e-10) -> Tensor:
     sign_b = torch.where(sign_b == 0, torch.ones_like(sign_b), sign_b)
     return a / (b + eps * sign_b)
 
-
+# clamp 会造成梯度消失 未来需要注意
 def safe_exp(x: Tensor, max_val: float = 50.0) -> Tensor:
     """Protected exponential: clamps input to prevent overflow.
 
