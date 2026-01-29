@@ -336,3 +336,54 @@ class TestTokenEquality:
         # Equality should be based on name, arity, type, commutative - not function ref
         # This is a design decision - tokens with same identity are equal
         assert token1 == token2
+
+
+# =============================================================================
+# Unit Tests - Token __call__
+# =============================================================================
+
+
+@pytest.mark.unit
+class TestTokenCall:
+    """Unit tests for Token.__call__ method."""
+
+    def test_call_unary_function(self) -> None:
+        """Can call unary function token directly."""
+        sin_token = Token(
+            name="sin", arity=1, token_type=TokenType.FUNCTION, function=torch.sin
+        )
+        x = torch.tensor([0.0, 1.0, 2.0])
+        result = sin_token(x)
+        expected = torch.sin(x)
+        assert torch.allclose(result, expected)
+
+    def test_call_binary_function(self) -> None:
+        """Can call binary function token directly."""
+        add_token = Token(
+            name="add",
+            arity=2,
+            token_type=TokenType.FUNCTION,
+            function=torch.add,
+            is_commutative=True,
+        )
+        a = torch.tensor([1.0, 2.0, 3.0])
+        b = torch.tensor([4.0, 5.0, 6.0])
+        result = add_token(a, b)
+        expected = torch.add(a, b)
+        assert torch.allclose(result, expected)
+
+    def test_call_none_function_raises(self) -> None:
+        """Calling token with None function raises RuntimeError."""
+        var_token = Token(
+            name="x", arity=0, token_type=TokenType.VARIABLE, function=None
+        )
+        with pytest.raises(RuntimeError, match="has no callable function"):
+            var_token(torch.tensor([1.0]))
+
+    def test_call_diff_token_raises(self) -> None:
+        """Calling diff token (with None function) raises RuntimeError."""
+        diff_token = Token(
+            name="diff_x", arity=1, token_type=TokenType.DIFF, function=None
+        )
+        with pytest.raises(RuntimeError, match="Diff operators require special"):
+            diff_token(torch.tensor([1.0]))

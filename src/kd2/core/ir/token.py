@@ -77,3 +77,18 @@ class Token:
             and self.token_type == other.token_type
             and self.is_commutative == other.is_commutative
         )
+
+    def __call__(self, *args: Tensor) -> Tensor:
+        """Call the token's function directly.
+
+        Allows natural syntax: `add_op(a, b)` instead of `add_op.function(a, b)`.
+
+        Raises:
+            RuntimeError: If token has no callable function (e.g., diff tokens).
+        """
+        if self.function is None:
+            raise RuntimeError(
+                f"Token '{self.name}' has no callable function. "
+                f"Diff operators require special handling by the Executor."
+            )
+        return self.function(*args)
