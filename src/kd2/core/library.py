@@ -4,9 +4,11 @@ The Library manages available tokens (operators, variables, constants, diff oper
 and provides query methods for different use cases.
 """
 
-from typing import List
+import torch
+from torch import Tensor
 
-from kd2.core.ir.token import Token
+from kd2.core.ir.token import Token, TokenType
+from kd2.core.safety import safe_div, safe_exp, safe_log
 
 
 class Library:
@@ -29,7 +31,7 @@ class Library:
 
     def __init__(self) -> None:
         """Initialize an empty library."""
-        raise NotImplementedError("Library.__init__ not implemented")
+        self._tokens: dict[str, Token] = {}
 
     def register(self, token: Token) -> None:
         """Register a token in the library.
@@ -40,7 +42,9 @@ class Library:
         Raises:
             ValueError: If a token with the same name already exists.
         """
-        raise NotImplementedError("Library.register not implemented")
+        if token.name in self._tokens:
+            raise ValueError(f"Token '{token.name}' already exists in library")
+        self._tokens[token.name] = token
 
     def get(self, name: str) -> Token:
         """Get a token by name.
@@ -54,9 +58,9 @@ class Library:
         Raises:
             KeyError: If no token with the given name exists.
         """
-        raise NotImplementedError("Library.get not implemented")
+        return self._tokens[name]
 
-    def get_by_arity(self, arity: int) -> List[Token]:
+    def get_by_arity(self, arity: int) -> list[Token]:
         """Get all tokens with the specified arity.
 
         Args:
@@ -65,47 +69,63 @@ class Library:
         Returns:
             List of tokens with the given arity.
         """
-        raise NotImplementedError("Library.get_by_arity not implemented")
+        return [t for t in self._tokens.values() if t.arity == arity]
 
-    def get_terminals(self) -> List[Token]:
+    def get_terminals(self) -> list[Token]:
         """Get all terminal tokens (arity=0).
 
         Returns:
             List of all terminals (variables, constants).
         """
-        raise NotImplementedError("Library.get_terminals not implemented")
+        return self.get_by_arity(0)
 
-    def get_functions(self) -> List[Token]:
+    def get_functions(self) -> list[Token]:
         """Get all function tokens (arity > 0).
 
         Returns:
             List of all functions (operators, diff).
         """
-        raise NotImplementedError("Library.get_functions not implemented")
+        return [t for t in self._tokens.values() if t.arity > 0]
 
     def register_diff_tokens(
-        self, axes: List[str], fields: List[str], max_order: int
+        self, axes: list[str], fields: list[str], max_order: int
     ) -> None:
         """Register differential operator tokens.
 
-        Generates diff tokens for all combinations of axes and fields,
-        up to the specified maximum order.
+        Generates diff tokens for all axes up to the specified maximum order.
+        The fields parameter is reserved for future use.
 
         Token naming convention:
         - Order 1: diff_{axis}  (e.g., diff_x)
         - Order 2+: diff{order}_{axis}  (e.g., diff2_x, diff3_x)
 
-        All diff tokens have arity=1 (unary operators).
+        All diff tokens have arity=1 (unary operators) and function=None.
+        The actual differentiation is handled by the Executor.
 
         Args:
             axes: Spatial/temporal axes (e.g., ["x", "t"]).
-            fields: Field names (e.g., ["u", "v"]).
+            fields: Field names (e.g., ["u", "v"]). Reserved for future use.
             max_order: Maximum derivative order.
 
         Raises:
             ValueError: If max_order < 1.
         """
-        raise NotImplementedError("Library.register_diff_tokens not implemented")
+        if max_order < 1:
+            raise ValueError(f"max_order must be >= 1, got {max_order}")
+
+        for axis in axes:
+            for order in range(1, max_order + 1):
+                # Naming convention: diff_x for order 1, diff2_x for order 2+
+                name = f"diff_{axis}" if order == 1 else f"diff{order}_{axis}"
+
+                token = Token(
+                    name=name,
+                    arity=1,
+                    token_type=TokenType.DIFF,
+                    function=None,  # Handled by Executor
+                    is_commutative=False,
+                )
+                self.register(token)
 
     @classmethod
     def create_default(cls) -> "Library":
@@ -120,4 +140,115 @@ class Library:
         Returns:
             Library with default operators registered.
         """
-        raise NotImplementedError("Library.create_default not implemented")
+        lib = cls()
+
+        # Binary operators
+        lib.register(
+            Token(
+                name="add",
+                arity=2,
+                token_type=TokenType.FUNCTION,
+                function=torch.add,
+                is_commutative=True,
+            )
+        )
+        lib.register(
+            Token(
+                name="sub",
+                arity=2,
+                token_type=TokenType.FUNCTION,
+                function=torch.sub,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="mul",
+                arity=2,
+                token_type=TokenType.FUNCTION,
+                function=torch.mul,
+                is_commutative=True,
+            )
+        )
+        lib.register(
+            Token(
+                name="div",
+                arity=2,
+                token_type=TokenType.FUNCTION,
+                function=_safe_div_wrapper,
+                is_commutative=False,
+            )
+        )
+
+        # Unary operators
+        lib.register(
+            Token(
+                name="sin",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=torch.sin,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="cos",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=torch.cos,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="exp",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=safe_exp,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="log",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=safe_log,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="n2",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=_square,
+                is_commutative=False,
+            )
+        )
+        lib.register(
+            Token(
+                name="n3",
+                arity=1,
+                token_type=TokenType.FUNCTION,
+                function=_cube,
+                is_commutative=False,
+            )
+        )
+
+        return lib
+
+
+def _safe_div_wrapper(a: Tensor, b: Tensor) -> Tensor:
+    """Wrapper for safe_div with default eps."""
+    return safe_div(a, b)
+
+
+def _square(x: Tensor) -> Tensor:
+    """Compute x^2."""
+    return x * x
+
+
+def _cube(x: Tensor) -> Tensor:
+    """Compute x^3."""
+    return x * x * x
