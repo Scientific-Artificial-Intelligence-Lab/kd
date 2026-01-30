@@ -1,6 +1,6 @@
 # Task: 002 - Token & Library
 
-> Status: `ready`
+> Status: `done`
 > Parent: SPEC.md (Phase 1)
 > Assignee: claude
 
@@ -81,22 +81,22 @@ class Library:
 
 ## Implementation steps
 
-1. [ ] **Step 1**: 实现 TokenType 和 Token
+1. [x] **Step 1**: 实现 TokenType 和 Token
    - Files: `src/kd2/core/ir/token.py`
    - Test: `pytest tests/unit/test_token.py -k "test_token"`
    - Agent: Dev
 
-2. [ ] **Step 2**: 实现 Library 基础功能
+2. [x] **Step 2**: 实现 Library 基础功能
    - Files: `src/kd2/core/library.py`
    - Test: `pytest tests/unit/test_library.py -k "test_library_basic"`
    - Agent: Dev
 
-3. [ ] **Step 3**: 实现默认算子集
+3. [x] **Step 3**: 实现默认算子集
    - Files: `src/kd2/core/library.py`
    - Test: `pytest tests/unit/test_library.py -k "test_default_operators"`
    - Agent: Dev
 
-4. [ ] **Step 4**: 实现 diff token 自动注册
+4. [x] **Step 4**: 实现 diff token 自动注册
    - Files: `src/kd2/core/library.py`
    - Test: `pytest tests/unit/test_library.py -k "test_diff_registration"`
    - Agent: Dev
@@ -105,22 +105,22 @@ class Library:
 
 ### Functional
 
-- [ ] Token 创建正确，frozen 不可修改
-- [ ] Library 注册、查找、过滤功能正常
-- [ ] 默认算子集包含：add, sub, mul, div, sin, cos, exp, log, n2, n3
-- [ ] diff 自动注册生成正确的一元 token（如 `diff_x`, `diff2_x`, `diff_t`）
-- [ ] 可交换标记（is_commutative）对 add, mul 为 True
+- [x] Token 创建正确，frozen 不可修改
+- [x] Library 注册、查找、过滤功能正常
+- [x] 默认算子集包含：add, sub, mul, div, sin, cos, exp, log, n2, n3
+- [x] diff 自动注册生成正确的一元 token（如 `diff_x`, `diff2_x`, `diff_t`）
+- [x] 可交换标记（is_commutative）对 add, mul 为 True
 
 ### Tests
 
-- [ ] Unit tests pass: `pytest tests/unit/test_token.py tests/unit/test_library.py`
-- [ ] Coverage >= 95%: `pytest --cov=src/kd2/core/ir/token --cov=src/kd2/core/library`
+- [x] Unit tests pass: `pytest tests/unit/test_token.py tests/unit/test_library.py` (66 passed)
+- [x] Coverage >= 95%: 100% coverage achieved
 
 ### Quality
 
-- [ ] Type hints complete: `mypy src/kd2/core/ir/token.py src/kd2/core/library.py`
-- [ ] No lint errors: `ruff check src/kd2/core/`
-- [ ] 算子函数使用 safe_div, safe_exp, safe_log
+- [x] Type hints complete: `mypy src/kd2/core/ir/token.py src/kd2/core/library.py`
+- [x] No lint errors: `ruff check src/kd2/core/`
+- [x] 算子函数使用 safe_div, safe_exp, safe_log
 
 ## Validation
 
@@ -136,8 +136,8 @@ ruff check src/kd2/core
 
 ## Constraints
 
-- [ ] 无破坏性变更
-- [ ] Token 必须 hashable（用于缓存键）
+- [x] 无破坏性变更
+- [x] Token 必须 hashable（用于缓存键）
 
 ## Risks & mitigations
 
@@ -163,9 +163,9 @@ _实现时注意：_
 
 Before marking as `done`:
 
-- [ ] All implementation steps completed
-- [ ] All acceptance criteria met
-- [ ] Tests written and passing
-- [ ] Code reviewed (`/code-review`)
-- [ ] No TODOs left in code
-- [ ] `/wrap-up` completed
+- [x] All implementation steps completed
+- [x] All acceptance criteria met
+- [x] Tests written and passing (87 tests, 100% coverage)
+- [x] Code reviewed (`/code-review`) - APPROVED
+- [x] No TODOs left in code
+- [x] `/wrap-up` completed (2026-01-29)

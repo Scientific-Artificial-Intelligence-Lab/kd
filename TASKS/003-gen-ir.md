@@ -1,6 +1,6 @@
 # Task: 003 - GenIR
 
-> Status: `ready`
+> Status: `done`
 > Parent: SPEC.md (Phase 1)
 > Assignee: claude
 
@@ -90,22 +90,22 @@ return dangling == 0
 
 ## Implementation steps
 
-1. [ ] **Step 1**: 实现 GenIR 基础结构
+1. [x] **Step 1**: 实现 GenIR 基础结构
    - Files: `src/kd2/core/ir/gen_ir.py`
    - Test: `pytest tests/unit/test_gen_ir.py -k "test_gen_ir_basic"`
    - Agent: Dev
 
-2. [ ] **Step 2**: 实现 from_string 解析
+2. [x] **Step 2**: 实现 from_string 解析
    - Files: `src/kd2/core/ir/gen_ir.py`
    - Test: `pytest tests/unit/test_gen_ir.py -k "test_from_string"`
    - Agent: Dev
 
-3. [ ] **Step 3**: 实现完整性检查
+3. [x] **Step 3**: 实现完整性检查
    - Files: `src/kd2/core/ir/gen_ir.py`
    - Test: `pytest tests/unit/test_gen_ir.py -k "test_completeness"`
    - Agent: Dev
 
-4. [ ] **Step 4**: 实现 hash 和相等性
+4. [x] **Step 4**: 实现 hash 和相等性
    - Files: `src/kd2/core/ir/gen_ir.py`
    - Test: `pytest tests/unit/test_gen_ir.py -k "test_hash"`
    - Agent: Dev
@@ -114,21 +114,21 @@ return dangling == 0
 
 ### Functional
 
-- [ ] `from_string("add,u,v", library)` 正确解析
-- [ ] `is_complete()` 正确识别完整/不完整表达式
-- [ ] `dangling()` 返回正确的槽位数
-- [ ] 相同 tokens 的 GenIR hash 相同
-- [ ] 不同 tokens 的 GenIR hash 不同（高概率）
+- [x] `from_string("add,u,v", library)` 正确解析
+- [x] `is_complete()` 正确识别完整/不完整表达式
+- [x] `dangling()` 返回正确的槽位数
+- [x] 相同 tokens 的 GenIR hash 相同
+- [x] 不同 tokens 的 GenIR hash 不同（高概率）
 
 ### Tests
 
-- [ ] Unit tests pass: `pytest tests/unit/test_gen_ir.py`
-- [ ] Coverage >= 95%
+- [x] Unit tests pass: `pytest tests/unit/test_gen_ir.py` (57 passed)
+- [x] Coverage >= 95%: 100% achieved
 
 ### Quality
 
-- [ ] Type hints complete: `mypy src/kd2/core/ir/gen_ir.py`
-- [ ] No lint errors: `ruff check src/kd2/core/ir/`
+- [x] Type hints complete: `mypy src/kd2/core/ir/gen_ir.py`
+- [x] No lint errors: `ruff check src/kd2/core/ir/`
 
 ## Validation
 
@@ -144,8 +144,8 @@ ruff check src/kd2/core/ir
 
 ## Constraints
 
-- [ ] GenIR 必须 frozen 和 hashable
-- [ ] 解析时验证 token 存在于 Library
+- [x] GenIR 必须 frozen 和 hashable
+- [x] 解析时验证 token 存在于 Library
 
 ## Risks & mitigations
 
@@ -172,9 +172,9 @@ _测试用例示例：_
 
 Before marking as `done`:
 
-- [ ] All implementation steps completed
-- [ ] All acceptance criteria met
-- [ ] Tests written and passing
-- [ ] Code reviewed (`/code-review`)
-- [ ] No TODOs left in code
-- [ ] `/wrap-up` completed
+- [x] All implementation steps completed
+- [x] All acceptance criteria met
+- [x] Tests written and passing (57 tests, 100% coverage)
+- [x] Code reviewed (`/code-review`) - APPROVED
+- [x] No TODOs left in code
+- [x] `/wrap-up` completed (2026-01-30)
