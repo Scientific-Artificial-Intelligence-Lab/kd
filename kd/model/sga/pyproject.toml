@@ -11,3 +11,12 @@ requires-python = ">=3.8"
 # The 'packages' key is moved from [project] to here
 [tool.setuptools]
 packages = ["sgapde"]
+
+[tool.pytest.ini_options]
+markers = [
+  "unit: fast unit tests that do not require running the full solver",
+  "integration: tests exercising ProblemContext/solver integration on small grids",
+  "dataset: tests requiring external dataset files (e.g. burgers/kdv); must skip when unavailable",
+  "kd: tests covering KD adapter/integration; typically require the kd package",
+  "slow: long-running tests/benchmarks (not for default CI)",
+]

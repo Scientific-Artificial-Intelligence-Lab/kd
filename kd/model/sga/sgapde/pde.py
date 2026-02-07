@@ -113,11 +113,16 @@ def evaluate_mse(a_pde, context, is_term=False, *, return_matrix=False):
         terms = a_pde
     else:
         terms = a_pde.elements
-    terms_values = np.zeros((context.u.shape[0] * context.u.shape[1], len(terms)))
+    # NOTE(ND): LHS size defines the feature matrix rows for N-dim alignment.
+    lhs = context.ut
+    flat_size = lhs.size
+    terms_values = np.zeros((flat_size, len(terms)))
     delete_ix = []
     feature_matrix = None
     division_strategy = _resolve_division_strategy()
-    discarded_terms = 0
+    # NOTE(ND): Track discard reasons separately for clearer debugging.
+    discarded_lhs_terms = 0
+    discarded_division_terms = 0
 
     for ix, term in enumerate(terms):
         tree_list = term.tree
@@ -149,19 +154,35 @@ def evaluate_mse(a_pde, context, is_term=False, *, return_matrix=False):
                     child2 = tree_list[-i + 1][node.child_st + 1]
 
                     if node.name in {'d', 'd^2'}:
-                        what_is_denominator = child2.name
-                        if what_is_denominator == 't':
-                            tmp = context.dt
-                        elif what_is_denominator == 'x':
-                            tmp = context.dx
-                        else:
-                            raise NotImplementedError()
+                        axis_name = child2.name
+                        # 设计约束（Strict LHS / RHS 禁止对 lhs_axis 求导）：
+                        # - 默认任务是发现 `u_t = RHS(...)`，因此 RHS 中一旦出现 `d(·, t)` 或 `d^2(·, t)`，
+                        #   很容易产生退化解（例如 ut=ut）或违反论文形式。
+                        # - 生成层（tree.den 过滤）会尽量避免抽到 lhs_axis，但这不是“全链路保证”：
+                        #   外部构造的 tree、旧缓存、或未来 den 扩展到 N 维时都可能绕过生成层。
+                        # 因此在评估层做 fail-fast：检测到 RHS 沿 lhs_axis 求导直接丢弃该 term。
+                        if axis_name == getattr(context, "lhs_axis", "t"):
+                            term_invalid = True
+                            discarded_lhs_terms += 1
+                            child1.cache = child1.var
+                            child2.cache = child2.var
+                            break
+                        if axis_name not in context.axis_map:
+                            raise NotImplementedError(
+                                f"Unknown axis '{axis_name}' for derivative."
+                            )
+                        axis_index = context.axis_map[axis_name]
+                        tmp = context.delta.get(axis_name)
+                        if tmp is None:
+                            raise NotImplementedError(
+                                f"Missing delta for axis '{axis_name}'."
+                            )
 
                         if not isfunction(node.cache):
                             pdb.set_trace()
                             node.cache = node.var
 
-                        node.cache = node.cache(child1.cache, tmp, what_is_denominator)
+                        node.cache = node.cache(child1.cache, tmp, axis_index)
 
                     else:
                         if isfunction(child1.cache) or isfunction(child2.cache):
@@ -173,7 +194,7 @@ def evaluate_mse(a_pde, context, is_term=False, *, return_matrix=False):
                             if np.allclose(divisor, 0.0, atol=_DIVISION_ZERO_ATOL):
                                 if division_strategy == _DIVISION_STRATEGY_GUARD:
                                     term_invalid = True
-                                    discarded_terms += 1
+                                    discarded_division_terms += 1
                                     child1.cache = child1.var
                                     child2.cache = child2.var
                                     break
@@ -217,8 +238,16 @@ def evaluate_mse(a_pde, context, is_term=False, *, return_matrix=False):
         terms_values = np.delete(terms_values, ixx - move, axis=1)
         move += 1  # pop以后index左移
 
-    if discarded_terms and division_strategy == _DIVISION_STRATEGY_GUARD:
-        _LOGGER.debug("Discarded %d invalid division term(s)", discarded_terms)
+    if discarded_lhs_terms:
+        _LOGGER.debug(
+            "Discarded %d term(s) due to rhs derivative along lhs_axis",
+            discarded_lhs_terms,
+        )
+    if discarded_division_terms and division_strategy == _DIVISION_STRATEGY_GUARD:
+        _LOGGER.debug(
+            "Discarded %d term(s) due to division guard",
+            discarded_division_terms,
+        )
 
     # 检查是否存在inf或者nan，或者terms_values是否被削没了
     if False in np.isfinite(terms_values) or terms_values.shape[1] == 0:
@@ -228,8 +257,20 @@ def evaluate_mse(a_pde, context, is_term=False, *, return_matrix=False):
 
     else:
         # 2D --> 1D
+        if context.default_terms.shape[0] != flat_size:
+            # NOTE(ND): Prevent silent misalignment between default terms and LHS flattening.
+            raise ValueError(
+                "default_terms row count does not match lhs size; "
+                "check grid alignment and flatten order."
+            )
         terms_values = np.hstack((context.default_terms, terms_values))
-        w, loss, mse, aic = Train(terms_values, context.ut.reshape(context.n * context.m, 1), 0, 1, context.config.aic_ratio)
+        w, loss, mse, aic = Train(
+            terms_values,
+            lhs.reshape(-1, 1),
+            0,
+            1,
+            context.config.aic_ratio,
+        )
         feature_matrix = terms_values
 
     if is_term:

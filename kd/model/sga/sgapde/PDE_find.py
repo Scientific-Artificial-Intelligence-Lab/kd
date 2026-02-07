@@ -14,6 +14,9 @@ from sklearn.metrics import mean_squared_error
 def FiniteDiff(u, dx):
 
     n = u.size
+    # Fail fast on short axes to avoid out-of-bounds access in the stencil.
+    if n < 3:
+        raise ValueError(f"FiniteDiff requires at least 3 points; got {n}.")
     ux = np.zeros(n)
 
     for i in range(1, n - 1):
@@ -25,8 +28,9 @@ def FiniteDiff(u, dx):
 
 
 def FiniteDiff2(u, dx):
-
     n = u.size
+    if n < 4:
+        raise ValueError(f"FiniteDiff2 requires at least 4 points; got {n}.")
     ux = np.zeros(n)
 
     for i in range(1, n - 1):
@@ -37,26 +41,28 @@ def FiniteDiff2(u, dx):
     return ux
 
 
+def _resolve_axis(u, name):
+    if isinstance(name, int):
+        if name < 0 or name >= u.ndim:
+            raise ValueError(f"Axis index out of range: {name}")
+        return name
+    if isinstance(name, str):
+        if u.ndim == 2:
+            if name == 'x':
+                return 0
+            if name == 't':
+                return 1
+        raise ValueError(f"Unknown axis name '{name}'. Pass axis index for N-dim.")
+    raise TypeError("Axis spec must be int or str.")
+
+
 def Diff(u, dxt, name):
     """
     Here dx is a scalar, name is a str indicating what it is
     """
 
-    n, m = u.shape
-    uxt = np.zeros((n, m))
-
-    if name == 'x':
-        for i in range(m):
-            uxt[:, i] = FiniteDiff(u[:, i], dxt)
-
-    elif name == 't':
-        for i in range(n):
-            uxt[i, :] = FiniteDiff(u[i, :], dxt)
-
-    else:
-        NotImplementedError()
-
-    return uxt
+    axis = _resolve_axis(u, name)
+    return np.apply_along_axis(FiniteDiff, axis, u, dxt)
 
 
 def Diff2(u, dxt, name):
@@ -64,21 +70,8 @@ def Diff2(u, dxt, name):
     Here dx is a scalar, name is a str indicating what it is
     """
 
-    n, m = u.shape
-    uxt = np.zeros((n, m))
-
-    if name == 'x':
-        for i in range(m):
-            uxt[:, i] = FiniteDiff2(u[:, i], dxt)
-
-    elif name == 't':
-        for i in range(n):
-            uxt[i, :] = FiniteDiff2(u[i, :], dxt)
-
-    else:
-        NotImplementedError()
-
-    return uxt
+    axis = _resolve_axis(u, name)
+    return np.apply_along_axis(FiniteDiff2, axis, u, dxt)
 
 
 def Train(R, Ut, lam, d_tol, AIC_ratio=1, maxit=10, STR_iters=10, l0_penalty=1, normalize=2, split=0.8,

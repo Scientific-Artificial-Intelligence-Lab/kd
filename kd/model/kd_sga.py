@@ -17,16 +17,42 @@ class KD_SGA(BaseEstimator):
     This class exposes a scikit-learn–style interface around the upstream
     ``sgapde`` implementation for discovering PDEs of the form
     ``u_t = N(u, u_x, ...)``.
+
+    Supports N-D datasets via optional parameters. Default behavior infers
+    ``target_field`` and ``lhs_axis`` from the dataset when not specified.
     """
-    
-    def __init__(self, sga_run=100, num=20, depth=4, width=5, 
-                 p_var=0.5, p_mute=0.3, p_cro=0.5, seed=0, 
-                 use_autograd=False, max_epoch=100000,
-                 use_metadata=False, delete_edges=False):
+
+    def __init__(
+        self,
+        sga_run: int = 100,
+        num: int = 20,
+        depth: int = 4,
+        width: int = 5,
+        p_var: float = 0.5,
+        p_mute: float = 0.3,
+        p_cro: float = 0.5,
+        seed: int = 0,
+        use_autograd: bool = False,
+        max_epoch: int = 100000,
+        use_metadata: bool = False,
+        delete_edges: bool = False,
+        # N-D 参数（可选，推断为主）
+        target_field: Optional[str] = None,
+        lhs_axis: Optional[str] = None,
+        primary_spatial_axis: Optional[str] = None,
+    ):
         """Initialise a KD_SGA solver.
 
         All parameters correspond directly to fields in
         :class:`sgapde.config.SolverConfig`.
+
+        Args:
+            target_field: Field name for the PDE target (e.g., "u", "rho").
+                If None, inferred from dataset or defaults to "u".
+            lhs_axis: Axis for the LHS derivative (e.g., "t").
+                If None, inferred from dataset or defaults to "t".
+            primary_spatial_axis: Override for the primary spatial axis used
+                in legacy ux/uxx naming when no "x" axis exists.
         """
         # BaseEstimator.__init__ will help manage parameters,
         # but we keep explicit attributes for clarity.
@@ -42,6 +68,10 @@ class KD_SGA(BaseEstimator):
         self.max_epoch = max_epoch
         self.use_metadata = use_metadata
         self.delete_edges = delete_edges
+        # N-D 参数
+        self.target_field = target_field
+        self.lhs_axis = lhs_axis
+        self.primary_spatial_axis = primary_spatial_axis
         
     # 旧版 fit 方法，保留以兼容现有代码
     def fit(self, problem_name: str):
@@ -116,6 +146,18 @@ class KD_SGA(BaseEstimator):
             f"--- Starting SGA PDE Discovery for problem: {problem_label} (dataset mode) ---"
         )
 
+        # 推断优先级：用户显式设置 > adapter 推断 > 默认值
+        final_target_field = (
+            self.target_field
+            or solver_kwargs.pop("target_field", None)
+            or "u"
+        )
+        final_lhs_axis = (
+            self.lhs_axis
+            or solver_kwargs.pop("lhs_axis", None)
+            or "t"
+        )
+
         config = SolverConfig(
             problem_name=problem_label,
             sga_run=self.sga_run,
@@ -130,6 +172,9 @@ class KD_SGA(BaseEstimator):
             max_epoch=self.max_epoch,
             use_metadata=self.use_metadata,
             delete_edges=self.delete_edges,
+            target_field=final_target_field,
+            lhs_axis=final_lhs_axis,
+            primary_spatial_axis=self.primary_spatial_axis,
             **solver_kwargs,
         )
 

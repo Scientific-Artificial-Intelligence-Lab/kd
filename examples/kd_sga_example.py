@@ -38,7 +38,6 @@ configure(save_dir=SAVE_DIR)
 
 
 # 3. Load dataset / 加载 PDE 数据集
-print(f"[KD_SGA Example] Loading dataset '{DATASET_NAME}' via kd.dataset.load_pde(...)")
 dataset = load_pde(DATASET_NAME)
 
 
@@ -77,7 +76,7 @@ render_equation(model)
 
 
 # 7. Additional visualizations via named helpers /
-#    使用具名辅助函数进行额外可视化
+#    使用辅助函数进行额外可视化
 #
 # For KD_SGA the adapter reads everything from model.context_, so the
 # generic arguments (x_coords, actual, predicted, etc.) are not used.

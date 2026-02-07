@@ -9,9 +9,12 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import sys
+import os
 
-from .PDE_find import Diff, Diff2, FiniteDiff
+from .PDE_find import Diff, Diff2, FiniteDiff, FiniteDiff2
 from .config import Net
+from .metann import train_metanet
+from .naming import build_derivative_key, validate_axis_name, validate_name
 
 class ProblemContext:
     """Encapsulates all problem-specific data and computations."""
@@ -27,6 +30,8 @@ class ProblemContext:
         self.device = config.device
 
         self.simple_mode = config.simple_mode
+        self.target_field = getattr(config, "target_field", "u")
+        self.lhs_axis = getattr(config, "lhs_axis", "t")
         
         # Initialize data
         self._load_data()
@@ -49,57 +54,394 @@ class ProblemContext:
         2. 若无直接数据，则根据 problem_name 从文件加载。
         3. 加载后，根据 use_metadata 开关决定是否生成并使用高分辨率元数据。
         """
-        # 1. 决定数据来源：是直接传入，还是从文件加载
-        if self.config.u_data is not None:
-            print("\tINFO: Loading data directly from provided arrays (Framework Mode).")
-            base_u, base_x, base_t = self.config.u_data, self.config.x_data, self.config.t_data
-        else:
-            print(f"\tINFO: Loading data from file for problem: '{self.config.problem_name}' (Standalone Mode).")
-            base_u, base_x, base_t = self.config.u, self.config.x, self.config.t
-        
-        # 将基础数据存入 _origin 属性，作为永远的备份
-        self.u_origin, self.x_origin, self.t_origin = base_u, base_x, base_t
-        self.n_origin, self.m_origin = self.u_origin.shape
-        self.dx_origin = self.x_origin[1] - self.x_origin[0] if len(self.x_origin) > 1 else 0
-        self.dt_origin = self.t_origin[1] - self.t_origin[0] if len(self.t_origin) > 1 else 0
+        if not self._has_registry_payload():
+            if (
+                self.config.u_data is not None
+                or self.config.x_data is not None
+                or self.config.t_data is not None
+            ):
+                print("\tINFO: Loading data directly from provided arrays (Framework Mode).")
+            else:
+                print(
+                    f"\tINFO: Loading data from file for problem: "
+                    f"'{self.config.problem_name}' (Standalone Mode)."
+                )
 
-        # 2. 决定计算用数据：是使用元数据，还是使用基础数据
+        payload = self._build_registry_payload_from_config(self.config)
+        if payload is None:
+            raise ValueError("No data available to build structured grid payload.")
+
+        fields, coords_1d, axis_order = payload
+        self.config.fields_data = fields
+        self.config.coords_1d = coords_1d
+        self.config.axis_order = axis_order
+
+        self._init_variable_registry(fields, coords_1d, axis_order)
+
+        if self.target_field not in self.fields:
+            raise ValueError(
+                f"Structured grid requires target_field '{self.target_field}' "
+                f"in fields_data; available: {sorted(self.fields.keys())}"
+            )
+
+        self._resolve_primary_spatial_axis()
+        # Legacy views (x/dx/n) follow 'x' when present; otherwise use the primary axis.
+        legacy_x_axis = "x" if "x" in self.axis_map else self.primary_spatial_axis
+        self.legacy_x_axis = legacy_x_axis
+
+        self.u_origin = self.fields[self.target_field]
+        self.u = self.u_origin
+        x_origin_1d = self.coords_1d.get("x")
+        t_origin_1d = self.coords_1d.get("t")
+        self.x = self.coord_grids.get(legacy_x_axis)
+        self.t = self.coord_grids.get("t")
+        self.x_origin = self.x
+        self.t_origin = self.t
+        self.x_all = self.x
+
+        self.n_origin = self._shape_axis_length(self.u_origin.shape, self.axis_map[legacy_x_axis])
+        self.m_origin = self._shape_axis_length(self.u_origin.shape, self.axis_map.get("t", 1))
+        self.dx_origin = self.delta.get(legacy_x_axis, 0.0)
+        self.dt_origin = self.delta.get("t", 0.0)
+
+        self.n = self._shape_axis_length(self.u.shape, self.axis_map[legacy_x_axis])
+        self.m = self._shape_axis_length(self.u.shape, self.axis_map.get("t", 1))
+        self.dx = self.delta.get(legacy_x_axis, 0.0)
+        self.dt = self.delta.get("t", 0.0)
+
         if self.config.use_metadata:
-            self.u, self.x, self.t, self.x_all = self._generate_metadata()
-        else:
-            self.u, self.x, self.t, self.x_all = self.u_origin, self.x_origin, self.t_origin, self.x_origin
+            if axis_order != ["x", "t"]:
+                raise NotImplementedError(
+                    "Metadata generation for registry payloads only supports axis_order "
+                    "['x', 't']."
+                )
+            if len(self.fields) != 1 or self.target_field not in self.fields:
+                raise NotImplementedError(
+                    "Metadata generation for registry payloads only supports a single "
+                    "target field."
+                )
+            if x_origin_1d is None or t_origin_1d is None:
+                raise ValueError("Metadata generation requires x/t coordinates.")
 
-        # 3. 对最终选定的计算用数据进行通用设置
-        self.n, self.m = self.u.shape
-        self.dx = self.x[1] - self.x[0] if len(self.x) > 1 else 0
-        self.dt = self.t[1] - self.t[0] if len(self.t) > 1 else 0
+            x_origin_1d = np.asarray(x_origin_1d).reshape(-1)
+            t_origin_1d = np.asarray(t_origin_1d).reshape(-1)
+            self.x_origin = x_origin_1d
+            self.t_origin = t_origin_1d
+            self.dx_origin = x_origin_1d[1] - x_origin_1d[0] if len(x_origin_1d) > 1 else 0.0
+            self.dt_origin = t_origin_1d[1] - t_origin_1d[0] if len(t_origin_1d) > 1 else 0.0
+            self.n_origin, self.m_origin = self.u_origin.shape
 
-        # 扩展维度以匹配 u 的形状
-        self.x = np.tile(self.x, (self.m, 1)).transpose((1, 0))
-        self.x_all = np.tile(self.x_all, (self.m, 1)).transpose((1, 0))
-        self.t = np.tile(self.t, (self.n, 1))
+            self.u, x_1d, t_1d, _ = self._generate_metadata()
 
-        # 同样扩展 _origin 数据的维度，以供后续绘图或比较使用
-        self.x_origin = np.tile(self.x_origin, (self.m_origin, 1)).transpose((1, 0))
-        self.t_origin = np.tile(self.t_origin, (self.n_origin, 1))
+            self.u = np.asarray(self.u)
+            x_1d = np.asarray(x_1d).reshape(-1)
+            t_1d = np.asarray(t_1d).reshape(-1)
 
-        # 4. 根据开关，选择性地切割数据边缘
+            fields = {self.target_field: self.u}
+            coords_1d = {"x": x_1d, "t": t_1d}
+            self._init_variable_registry(fields, coords_1d, axis_order)
+
+            self.u = self.fields[self.target_field]
+            self.x = self.coord_grids.get("x")
+            self.t = self.coord_grids.get("t")
+            self.x_all = self.x
+
+            self.n = self._shape_axis_length(self.u.shape, self.axis_map.get("x", 0))
+            self.m = self._shape_axis_length(self.u.shape, self.axis_map.get("t", 1))
+            self.dx = self.delta.get("x", 0.0)
+            self.dt = self.delta.get("t", 0.0)
+
+            origin_axis_map = {axis: idx for idx, axis in enumerate(axis_order)}
+            self.x_origin = self._broadcast_coord(
+                x_origin_1d,
+                origin_axis_map["x"],
+                self.u_origin.shape,
+            )
+            self.t_origin = self._broadcast_coord(
+                t_origin_1d,
+                origin_axis_map["t"],
+                self.u_origin.shape,
+            )
+
         if self.config.delete_edges:
-            print("\tINFO: Deleting edges from the data (10% on each side).")
-            n_slice_start = int(self.n * 0.1)
-            n_slice_end = int(self.n * 0.9)
-            
-            self.u = self.u[n_slice_start:n_slice_end, :]
-            self.x = self.x[n_slice_start:n_slice_end, :] # 注意：x也需要同步切割
-            self.t = self.t[n_slice_start:n_slice_end, :] # t也需要同步切割
-            
-            # 更新切割后的维度
-            self.n, self.m = self.u.shape
+            self._apply_edge_deletion()
+
+    def _has_registry_payload(self):
+        return self.config.fields_data is not None or self.config.coords_1d is not None
+
+    @staticmethod
+    def _build_registry_payload_from_config(config):
+        has_registry_payload = config.fields_data is not None or config.coords_1d is not None
+        if has_registry_payload:
+            if config.fields_data is None:
+                raise ValueError("Structured grid requires fields_data.")
+            if config.coords_1d is None:
+                raise ValueError("Structured grid requires coords_1d.")
+            if not isinstance(config.fields_data, dict):
+                raise TypeError("Structured grid requires fields_data as a dict.")
+            if not isinstance(config.coords_1d, dict):
+                raise TypeError("Structured grid requires coords_1d as a dict.")
+            fields = {name: np.asarray(value) for name, value in config.fields_data.items()}
+            coords_1d = {axis: np.asarray(coord) for axis, coord in config.coords_1d.items()}
+            axis_order = list(config.axis_order) if config.axis_order else list(coords_1d.keys())
+            if not axis_order:
+                raise ValueError("Structured grid requires a non-empty axis_order.")
+            return fields, coords_1d, axis_order
+
+        if (
+            config.u_data is not None
+            or config.x_data is not None
+            or config.t_data is not None
+        ):
+            base_u, base_x, base_t = config.u_data, config.x_data, config.t_data
+        else:
+            base_u = getattr(config, "u", None)
+            base_x = getattr(config, "x", None)
+            base_t = getattr(config, "t", None)
+
+        if base_u is None or base_x is None or base_t is None:
+            return None
+
+        target_field = getattr(config, "target_field", "u")
+        fields = {target_field: np.asarray(base_u)}
+        coords_1d = {
+            "x": np.asarray(base_x).reshape(-1),
+            "t": np.asarray(base_t).reshape(-1),
+        }
+        # Legacy inputs are always treated as 2D x/t grids.
+        axis_order = ["x", "t"]
+        return fields, coords_1d, axis_order
+
+
+    def _coerce_fields(self, fields):
+        if fields is None:
+            raise ValueError("Structured grid requires fields_data.")
+        if not isinstance(fields, dict):
+            raise TypeError("Structured grid requires fields_data as a dict.")
+        return {name: np.asarray(value) for name, value in fields.items()}
+
+    def _coerce_coords(self, coords_1d):
+        if coords_1d is None:
+            raise ValueError("Structured grid requires coords_1d.")
+        if not isinstance(coords_1d, dict):
+            raise TypeError("Structured grid requires coords_1d as a dict.")
+        return {axis: np.asarray(coord) for axis, coord in coords_1d.items()}
+
+    def _resolve_axis_order(self, coords_1d):
+        axis_order = list(self.config.axis_order) if self.config.axis_order else list(coords_1d.keys())
+        if not axis_order:
+            raise ValueError("Structured grid requires a non-empty axis_order.")
+        return axis_order
+
+    def _init_variable_registry(self, fields, coords_1d, axis_order):
+        self._validate_registry_names(fields, coords_1d, axis_order)
+        self._validate_structured_grid(fields, coords_1d, axis_order)
+        self.fields = fields
+        self.coords_1d = coords_1d
+        self.axis_order = list(axis_order)
+        self.axis_map = {axis: idx for idx, axis in enumerate(self.axis_order)}
+
+        self.delta = {
+            axis: self._compute_delta(coords_1d[axis], axis)
+            for axis in self.axis_order
+        }
+        grid_shape = tuple(coords_1d[axis].shape[0] for axis in self.axis_order)
+        self.coord_grids = self._build_coord_grids(coords_1d, self.axis_map, grid_shape)
+
+    def _validate_registry_names(self, fields, coords_1d, axis_order):
+        field_names = list(fields.keys())
+        coord_names = list(coords_1d.keys())
+
+        for axis in axis_order:
+            validate_axis_name(axis)
+        for coord in coord_names:
+            validate_axis_name(coord)
+        for field in field_names:
+            validate_name(field)
+
+        # Fail fast on collisions that would otherwise be silent in VARS/grad_fields.
+        coord_conflicts = sorted(set(field_names) & set(coord_names))
+        if coord_conflicts:
+            raise ValueError(
+                "Field names conflict with coordinate axes: "
+                f"{coord_conflicts}."
+            )
+
+        derivative_keys = {
+            build_derivative_key(field, axis, order=1)
+            for field in field_names
+            for axis in axis_order
+        }
+        derivative_conflicts = sorted(set(field_names) & derivative_keys)
+        if derivative_conflicts:
+            raise ValueError(
+                "Field names conflict with derivative keys: "
+                f"{derivative_conflicts}."
+            )
+
+        lhs_axis = self.lhs_axis
+        if len(lhs_axis) == 1 and self.target_field in field_names:
+            legacy_lhs_alias = f"{self.target_field}{lhs_axis}"
+            if legacy_lhs_alias in field_names:
+                # Prevent RHS from sneaking in lhs-derivative leaves via legacy alias.
+                raise ValueError(
+                    "Field names conflict with lhs derivative alias: "
+                    f"['{legacy_lhs_alias}']. Use canonical keys like "
+                    f"'{self.target_field}_{lhs_axis}' only for derived data."
+                )
+
+        legacy_conflicts = sorted(set(field_names) & {"ux"})
+        if legacy_conflicts:
+            raise ValueError(
+                "Field names conflict with legacy aliases: "
+                f"{legacy_conflicts}."
+            )
+
+    def _resolve_primary_spatial_axis(self):
+        spatial_axes = [axis for axis in self.axis_order if axis != self.lhs_axis]
+        if not spatial_axes:
+            raise ValueError("Structured grid requires at least one spatial axis.")
+
+        override = getattr(self.config, "primary_spatial_axis", None)
+        if override is not None:
+            if override not in self.axis_map:
+                raise ValueError(
+                    f"primary_spatial_axis '{override}' is not in axis_order {self.axis_order}."
+                )
+            if override == self.lhs_axis:
+                raise ValueError("primary_spatial_axis cannot be the lhs_axis.")
+            primary_axis = override
+        else:
+            primary_axis = "x" if "x" in spatial_axes else spatial_axes[0]
+
+        self.primary_spatial_axis = primary_axis
+        self.primary_spatial_index = self.axis_map[primary_axis]
+
+    def _validate_structured_grid(self, fields, coords_1d, axis_order):
+        if len(axis_order) != len(set(axis_order)):
+            raise ValueError("Structured grid requires unique axis_order entries.")
+
+        axis_set = set(axis_order)
+        coord_set = set(coords_1d.keys())
+        if axis_set != coord_set:
+            missing = sorted(axis_set - coord_set)
+            extra = sorted(coord_set - axis_set)
+            raise ValueError(
+                "Structured grid axis_order must match coords_1d keys. "
+                f"Missing: {missing}, Extra: {extra}"
+            )
+
+        grid_shape = tuple(coords_1d[axis].shape[0] for axis in axis_order)
+        for axis in axis_order:
+            coord = coords_1d[axis]
+            if coord.ndim != 1:
+                raise ValueError(
+                    f"Structured grid requires 1D coordinates for axis '{axis}'."
+                )
+
+        for name, field in fields.items():
+            if field.shape != grid_shape:
+                raise ValueError(
+                    "Structured grid requires all fields to share the grid shape. "
+                    f"Field '{name}' has shape {field.shape}, expected {grid_shape}."
+                )
+
+        if self.config.enforce_uniform_grid:
+            for axis in axis_order:
+                coord = coords_1d[axis]
+                if coord.size < 2:
+                    continue
+                diffs = np.diff(coord)
+                if not np.allclose(diffs, diffs[0]):
+                    raise ValueError(
+                        "Structured grid requires uniform spacing for axis "
+                        f"'{axis}'."
+                    )
+
+    @staticmethod
+    def _compute_delta(coord, axis):
+        if coord.size < 2:
+            return 0.0
+        diffs = np.diff(coord)
+        # Guard against duplicate or non-monotonic coordinates before FD uses delta.
+        if np.any(diffs == 0):
+            raise ValueError(
+                f"Structured grid axis '{axis}' must have non-zero spacing."
+            )
+        if not (np.all(diffs > 0) or np.all(diffs < 0)):
+            raise ValueError(
+                f"Structured grid axis '{axis}' must be strictly monotonic."
+            )
+        return float(diffs[0])
+
+    @staticmethod
+    def _build_coord_grids(coords_1d, axis_map, grid_shape):
+        coord_grids = {}
+        for axis, index in axis_map.items():
+            coord = coords_1d[axis]
+            reshape = [1] * len(grid_shape)
+            reshape[index] = coord.shape[0]
+            coord_grids[axis] = np.broadcast_to(coord.reshape(reshape), grid_shape)
+        return coord_grids
+
+    @staticmethod
+    def _broadcast_coord(coord_1d, axis_index, shape):
+        reshape = [1] * len(shape)
+        reshape[axis_index] = coord_1d.shape[0]
+        return np.broadcast_to(coord_1d.reshape(reshape), shape)
+
+    @staticmethod
+    def _shape_axis_length(shape, axis_index):
+        if axis_index < len(shape):
+            return shape[axis_index]
+        return 1
+
+    def _apply_edge_deletion(self):
+        if self.u.ndim != 2:
+            raise NotImplementedError("delete_edges only supports 2D grids.")
+        print("\tINFO: Deleting edges from the data (10% on each side).")
+        if "x" not in self.axis_map:
+            raise ValueError("delete_edges requires structured grid axis 'x'.")
+
+        # NOTE(ND): Legacy delete_edges semantics are "crop spatial x edges".
+        # The previous implementation assumed x is axis 0 and silently cropped the wrong
+        # axis when axis_order was permuted (e.g. ['t', 'x']). Here we crop the actual
+        # x-axis and keep coords_1d/grid_shape consistent.
+        x_index = self.axis_map["x"]
+        n_slice_start = int(self.n * 0.1)
+        n_slice_end = int(self.n * 0.9)
+
+        slicer = [slice(None)] * self.u.ndim
+        slicer[x_index] = slice(n_slice_start, n_slice_end)
+        slicer = tuple(slicer)
+
+        new_fields = {name: field[slicer] for name, field in self.fields.items()}
+        new_coords_1d = dict(self.coords_1d)
+        new_coords_1d["x"] = np.asarray(new_coords_1d["x"]).reshape(-1)[n_slice_start:n_slice_end]
+
+        # Rebuild the variable registry so fields/coords/axis_map/delta/coord_grids stay in sync.
+        self.config.fields_data = new_fields
+        self.config.coords_1d = new_coords_1d
+        self._init_variable_registry(new_fields, new_coords_1d, self.axis_order)
+        self._resolve_primary_spatial_axis()
+        legacy_x_axis = "x" if "x" in self.axis_map else self.primary_spatial_axis
+        self.legacy_x_axis = legacy_x_axis
+
+        self.u = self.fields[self.target_field]
+        self.x = self.coord_grids.get(legacy_x_axis)
+        self.t = self.coord_grids.get("t")
+        self.x_all = self.x
+
+        self.n = self._shape_axis_length(self.u.shape, self.axis_map[legacy_x_axis])
+        self.m = self._shape_axis_length(self.u.shape, self.axis_map.get("t", 1))
+        self.dx = self.delta.get(legacy_x_axis, 0.0)
+        self.dt = self.delta.get("t", 0.0)
         
     def _init_operators(self):
         """Initialize operator definitions."""
         # Define zeros array
         self.zeros = np.zeros(self.u.shape)
+        self.grad_fields = {}
         
         # Define operators (from setup.py)
         self.ALL = np.array([
@@ -127,12 +469,22 @@ class ProblemContext:
             ['/', 2, self.config.divide], ['d', 2, Diff], ['d^2', 2, Diff2]
         ], dtype=object)
         
-        self.VARS = np.array([
-            ['u', 0, self.u], ['x', 0, self.x], ['0', 0, self.zeros], 
-            ['ux', 0, None]  # Will be set after calculation
-        ], dtype=object)
+        self.VARS = self._build_vars(include_grad=False)
         
-        self.den = np.array([['x', 0, self.x]], dtype=object)
+        den_entries = []
+        for axis in self.axis_order:
+            if axis == self.lhs_axis:
+                continue
+            coord = self.coord_grids.get(axis)
+            if coord is not None:
+                # 遵循旧代码的数据结构约定：[name, child_num, payload]。
+                # 这里 den 的元素必须是“叶子变量”，因此 child_num 固定为 0。
+                den_entries.append([axis, 0, coord])
+        if not den_entries:
+            raise ValueError("No RHS derivative axes available after filtering lhs_axis.")
+        self.den = np.array(den_entries, dtype=object)
+        # Guardrail: RHS denominators must never include lhs_axis (prevents ut on RHS).
+        self._assert_no_lhs_in_den()
     
     @staticmethod # 最重要的修复! 一定要加这个... 不然第一个参数是 self 的话会爆炸 :(
     def _cubic(inputs):
@@ -146,122 +498,525 @@ class ProblemContext:
             self._calculate_derivatives_autograd()
         else:
             self._calculate_derivatives_difference()
+
+        self._compute_grad_fields()
             
         # Update operators with calculated derivatives
         self._update_operators_with_derivatives()
         
     def _calculate_derivatives_difference(self):
         """Calculate derivatives using finite differences."""
-        n, m = self.n, self.m
-        
-        # Calculate ut
-        self.ut = np.zeros((n, m))
-        for idx in range(n):
-            self.ut[idx, :] = FiniteDiff(self.u[idx, :], self.dt)
-            
-        # Calculate ux, uxx, uxxx
-        self.ux = np.zeros((n, m))
-        self.uxx = np.zeros((n, m))
-        self.uxxx = np.zeros((n, m))
-        
-        for idx in range(m):
-            self.ux[:, idx] = FiniteDiff(self.u[:, idx], self.dx)
-        for idx in range(m):
-            self.uxx[:, idx] = FiniteDiff(self.ux[:, idx], self.dx)
-        for idx in range(m):
-            self.uxxx[:, idx] = FiniteDiff(self.uxx[:, idx], self.dx)
-            
-        # Calculate derivatives for original data
-        n_origin, m_origin = self.n_origin, self.m_origin
-        
-        self.ut_origin = np.zeros((n_origin, m_origin))
-        for idx in range(n_origin):
-            self.ut_origin[idx, :] = FiniteDiff(self.u_origin[idx, :], self.dt_origin)
-            
-        self.ux_origin = np.zeros((n_origin, m_origin))
-        self.uxx_origin = np.zeros((n_origin, m_origin))
-        self.uxxx_origin = np.zeros((n_origin, m_origin))
-        
-        for idx in range(m_origin):
-            self.ux_origin[:, idx] = FiniteDiff(self.u_origin[:, idx], self.dx_origin)
-        for idx in range(m_origin):
-            self.uxx_origin[:, idx] = FiniteDiff(self.ux_origin[:, idx], self.dx_origin)
-        for idx in range(m_origin):
-            self.uxxx_origin[:, idx] = FiniteDiff(self.uxx_origin[:, idx], self.dx_origin)
+        if self.lhs_axis not in self.axis_map:
+            raise ValueError(
+                f"Structured grid missing lhs_axis '{self.lhs_axis}' in axis_order."
+            )
+        primary_axis = getattr(self, "primary_spatial_axis", None)
+        if primary_axis not in self.axis_map:
+            raise ValueError("Structured grid missing a valid primary spatial axis.")
+
+        lhs_index = self.axis_map[self.lhs_axis]
+        x_index = self.axis_map[primary_axis]
+        lhs_delta = self.delta.get(self.lhs_axis, 0.0)
+        x_delta = self.delta.get(primary_axis, 0.0)
+
+        self.ut = self._finite_diff_along_axis(self.u, lhs_delta, lhs_index, order=1)
+        self.ux = self._finite_diff_along_axis(self.u, x_delta, x_index, order=1)
+        # Legacy stencil: u_xx is computed as d(u_x)/dx (not direct second diff).
+        # self.uxx = self._finite_diff_along_axis(self.u, x_delta, x_index, order=2)
+        self.uxx = self._finite_diff_along_axis(self.ux, x_delta, x_index, order=1)
+        self.uxxx = self._finite_diff_along_axis(self.uxx, x_delta, x_index, order=1)
+
+        origin_lhs_delta = self._origin_delta(self.lhs_axis)
+        origin_x_delta = self._origin_delta(primary_axis)
+        self.ut_origin = self._finite_diff_along_axis(
+            self.u_origin, origin_lhs_delta, lhs_index, order=1
+        )
+        self.ux_origin = self._finite_diff_along_axis(
+            self.u_origin, origin_x_delta, x_index, order=1
+        )
+        # Keep legacy stencil for origin as well.
+        # self.uxx_origin = self._finite_diff_along_axis(
+        #     self.u_origin, origin_x_delta, x_index, order=2
+        # )
+        self.uxx_origin = self._finite_diff_along_axis(
+            self.ux_origin, origin_x_delta, x_index, order=1
+        )
+        self.uxxx_origin = self._finite_diff_along_axis(
+            self.uxx_origin, origin_x_delta, x_index, order=1
+        )
+
+    def _compute_grad_fields(self):
+        """Precompute spatial first derivatives for VARS (exclude lhs axis)."""
+        if not hasattr(self, "grad_fields") or self.grad_fields is None:
+            self.grad_fields = {}
+        if not hasattr(self, "fields") or not self.fields:
+            return
+
+        for field_name, field_value in self.fields.items():
+            for axis in self.axis_order:
+                if axis == self.lhs_axis:
+                    continue
+                key = build_derivative_key(field_name, axis, order=1)
+                if key in self.grad_fields:
+                    continue
+                axis_index = self.axis_map[axis]
+                delta = self.delta.get(axis, 0.0)
+
+                if field_name == self.target_field and axis == self.primary_spatial_axis:
+                    grad = self.ux
+                else:
+                    grad = self._finite_diff_along_axis(
+                        field_value, delta, axis_index, order=1
+                    )
+
+                self.grad_fields[key] = grad
+        if self.target_field in self.fields:
+            key = build_derivative_key(self.target_field, self.primary_spatial_axis, order=1)
+            grad = self.grad_fields.get(key)
+            if grad is not None and "ux" not in self.fields and "ux" not in self.grad_fields:
+                # Legacy alias for backward compatibility on the primary spatial axis.
+                self.grad_fields["ux"] = grad
+
+    @staticmethod
+    def _finite_diff_along_axis(data, delta, axis, order=1):
+        if order == 1:
+            func = FiniteDiff
+        elif order == 2:
+            func = FiniteDiff2
+        else:
+            raise ValueError(f"Unsupported finite diff order: {order}")
+        return np.apply_along_axis(func, axis, data, delta)
+
+    def _origin_delta(self, axis):
+        if axis == "x":
+            return self.dx_origin
+        if axis == "t":
+            return self.dt_origin
+        return self.delta.get(axis, 0.0)
             
     def _calculate_derivatives_autograd(self):
         """Calculate derivatives using autograd."""
-        # load model
-        model = Net(self.config.num_feature, self.config.hidden_dim, 1)
-        model.load_state_dict(torch.load(self.config.model_path, map_location=self.device))
-        model.to(self.device)
+        raw_autograd_fields = getattr(self.config, "autograd_fields", None)
+        if raw_autograd_fields is None:
+            autograd_fields = list(self.fields.keys())
+        elif isinstance(raw_autograd_fields, (list, tuple, set)):
+            autograd_fields = list(raw_autograd_fields)
+        else:
+            autograd_fields = [raw_autograd_fields]
 
-        # autograd function
-        def fun(x_data, t_data, model_instance):
-            # Combine x and t data and prepare for autograd
-            database = torch.cat((x_data, t_data), 1).float().to(self.device)
-            database.requires_grad = True # Set requires_grad for differentiation
+        missing_fields = [name for name in autograd_fields if name not in self.fields]
+        if missing_fields:
+            raise ValueError(
+                f"Autograd fields not found in data: {missing_fields}"
+            )
+        if self.target_field not in autograd_fields:
+            raise ValueError(
+                "Autograd fields must include target_field for LHS computation."
+            )
 
-            # Get model output
-            pinn_output = model_instance(database)
-            
-            # First-order derivatives
-            H_grad = torch.autograd.grad(outputs=pinn_output.sum(), inputs=database, create_graph=True)[0]
-            Ht = H_grad[:, 1]
-            Hx = H_grad[:, 0]
-            
-            # Second-order derivatives
-            Hxx = torch.autograd.grad(outputs=Hx.sum(), inputs=database, create_graph=True)[0][:, 0]
-            
-            # Third-order derivatives
-            Hxxx = torch.autograd.grad(outputs=Hxx.sum(), inputs=database, create_graph=True)[0][:, 0]
-            
-            # Return derivatives as numpy arrays
-            return Hx.cpu().data.numpy(), Hxx.cpu().data.numpy(), Hxxx.cpu().data.numpy(), Ht.cpu().data.numpy()
+        autograd_models = getattr(self.config, "autograd_models", None)
+        if autograd_models is None:
+            autograd_models = {}
+        if not isinstance(autograd_models, dict):
+            raise TypeError("autograd_models must be a dict when provided.")
 
-        # --- Calculate derivatives for metadata ---
-        x_1d = np.reshape(self.x, (self.n * self.m, 1))
-        t_1d = np.reshape(self.t, (self.n * self.m, 1))
-        
-        # Convert numpy arrays to torch tensors
-        x_tensor = torch.from_numpy(x_1d)
-        t_tensor = torch.from_numpy(t_1d)
+        if (
+            getattr(self.config, "autograd_model", None) is not None
+            and self.target_field not in autograd_models
+        ):
+            autograd_models[self.target_field] = self.config.autograd_model
 
-        ux, uxx, uxxx, ut = fun(x_tensor, t_tensor, model)
+        autograd_model_paths = getattr(self.config, "autograd_model_paths", None)
+        if autograd_model_paths is None:
+            autograd_model_paths = {}
+        if not isinstance(autograd_model_paths, dict):
+            raise TypeError("autograd_model_paths must be a dict when provided.")
+        if self.config.model_path and self.target_field not in autograd_model_paths:
+            autograd_model_paths[self.target_field] = self.config.model_path
 
-        # Reshape and store results as instance attributes
-        self.ut = np.reshape(ut, (self.n, self.m))
-        self.ux = np.reshape(ux, (self.n, self.m))
-        self.uxx = np.reshape(uxx, (self.n, self.m))
-        self.uxxx = np.reshape(uxxx, (self.n, self.m))
+        num_feature = len(self.axis_order)
 
-        # --- Calculate derivatives for original data ---
-        x_1d_origin = np.reshape(self.x_origin, (self.n_origin * self.m_origin, 1))
-        t_1d_origin = np.reshape(self.t_origin, (self.n_origin * self.m_origin, 1))
+        def _infer_model_input_dim(model):
+            if hasattr(model, "in_features"):
+                try:
+                    return int(model.in_features)
+                except (TypeError, ValueError):
+                    pass
+            for attr in ("input_dim", "n_features", "num_features"):
+                value = getattr(model, attr, None)
+                if value is None:
+                    continue
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    continue
+            for module in model.modules():
+                if isinstance(module, nn.Linear):
+                    return int(module.in_features)
+            return None
 
-        # Convert numpy arrays to torch tensors
-        x_tensor_origin = torch.from_numpy(x_1d_origin)
-        t_tensor_origin = torch.from_numpy(t_1d_origin)
+        def _validate_model_input_dim(model, field_name):
+            # Guard input dimensionality early to avoid opaque shape errors in autograd.
+            inferred = _infer_model_input_dim(model)
+            if inferred is not None:
+                if inferred != num_feature:
+                    raise ValueError(
+                        f"Autograd model input dim {inferred} does not match axis_order "
+                        f"length {num_feature} for field '{field_name}'."
+                    )
+                return
+            dummy = torch.zeros((1, num_feature), dtype=torch.float32, device=self.device)
+            try:
+                with torch.no_grad():
+                    model(dummy)
+            except Exception as exc:
+                raise ValueError(
+                    f"Autograd model input dim check failed for field '{field_name}': "
+                    f"expected {num_feature} features."
+                ) from exc
 
-        ux_origin, uxx_origin, uxxx_origin, ut_origin = fun(x_tensor_origin, t_tensor_origin, model)
-        
-        # Reshape and store results as instance attributes
-        self.ut_origin = np.reshape(ut_origin, (self.n_origin, self.m_origin))
-        self.ux_origin = np.reshape(ux_origin, (self.n_origin, self.m_origin))
-        self.uxx_origin = np.reshape(uxx_origin, (self.n_origin, self.m_origin))
-        self.uxxx_origin = np.reshape(uxxx_origin, (self.n_origin, self.m_origin))
+        def _load_model_from_path(path: str):
+            model = Net(num_feature, self.config.hidden_dim, 1)
+            try:
+                state = torch.load(
+                    path,
+                    map_location=self.device,
+                    weights_only=True,
+                )
+            except TypeError:
+                state = torch.load(path, map_location=self.device)
+            model.load_state_dict(state)
+            return model
+
+        def _resolve_model(field_name: str, field_value: np.ndarray):
+            model = autograd_models.get(field_name)
+            if model is not None:
+                return model
+
+            path = autograd_model_paths.get(field_name)
+            if path and os.path.exists(path):
+                model = _load_model_from_path(path)
+            else:
+                # NOTE(ND): Train a MetaNN model on-the-fly when no checkpoint exists.
+                model, stats = train_metanet(
+                    self.coords_1d,
+                    field_value,
+                    axis_order=self.axis_order,
+                    hidden_dim=self.config.hidden_dim,
+                    max_epoch=self.config.max_epoch,
+                    train_ratio=self.config.train_ratio,
+                    normalize=self.config.normal,
+                    seed=self.config.seed,
+                    device=self.device,
+                )
+                if not hasattr(self, "autograd_stats") or self.autograd_stats is None:
+                    self.autograd_stats = {}
+                self.autograd_stats[field_name] = stats
+
+            autograd_models[field_name] = model
+            return model
+
+        def _autograd_high_order_2d(model, coord_grids, field_value, grid_shape, normalize):
+            # Legacy 2D autograd semantics: compute ux/uxx/uxxx directly via autograd,
+            # but use axis_order to build inputs so permuted axes are handled correctly.
+            coord_vectors = []
+            for axis in self.axis_order:
+                coord = coord_grids.get(axis)
+                if coord is None:
+                    raise ValueError(f"Missing coord grid for axis '{axis}'.")
+                coord_vectors.append(coord.reshape(-1))
+            X = np.stack(coord_vectors, axis=1).astype(np.float32)
+
+            if normalize:
+                x_mean = X.mean(axis=0)
+                x_std = X.std(axis=0)
+                x_std_safe = np.where(x_std == 0.0, 1.0, x_std)
+                X_in = (X - x_mean) / x_std_safe
+                y_std = float(np.std(field_value.reshape(-1)))
+                if y_std == 0.0:
+                    y_std = 1.0
+            else:
+                x_std_safe = np.ones(X.shape[1], dtype=float)
+                X_in = X
+                y_std = 1.0
+
+            X_tensor = torch.from_numpy(X_in).float().to(self.device)
+            X_tensor.requires_grad_(True)
+
+            pred = model(X_tensor)
+            if pred.ndim == 1:
+                pred = pred.view(-1, 1)
+            elif pred.ndim == 2 and pred.shape[1] != 1:
+                raise ValueError(
+                    f"Autograd model output must be (N, 1); got {tuple(pred.shape)}."
+                )
+            elif pred.ndim != 2:
+                raise ValueError(
+                    f"Autograd model output must be 1D or 2D; got ndim={pred.ndim}."
+                )
+            # NOTE(legacy): pred.sum() mixes outputs if the model returns multiple columns.
+            grads = torch.autograd.grad(
+                outputs=pred.sum(),
+                inputs=X_tensor,
+                create_graph=True,
+            )[0]
+            x_index = self.axis_map["x"]
+            t_index = self.axis_map["t"]
+
+            ux = grads[:, x_index]
+            ut = grads[:, t_index]
+            if ux.requires_grad:
+                uxx_full = torch.autograd.grad(
+                    outputs=ux.sum(),
+                    inputs=X_tensor,
+                    create_graph=True,
+                )[0]
+                uxx = uxx_full[:, x_index]
+            else:
+                uxx = torch.zeros_like(ux)
+
+            if uxx.requires_grad:
+                uxxx_full = torch.autograd.grad(
+                    outputs=uxx.sum(),
+                    inputs=X_tensor,
+                    create_graph=True,
+                )[0]
+                uxxx = uxxx_full[:, x_index]
+            else:
+                uxxx = torch.zeros_like(ux)
+
+            if normalize:
+                scale_x = float(y_std / x_std_safe[x_index])
+                scale_t = float(y_std / x_std_safe[t_index])
+                scale_xx = float(y_std / (x_std_safe[x_index] ** 2))
+                scale_xxx = float(y_std / (x_std_safe[x_index] ** 3))
+                # Chain rule: convert d(u_norm)/d(x_norm) back to d(u)/d(x).
+                ux = ux * scale_x
+                ut = ut * scale_t
+                uxx = uxx * scale_xx
+                uxxx = uxxx * scale_xxx
+
+            return (
+                ut.detach().cpu().numpy().reshape(grid_shape),
+                ux.detach().cpu().numpy().reshape(grid_shape),
+                uxx.detach().cpu().numpy().reshape(grid_shape),
+                uxxx.detach().cpu().numpy().reshape(grid_shape),
+            )
+
+        def _apply_autograd_strategy_2d_high_order(model, coord_grids, field_value, grid_shape, normalize):
+            # 统一 legacy 2D 高阶导路径，避免分支散落（行为保持不变）。
+            return _autograd_high_order_2d(
+                model,
+                coord_grids,
+                field_value,
+                grid_shape,
+                normalize,
+            )
+
+        self.config.autograd_models = autograd_models
+
+        # Legacy 2D x/t path: keep original behavior for backward compatibility.
+        if (
+            self.u.ndim == 2
+            and len(self.axis_order) == 2
+            and "x" in self.axis_map
+            and "t" in self.axis_map
+            and self.lhs_axis == "t"
+            and len(autograd_fields) == 1
+        ):
+            model = _resolve_model(self.target_field, self.u)
+            model.to(self.device)
+            _validate_model_input_dim(model, self.target_field)
+            model.eval()
+            normalize = bool(getattr(self.config, "normal", True))
+            self.ut, self.ux, self.uxx, self.uxxx = _apply_autograd_strategy_2d_high_order(
+                model,
+                self.coord_grids,
+                self.u,
+                self.u.shape,
+                normalize,
+            )
+
+            origin_coord_grids = dict(self.coord_grids)
+            origin_coord_grids["x"] = self.x_origin
+            origin_coord_grids["t"] = self.t_origin
+            self.ut_origin, self.ux_origin, self.uxx_origin, self.uxxx_origin = (
+                _apply_autograd_strategy_2d_high_order(
+                    model,
+                    origin_coord_grids,
+                    self.u_origin,
+                    self.u_origin.shape,
+                    normalize,
+                )
+            )
+            return
+
+        if self.u.ndim != len(self.axis_order):
+            raise ValueError(
+                "Autograd requires field dimensions to match axis_order length."
+            )
+        grid_shape = self.u.shape
+
+        coord_vectors = []
+        for axis in self.axis_order:
+            coord = self.coord_grids.get(axis)
+            if coord is None:
+                raise ValueError(f"Missing coord grid for axis '{axis}'.")
+            coord_vectors.append(coord.reshape(-1))
+
+        X = np.stack(coord_vectors, axis=1).astype(np.float32)
+
+        normalize = bool(getattr(self.config, "normal", True))
+        if normalize:
+            x_mean = X.mean(axis=0)
+            x_std = X.std(axis=0)
+            x_std_safe = np.where(x_std == 0.0, 1.0, x_std)
+            X_in = (X - x_mean) / x_std_safe
+        else:
+            x_std_safe = np.ones(X.shape[1], dtype=float)
+            X_in = X
+
+        self.grad_fields = {}
+        target_axis_grads = None
+
+        for field_name in autograd_fields:
+            field_value = self.fields[field_name]
+            model = _resolve_model(field_name, field_value)
+            model.to(self.device)
+            _validate_model_input_dim(model, field_name)
+            model.eval()
+
+            X_tensor = torch.from_numpy(X_in).float().to(self.device)
+            X_tensor.requires_grad_(True)
+
+            pred = model(X_tensor)
+            if pred.ndim == 1:
+                pred = pred.view(-1, 1)
+            elif pred.ndim == 2 and pred.shape[1] != 1:
+                raise ValueError(
+                    f"Autograd model output must be (N, 1); got {tuple(pred.shape)} "
+                    f"for field '{field_name}'."
+                )
+            elif pred.ndim != 2:
+                raise ValueError(
+                    f"Autograd model output must be 1D or 2D; got ndim={pred.ndim} "
+                    f"for field '{field_name}'."
+                )
+            grads = torch.autograd.grad(
+                outputs=pred.sum(),
+                inputs=X_tensor,
+                create_graph=True,
+            )[0]
+
+            if normalize:
+                y_std = float(np.std(field_value.reshape(-1)))
+                if y_std == 0.0:
+                    y_std = 1.0
+                # NOTE(ND): Convert d(u_norm)/d(x_norm) to d(u)/d(x).
+                scale = torch.tensor(
+                    y_std / x_std_safe,
+                    dtype=grads.dtype,
+                    device=grads.device,
+                )
+                grads = grads * scale
+
+            grads_np = grads.detach().cpu().numpy()
+            axis_grads = {
+                axis: grads_np[:, axis_index].reshape(grid_shape)
+                for axis_index, axis in enumerate(self.axis_order)
+            }
+
+            if field_name == self.target_field:
+                target_axis_grads = axis_grads
+
+            for axis, values in axis_grads.items():
+                if axis == self.lhs_axis:
+                    continue
+                key = build_derivative_key(field_name, axis, order=1)
+                self.grad_fields[key] = values
+
+        if target_axis_grads is None or self.lhs_axis not in target_axis_grads:
+            raise ValueError(
+                f"Structured grid missing lhs_axis '{self.lhs_axis}' in axis_order."
+            )
+
+        self.ut = target_axis_grads[self.lhs_axis]
+        primary_axis = self.primary_spatial_axis
+        if primary_axis in target_axis_grads:
+            self.ux = target_axis_grads[primary_axis]
+        else:
+            # Legacy attribute fallback when no spatial axis is available.
+            self.ux = np.zeros_like(self.u)
+
+        if primary_axis in self.axis_map:
+            x_index = self.axis_map[primary_axis]
+            x_delta = self.delta.get(primary_axis, 0.0)
+            self.uxx = self._finite_diff_along_axis(self.ux, x_delta, x_index, order=1)
+            self.uxxx = self._finite_diff_along_axis(self.uxx, x_delta, x_index, order=1)
+        else:
+            self.uxx = np.zeros_like(self.u)
+            self.uxxx = np.zeros_like(self.u)
+
+        # For registry payloads, origin matches current grid; keep derivative copies.
+        self.ut_origin = np.array(self.ut, copy=True)
+        self.ux_origin = np.array(self.ux, copy=True)
+        self.uxx_origin = np.array(self.uxx, copy=True)
+        self.uxxx_origin = np.array(self.uxxx, copy=True)
         
     def _update_operators_with_derivatives(self):
         """Update operator arrays with calculated derivatives."""
+        # Guardrail: grad_fields must exclude lhs-axis derivatives (avoid trivial ut=ut).
+        self._assert_no_lhs_in_grad_fields()
+        self.VARS = self._build_vars(include_grad=True)
+
         # Find and update ux in ALL array
         for i, op in enumerate(self.ALL):
             if op[0] == 'ux':
-                self.ALL[i][2] = self.ux
-                
-        # Find and update ux in VARS array
-        for i, var in enumerate(self.VARS):
-            if var[0] == 'ux':
-                self.VARS[i][2] = self.ux
+                op[2] = self.grad_fields.get("ux", self.ux)
+
+    def _build_vars(self, *, include_grad):
+        vars_list = []
+
+        for field_name, field_value in self.fields.items():
+            vars_list.append([field_name, 0, field_value])
+
+        for axis in self.axis_order:
+            coord = self.coord_grids.get(axis)
+            if coord is not None:
+                vars_list.append([axis, 0, coord])
+
+        if include_grad:
+            for name, value in self.grad_fields.items():
+                vars_list.append([name, 0, value])
+
+        vars_list.append(['0', 0, self.zeros])
+
+        return np.array(vars_list, dtype=object)
+
+    def _assert_no_lhs_in_den(self):
+        """Fail fast if lhs_axis appears in derivative denominators."""
+        if not hasattr(self, "den") or self.den is None:
+            return
+        # den is the allowed RHS derivative denominator set (leaf nodes only).
+        if any(entry[0] == self.lhs_axis for entry in self.den):
+            raise ValueError(
+                f"den contains lhs_axis '{self.lhs_axis}', which is forbidden."
+            )
+
+    def _assert_no_lhs_in_grad_fields(self):
+        """Fail fast if grad_fields contains lhs-axis derivatives."""
+        if not hasattr(self, "grad_fields") or self.grad_fields is None:
+            return
+        # grad_fields should include spatial derivatives only; lhs derivatives are forbidden.
+        forbidden = []
+        for field_name in self.fields:
+            key = build_derivative_key(field_name, self.lhs_axis, order=1)
+            if key in self.grad_fields:
+                forbidden.append(key)
+        if forbidden:
+            raise ValueError(
+                f"grad_fields contains lhs_axis derivative(s): {sorted(forbidden)}"
+            )
 
 
     def _initialize_slicing_indices(self):
@@ -278,12 +1033,13 @@ class ProblemContext:
     def _calculate_errors(self):
         """Calculate errors between left and right sides of the PDE."""
         # Prepare default terms for evaluation
-        self.default_u = np.reshape(self.u, (self.u.shape[0]*self.u.shape[1], 1))
-        self.default_ux = np.reshape(self.ux, (self.u.shape[0]*self.u.shape[1], 1))
-        self.default_uxx = np.reshape(self.uxx, (self.u.shape[0]*self.u.shape[1], 1))
-        self.default_u2 = np.reshape(self.u**2, (self.u.shape[0]*self.u.shape[1], 1))
-        self.default_u3 = np.reshape(self.u**3, (self.u.shape[0]*self.u.shape[1], 1))
-        self.default_terms = np.hstack((self.default_u)).reshape(-1, 1)
+        flat_size = self.u.size
+        self.default_u = np.reshape(self.u, (flat_size, 1))
+        self.default_ux = np.reshape(self.ux, (flat_size, 1))
+        self.default_uxx = np.reshape(self.uxx, (flat_size, 1))
+        self.default_u2 = np.reshape(self.u**2, (flat_size, 1))
+        self.default_u3 = np.reshape(self.u**3, (flat_size, 1))
+        self.default_terms = self.default_u
         self.default_names = ['u']
         self.num_default = self.default_terms.shape[1]
 

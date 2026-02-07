@@ -3,7 +3,7 @@ Configuration classes for the SGA-PDE solver.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, List
 import numpy as np
 import torch
 import torch.nn as nn
@@ -56,6 +56,14 @@ class SolverConfig:
     u_data: np.ndarray = None
     x_data: np.ndarray = None
     t_data: np.ndarray = None
+    fields_data: Optional[Dict[str, np.ndarray]] = None
+    coords_1d: Optional[Dict[str, np.ndarray]] = None
+    axis_order: Optional[List[str]] = None
+    target_field: str = "u"
+    lhs_axis: str = "t"
+    # Optional override for the legacy ux/uxx/uxxx axis when no 'x' axis exists.
+    primary_spatial_axis: Optional[str] = None
+    enforce_uniform_grid: bool = True
 
     # SGA parameters
     num: int = 20  # Number of PDEs in the pool
@@ -101,10 +109,21 @@ class SolverConfig:
         # Set random seed
         np.random.seed(self.seed)
         
-        self.model_path = (
-            f"{self.problem_name}_sine_sin_50_3fc2_"
-            f"{int(self.max_epoch/1000)}k_Adam.pkl"
-        )
+        if self.model_path is None:
+            # Only derive the legacy default when the caller did not supply one.
+            self.model_path = (
+                f"{self.problem_name}_sine_sin_50_3fc2_"
+                f"{int(self.max_epoch/1000)}k_Adam.pkl"
+            )
+
+        has_registry_payload = self.fields_data is not None or self.coords_1d is not None
+        if has_registry_payload:
+            self.right_side = None
+            self.left_side = None
+            self.right_side_origin = None
+            self.left_side_origin = None
+            self.has_ground_truth = False
+            return
 
         # Load problem-specific configuration
         self._load_problem_config()
@@ -117,11 +136,16 @@ class SolverConfig:
 
         base_dir = os.path.dirname(__file__)
         proj_root = os.path.abspath(os.path.join(base_dir, "../../../.."))
+        repo_root = os.path.abspath(os.path.join(base_dir, ".."))
 
         for candidate in candidates:
             local_path = os.path.join(base_dir, "data", candidate)
             if os.path.exists(local_path):
                 return local_path
+
+            repo_data_path = os.path.join(repo_root, "data", candidate)
+            if os.path.exists(repo_data_path):
+                return repo_data_path
 
             kd_data_path = os.path.join(proj_root, "kd", "dataset", "data", candidate)
             if os.path.exists(kd_data_path):

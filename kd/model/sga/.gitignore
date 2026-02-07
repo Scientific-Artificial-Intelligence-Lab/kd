@@ -1,3 +1,18 @@
+# 测试相关（不提交到 kd repo）
+tests/
+qa/
+NOTES/
+
+# 开发文档（不提交到 kd repo）
+TODO.md
+next.md
+Agents.md
+TEMPLATE.md
+test_log.md
+GUIDE/
+LEGACY/
+ARCHIVE/
+
 # Log files
 notes.log
 *.log
@@ -9,7 +24,12 @@ models/
 # Python cache
 __pycache__/
 *.pyc
+.pycache*
 
+# IDE/Build
 .vscode/
 .pytest_cache/
 *.egg-info/
+
+# OS
+.DS_Store

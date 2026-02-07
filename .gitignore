@@ -209,10 +209,14 @@ agent.md
 
 ## Local-only developer materials (repo is public)
 scripts/
-AGENTS.md
 REPO_MAP.md
 RUNBOOK.md
-TASK_SPEC.md
+
+## Claude Code config (local only)
+.claude/
+CLAUDE.md
+TASKS/
+.session/
 
 
 

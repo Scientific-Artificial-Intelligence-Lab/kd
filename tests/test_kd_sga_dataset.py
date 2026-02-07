@@ -91,3 +91,41 @@ def test_problem_context_skips_ground_truth_when_absent():
     # 无解析模板时不应创建 ground-truth 残差字段
     assert not hasattr(context, "right_side_full")
     assert not hasattr(context, "right_side_full_origin")
+
+
+# =============================================================================
+# N-D PDEDataset Integration
+# =============================================================================
+
+
+def test_fit_dataset_nd_3d_smoke():
+    """Smoke test: KD_SGA can run with 3D N-D PDEDataset."""
+    from kd.dataset import PDEDataset
+
+    # Small 3D grid
+    x = np.linspace(0, 1, 5)
+    y = np.linspace(0, 1, 5)
+    t = np.linspace(0, 1, 5)
+    X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+    u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+    ds = PDEDataset(
+        equation_name="test_3d_smoke",
+        fields_data={"u": u},
+        coords_1d={"x": x, "y": y, "t": t},
+        axis_order=["x", "y", "t"],
+    )
+
+    model = KD_SGA(sga_run=1, depth=1, width=1)
+    result = model.fit_dataset(
+        ds,
+        context_cls=DummyContext,
+        solver_cls=DummySolver,
+    )
+
+    assert result is model
+    assert model.dataset_ is ds
+    # N-D mode should populate config with N-D data
+    assert model.config_.fields_data is not None
+    assert model.config_.coords_1d is not None
+    assert model.config_.axis_order == ["x", "y", "t"]

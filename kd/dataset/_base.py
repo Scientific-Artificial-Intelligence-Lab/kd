@@ -8,7 +8,7 @@ import pandas as pd
 import scipy.io as sio
 import matplotlib.pyplot as plt
 import warnings
-from typing import Any, Dict, Union, Optional, Tuple
+from typing import Any, Dict, List, Union, Optional, Tuple
 from pathlib import Path
 from importlib import resources
 from abc import ABC, abstractmethod
@@ -279,53 +279,192 @@ class PDEDataset(MetaData):
     and analysis functionality.
     """
     
-    def __init__(self, 
-                 equation_name: str,
-                 pde_data: Optional[Dict[str, Any]],
-                 domain: Optional[Dict[str, Tuple[float, float]]],
-                 epi: float,
-                 x: Optional[np.ndarray] = None, 
-                 t: Optional[np.ndarray] = None, 
-                 usol: Optional[np.ndarray] = None,
-                 descr: Optional[DatasetInfo] = None):
+    def __init__(
+        self,
+        equation_name: str,
+        pde_data: Optional[Dict[str, Any]] = None,
+        domain: Optional[Dict[str, Tuple[float, float]]] = None,
+        epi: float = 0.0,
+        x: Optional[np.ndarray] = None,
+        t: Optional[np.ndarray] = None,
+        usol: Optional[np.ndarray] = None,
+        descr: Optional[DatasetInfo] = None,
+        # N-D parameters
+        fields_data: Optional[Dict[str, np.ndarray]] = None,
+        coords_1d: Optional[Dict[str, np.ndarray]] = None,
+        axis_order: Optional[List[str]] = None,
+        target_field: str = "u",
+        lhs_axis: str = "t",
+    ):
         """
-        Initializes the PDE dataset, supporting two input methods:
-        1. Providing data through the `pde_data` dictionary.
-        2. Directly passing `x`, `t`, and `usol` arrays.
+        Initializes the PDE dataset, supporting three input methods:
+        1. Providing data through the `pde_data` dictionary (legacy 2D).
+        2. Directly passing `x`, `t`, and `usol` arrays (legacy 2D).
+        3. Using `fields_data` + `coords_1d` for N-D structured grids.
 
         :param equation_name: Name of the PDE.
-        :param descr: Metadata containing information about the PDE.
         :param pde_data: Optional dictionary containing 'x', 't', and 'usol' data.
-        :param x: Optional, spatial coordinate array.
-        :param t: Optional, temporal coordinate array.
-        :param usol: Optional, solution array u(x, t).
         :param domain: Dictionary defining the domain {variable: (min_value, max_value)}.
         :param epi: Additional parameter.
+        :param x: Optional, spatial coordinate array (legacy 2D).
+        :param t: Optional, temporal coordinate array (legacy 2D).
+        :param usol: Optional, solution array u(x, t) (legacy 2D).
+        :param descr: Metadata containing information about the PDE.
+        :param fields_data: Dict mapping field names to N-D arrays (N-D mode).
+        :param coords_1d: Dict mapping axis names to 1D coordinate arrays (N-D mode).
+        :param axis_order: List of axis names defining array dimension order (N-D mode).
+        :param target_field: Name of the target field in fields_data (default: "u").
+        :param lhs_axis: Axis for LHS derivative (default: "t").
         """
         super().__init__(equation_name)
 
-        if pde_data is not None:
-            # Assign data from the provided dictionary
-            self.x = np.asarray(pde_data.get('x'), dtype=float).flatten()
-            self.t = np.asarray(pde_data.get('t'), dtype=float).flatten()
-            self.usol = np.real(np.asarray(pde_data.get('usol')))
-        elif x is not None and t is not None and usol is not None:
-            # Directly assign provided x, t, and usol arrays
-            self.x = np.asarray(x, dtype=float).flatten()
-            self.t = np.asarray(t, dtype=float).flatten()
-            self.usol = np.real(np.asarray(usol))
-        else:
-            raise ValueError("Either `pde_data` or `x`, `t`, and `usol` must be provided.")
+        # Determine construction mode
+        has_nd_data = fields_data is not None or coords_1d is not None
+        has_legacy_data = pde_data is not None or (x is not None and t is not None and usol is not None)
 
-        # Ensure consistency of data dimensions
-        if self.usol.shape != (len(self.x), len(self.t)):
-            raise ValueError(f"usol dimensions {self.usol.shape} do not match x {len(self.x)} and t {len(self.t)}")
-        
+        if has_nd_data:
+            # N-D mode
+            self._init_nd_mode(
+                fields_data=fields_data,
+                coords_1d=coords_1d,
+                axis_order=axis_order,
+                target_field=target_field,
+                lhs_axis=lhs_axis,
+            )
+        elif has_legacy_data:
+            # Legacy 2D mode
+            self._init_legacy_mode(pde_data=pde_data, x=x, t=t, usol=usol)
+            # N-D attributes not set in legacy mode
+            self.fields_data = None
+            self.coords_1d = None
+            self.axis_order = None
+            self.target_field = None
+            self.lhs_axis = None
+        else:
+            raise ValueError(
+                "Either `pde_data`, `x/t/usol`, or `fields_data/coords_1d` must be provided."
+            )
+
         self.u = self.usol
         self.equation_name = equation_name
         self.domain = domain
-        self.epi = epi 
-        
+        self.epi = epi
+
+    def _init_legacy_mode(
+        self,
+        pde_data: Optional[Dict[str, Any]],
+        x: Optional[np.ndarray],
+        t: Optional[np.ndarray],
+        usol: Optional[np.ndarray],
+    ) -> None:
+        """Initialize in legacy 2D mode."""
+        if pde_data is not None:
+            self.x = np.asarray(pde_data.get("x"), dtype=float).flatten()
+            self.t = np.asarray(pde_data.get("t"), dtype=float).flatten()
+            self.usol = np.real(np.asarray(pde_data.get("usol")))
+        else:
+            self.x = np.asarray(x, dtype=float).flatten()
+            self.t = np.asarray(t, dtype=float).flatten()
+            self.usol = np.real(np.asarray(usol))
+
+        # Validate shape
+        if self.usol.shape != (len(self.x), len(self.t)):
+            raise ValueError(
+                f"usol dimensions {self.usol.shape} do not match x {len(self.x)} and t {len(self.t)}"
+            )
+
+    def _init_nd_mode(
+        self,
+        fields_data: Optional[Dict[str, np.ndarray]],
+        coords_1d: Optional[Dict[str, np.ndarray]],
+        axis_order: Optional[List[str]],
+        target_field: str,
+        lhs_axis: str,
+    ) -> None:
+        """Initialize in N-D mode with validation."""
+        # Validate required parameters
+        if fields_data is None or coords_1d is None:
+            raise ValueError(
+                "N-D mode requires both fields_data and coords_1d."
+            )
+        if axis_order is None:
+            raise ValueError("axis_order is required for N-D mode.")
+
+        # Convert to numpy arrays
+        fields_data = {k: np.asarray(v) for k, v in fields_data.items()}
+        coords_1d = {k: np.asarray(v).flatten() for k, v in coords_1d.items()}
+        axis_order = list(axis_order)
+
+        # Validate fields_data is not empty
+        if len(fields_data) == 0:
+            raise ValueError("fields_data cannot be empty.")
+
+        # Validate axis_order is not empty
+        if len(axis_order) == 0:
+            raise ValueError("axis_order cannot be empty.")
+
+        # Validate axis_order has no duplicates
+        if len(axis_order) != len(set(axis_order)):
+            duplicates = [a for a in axis_order if axis_order.count(a) > 1]
+            raise ValueError(f"axis_order contains duplicate axes: {set(duplicates)}")
+
+        # Validate axis_order matches coords_1d keys
+        axis_set = set(axis_order)
+        coords_set = set(coords_1d.keys())
+        if axis_set != coords_set:
+            missing = coords_set - axis_set
+            extra = axis_set - coords_set
+            msg = "axis_order and coords_1d keys must match."
+            if missing:
+                msg += f" Missing in axis_order: {missing}."
+            if extra:
+                msg += f" Extra in axis_order (not in coords_1d): {extra}."
+            raise ValueError(msg)
+
+        # Validate target_field exists
+        if target_field not in fields_data:
+            raise ValueError(
+                f"target_field '{target_field}' not found in fields_data. "
+                f"Available fields: {list(fields_data.keys())}"
+            )
+
+        # Validate lhs_axis exists (must be in axis_order, which equals coords_1d keys)
+        if lhs_axis not in axis_order:
+            raise ValueError(
+                f"lhs_axis '{lhs_axis}' must be in axis_order {axis_order}."
+            )
+
+        # Compute expected shape from axis_order
+        expected_shape = tuple(len(coords_1d[axis]) for axis in axis_order)
+
+        # Validate all fields have consistent shape
+        field_shapes = {name: arr.shape for name, arr in fields_data.items()}
+        unique_shapes = set(field_shapes.values())
+        if len(unique_shapes) > 1:
+            raise ValueError(
+                f"All fields must have the same shape. Got inconsistent shapes: {field_shapes}"
+            )
+
+        # Validate shape matches coords
+        actual_shape = list(unique_shapes)[0] if unique_shapes else ()
+        if actual_shape != expected_shape:
+            raise ValueError(
+                f"Field shape {actual_shape} does not match expected shape {expected_shape} "
+                f"from coords_1d and axis_order."
+            )
+
+        # Store N-D attributes
+        self.fields_data = fields_data
+        self.coords_1d = coords_1d
+        self.axis_order = axis_order
+        self.target_field = target_field
+        self.lhs_axis = lhs_axis
+
+        # Set compatibility layer attributes
+        self.x = coords_1d.get("x")
+        self.t = coords_1d.get("t")
+        self.usol = fields_data[target_field]
+
     def get_datapoint(self, x_id: int, t_id: int) -> Tuple[float, float, float]:
         """
         Retrieves the (x, t) coordinates and the corresponding solution value.
@@ -411,8 +550,19 @@ class PDEDataset(MetaData):
         return mesh_data.min(0), mesh_data.max(0)
     
     def get_boundaries(self) -> Dict[str, Tuple[float, float]]:
-        """ Returns the minimum and maximum values for x and t. """
-        return {'x': (self.x.min(), self.x.max()), 't': (self.t.min(), self.t.max())}
+        """Returns the minimum and maximum values for coordinates.
+
+        In legacy 2D mode, returns {'x': (min, max), 't': (min, max)}.
+        In N-D mode, returns boundaries for all coords_1d axes.
+        """
+        if self.coords_1d is not None:
+            # N-D mode: return boundaries for all axes
+            return {
+                axis: (float(coords.min()), float(coords.max()))
+                for axis, coords in self.coords_1d.items()
+            }
+        # Legacy 2D mode
+        return {"x": (self.x.min(), self.x.max()), "t": (self.t.min(), self.t.max())}
 
     def get_domain(self) -> Dict[str, Tuple[float, float]]:
         """ Retrieves the domain definition. """
@@ -433,7 +583,7 @@ class PDEDataset(MetaData):
             raise ValueError("Invalid axis name, must be 'x' or 't'.")
 
     def get_range(self, x_range: Tuple[float, float], t_range: Tuple[float, float]) -> Dict[str, np.ndarray]:
-        """ 
+        """
         Retrieves subsets of x, t, and the corresponding solution within the specified range.
 
         :param x_range: Tuple representing the range of x values (min_x, max_x).
