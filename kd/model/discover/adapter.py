@@ -279,6 +279,20 @@ class DSCVSparseAdapter:
         self._data = self._prepare()
 
     def _prepare(self) -> Dict[str, Any]:
+        """Detect data mode and dispatch to the appropriate builder."""
+        fields_data = getattr(self.dataset, "fields_data", None)
+        coords_1d = getattr(self.dataset, "coords_1d", None)
+
+        if fields_data is not None or coords_1d is not None:
+            if fields_data is None or coords_1d is None:
+                raise ValueError(
+                    "N-D data requires both fields_data and coords_1d; "
+                    "got only one. Use x/t/usol for legacy 1D data."
+                )
+            return self._prepare_nd()
+        return self._prepare_legacy()
+
+    def _prepare_legacy(self) -> Dict[str, Any]:
         dataset = self.dataset
 
         x = np.asarray(dataset.x, dtype=float)
@@ -361,6 +375,126 @@ class DSCVSparseAdapter:
         result['shape'] = u.shape
 
         return result
+
+    # ------------------------------------------------------------------
+    # N-D path (2D / 3D spatial)
+    # ------------------------------------------------------------------
+
+    def _prepare_nd(self) -> Dict[str, Any]:
+        """Build sparse data dict from an N-D :class:`PDEDataset`.
+
+        Produces the same output keys as the legacy path:
+        ``X_u_train``, ``u_train``, ``X_f_train``, ``X_u_val``, ``u_val``,
+        ``lb``, ``ub``, plus ``n_input_dim``.
+        """
+        dataset = self.dataset
+        axis_order: List[str] = list(dataset.axis_order)
+        coords_1d: Dict[str, np.ndarray] = {
+            k: np.asarray(v, dtype=float) for k, v in dataset.coords_1d.items()
+        }
+        target_field: str = getattr(dataset, "target_field", "u") or "u"
+        lhs_axis: str = getattr(dataset, "lhs_axis", "t") or "t"
+
+        # N-D path does not support legacy 1D-only parameters.
+        if self.spline_sample:
+            raise NotImplementedError(
+                "spline_sample is not supported for N-D data "
+                "(scipy 1D spline is not applicable to multi-dimensional grids). "
+                "Use random sampling (spline_sample=False)."
+            )
+        if self.cut_quantile is not None:
+            raise NotImplementedError(
+                "cut_quantile is not supported for N-D data yet. "
+                "Remove cut_quantile or use the legacy 1D path."
+            )
+        if self.data_ratio is not None:
+            raise NotImplementedError(
+                "data_ratio is not supported for N-D data yet. "
+                "Use sample_ratio to control sampling instead."
+            )
+
+        u_raw = np.asarray(dataset.fields_data[target_field], dtype=float)
+        if not np.all(np.isfinite(u_raw)):
+            raise ValueError("Input field data contains NaN or Inf values")
+
+        # Separate spatial and time axes
+        if lhs_axis not in axis_order:
+            raise ValueError(
+                f"lhs_axis '{lhs_axis}' not found in axis_order {axis_order}"
+            )
+        spatial_axes = [a for a in axis_order if a != lhs_axis]
+        n_spatial = len(spatial_axes)
+
+        # Build the full N-D mesh and flatten
+        spatial_coords = [coords_1d[a] for a in spatial_axes]
+        t_coord = coords_1d[lhs_axis]
+        all_coords = spatial_coords + [t_coord]
+
+        grids = np.meshgrid(*all_coords, indexing="ij")
+        # Flatten into (n_total, n_spatial + 1) point matrix
+        points = np.column_stack([g.ravel() for g in grids])
+
+        # Reorder u to match (spatial_axes..., time) axis layout
+        target_order = spatial_axes + [lhs_axis]
+        perm = [axis_order.index(a) for a in target_order]
+        u = np.transpose(u_raw, perm)
+        values = u.ravel(order="C").reshape(-1, 1)
+
+        assert points.shape[0] == values.shape[0], (
+            f"Point/value count mismatch: {points.shape[0]} vs {values.shape[0]}"
+        )
+
+        # Sample points
+        xt, sampled_values = self._sample_points_nd(points, values)
+
+        if self.noise_level:
+            std = float(self.noise_level) * np.std(sampled_values)
+            rng = np.random.default_rng(self.random_state)
+            sampled_values = sampled_values + rng.normal(
+                scale=std, size=sampled_values.shape
+            )
+
+        # Compute lb/ub from coords directly (not from mesh_bounds)
+        lb = np.array([c.min() for c in all_coords])
+        ub = np.array([c.max() for c in all_coords])
+
+        from kd.data import SparseData as LegacySparseData
+
+        sparse = LegacySparseData(xt, sampled_values)
+        if self.colloc_num is not None:
+            sparse.colloc_num = int(self.colloc_num)
+        sparse.process_data((lb, ub))
+
+        result = dict(sparse.get_data())
+        result['n_input_dim'] = n_spatial
+        result['measured_points'] = xt
+        result['sampling_strategy'] = 'random'
+        result['X_star'] = points
+        result['u_star'] = values
+        result['shape'] = u.shape
+
+        return result
+
+    def _sample_points_nd(
+        self, points: np.ndarray, values: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Random-sample from the full N-D point set."""
+        total = points.shape[0]
+        if self.sample is not None:
+            n_samples = int(self.sample)
+        else:
+            ratio = float(self.sample_ratio)
+            if not 0 < ratio <= 1:
+                raise ValueError("sample_ratio must be within (0, 1]")
+            n_samples = max(1, int(total * ratio))
+
+        if n_samples > total:
+            raise ValueError(
+                f"Requested {n_samples} samples, but only {total} points"
+            )
+        rng = np.random.default_rng(self.random_state)
+        indices = rng.choice(total, n_samples, replace=False)
+        return points[indices], values[indices]
 
     def _sample_points(self, x: np.ndarray, t: np.ndarray, u: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         mesh_x, mesh_t = np.meshgrid(x, t, indexing='ij')

@@ -1244,3 +1244,323 @@ class TestPhase1b3DEquivalence:
         ut_flat = data["ut"].reshape(-1, 1)
         assert ut_flat.shape == (nt * nx * ny * nz, 1)
         assert np.all(np.isfinite(ut_flat))
+
+
+# ==========================================================================
+# Phase 2: Sparse N-D Adapter Tests (RED phase — expected to FAIL)
+# ==========================================================================
+
+
+def _make_sparse_nd_2d_dataset():
+    """Create a 2D spatial (x, y, t) PDEDataset for Sparse adapter testing.
+
+    u = sin(pi*x) * cos(pi*y) * exp(-t)
+    """
+    nx, ny, nt = 10, 12, 15
+    x = np.linspace(0, np.pi, nx)
+    y = np.linspace(0, np.pi, ny)
+    t = np.linspace(0, 1.0, nt)
+    X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+    u = np.sin(X) * np.cos(Y) * np.exp(-T)
+    return PDEDataset(
+        equation_name="synthetic-sparse-2d",
+        fields_data={"u": u},
+        coords_1d={"x": x, "y": y, "t": t},
+        axis_order=["x", "y", "t"],
+        target_field="u",
+        lhs_axis="t",
+    )
+
+
+def _make_sparse_nd_3d_dataset():
+    """Create a 3D spatial (x, y, z, t) PDEDataset for Sparse adapter testing.
+
+    u = sin(pi*x) * cos(pi*y) * sin(pi*z) * exp(-t)
+    """
+    nx, ny, nz, nt = 6, 7, 5, 10
+    x = np.linspace(0, 1, nx)
+    y = np.linspace(0, 1, ny)
+    z = np.linspace(0, 1, nz)
+    t = np.linspace(0, 0.5, nt)
+    X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+    u = np.sin(np.pi * X) * np.cos(np.pi * Y) * np.sin(np.pi * Z) * np.exp(-T)
+    return PDEDataset(
+        equation_name="synthetic-sparse-3d",
+        fields_data={"u": u},
+        coords_1d={"x": x, "y": y, "z": z, "t": t},
+        axis_order=["x", "y", "z", "t"],
+        target_field="u",
+        lhs_axis="t",
+    )
+
+
+class TestDSCVSparseND:
+    """Phase 2: Sparse adapter N-D support tests.
+
+    These tests define the expected behavior for DSCVSparseAdapter handling
+    2D/3D spatial data via fields_data/coords_1d.  They are RED-phase tests
+    that should FAIL until the implementation is complete.
+    """
+
+    # ------------------------------------------------------------------
+    # Adapter layer: 2D / 3D prepare
+    # ------------------------------------------------------------------
+
+    def test_sparse_nd_2d_prepare(self):
+        """2D PDEDataset(fields_data, coords_1d) should be accepted by Sparse adapter."""
+        dataset = _make_sparse_nd_2d_dataset()
+        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        data = adapter.get_data()
+
+        # Must contain the standard sparse output keys
+        assert set(data.keys()) >= {
+            "X_u_train", "u_train", "X_f_train",
+            "X_u_val", "u_val", "lb", "ub",
+        }
+        # Sampled points must exist
+        assert data["X_u_train"].shape[0] > 0
+        assert data["u_train"].shape[0] == data["X_u_train"].shape[0]
+
+    def test_sparse_nd_3d_prepare(self):
+        """3D PDEDataset(fields_data, coords_1d) should be accepted by Sparse adapter."""
+        dataset = _make_sparse_nd_3d_dataset()
+        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        data = adapter.get_data()
+
+        assert set(data.keys()) >= {
+            "X_u_train", "u_train", "X_f_train",
+            "X_u_val", "u_val", "lb", "ub",
+        }
+        assert data["X_u_train"].shape[0] > 0
+
+    def test_sparse_nd_output_shape(self):
+        """X_u_train columns must equal n_spatial + 1 (spatial coords + time)."""
+        # 2D spatial: x, y, t -> 3 columns
+        ds_2d = _make_sparse_nd_2d_dataset()
+        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        data_2d = adapter_2d.get_data()
+        assert data_2d["X_u_train"].shape[1] == 3, (
+            f"2D spatial should give 3 columns, got {data_2d['X_u_train'].shape[1]}"
+        )
+
+        # 3D spatial: x, y, z, t -> 4 columns
+        ds_3d = _make_sparse_nd_3d_dataset()
+        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        data_3d = adapter_3d.get_data()
+        assert data_3d["X_u_train"].shape[1] == 4, (
+            f"3D spatial should give 4 columns, got {data_3d['X_u_train'].shape[1]}"
+        )
+
+    def test_sparse_nd_n_input_dim(self):
+        """get_data() should return n_input_dim matching the spatial dimension count."""
+        ds_2d = _make_sparse_nd_2d_dataset()
+        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        data_2d = adapter_2d.get_data()
+        assert data_2d.get("n_input_dim") == 2, (
+            f"Expected n_input_dim=2, got {data_2d.get('n_input_dim')}"
+        )
+
+        ds_3d = _make_sparse_nd_3d_dataset()
+        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        data_3d = adapter_3d.get_data()
+        assert data_3d.get("n_input_dim") == 3, (
+            f"Expected n_input_dim=3, got {data_3d.get('n_input_dim')}"
+        )
+
+    def test_sparse_nd_lb_ub_shape(self):
+        """lb and ub should have shape (n_spatial + 1,)."""
+        ds_2d = _make_sparse_nd_2d_dataset()
+        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        data_2d = adapter_2d.get_data()
+        assert data_2d["lb"].shape == (3,), (
+            f"2D lb shape should be (3,), got {data_2d['lb'].shape}"
+        )
+        assert data_2d["ub"].shape == (3,), (
+            f"2D ub shape should be (3,), got {data_2d['ub'].shape}"
+        )
+
+        ds_3d = _make_sparse_nd_3d_dataset()
+        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        data_3d = adapter_3d.get_data()
+        assert data_3d["lb"].shape == (4,), (
+            f"3D lb shape should be (4,), got {data_3d['lb'].shape}"
+        )
+        assert data_3d["ub"].shape == (4,), (
+            f"3D ub shape should be (4,), got {data_3d['ub'].shape}"
+        )
+
+    def test_sparse_nd_nan_rejection(self):
+        """NaN in the input field data should raise ValueError."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+        u[2, 3, 4] = np.nan
+
+        dataset = PDEDataset(
+            equation_name="sparse-nan-2d",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="NaN or Inf"):
+            DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+
+    def test_sparse_nd_inf_rejection(self):
+        """Inf in the input field data should raise ValueError."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+        u[1, 5, 7] = np.inf
+
+        dataset = PDEDataset(
+            equation_name="sparse-inf-2d",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="NaN or Inf"):
+            DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+
+    def test_sparse_legacy_1d_unchanged(self):
+        """Legacy 1D path should remain unaffected by N-D additions."""
+        dataset = load_pde("burgers")
+        adapter = DSCVSparseAdapter(
+            dataset, sample=200, colloc_num=512, random_state=0
+        )
+        data = adapter.get_data()
+
+        # Standard 1D sparse outputs
+        assert data["X_u_train"].shape[1] == 2
+        assert data["lb"].shape == (2,)
+        assert data["ub"].shape == (2,)
+        assert data["X_u_train"].shape[0] > 0
+        assert data["u_train"].shape[0] == data["X_u_train"].shape[0]
+
+    # ------------------------------------------------------------------
+    # Integration layer: KD_DSCV_SPR config injection
+    # ------------------------------------------------------------------
+
+    def test_spr_import_nd_config_injection(self, monkeypatch):
+        """KD_DSCV_SPR.import_dataset() with N-D data should inject PINN config.
+
+        After import_dataset:
+        - config_pinn['input_dim'] == n_spatial + 1
+        - config_task['n_input_var'] == n_spatial (or equivalent)
+        - config_pinn['generation_type'] == 'multi_AD'
+        """
+        dataset = _make_sparse_nd_2d_dataset()
+        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+
+        # Bypass heavy setup to focus on config injection
+        def fake_setup(self):
+            self.config_task.setdefault("eq_num", 1)
+
+        monkeypatch.setattr(KD_DSCV_SPR, "setup", fake_setup)
+
+        model.import_dataset(dataset, sample_ratio=0.1, random_state=0)
+
+        # After N-D import, PINN network input_dim should be 3 (2 spatial + 1 time)
+        assert model.config_pinn["input_dim"] == 3, (
+            f"Expected config_pinn['input_dim']=3, got {model.config_pinn['input_dim']}"
+        )
+        # generation_type should be switched to multi_AD for N-D
+        assert model.config_pinn["generation_type"] == "multi_AD", (
+            f"Expected generation_type='multi_AD', got {model.config_pinn['generation_type']}"
+        )
+
+    def test_spr_nd_token_selection(self, monkeypatch):
+        """N-D sparse mode should auto-select dimension-appropriate function_set.
+
+        For 2D spatial, the default PINN torch tokens should be replaced with
+        2D-compatible tokens (torch versions of Diff, Diff2, lap).
+        """
+        dataset = _make_sparse_nd_2d_dataset()
+        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV_SPR, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV_SPR, "make_gp_aggregator", lambda self: None)
+
+        # Mock the PINN model creation to avoid heavy dependencies
+        class FakePINN:
+            def import_outter_data(self, data):
+                pass
+
+        monkeypatch.setattr(KD_DSCV_SPR, "make_pinn_model", lambda self: FakePINN())
+
+        model.import_dataset(dataset, sample_ratio=0.1, random_state=0)
+
+        fs = captured.get("function_set", [])
+        # 1D-only torch diff tokens should not be present for 2D data
+        assert "diff_t" not in fs, f"1D diff_t should be replaced, got {fs}"
+        assert "diff2_t" not in fs, f"1D diff2_t should be replaced, got {fs}"
+        assert "diff3_t" not in fs, f"1D diff3_t should be replaced, got {fs}"
+
+        # Must have 2D-compatible tokens (exact names TBD by implementation,
+        # but should contain some form of multi-D diff)
+        has_nd_tokens = any(
+            tok in fs
+            for tok in ["Diff_t", "Diff2_t", "lap_t", "Diff", "Diff2", "lap"]
+        )
+        assert has_nd_tokens, (
+            f"Expected 2D-compatible diff tokens in function_set, got {fs}"
+        )
+
+    # ------------------------------------------------------------------
+    # SparseData: N-D collocation points
+    # ------------------------------------------------------------------
+
+    def test_sparse_data_nd_collocation(self):
+        """SparseData.process_data should use correct lhs dimension for N-D inputs.
+
+        For a 3-column input (2D spatial + time), lhs should sample in 3D,
+        not hardcoded 2D.
+        """
+        from kd.data import SparseData
+
+        rng = np.random.default_rng(42)
+
+        # Create 3-column (x, y, t) sparse data
+        n_points = 100
+        xt = rng.uniform(size=(n_points, 3))  # 3 columns
+        u = rng.standard_normal((n_points, 1))
+
+        lb = np.array([0.0, 0.0, 0.0])
+        ub = np.array([1.0, 1.0, 1.0])
+
+        colloc_num = 50
+        sparse = SparseData(xt, u)
+        sparse.colloc_num = colloc_num
+        sparse.process_data((lb, ub))
+
+        data = sparse.get_data()
+
+        # X_f_train should have 3 columns (matching input dimension)
+        assert data["X_f_train"].shape[1] == 3, (
+            f"Collocation points should have 3 columns, got {data['X_f_train'].shape[1]}"
+        )
+        # Total collocation = lhs_points + train_points
+        n_train = data["X_u_train"].shape[0]
+        assert data["X_f_train"].shape[0] == colloc_num + n_train, (
+            f"Expected {colloc_num + n_train} collocation rows, "
+            f"got {data['X_f_train'].shape[0]}"
+        )

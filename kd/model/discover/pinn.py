@@ -186,12 +186,13 @@ class PINN_model:
             
             # import pdb;pdb.set_trace()
             delta_xt = (ub-lb)/100
-            xt = np.concatenate((x,t), axis = 1)
+            xt = np.concatenate((*x, t), axis=1)
             xt = np.repeat(xt,20,axis =0)
             xt_l = xt-delta_xt
             length = len(xt_l)
             print("length:", length)
-            xt_new = xt_l+delta_xt*lhs(2,length)
+            n_dims = lb.shape[0]
+            xt_new = xt_l+delta_xt*lhs(n_dims, length)
             xt = np.vstack((xt_new, xt))
         else:
             # import pdb;pdb.set_trace()

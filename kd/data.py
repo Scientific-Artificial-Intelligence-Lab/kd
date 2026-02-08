@@ -241,7 +241,8 @@ class SparseData(BaseDataHandler):
         
         # 2. Collocation points sampling
         lb, ub = domains[0], domains[1]
-        X_f_train = lb + (ub-lb)*lhs(2, self.colloc_num)     
+        n_dims = self.xt.shape[-1]
+        X_f_train = lb + (ub-lb)*lhs(n_dims, self.colloc_num)
         self.X_f_train = np.vstack((X_f_train, self.X_u_train))   
 
         self.data = {

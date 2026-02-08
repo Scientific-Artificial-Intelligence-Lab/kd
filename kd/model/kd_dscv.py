@@ -355,16 +355,26 @@ class KD_DSCV(BaseRL):
         return searcher
 
     # Diff tokens for each spatial dimension (used for auto function_set).
+    # Numpy (FD) tokens — used by KD_DSCV (Regular mode).
     _DIFF_TOKENS_BY_DIM = {
         1: ["diff", "diff2", "diff3"],
         2: ["Diff", "Diff2", "lap"],
         3: ["Diff_3", "Diff2_3", "lap_3"],
+    }
+    # Torch (PINN) tokens — used by KD_DSCV_SPR (Sparse mode).
+    # For N-D, lap_t provides the Laplacian via autograd (sum of d2u/dxi^2).
+    # diff_t/diff2_t are 1D-oriented; lap_t covers the common N-D PDE pattern.
+    _DIFF_TOKENS_TORCH_BY_DIM = {
+        1: ["diff_t", "diff2_t", "diff3_t"],
+        2: ["lap_t"],
+        3: ["lap_t"],
     }
     # All diff-family tokens across all dimensions (used to strip before replacing).
     _ALL_DIFF_TOKENS = {
         "diff", "diff2", "diff3", "diff4",
         "Diff", "Diff2", "lap",
         "Diff_3", "Diff2_3", "lap_3",
+        "diff_t", "diff2_t", "diff3_t", "diff4_t", "lap_t",
     }
 
     def set_task(self):
@@ -392,6 +402,10 @@ class KD_DSCV(BaseRL):
 
         Always resets from ``_base_function_set`` to avoid stale tokens
         when the same ``KD_DSCV`` instance is reused across datasets.
+
+        Handles both numpy (FD) tokens for Regular mode and torch tokens
+        for PINN/Sparse mode, selecting the correct map based on whether
+        the base function_set contains torch tokens (``_t`` suffix).
         """
         # Reset to base config snapshot to avoid stale mutations.
         self.config_task["function_set"] = list(self._base_function_set)
@@ -402,14 +416,21 @@ class KD_DSCV(BaseRL):
         n_dim = data.get("n_input_dim", 1)
         if n_dim <= 1:
             return
-        if n_dim not in self._DIFF_TOKENS_BY_DIM:
+
+        # Detect torch mode: base function_set contains _t suffix tokens
+        has_torch = any(t.endswith("_t") for t in self._base_function_set)
+        token_map = (
+            self._DIFF_TOKENS_TORCH_BY_DIM if has_torch
+            else self._DIFF_TOKENS_BY_DIM
+        )
+        if n_dim not in token_map:
             return
 
         # Strip ALL diff-family tokens (across all dims) to avoid duplicates,
         # then inject exactly the target-dimension tokens.
         current = list(self._base_function_set)
         non_diff = [t for t in current if t not in self._ALL_DIFF_TOKENS]
-        new_diff = self._DIFF_TOKENS_BY_DIM[n_dim]
+        new_diff = token_map[n_dim]
         self.config_task["function_set"] = list(dict.fromkeys(new_diff + non_diff))
 
     def set_seeds(self, new_seed):
@@ -520,6 +541,9 @@ class KD_DSCV_SPR(KD_DSCV):
         self.data_class = adapter
         self.dataset_ = dataset
 
+        # Inject N-D config from adapter output
+        self._inject_nd_config()
+
         resolved_name = dataset_name or getattr(dataset, 'legacy_name', None) or \
             getattr(dataset, 'registry_name', None) or getattr(dataset, 'equation_name', None) or "custom_dataset"
         self.dataset = resolved_name
@@ -531,6 +555,20 @@ class KD_DSCV_SPR(KD_DSCV):
 
         self.setup()
         return self
+
+    def _inject_nd_config(self) -> None:
+        """Inject N-D PINN config from adapter's ``n_input_dim``.
+
+        Sets ``config_pinn['input_dim']``, ``config_pinn['generation_type']``,
+        and ``config_task['n_input_var']`` when dealing with multi-D data.
+        """
+        data = self.data_class.get_data()
+        n_spatial: int = data.get("n_input_dim", 1)
+        if n_spatial <= 1:
+            return
+        self.config_pinn["input_dim"] = n_spatial + 1
+        self.config_pinn["generation_type"] = "multi_AD"
+        self.config_task["n_input_var"] = n_spatial
 
     def make_pinn_model(self):
         """Create PINN model.
