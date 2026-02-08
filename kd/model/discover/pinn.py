@@ -190,7 +190,6 @@ class PINN_model:
             xt = np.repeat(xt,20,axis =0)
             xt_l = xt-delta_xt
             length = len(xt_l)
-            print("length:", length)
             n_dims = lb.shape[0]
             xt_new = xt_l+delta_xt*lhs(n_dims, length)
             xt = np.vstack((xt_new, xt))

@@ -1564,3 +1564,76 @@ class TestDSCVSparseND:
             f"Expected {colloc_num + n_train} collocation rows, "
             f"got {data['X_f_train'].shape[0]}"
         )
+
+    # ------------------------------------------------------------------
+    # Codex-review follow-up: additional coverage
+    # ------------------------------------------------------------------
+
+    def test_sparse_nd_spline_sample_raises(self):
+        """spline_sample=True should raise NotImplementedError for N-D data."""
+        dataset = _make_sparse_nd_2d_dataset()
+        with pytest.raises(NotImplementedError, match="spline_sample"):
+            DSCVSparseAdapter(dataset, sample_ratio=0.1, spline_sample=True)
+
+    def test_sparse_nd_cut_quantile_raises(self):
+        """cut_quantile should raise NotImplementedError for N-D data."""
+        dataset = _make_sparse_nd_2d_dataset()
+        with pytest.raises(NotImplementedError, match="cut_quantile"):
+            DSCVSparseAdapter(dataset, sample_ratio=0.1, cut_quantile=0.9)
+
+    def test_sparse_nd_data_ratio_raises(self):
+        """data_ratio should raise NotImplementedError for N-D data."""
+        dataset = _make_sparse_nd_2d_dataset()
+        with pytest.raises(NotImplementedError, match="data_ratio"):
+            DSCVSparseAdapter(dataset, sample_ratio=0.1, data_ratio=0.5)
+
+    def test_sparse_nd_nonstandard_axis_order(self):
+        """Non-standard axis_order (time not last) should still produce correct output."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        # axis_order has time in the middle: ['x', 't', 'y']
+        u_permuted = np.transpose(u, [0, 2, 1])  # (nx, nt, ny)
+        dataset = PDEDataset(
+            equation_name="sparse-nonstandard-order",
+            fields_data={"u": u_permuted},
+            coords_1d={"x": x, "t": t, "y": y},
+            axis_order=["x", "t", "y"],
+            target_field="u",
+            lhs_axis="t",
+        )
+        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        data = adapter.get_data()
+
+        assert data["X_u_train"].shape[1] == 3  # x, y, t
+        assert data.get("n_input_dim") == 2
+        assert data["X_u_train"].shape[0] > 0
+
+    def test_spr_reimport_nd_then_1d_resets_config(self, monkeypatch):
+        """Reimporting 1D after N-D should reset PINN config to baseline."""
+        ds_nd = _make_sparse_nd_2d_dataset()
+        ds_1d = load_pde("burgers")
+        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+
+        def fake_setup(self):
+            self.config_task.setdefault("eq_num", 1)
+
+        monkeypatch.setattr(KD_DSCV_SPR, "setup", fake_setup)
+
+        # First import: 2D spatial
+        model.import_dataset(ds_nd, sample_ratio=0.1, random_state=0)
+        assert model.config_pinn["input_dim"] == 3
+        assert model.config_pinn["generation_type"] == "multi_AD"
+
+        # Second import: 1D (legacy) — config must reset
+        model.import_dataset(ds_1d, sample=50, random_state=0)
+        assert model.config_pinn["input_dim"] == 2, (
+            f"Expected input_dim=2 after 1D reimport, got {model.config_pinn['input_dim']}"
+        )
+        assert model.config_pinn["generation_type"] != "multi_AD", (
+            "generation_type should reset from multi_AD after 1D reimport"
+        )

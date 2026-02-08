@@ -493,6 +493,10 @@ class KD_DSCV_SPR(KD_DSCV):
         super().set_config(config)
         self.config_pinn = self.config["pinn"]
         self.config_task['task_type'] = 'pde_pinn'
+        # Baseline values for reset when reusing instances across dimensions.
+        self._base_pinn_input_dim = int(self.config_pinn.get("input_dim", 2))
+        self._base_generation_type = self.config_pinn.get("generation_type", "AD")
+        self._base_n_input_var = int(self.config_task.get("n_input_var", 1))
 
     def import_dataset(
         self,
@@ -559,16 +563,20 @@ class KD_DSCV_SPR(KD_DSCV):
     def _inject_nd_config(self) -> None:
         """Inject N-D PINN config from adapter's ``n_input_dim``.
 
-        Sets ``config_pinn['input_dim']``, ``config_pinn['generation_type']``,
-        and ``config_task['n_input_var']`` when dealing with multi-D data.
+        Always resets to baseline first to avoid stale config when the same
+        instance is reused across datasets of different dimensionality.
         """
+        # Reset to baseline to handle ND→1D reuse.
+        self.config_pinn["input_dim"] = self._base_pinn_input_dim
+        self.config_pinn["generation_type"] = self._base_generation_type
+        self.config_task["n_input_var"] = self._base_n_input_var
+
         data = self.data_class.get_data()
         n_spatial: int = data.get("n_input_dim", 1)
-        if n_spatial <= 1:
-            return
-        self.config_pinn["input_dim"] = n_spatial + 1
-        self.config_pinn["generation_type"] = "multi_AD"
-        self.config_task["n_input_var"] = n_spatial
+        if n_spatial > 1:
+            self.config_pinn["input_dim"] = n_spatial + 1
+            self.config_pinn["generation_type"] = "multi_AD"
+            self.config_task["n_input_var"] = n_spatial
 
     def make_pinn_model(self):
         """Create PINN model.
