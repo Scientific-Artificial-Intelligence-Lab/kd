@@ -94,35 +94,78 @@ class OptimizationHistoryData:
 
 @dataclass
 class FieldComparisonData:
-    x_coords: np.ndarray
+    spatial_coords: List[np.ndarray]
     t_coords: np.ndarray
     true_field: np.ndarray
     predicted_field: np.ndarray
     residual_field: Optional[np.ndarray] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        self.x_coords = np.asarray(self.x_coords)
-        self.t_coords = np.asarray(self.t_coords)
-        self.true_field = np.asarray(self.true_field)
-        self.predicted_field = np.asarray(self.predicted_field)
+    def __init__(
+        self,
+        spatial_coords: Any = None,
+        t_coords: Any = None,
+        true_field: Any = None,
+        predicted_field: Any = None,
+        residual_field: Any = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        *,
+        x_coords: Any = None,
+    ) -> None:
+        # Backward compat: accept x_coords= keyword as 1D shortcut
+        if spatial_coords is None and x_coords is not None:
+            spatial_coords = x_coords
+        if spatial_coords is None:
+            raise TypeError("'spatial_coords' (or 'x_coords') is required")
+
+        # Auto-wrap a single ndarray into a list (1D spatial case)
+        if isinstance(spatial_coords, np.ndarray):
+            if spatial_coords.ndim <= 1:
+                self.spatial_coords = [np.asarray(spatial_coords)]
+            else:
+                # 2D array passed as single coords — wrap it
+                self.spatial_coords = [np.asarray(spatial_coords)]
+        elif isinstance(spatial_coords, list):
+            # Check if it's a list of arrays (multi-dim) or a plain list (single 1D)
+            if len(spatial_coords) > 0 and isinstance(spatial_coords[0], np.ndarray):
+                self.spatial_coords = [np.asarray(c) for c in spatial_coords]
+            else:
+                # Plain list → single 1D coord
+                self.spatial_coords = [np.asarray(spatial_coords)]
+        else:
+            self.spatial_coords = [np.asarray(spatial_coords)]
+
+        self.t_coords = np.asarray(t_coords)
+        self.true_field = np.asarray(true_field)
+        self.predicted_field = np.asarray(predicted_field)
+        self.metadata = metadata if metadata is not None else {}
 
         if self.true_field.shape != self.predicted_field.shape:
             raise ValueError("'true_field' and 'predicted_field' must have identical shapes")
 
-        expected_shape = (self.x_coords.size, self.t_coords.size)
+        expected_shape = tuple(c.size for c in self.spatial_coords) + (self.t_coords.size,)
         if self.true_field.shape != expected_shape:
             raise ValueError(
-                "Field data must have shape (len(x_coords), len(t_coords))"
+                f"Field data must have shape {expected_shape} "
+                f"(spatial_coords sizes + t_coords size), got {self.true_field.shape}"
             )
 
-        if self.residual_field is None:
+        if residual_field is None:
             self.residual_field = self.true_field - self.predicted_field
         else:
-            residual = np.asarray(self.residual_field)
+            residual = np.asarray(residual_field)
             if residual.shape != expected_shape:
                 raise ValueError("'residual_field' must match the field shape")
             self.residual_field = residual
+
+    @property
+    def x_coords(self) -> np.ndarray:
+        """Backward-compatible shortcut for the first spatial axis."""
+        return self.spatial_coords[0]
+
+    @property
+    def n_spatial_dims(self) -> int:
+        return len(self.spatial_coords)
 
 
 __all__ = [
@@ -139,29 +182,70 @@ __all__ = [
 
 @dataclass
 class TimeSliceComparisonData:
-    x_coords: np.ndarray
+    spatial_coords: List[np.ndarray]
     t_coords: np.ndarray
     true_field: np.ndarray
     predicted_field: np.ndarray
     slice_times: np.ndarray
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        self.x_coords = np.asarray(self.x_coords)
-        self.t_coords = np.asarray(self.t_coords)
-        self.true_field = np.asarray(self.true_field)
-        self.predicted_field = np.asarray(self.predicted_field)
-        self.slice_times = np.asarray(self.slice_times)
+    def __init__(
+        self,
+        spatial_coords: Any = None,
+        t_coords: Any = None,
+        true_field: Any = None,
+        predicted_field: Any = None,
+        slice_times: Any = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        *,
+        x_coords: Any = None,
+    ) -> None:
+        # Backward compat: accept x_coords= keyword as 1D shortcut
+        if spatial_coords is None and x_coords is not None:
+            spatial_coords = x_coords
+        if spatial_coords is None:
+            raise TypeError("'spatial_coords' (or 'x_coords') is required")
+
+        if isinstance(spatial_coords, np.ndarray):
+            if spatial_coords.ndim <= 1:
+                self.spatial_coords = [np.asarray(spatial_coords)]
+            else:
+                self.spatial_coords = [np.asarray(spatial_coords)]
+        elif isinstance(spatial_coords, list):
+            if len(spatial_coords) > 0 and isinstance(spatial_coords[0], np.ndarray):
+                self.spatial_coords = [np.asarray(c) for c in spatial_coords]
+            else:
+                self.spatial_coords = [np.asarray(spatial_coords)]
+        else:
+            self.spatial_coords = [np.asarray(spatial_coords)]
+
+        self.t_coords = np.asarray(t_coords)
+        self.true_field = np.asarray(true_field)
+        self.predicted_field = np.asarray(predicted_field)
+        self.slice_times = np.asarray(slice_times)
+        self.metadata = metadata if metadata is not None else {}
 
         if self.true_field.shape != self.predicted_field.shape:
             raise ValueError("'true_field' and 'predicted_field' must have identical shapes")
 
-        expected_shape = (self.x_coords.size, self.t_coords.size)
+        expected_shape = tuple(c.size for c in self.spatial_coords) + (self.t_coords.size,)
         if self.true_field.shape != expected_shape:
-            raise ValueError("Field data must have shape (len(x_coords), len(t_coords))")
+            raise ValueError(
+                f"Field data must have shape {expected_shape} "
+                f"(spatial_coords sizes + t_coords size), got {self.true_field.shape}"
+            )
 
         if np.any(self.slice_times < self.t_coords.min()) or np.any(self.slice_times > self.t_coords.max()):
             raise ValueError("'slice_times' must fall within the provided time coordinate range")
+
+    @property
+    def x_coords(self) -> np.ndarray:
+        """Backward-compatible shortcut for the first spatial axis."""
+        return self.spatial_coords[0]
+
+    @property
+    def n_spatial_dims(self) -> int:
+        return len(self.spatial_coords)
 
 
 @dataclass

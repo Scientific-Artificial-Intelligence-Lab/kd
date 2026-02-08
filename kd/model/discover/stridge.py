@@ -128,7 +128,19 @@ class Node(object):
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
         elif base_op_name == "diff4": # KD_DSCV 的 diff4(f, x) 对应 SymPy 的 Derivative(f, x, x, x, x)
             return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
-        
+
+        # --- N-D operators ---
+        elif base_op_name == "Diff":  # Diff(f, x_i) → first-order partial
+            return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]})"
+        elif base_op_name == "Diff2":  # Diff2(f, x_i) → second-order partial
+            return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
+        elif base_op_name == "Diff_3":  # Diff_3(f, x_i) → first-order partial (3D variant)
+            return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]})"
+        elif base_op_name == "Diff2_3":  # Diff2_3(f, x_i) → second-order partial (3D variant)
+            return f"Derivative({child_sympy_strings[0]}, {child_sympy_strings[1]}, {child_sympy_strings[1]})"
+        elif base_op_name in ("lap", "lap_3"):  # Laplacian
+            return f"laplacian({child_sympy_strings[0]})"
+
         elif base_op_name == "sigmoid":
             # Sigmoid(x) 的数学表达式是 1 / (1 + exp(-x)) 我们将其翻译成等价的 SymPy 字符串格式
             return f"1 / (1 + exp(-({child_sympy_strings[0]})))"

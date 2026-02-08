@@ -97,37 +97,78 @@ def plot_evolution(model, figsize=(10, 6)):
 
 
 # --- 内部辅助函数 ---
+def _finite_difference_nd(y: np.ndarray, dx: float, order: int = 1, axis: int = -1) -> np.ndarray:
+    """使用中心差分沿指定轴计算导数（支持 N-D 数组）。"""
+    if order < 1 or order > 4:
+        raise ValueError(f"只支持1-4阶导数, 但请求了 {order} 阶")
+    result = y
+    for _ in range(order):
+        result = np.gradient(result, dx, axis=axis, edge_order=2)
+    return result
+
+
 def _finite_difference(y, x, order=1):
-    """使用中心差分计算导数。"""
+    """使用中心差分计算导数（1D 快捷方式）。"""
     if len(y.shape) > 1: y = y.flatten()
     if len(x.shape) > 1: x = x.flatten()
     dx = x[1] - x[0]
-    if order == 1: 
-        return np.gradient(y, dx, edge_order=2)
-    elif order == 2: 
-        return np.gradient(np.gradient(y, dx, edge_order=2), dx, edge_order=2)
-    elif order == 3:
-        return np.gradient(np.gradient(np.gradient(y, dx, edge_order=2), dx, edge_order=2), dx, edge_order=2)
-    elif order == 4:
-        return np.gradient(np.gradient(np.gradient(np.gradient(y, dx, edge_order=2), dx, edge_order=2), dx, edge_order=2), dx, edge_order=2)
-    else: raise ValueError("只支持1-4阶导数, 但请求了 {order} 阶")
+    return _finite_difference_nd(y, dx, order=order, axis=-1)
 
-def _evaluate_term_recursively(node, u_snapshot, x_coords):
-    """递归地计算一个符号树(Node)的数值 """
+def _evaluate_term_recursively(
+    node,
+    u_snapshot,
+    x_coords,
+    spatial_coords_list=None,
+    spatial_dxs=None,
+):
+    """递归地计算一个符号树(Node)的数值。
+
+    Parameters
+    ----------
+    spatial_coords_list : list[np.ndarray], optional
+        N-D 模式下各空间轴的 1-D 坐标，按 (x1, x2, x3, ...) 顺序。
+    spatial_dxs : list[float], optional
+        各空间轴的网格间距。
+    """
+    # --- 坐标名到轴索引的映射 ---
+    _COORD_TO_AXIS = {'x1': 0, 'x2': 1, 'x3': 2}
+
+    is_nd = spatial_coords_list is not None and len(spatial_coords_list) > 1
+
+    def _recurse(child):
+        return _evaluate_term_recursively(
+            child, u_snapshot, x_coords,
+            spatial_coords_list=spatial_coords_list,
+            spatial_dxs=spatial_dxs,
+        )
+
     if not node.children:
-        if node.val == 'u1': 
+        if node.val == 'u1':
             return u_snapshot
-        elif node.val == 'x1': 
+        elif node.val == 'x1':
+            if is_nd:
+                # broadcast 到 spatial shape
+                coords = spatial_coords_list[0]
+                shape = [1] * len(spatial_coords_list)
+                shape[0] = coords.size
+                return np.broadcast_to(coords.reshape(shape), u_snapshot.shape)
             return x_coords
-        try: # 尝试将叶子节点的值转换为浮点数 
+        elif node.val in ('x2', 'x3') and is_nd:
+            axis_idx = _COORD_TO_AXIS[node.val]
+            if axis_idx < len(spatial_coords_list):
+                coords = spatial_coords_list[axis_idx]
+                shape = [1] * len(spatial_coords_list)
+                shape[axis_idx] = coords.size
+                return np.broadcast_to(coords.reshape(shape), u_snapshot.shape)
+            raise ValueError(f"坐标 {node.val} 超出空间维度范围 (n_spatial_dims={len(spatial_coords_list)})")
+        try:
             return float(node.val)
         except ValueError:
             raise ValueError(f"未知的叶子节点或无法转换为浮点数的常数: {node.val}")
-        
-    # 递归步骤: 先计算所有子节点的值
-    child_values = [_evaluate_term_recursively(child, u_snapshot, x_coords) for child in node.children]
-    op_name = node.val.removesuffix('_t') # 统一处理带和不带_t的后缀
 
+    # 递归步骤
+    child_values = [_recurse(child) for child in node.children]
+    op_name = node.val.removesuffix('_t')
 
     if op_name == 'add': return child_values[0] + child_values[1]
     elif op_name == 'sub': return child_values[0] - child_values[1]
@@ -146,23 +187,65 @@ def _evaluate_term_recursively(node, u_snapshot, x_coords):
     elif op_name == 'cos': return np.cos(child_values[0])
     elif op_name == 'tan': return np.tan(child_values[0])
 
+    # --- 1D derivatives (legacy) ---
     elif op_name == 'diff': return _finite_difference(child_values[0], x_coords, order=1)
     elif op_name == 'diff2': return _finite_difference(child_values[0], x_coords, order=2)
     elif op_name == 'diff3': return _finite_difference(child_values[0], x_coords, order=3)
     elif op_name == 'diff4': return _finite_difference(child_values[0], x_coords, order=4)
+
+    # --- N-D partial derivatives ---
+    elif op_name in ('Diff', 'Diff_3'):
+        axis_idx = _infer_axis(node.children[1], _COORD_TO_AXIS)
+        dx = spatial_dxs[axis_idx] if spatial_dxs else (x_coords[1] - x_coords[0])
+        return _finite_difference_nd(child_values[0], dx, order=1, axis=axis_idx)
+    elif op_name in ('Diff2', 'Diff2_3'):
+        axis_idx = _infer_axis(node.children[1], _COORD_TO_AXIS)
+        dx = spatial_dxs[axis_idx] if spatial_dxs else (x_coords[1] - x_coords[0])
+        return _finite_difference_nd(child_values[0], dx, order=2, axis=axis_idx)
+    elif op_name in ('lap', 'lap_3'):
+        if not is_nd:
+            return _finite_difference(child_values[0], x_coords, order=2)
+        result = np.zeros_like(child_values[0])
+        for ax_i in range(len(spatial_dxs)):
+            result = result + _finite_difference_nd(child_values[0], spatial_dxs[ax_i], order=2, axis=ax_i)
+        return result
+
     else: raise ValueError(f"未知的操作: {op_name}")
+
+
+def _infer_axis(coord_node, coord_to_axis: dict) -> int:
+    """从导数算子的坐标子节点推断空间轴索引。"""
+    name = coord_node.val
+    if name in coord_to_axis:
+        return coord_to_axis[name]
+    raise ValueError(f"无法从 '{name}' 推断空间轴索引")
 
 def _calculate_pde_fields(model, best_program):
     """
     一个私有的核心计算函数，供所有绘图函数调用。
     它负责计算所有必要的场数据并返回一个字典。
+
+    对于 N-D 数据（n_input_dim > 1），u_trimmed.shape = (nt, *spatial_shape)。
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # 1. 获取信息和数据
     data_dict = model.data_class.get_data()
     final_symbolic_terms = best_program.STRidge.terms
     w_best = best_program.w
     u_trimmed = data_dict['u']
     ut_trimmed = data_dict['ut']
+
+    n_input_dim = data_dict.get('n_input_dim', 1)
+
+    # ---- N-D 路径 ----
+    if n_input_dim > 1:
+        return _calculate_pde_fields_nd(
+            data_dict, final_symbolic_terms, w_best, u_trimmed, ut_trimmed, n_input_dim,
+        )
+
+    # ---- Legacy 1D 路径 (完全保留) ----
     x_axis = data_dict['X'][0].flatten()
 
     # 2. 计算 Theta 矩阵
@@ -174,11 +257,9 @@ def _calculate_pde_fields(model, best_program):
             u_snapshot = u_trimmed[:, t_idx]
             term_values_grid[:, t_idx] = _evaluate_term_recursively(term_node, u_snapshot, x_axis)
         Theta_final[:, i] = term_values_grid.flatten()
-    
+
     if not np.isfinite(Theta_final).all():
-        print("\n[DSCV WARNING] Discovered equation contains numerically unstable terms.")
-        print("  Subsequent visualizations may fail or look incorrect.")
-        # return None
+        logger.warning("Discovered equation contains numerically unstable terms.")
 
     # 3. 计算 RHS 和残差
     if Theta_final.shape[1] == len(w_best) - 1:
@@ -186,7 +267,7 @@ def _calculate_pde_fields(model, best_program):
     else:
         y_hat_rhs = Theta_final @ w_best
     physical_residual = ut_trimmed.flatten() - y_hat_rhs.flatten()
-    
+
     # 4. 构建绘图坐标
     t_axis_trimmed = np.arange(num_timesteps_trimmed)
     X_grid, T_grid = np.meshgrid(x_axis, t_axis_trimmed, indexing='ij')
@@ -199,7 +280,76 @@ def _calculate_pde_fields(model, best_program):
         "ut_grid": ut_trimmed,
         "y_hat_grid": y_hat_rhs.reshape(num_space_points, num_timesteps_trimmed),
         "x_axis": x_axis,
-        "t_axis": t_axis_trimmed
+        "t_axis": t_axis_trimmed,
+        "n_spatial_dims": 1,
+    }
+
+
+def _calculate_pde_fields_nd(
+    data_dict: dict,
+    final_symbolic_terms: list,
+    w_best,
+    u_trimmed: np.ndarray,
+    ut_trimmed: np.ndarray,
+    n_input_dim: int,
+) -> dict:
+    """N-D 版本的 PDE field 计算。
+
+    u_trimmed.shape = (nt, *spatial_shape) — 时间轴在前。
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # 构建空间坐标和 dx
+    spatial_coords_list = []
+    spatial_dxs = []
+    for dim_idx in range(n_input_dim):
+        coord_1d = np.asarray(data_dict['X'][dim_idx]).flatten()
+        coord_unique = np.unique(coord_1d)
+        spatial_coords_list.append(coord_unique)
+        spatial_dxs.append(float(coord_unique[1] - coord_unique[0]))
+
+    num_timesteps = u_trimmed.shape[0]
+    spatial_shape = u_trimmed.shape[1:]
+
+    # 伪 x_coords 用于 legacy op fallback（不应在纯 N-D 算子中使用）
+    x_axis_fallback = spatial_coords_list[0]
+
+    # 计算 Theta 矩阵
+    Theta_final = np.zeros((u_trimmed.size, len(final_symbolic_terms)))
+    for i, term_node in enumerate(final_symbolic_terms):
+        term_values_grid = np.zeros_like(u_trimmed)
+        for t_idx in range(num_timesteps):
+            u_snapshot = u_trimmed[t_idx]  # shape = spatial_shape
+            term_values_grid[t_idx] = _evaluate_term_recursively(
+                term_node, u_snapshot, x_axis_fallback,
+                spatial_coords_list=spatial_coords_list,
+                spatial_dxs=spatial_dxs,
+            )
+        Theta_final[:, i] = term_values_grid.flatten()
+
+    if not np.isfinite(Theta_final).all():
+        logger.warning("Discovered equation contains numerically unstable terms.")
+
+    # RHS 和残差
+    if Theta_final.shape[1] == len(w_best) - 1:
+        y_hat_rhs = Theta_final @ w_best[:-1] + w_best[-1]
+    else:
+        y_hat_rhs = Theta_final @ w_best
+    physical_residual = ut_trimmed.flatten() - y_hat_rhs.flatten()
+
+    # 时间轴
+    t_axis_trimmed = np.arange(num_timesteps)
+
+    return {
+        "residual": physical_residual,
+        "coords": None,  # N-D 不使用 2D scatter coords
+        "ut_grid": ut_trimmed,
+        "y_hat_grid": y_hat_rhs.reshape(u_trimmed.shape),
+        "x_axis": spatial_coords_list[0],
+        "t_axis": t_axis_trimmed,
+        "n_spatial_dims": n_input_dim,
+        "spatial_coords_list": spatial_coords_list,
     }
 
 

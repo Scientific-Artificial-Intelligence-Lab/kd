@@ -92,45 +92,17 @@ class SGAVizAdapter:
         if data is None:
             return VizResult(intent='field_comparison', warnings=['Context does not expose metadata/original fields.'])
 
-        fig, axes = plt.subplots(1, 2, figsize=ctx.options.get('figsize', (14, 5)), sharey=True)
-        fig.suptitle(ctx.options.get('title', 'Metadata vs Original Field'), fontsize=16)
-
-        vmin = float(np.nanmin([data.true_field.min(), data.predicted_field.min()]))
-        vmax = float(np.nanmax([data.true_field.max(), data.predicted_field.max()]))
-
-        im0 = axes[0].pcolormesh(
-            data.t_coords,
-            data.x_coords,
-            data.predicted_field,
-            cmap=ctx.options.get('cmap', 'viridis'),
-            vmin=vmin,
-            vmax=vmax,
-            shading='auto',
-        )
-        axes[0].set_title('Metadata Field')
-        axes[0].set_xlabel('Time')
-        axes[0].set_ylabel('Space')
-        fig.colorbar(im0, ax=axes[0], label='Value')
-
-        im1 = axes[1].pcolormesh(
-            data.t_coords,
-            data.x_coords,
-            data.true_field,
-            cmap=ctx.options.get('cmap', 'viridis'),
-            vmin=vmin,
-            vmax=vmax,
-            shading='auto',
-        )
-        axes[1].set_title('Original Field')
-        axes[1].set_xlabel('Time')
-        fig.colorbar(im1, ax=axes[1], label='Value')
-
-        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        if data.n_spatial_dims == 1:
+            fig = self._field_comparison_plot_1d(data, ctx)
+        else:
+            fig = self._field_comparison_plot_nd(data, ctx)
 
         output_path = self._resolve_output(ctx, 'field_comparison.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
         plt.close(fig)
 
+        vmin = float(np.nanmin([data.true_field.min(), data.predicted_field.min()]))
+        vmax = float(np.nanmax([data.true_field.max(), data.predicted_field.max()]))
         metadata = {
             'summary': {
                 'predicted_shape': data.predicted_field.shape,
@@ -141,6 +113,79 @@ class SGAVizAdapter:
             'field_comparison_data': data,
         }
         return VizResult(intent='field_comparison', paths=[output_path], metadata=metadata)
+
+    def _field_comparison_plot_1d(self, data: FieldComparisonData, ctx) -> 'plt.Figure':
+        fig, axes = plt.subplots(1, 2, figsize=ctx.options.get('figsize', (14, 5)), sharey=True)
+        fig.suptitle(ctx.options.get('title', 'Metadata vs Original Field'), fontsize=16)
+
+        vmin = float(np.nanmin([data.true_field.min(), data.predicted_field.min()]))
+        vmax = float(np.nanmax([data.true_field.max(), data.predicted_field.max()]))
+
+        im0 = axes[0].pcolormesh(
+            data.t_coords, data.x_coords, data.predicted_field,
+            cmap=ctx.options.get('cmap', 'viridis'), vmin=vmin, vmax=vmax, shading='auto',
+        )
+        axes[0].set_title('Metadata Field')
+        axes[0].set_xlabel('Time')
+        axes[0].set_ylabel('Space')
+        fig.colorbar(im0, ax=axes[0], label='Value')
+
+        im1 = axes[1].pcolormesh(
+            data.t_coords, data.x_coords, data.true_field,
+            cmap=ctx.options.get('cmap', 'viridis'), vmin=vmin, vmax=vmax, shading='auto',
+        )
+        axes[1].set_title('Original Field')
+        axes[1].set_xlabel('Time')
+        fig.colorbar(im1, ax=axes[1], label='Value')
+
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        return fig
+
+    def _field_comparison_plot_nd(self, data: FieldComparisonData, ctx) -> 'plt.Figure':
+        """2D spatial: show 2D heatmaps at selected time steps."""
+        nt = data.t_coords.size
+        if nt <= 3:
+            t_indices = list(range(nt))
+        else:
+            t_indices = [0, nt // 2, nt - 1]
+
+        n_cols = len(t_indices)
+        fig, axes = plt.subplots(2, n_cols, figsize=ctx.options.get('figsize', (5 * n_cols, 8)))
+        fig.suptitle(ctx.options.get('title', 'Metadata vs Original Field (2D spatial)'), fontsize=16)
+        if n_cols == 1:
+            axes = axes.reshape(2, 1)
+
+        vmin = float(np.nanmin([data.true_field.min(), data.predicted_field.min()]))
+        vmax = float(np.nanmax([data.true_field.max(), data.predicted_field.max()]))
+        cmap = ctx.options.get('cmap', 'viridis')
+
+        y_coords = data.spatial_coords[0]
+        x_coords = data.spatial_coords[1]
+
+        for col_idx, t_idx in enumerate(t_indices):
+            meta_slice = data.predicted_field[..., t_idx]
+            orig_slice = data.true_field[..., t_idx]
+
+            axes[0, col_idx].pcolormesh(
+                x_coords, y_coords, meta_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[0, col_idx].set_title(f'Metadata (t={data.t_coords[t_idx]:.2f})')
+            if col_idx == 0:
+                axes[0, col_idx].set_ylabel('$x_1$')
+
+            im = axes[1, col_idx].pcolormesh(
+                x_coords, y_coords, orig_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[1, col_idx].set_title(f'Original (t={data.t_coords[t_idx]:.2f})')
+            axes[1, col_idx].set_xlabel('$x_2$')
+            if col_idx == 0:
+                axes[1, col_idx].set_ylabel('$x_1$')
+
+        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
+        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+        return fig
 
     def _time_slices(self, model, ctx) -> VizResult:
         context = getattr(model, 'context_', None)
@@ -222,7 +267,7 @@ class SGAVizAdapter:
         }
         return VizResult(intent='time_slices', paths=[output_path], metadata=metadata)
 
-    def _build_field_comparison_data(self, context) -> FieldComparisonData | None:
+    def _build_field_comparison_data(self, context) -> 'FieldComparisonData | None':
         metadata_field = getattr(context, 'u', None)
         original_field = getattr(context, 'u_origin', None)
         if metadata_field is None or original_field is None:
@@ -230,6 +275,19 @@ class SGAVizAdapter:
 
         metadata_field = np.asarray(metadata_field)
         original_field = np.asarray(original_field)
+
+        # --- N-D 路径：有 axis_order / coords_1d ---
+        axis_order = getattr(context, 'axis_order', None)
+        coords_1d = getattr(context, 'coords_1d', None)
+        lhs_axis = getattr(context, 'lhs_axis', 't')
+
+        if axis_order is not None and coords_1d is not None:
+            return self._build_field_comparison_nd(
+                context, metadata_field, original_field,
+                axis_order, coords_1d, lhs_axis,
+            )
+
+        # --- Legacy 2D 路径 ---
         if metadata_field.ndim != 2 or original_field.ndim != 2:
             return None
 
@@ -241,6 +299,27 @@ class SGAVizAdapter:
             t_coords=t_coords,
             true_field=original_field,
             predicted_field=metadata_field,
+        )
+
+    def _build_field_comparison_nd(
+        self, context, metadata_field, original_field,
+        axis_order, coords_1d, lhs_axis,
+    ):
+        """Build FieldComparisonData from N-D SGA context with axis_order/coords_1d."""
+        spatial_axes = [a for a in axis_order if a != lhs_axis]
+        spatial_coords = [np.asarray(coords_1d[a]) for a in spatial_axes]
+        t_coords = np.asarray(coords_1d[lhs_axis])
+
+        # Permute fields to (*spatial, t) layout
+        perm = [axis_order.index(a) for a in spatial_axes] + [axis_order.index(lhs_axis)]
+        meta_perm = np.transpose(metadata_field, perm)
+        orig_perm = np.transpose(original_field, perm)
+
+        return FieldComparisonData(
+            spatial_coords=spatial_coords,
+            t_coords=t_coords,
+            true_field=orig_perm,
+            predicted_field=meta_perm,
         )
 
     def _extract_axis(self, grid, expected_size: int, *, axis: str) -> np.ndarray:
@@ -398,44 +477,12 @@ class SGAVizAdapter:
         )
 
         bins = int(ctx.options.get('bins', 40))
+        ndim = residual_meta.ndim
 
-        fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
-
-        axes[0, 0].hist(
-            residual_meta.reshape(-1),
-            bins=bins,
-            color='#1f77b4',
-            alpha=0.7,
-            edgecolor='black',
-        )
-        axes[0, 0].set_title('Metadata Residual Distribution')
-        axes[0, 0].set_xlabel('Residual (u_t - RHS)')
-        axes[0, 0].set_ylabel('Frequency')
-        axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
-
-        axes[0, 1].hist(
-            residual_origin.reshape(-1),
-            bins=bins,
-            color='#ff7f0e',
-            alpha=0.7,
-            edgecolor='black',
-        )
-        axes[0, 1].set_title('Original Residual Distribution')
-        axes[0, 1].set_xlabel('Residual (u_t - RHS)')
-        axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
-
-        im_meta = axes[1, 0].imshow(residual_meta, origin='lower', cmap='coolwarm', aspect='auto')
-        axes[1, 0].set_title('Metadata Residual Heatmap')
-        axes[1, 0].set_xlabel('Time index')
-        axes[1, 0].set_ylabel('Space index')
-        fig.colorbar(im_meta, ax=axes[1, 0], fraction=0.046, pad=0.04)
-
-        im_orig = axes[1, 1].imshow(residual_origin, origin='lower', cmap='coolwarm', aspect='auto')
-        axes[1, 1].set_title('Original Residual Heatmap')
-        axes[1, 1].set_xlabel('Time index')
-        fig.colorbar(im_orig, ax=axes[1, 1], fraction=0.046, pad=0.04)
-
-        fig.tight_layout()
+        if ndim <= 2:
+            fig = self._residual_plot_2d(residual_meta, residual_origin, bins, ctx)
+        else:
+            fig = self._residual_plot_nd(residual_meta, residual_origin, bins, ctx)
 
         output_path = self._resolve_output(ctx, 'residual_analysis.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
@@ -459,6 +506,70 @@ class SGAVizAdapter:
             'summary': residual_summary,
         }
         return VizResult(intent='residual', paths=[output_path], metadata=metadata)
+
+    def _residual_plot_2d(self, residual_meta, residual_origin, bins, ctx):
+        """1D spatial (2D array): histogram + imshow heatmap."""
+        fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
+
+        axes[0, 0].hist(residual_meta.reshape(-1), bins=bins, color='#1f77b4', alpha=0.7, edgecolor='black')
+        axes[0, 0].set_title('Metadata Residual Distribution')
+        axes[0, 0].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 0].set_ylabel('Frequency')
+        axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        axes[0, 1].hist(residual_origin.reshape(-1), bins=bins, color='#ff7f0e', alpha=0.7, edgecolor='black')
+        axes[0, 1].set_title('Original Residual Distribution')
+        axes[0, 1].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        im_meta = axes[1, 0].imshow(residual_meta, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 0].set_title('Metadata Residual Heatmap')
+        axes[1, 0].set_xlabel('Time index')
+        axes[1, 0].set_ylabel('Space index')
+        fig.colorbar(im_meta, ax=axes[1, 0], fraction=0.046, pad=0.04)
+
+        im_orig = axes[1, 1].imshow(residual_origin, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 1].set_title('Original Residual Heatmap')
+        axes[1, 1].set_xlabel('Time index')
+        fig.colorbar(im_orig, ax=axes[1, 1], fraction=0.046, pad=0.04)
+
+        fig.tight_layout()
+        return fig
+
+    def _residual_plot_nd(self, residual_meta, residual_origin, bins, ctx):
+        """N-D spatial (3D+ array): pick middle time slice for 2D heatmap + histogram."""
+        # Time is last axis in (*spatial, t) layout
+        t_idx = residual_meta.shape[-1] // 2
+
+        fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
+
+        axes[0, 0].hist(residual_meta.reshape(-1), bins=bins, color='#1f77b4', alpha=0.7, edgecolor='black')
+        axes[0, 0].set_title('Metadata Residual Distribution')
+        axes[0, 0].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 0].set_ylabel('Frequency')
+        axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        axes[0, 1].hist(residual_origin.reshape(-1), bins=bins, color='#ff7f0e', alpha=0.7, edgecolor='black')
+        axes[0, 1].set_title('Original Residual Distribution')
+        axes[0, 1].set_xlabel('Residual (u_t - RHS)')
+        axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+
+        meta_slice = residual_meta[..., t_idx]
+        orig_slice = residual_origin[..., t_idx]
+
+        im_meta = axes[1, 0].imshow(meta_slice, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 0].set_title(f'Metadata Residual (t_idx={t_idx})')
+        axes[1, 0].set_xlabel('$x_2$ index')
+        axes[1, 0].set_ylabel('$x_1$ index')
+        fig.colorbar(im_meta, ax=axes[1, 0], fraction=0.046, pad=0.04)
+
+        im_orig = axes[1, 1].imshow(orig_slice, origin='lower', cmap='coolwarm', aspect='auto')
+        axes[1, 1].set_title(f'Original Residual (t_idx={t_idx})')
+        axes[1, 1].set_xlabel('$x_2$ index')
+        fig.colorbar(im_orig, ax=axes[1, 1], fraction=0.046, pad=0.04)
+
+        fig.tight_layout()
+        return fig
 
 
 __all__ = ['SGAVizAdapter']

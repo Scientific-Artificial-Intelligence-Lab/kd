@@ -49,17 +49,27 @@ def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None):
     
 from kd.viz.dlga_eq2latex import _format_full_latex_term
 
+from typing import Optional
+
 def discover_program_to_latex(program_object, # lhs_name_str,
                             # 可选参数，如果需要覆盖模块级的默认值
-                            custom_lhs_latex_map=None, 
-                            custom_deeprl_symbols=None):
+                            custom_lhs_latex_map=None,
+                            custom_deeprl_symbols=None,
+                            lhs_axis: Optional[str] = None):
     """
     Convert a Program object to a full LaTeX equation string.
+
+    Parameters
+    ----------
+    lhs_axis : str, optional
+        Axis name for the LHS derivative (e.g. 't', 'x', 'y').
+        Defaults to 't' → ``u_t``.
     """
     # 1. 处理 LHS
-    # current_lhs_map = custom_lhs_latex_map if custom_lhs_latex_map else DEFAULT_LATEX_STYLE_MAP
-    # lhs_latex = current_lhs_map.get(lhs_name_str, lhs_name_str)
-    lhs_latex = "u_t" # 我们目前 LHS 始终是 "u_t"
+    if lhs_axis is not None:
+        lhs_latex = f"u_{{{lhs_axis}}}"
+    else:
+        lhs_latex = "u_t"
 
     # 2. Validate program_object and required attributes.
     if not (program_object and \

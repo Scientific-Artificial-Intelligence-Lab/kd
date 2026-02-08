@@ -236,14 +236,17 @@ class DSCVVizAdapter:
         except Exception as exc:  # pragma: no cover - heavy upstream dependency
             return VizResult(intent='residual', warnings=[f'Unable to compute PDE fields: {exc}'])
 
+        n_spatial_dims = fields.get('n_spatial_dims', 1)
+        residuals = np.asarray(fields['residual']).reshape(-1)
+        actual = np.asarray(fields['ut_grid']).reshape(-1)
+        predicted = np.asarray(fields['y_hat_grid']).reshape(-1)
+
         try:
-            coords = np.asarray(fields['coords'])
-            residuals = np.asarray(fields['residual']).reshape(-1)
-            actual = np.asarray(fields['ut_grid']).reshape(-1)
-            predicted = np.asarray(fields['y_hat_grid']).reshape(-1)
+            coords = fields.get('coords')
+            if coords is not None:
+                coords = np.asarray(coords)
             residual_data = ResidualPlotData.from_actual_predicted(
-                actual,
-                predicted,
+                actual, predicted,
                 input_coordinates=coords,
             )
         except Exception as exc:
@@ -251,29 +254,11 @@ class DSCVVizAdapter:
 
         import matplotlib.pyplot as plt
 
-        fig = plt.figure(figsize=ctx.options.get('figsize', (12, 5)))
-        ax1 = fig.add_subplot(1, 2, 1)
-        sc = ax1.scatter(
-            coords[:, 1],
-            coords[:, 0],
-            c=residuals,
-            cmap=ctx.options.get('cmap', 'coolwarm'),
-            s=15,
-            alpha=0.8,
-        )
-        fig.colorbar(sc, ax=ax1, label='Residual ($u_t$ - RHS)')
-        ax1.set_xlabel('Time (index)')
-        ax1.set_ylabel('Space')
-        ax1.set_title('Spatiotemporal Residual Distribution')
+        if n_spatial_dims == 1:
+            fig = self._residual_plot_1d(residuals, coords, ctx)
+        else:
+            fig = self._residual_plot_nd(fields, residuals, ctx)
 
-        ax2 = fig.add_subplot(1, 2, 2)
-        ax2.hist(residuals, bins=int(ctx.options.get('bins', 40)), color='#1f77b4', alpha=0.7, edgecolor='black', density=True)
-        ax2.set_xlabel('Residual Value')
-        ax2.set_ylabel('Probability Density')
-        ax2.set_title('Residual Distribution')
-        ax2.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
-
-        fig.tight_layout()
         _, path = self._resolve_output(ctx, 'residual_analysis.png')
         fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
         try:
@@ -289,6 +274,68 @@ class DSCVVizAdapter:
         }
         return VizResult(intent='residual', paths=[path], metadata={'residual': residual_data, 'summary': summary})
 
+    def _residual_plot_1d(self, residuals, coords, ctx):
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure(figsize=ctx.options.get('figsize', (12, 5)))
+        ax1 = fig.add_subplot(1, 2, 1)
+        sc = ax1.scatter(
+            coords[:, 1], coords[:, 0], c=residuals,
+            cmap=ctx.options.get('cmap', 'coolwarm'), s=15, alpha=0.8,
+        )
+        fig.colorbar(sc, ax=ax1, label='Residual ($u_t$ - RHS)')
+        ax1.set_xlabel('Time (index)')
+        ax1.set_ylabel('Space')
+        ax1.set_title('Spatiotemporal Residual Distribution')
+
+        ax2 = fig.add_subplot(1, 2, 2)
+        ax2.hist(residuals, bins=int(ctx.options.get('bins', 40)), color='#1f77b4', alpha=0.7, edgecolor='black', density=True)
+        ax2.set_xlabel('Residual Value')
+        ax2.set_ylabel('Probability Density')
+        ax2.set_title('Residual Distribution')
+        ax2.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+        fig.tight_layout()
+        return fig
+
+    def _residual_plot_nd(self, fields, residuals, ctx):
+        """2D+ spatial: heatmap of residuals at a selected time step + histogram."""
+        import matplotlib.pyplot as plt
+
+        ut_grid = fields['ut_grid']
+        y_hat_grid = fields['y_hat_grid']
+        spatial_coords = fields['spatial_coords_list']
+        t_axis = fields['t_axis']
+
+        residual_grid = ut_grid - y_hat_grid
+        # Pick middle time step
+        t_idx = residual_grid.shape[0] // 2
+
+        fig = plt.figure(figsize=ctx.options.get('figsize', (12, 5)))
+        ax1 = fig.add_subplot(1, 2, 1)
+
+        y_coords = spatial_coords[0]
+        x_coords = spatial_coords[1]
+        residual_slice = residual_grid[t_idx]
+        vabs = float(np.max(np.abs(residual_slice)))
+        im = ax1.pcolormesh(
+            x_coords, y_coords, residual_slice,
+            cmap=ctx.options.get('cmap', 'coolwarm'),
+            vmin=-vabs, vmax=vabs, shading='auto',
+        )
+        fig.colorbar(im, ax=ax1, label='Residual')
+        ax1.set_title(f'Residual (t={t_axis[t_idx]:.2f})')
+        ax1.set_xlabel('$x_2$')
+        ax1.set_ylabel('$x_1$')
+
+        ax2 = fig.add_subplot(1, 2, 2)
+        ax2.hist(residuals, bins=int(ctx.options.get('bins', 40)), color='#1f77b4', alpha=0.7, edgecolor='black', density=True)
+        ax2.set_xlabel('Residual Value')
+        ax2.set_ylabel('Probability Density')
+        ax2.set_title('Residual Distribution')
+        ax2.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+        fig.tight_layout()
+        return fig
+
     def _field_comparison(self, model, ctx) -> VizResult:
         program = self._get_best_program(model)
         if program is None:
@@ -299,20 +346,41 @@ class DSCVVizAdapter:
         except Exception as exc:
             return VizResult(intent='field_comparison', warnings=[f'Unable to compute PDE fields: {exc}'])
 
+        n_spatial_dims = fields.get('n_spatial_dims', 1)
+
         try:
-            x_axis = np.asarray(fields['x_axis'])
             t_axis = np.asarray(fields['t_axis'])
             true_field = np.asarray(fields['ut_grid'])
             pred_field = np.asarray(fields['y_hat_grid'])
-            data = FieldComparisonData(
-                x_coords=x_axis,
-                t_coords=t_axis,
-                true_field=true_field,
-                predicted_field=pred_field,
-            )
+
+            if n_spatial_dims == 1:
+                x_axis = np.asarray(fields['x_axis'])
+                data = FieldComparisonData(
+                    x_coords=x_axis, t_coords=t_axis,
+                    true_field=true_field, predicted_field=pred_field,
+                )
+            else:
+                spatial_coords = fields['spatial_coords_list']
+                # DSCV N-D returns (nt, *spatial) — transpose to (*spatial, t) for contract
+                n_dims = true_field.ndim
+                perm = list(range(1, n_dims)) + [0]
+                data = FieldComparisonData(
+                    spatial_coords=spatial_coords, t_coords=t_axis,
+                    true_field=np.transpose(true_field, perm),
+                    predicted_field=np.transpose(pred_field, perm),
+                )
         except Exception as exc:
             return VizResult(intent='field_comparison', warnings=[f'Failed to build field comparison data: {exc}'])
 
+        import matplotlib.pyplot as plt
+
+        if n_spatial_dims == 1:
+            return self._field_comparison_1d(data, ctx)
+
+        # --- 2D spatial: show selected time steps as 2D heatmaps ---
+        return self._field_comparison_nd(data, ctx)
+
+    def _field_comparison_1d(self, data: FieldComparisonData, ctx) -> VizResult:
         import matplotlib.pyplot as plt
 
         fig, axes = plt.subplots(1, 2, figsize=ctx.options.get('figsize', (14, 6)), sharey=True)
@@ -333,6 +401,63 @@ class DSCVVizAdapter:
         axes[1].set_xlabel('Time')
 
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        _, path = self._resolve_output(ctx, 'field_comparison.png')
+        fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        try:
+            plt.close(fig)
+        except Exception:
+            pass
+
+        return VizResult(intent='field_comparison', paths=[path], metadata={'field_comparison': data})
+
+    def _field_comparison_nd(self, data: FieldComparisonData, ctx) -> VizResult:
+        """2D+ spatial field comparison: show 2D heatmaps at selected time steps."""
+        import matplotlib.pyplot as plt
+
+        nt = data.t_coords.size
+        # Pick up to 3 time steps: first, middle, last
+        if nt <= 3:
+            t_indices = list(range(nt))
+        else:
+            t_indices = [0, nt // 2, nt - 1]
+
+        n_cols = len(t_indices)
+        fig, axes = plt.subplots(2, n_cols, figsize=ctx.options.get('figsize', (5 * n_cols, 8)))
+        fig.suptitle(ctx.options.get('title', 'Predicted vs True Field (2D spatial)'), fontsize=16)
+        if n_cols == 1:
+            axes = axes.reshape(2, 1)
+
+        vmin = float(np.min([data.true_field.min(), data.predicted_field.min()]))
+        vmax = float(np.max([data.true_field.max(), data.predicted_field.max()]))
+        cmap = ctx.options.get('cmap', 'viridis')
+
+        y_coords = data.spatial_coords[0]
+        x_coords = data.spatial_coords[1]
+
+        for col_idx, t_idx in enumerate(t_indices):
+            true_slice = data.true_field[..., t_idx]
+            pred_slice = data.predicted_field[..., t_idx]
+
+            im0 = axes[0, col_idx].pcolormesh(
+                x_coords, y_coords, true_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[0, col_idx].set_title(f'True (t={data.t_coords[t_idx]:.2f})')
+            axes[0, col_idx].set_xlabel('$x_2$')
+            if col_idx == 0:
+                axes[0, col_idx].set_ylabel('$x_1$')
+
+            im1 = axes[1, col_idx].pcolormesh(
+                x_coords, y_coords, pred_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[1, col_idx].set_title(f'Predicted (t={data.t_coords[t_idx]:.2f})')
+            axes[1, col_idx].set_xlabel('$x_2$')
+            if col_idx == 0:
+                axes[1, col_idx].set_ylabel('$x_1$')
+
+        fig.colorbar(im0, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
+        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
         _, path = self._resolve_output(ctx, 'field_comparison.png')
         fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
         try:
