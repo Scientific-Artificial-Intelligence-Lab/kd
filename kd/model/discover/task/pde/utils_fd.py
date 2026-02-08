@@ -186,7 +186,7 @@ def Diff2_2(u, dxt, name=1):
         # uxt[:,:,n - 1] = (2 * u[:,:,n - 1] - 5 * u[:,:,n - 2] + 4 * u[:,:,n - 3] - u[:,:,n - 4]) / dxt ** 2
         
     else:
-        NotImplementedError()
+        raise NotImplementedError(f"Diff2_2: name={name} not supported")
 # except:
     #     import pdb;pdb.set_trace()
 
@@ -220,7 +220,6 @@ def Diff_3(u, dxt, name=1):
     t,n,m,p = u.shape
     uxt = np.zeros((t, n, m, p))
     if len(dxt.shape) == 2:
-        import pdb;pdb.set_trace()
         dxt = dxt[:,0]
     dxt = dxt.ravel()
     # import pdb;pdb.set_trace()
@@ -286,5 +285,5 @@ def Diff2_3(u, dxt, name=1):
         uxt[:,:,:,0] = (2 * u[:,:,:,0] - 5 * u[:,:,:,1] + 4 * u[:,:,:,2] - u[:,:,:,3]) / dxt ** 2
         uxt[:,:,:,p - 1] = (2 * u[:,:,:,p - 1] - 5 * u[:,:,:,p - 2] + 4 * u[:,:,:,p - 3] - u[:,:,:,p- 4]) / dxt ** 2
     else:
-        NotImplementedError()
+        raise NotImplementedError(f"Diff2_3: name={name} not supported")
     return uxt  # Fixed: original DISCOVER missing return in this function

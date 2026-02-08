@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from kd.model.discover.task.pde.utils_fd import FiniteDiff
+from kd.model.discover.task.pde.utils_fd import FiniteDiff, Diff_3, Diff2_3, Laplace_3
 from kd.dataset import get_dataset_sym_true, load_pde, PDEDataset
 from kd.model.discover.adapter import DSCVRegularAdapter, DSCVSparseAdapter
 from kd.model.kd_dscv import KD_DSCV, KD_DSCV_SPR
@@ -989,3 +989,258 @@ class TestDSCVAdapterEdgeCases:
 
         with pytest.raises(ValueError, match="both fields_data and coords_1d"):
             DSCVRegularAdapter(dataset)
+
+
+# ==========================================================================
+# Phase 1b: 3D Equivalence & End-to-End Tests
+# ==========================================================================
+
+def _make_3d_analytic_data(
+    nx: int = 20, ny: int = 20, nz: int = 20, nt: int = 15
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Create a 3D+t dataset with known analytic derivatives.
+
+    u = sin(pi*x) * cos(pi*y) * sin(pi*z) * exp(-t)
+
+    Returns (u_4d, x, y, z, t) where u_4d.shape = (nt, nx, ny, nz)
+    (time-first, matching DISCOVER convention).
+    """
+    x = np.linspace(0, 1, nx)
+    y = np.linspace(0, 1, ny)
+    z = np.linspace(0, 1, nz)
+    t = np.linspace(0, 0.5, nt)
+    # Build meshgrid in (x, y, z, t) order, then transpose to (t, x, y, z)
+    X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+    u_raw = np.sin(np.pi * X) * np.cos(np.pi * Y) * np.sin(np.pi * Z) * np.exp(-T)
+    # Transpose from (nx, ny, nz, nt) to (nt, nx, ny, nz)
+    u_4d = np.transpose(u_raw, (3, 0, 1, 2))
+    return u_4d, x, y, z, t
+
+
+class TestPhase1b3DEquivalence:
+    """Phase 1b: 3D FD equivalence tests against analytical derivatives."""
+
+    # ------------------------------------------------------------------
+    # Diff2_3 tests (second derivative)
+    # ------------------------------------------------------------------
+
+    def test_diff2_3_axis1_interior(self):
+        """Diff2_3(name=1) interior accuracy: d2u/dx2 = -pi^2 * u."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff2_3(u, x, name=1)
+        expected = -(np.pi ** 2) * u
+        # Interior only: skip 2 boundary points on axis 1
+        np.testing.assert_allclose(
+            result[:, 2:-2, :, :],
+            expected[:, 2:-2, :, :],
+            atol=0.5,
+            rtol=0.05,
+        )
+
+    def test_diff2_3_axis2_interior(self):
+        """Diff2_3(name=2) interior accuracy: d2u/dy2 = -pi^2 * u."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff2_3(u, y, name=2)
+        expected = -(np.pi ** 2) * u
+        np.testing.assert_allclose(
+            result[:, :, 2:-2, :],
+            expected[:, :, 2:-2, :],
+            atol=0.5,
+            rtol=0.05,
+        )
+
+    def test_diff2_3_axis3_interior(self):
+        """Diff2_3(name=3) interior accuracy: d2u/dz2 = -pi^2 * u."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff2_3(u, z, name=3)
+        expected = -(np.pi ** 2) * u
+        np.testing.assert_allclose(
+            result[:, :, :, 2:-2],
+            expected[:, :, :, 2:-2],
+            atol=0.5,
+            rtol=0.05,
+        )
+
+    def test_diff2_3_shape_preserved(self):
+        """Diff2_3 output shape must match input shape."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=10, ny=12, nz=8, nt=5)
+        for axis_idx, coord in [(1, x), (2, y), (3, z)]:
+            result = Diff2_3(u, coord, name=axis_idx)
+            assert result.shape == u.shape, (
+                f"Diff2_3(name={axis_idx}) changed shape: "
+                f"{result.shape} != {u.shape}"
+            )
+
+    def test_diff2_3_boundary_finite(self):
+        """Boundary stencil should produce finite values (no NaN/Inf)."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=10, ny=10, nz=10, nt=5)
+        for axis_idx, coord in [(1, x), (2, y), (3, z)]:
+            result = Diff2_3(u, coord, name=axis_idx)
+            assert np.all(np.isfinite(result)), (
+                f"Diff2_3(name={axis_idx}) produced NaN/Inf at boundary"
+            )
+
+    def test_diff2_3_boundary_loose_tolerance(self):
+        """Boundary points should be within a loose tolerance."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        expected = -(np.pi ** 2) * u
+        for axis_idx, coord in [(1, x), (2, y), (3, z)]:
+            result = Diff2_3(u, coord, name=axis_idx)
+            # Boundary included — use a very loose tolerance
+            np.testing.assert_allclose(result, expected, atol=5.0, rtol=0.5)
+
+    # ------------------------------------------------------------------
+    # Laplace_3 tests
+    # ------------------------------------------------------------------
+
+    def test_laplace_3_interior(self):
+        """Laplace_3 interior accuracy: nabla^2 u = -3*pi^2 * u."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Laplace_3(u, [x, y, z])
+        expected = -3 * (np.pi ** 2) * u
+        # Skip 2 boundary points on ALL spatial axes
+        np.testing.assert_allclose(
+            result[:, 2:-2, 2:-2, 2:-2],
+            expected[:, 2:-2, 2:-2, 2:-2],
+            atol=1.5,
+            rtol=0.05,
+        )
+
+    def test_laplace_3_shape(self):
+        """Laplace_3 output shape must match input."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=8, ny=10, nz=6, nt=5)
+        result = Laplace_3(u, [x, y, z])
+        assert result.shape == u.shape
+
+    def test_laplace_3_finite(self):
+        """Laplace_3 output must be entirely finite."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=8, ny=8, nz=8, nt=5)
+        result = Laplace_3(u, [x, y, z])
+        assert np.all(np.isfinite(result))
+
+    # ------------------------------------------------------------------
+    # Diff_3 tests (first derivative)
+    # ------------------------------------------------------------------
+
+    def test_diff_3_axis1_interior(self):
+        """Diff_3(name=1): du/dx = pi*cos(pi*x)*cos(pi*y)*sin(pi*z)*exp(-t)."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff_3(u, x, name=1)
+        X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+        expected_raw = (
+            np.pi * np.cos(np.pi * X) * np.cos(np.pi * Y)
+            * np.sin(np.pi * Z) * np.exp(-T)
+        )
+        expected = np.transpose(expected_raw, (3, 0, 1, 2))
+        np.testing.assert_allclose(
+            result[:, 2:-2, :, :],
+            expected[:, 2:-2, :, :],
+            atol=0.3,
+            rtol=0.05,
+        )
+
+    def test_diff_3_axis2_interior(self):
+        """Diff_3(name=2): du/dy = -pi*sin(pi*x)*sin(pi*y)*sin(pi*z)*exp(-t)."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff_3(u, y, name=2)
+        X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+        expected_raw = (
+            -np.pi * np.sin(np.pi * X) * np.sin(np.pi * Y)
+            * np.sin(np.pi * Z) * np.exp(-T)
+        )
+        expected = np.transpose(expected_raw, (3, 0, 1, 2))
+        np.testing.assert_allclose(
+            result[:, :, 2:-2, :],
+            expected[:, :, 2:-2, :],
+            atol=0.3,
+            rtol=0.05,
+        )
+
+    def test_diff_3_axis3_interior(self):
+        """Diff_3(name=3): du/dz = pi*sin(pi*x)*cos(pi*y)*cos(pi*z)*exp(-t)."""
+        u, x, y, z, t = _make_3d_analytic_data()
+        result = Diff_3(u, z, name=3)
+        X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+        expected_raw = (
+            np.pi * np.sin(np.pi * X) * np.cos(np.pi * Y)
+            * np.cos(np.pi * Z) * np.exp(-T)
+        )
+        expected = np.transpose(expected_raw, (3, 0, 1, 2))
+        np.testing.assert_allclose(
+            result[:, :, :, 2:-2],
+            expected[:, :, :, 2:-2],
+            atol=0.3,
+            rtol=0.05,
+        )
+
+    def test_diff_3_shape_preserved(self):
+        """Diff_3 output shape must match input shape."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=10, ny=12, nz=8, nt=5)
+        for axis_idx, coord in [(1, x), (2, y), (3, z)]:
+            result = Diff_3(u, coord, name=axis_idx)
+            assert result.shape == u.shape
+
+    def test_diff_3_boundary_finite(self):
+        """Diff_3 boundary stencil should produce finite values."""
+        u, x, y, z, t = _make_3d_analytic_data(nx=10, ny=10, nz=10, nt=5)
+        for axis_idx, coord in [(1, x), (2, y), (3, z)]:
+            result = Diff_3(u, coord, name=axis_idx)
+            assert np.all(np.isfinite(result))
+
+    # ------------------------------------------------------------------
+    # 3D End-to-End Pipeline Smoke Test
+    # ------------------------------------------------------------------
+
+    def test_3d_e2e_import_dataset(self, monkeypatch):
+        """3D dataset flows through KD_DSCV.import_dataset without error."""
+        dataset = _make_nd_3d_dataset()
+        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        model.import_dataset(dataset)
+
+        # Verify adapter type
+        assert isinstance(model.data_class, DSCVRegularAdapter)
+
+        # Verify 3D function_set tokens
+        fs = captured["function_set"]
+        assert "Diff_3" in fs, f"Missing Diff_3 in {fs}"
+        assert "Diff2_3" in fs, f"Missing Diff2_3 in {fs}"
+        assert "lap_3" in fs, f"Missing lap_3 in {fs}"
+
+        # 1D/2D tokens must NOT be present
+        assert "diff" not in fs
+        assert "diff2" not in fs
+        assert "Diff" not in fs
+        assert "Diff2" not in fs
+        assert "lap" not in fs
+
+    def test_3d_e2e_data_shapes(self):
+        """Verify data shapes after 3D adapter processing."""
+        dataset = _make_nd_3d_dataset()
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        nx, ny, nz, nt = 6, 7, 5, 10
+        assert data["u"].shape == (nt, nx, ny, nz)
+        assert data["ut"].shape == (nt, nx, ny, nz)
+
+        # ut can be flattened for PDETask.load_data (ut.reshape(-1,1))
+        ut_flat = data["ut"].reshape(-1, 1)
+        assert ut_flat.shape == (nt * nx * ny * nz, 1)
+        assert np.all(np.isfinite(ut_flat))
