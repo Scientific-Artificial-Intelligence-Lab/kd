@@ -285,6 +285,8 @@ class KD_DSCV(BaseRL):
         config_update = safe_merge_dicts(base_config, config)
         self.config = defaultdict(dict, config_update)
         self.config_task = self.config["task"]
+        # Snapshot original function_set for safe reset on re-import.
+        self._base_function_set = list(self.config_task.get("function_set", []))
         self.config_prior = self.config["prior"]
         self.config_state_manager = self.config["state_manager"]
         self.config_controller = self.config["controller"]
@@ -352,6 +354,19 @@ class KD_DSCV(BaseRL):
                             )
         return searcher
 
+    # Diff tokens for each spatial dimension (used for auto function_set).
+    _DIFF_TOKENS_BY_DIM = {
+        1: ["diff", "diff2", "diff3"],
+        2: ["Diff", "Diff2", "lap"],
+        3: ["Diff_3", "Diff2_3"],
+    }
+    # All diff-family tokens across all dimensions (used to strip before replacing).
+    _ALL_DIFF_TOKENS = {
+        "diff", "diff2", "diff3", "diff4",
+        "Diff", "Diff2", "lap",
+        "Diff_3", "Diff2_3",
+    }
+
     def set_task(self):
         """Set task configuration and optimizer."""
         # Set the constant optimizer
@@ -363,9 +378,39 @@ class KD_DSCV(BaseRL):
         self.config_task['dataset'] = self.dataset
         if len(self.operator) > 0:
             self.config_task['function_set'] = self.operator
-        
+        else:
+            self._auto_select_function_set()
+
         assert self.data_class is not None, "Dataset should be made before setting task"
         set_task(self.config_task, self.data_class.get_data())
+
+    def _auto_select_function_set(self) -> None:
+        """Replace default 1D diff tokens with dimension-appropriate ones.
+
+        Only activates when the user did not specify ``operator`` and
+        ``n_input_dim > 1``.  Preserves non-diff tokens (add, mul, etc.).
+
+        Always resets from ``_base_function_set`` to avoid stale tokens
+        when the same ``KD_DSCV`` instance is reused across datasets.
+        """
+        # Reset to base config snapshot to avoid stale mutations.
+        self.config_task["function_set"] = list(self._base_function_set)
+
+        if self.data_class is None:
+            return
+        data = self.data_class.get_data()
+        n_dim = data.get("n_input_dim", 1)
+        if n_dim <= 1:
+            return
+        if n_dim not in self._DIFF_TOKENS_BY_DIM:
+            return
+
+        # Strip ALL diff-family tokens (across all dims) to avoid duplicates,
+        # then inject exactly the target-dimension tokens.
+        current = list(self._base_function_set)
+        non_diff = [t for t in current if t not in self._ALL_DIFF_TOKENS]
+        new_diff = self._DIFF_TOKENS_BY_DIM[n_dim]
+        self.config_task["function_set"] = list(dict.fromkeys(new_diff + non_diff))
 
     def set_seeds(self, new_seed):
         """Set random seeds for reproducibility.

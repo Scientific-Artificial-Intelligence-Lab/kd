@@ -349,3 +349,597 @@ def test_kd_dscv_gp_aggregator_is_disabled_in_kd(monkeypatch):
         agg = model.make_gp_aggregator()
 
     assert agg is None
+
+
+# ==========================================================================
+# N-D Adapter Tests
+# ==========================================================================
+
+
+def _make_nd_2d_dataset():
+    """Create a 2D spatial (x, y, t) PDEDataset with known analytic solution."""
+    nx, ny, nt = 10, 12, 15
+    x = np.linspace(0, np.pi, nx)
+    y = np.linspace(0, np.pi, ny)
+    t = np.linspace(0, 1.0, nt)
+    X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+    u = np.sin(X) * np.cos(Y) * np.exp(-T)
+    return PDEDataset(
+        equation_name="synthetic-2d",
+        fields_data={"u": u},
+        coords_1d={"x": x, "y": y, "t": t},
+        axis_order=["x", "y", "t"],
+        target_field="u",
+        lhs_axis="t",
+    )
+
+
+def _make_nd_3d_dataset():
+    """Create a 3D spatial (x, y, z, t) PDEDataset."""
+    nx, ny, nz, nt = 6, 7, 5, 10
+    x = np.linspace(0, 1, nx)
+    y = np.linspace(0, 1, ny)
+    z = np.linspace(0, 1, nz)
+    t = np.linspace(0, 0.5, nt)
+    X, Y, Z, T = np.meshgrid(x, y, z, t, indexing="ij")
+    u = np.sin(X) * np.cos(Y) * np.sin(Z) * np.exp(-T)
+    return PDEDataset(
+        equation_name="synthetic-3d",
+        fields_data={"u": u},
+        coords_1d={"x": x, "y": y, "z": z, "t": t},
+        axis_order=["x", "y", "z", "t"],
+        target_field="u",
+        lhs_axis="t",
+    )
+
+
+class TestDSCVAdapterND2D:
+    """Tests for 2D spatial (x, y, t) adapter path."""
+
+    def test_shapes_and_fields(self):
+        dataset = _make_nd_2d_dataset()
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        assert set(data.keys()) >= {"u", "ut", "X", "n_input_dim"}
+
+        # dso expects u.shape = (nt, nx, ny) for 2D spatial
+        nx, ny, nt = 10, 12, 15
+        assert data["u"].shape == (nt, nx, ny)
+        assert data["ut"].shape == (nt, nx, ny)
+
+        # X should have 2 spatial coord columns
+        assert len(data["X"]) == 2
+        assert data["X"][0].shape == (nx, 1)
+        assert data["X"][1].shape == (ny, 1)
+        assert data["n_input_dim"] == 2
+
+    def test_ut_numerical_accuracy(self):
+        """Verify ut matches analytic derivative for u = sin(x)*cos(y)*exp(-t)."""
+        dataset = _make_nd_2d_dataset()
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        # Analytic: du/dt = -sin(x)*cos(y)*exp(-t)
+        nx, ny, nt = 10, 12, 15
+        x = np.linspace(0, np.pi, nx)
+        y = np.linspace(0, np.pi, ny)
+        t = np.linspace(0, 1.0, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        ut_analytic_raw = -np.sin(X) * np.cos(Y) * np.exp(-T)
+        # After permute: (nt, nx, ny)
+        ut_analytic = np.transpose(ut_analytic_raw, (2, 0, 1))
+
+        # FD approximation should be close to analytic (not exact due to FD error)
+        np.testing.assert_allclose(data["ut"], ut_analytic, atol=0.05)
+
+
+class TestDSCVAdapterND3D:
+    """Tests for 3D spatial (x, y, z, t) adapter path."""
+
+    def test_shapes_and_fields(self):
+        dataset = _make_nd_3d_dataset()
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        assert set(data.keys()) >= {"u", "ut", "X", "n_input_dim"}
+
+        nx, ny, nz, nt = 6, 7, 5, 10
+        # dso expects u.shape = (nt, nx, ny, nz) for 3D spatial
+        assert data["u"].shape == (nt, nx, ny, nz)
+        assert data["ut"].shape == (nt, nx, ny, nz)
+
+        assert len(data["X"]) == 3
+        assert data["X"][0].shape == (nx, 1)
+        assert data["X"][1].shape == (ny, 1)
+        assert data["X"][2].shape == (nz, 1)
+        assert data["n_input_dim"] == 3
+
+
+class TestDSCVAdapterLegacyUnchanged:
+    """Confirm legacy 1D path is not affected by N-D changes."""
+
+    def test_legacy_adapter_identical_output(self):
+        dataset = load_pde("chafee-infante")
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        # Same assertions as the original test
+        assert data["u"].shape == dataset.usol.shape
+        assert data["ut"].shape == dataset.usol.shape
+        assert len(data["X"]) == 1
+        assert data["X"][0].shape == (dataset.usol.shape[0], 1)
+        assert data["n_input_dim"] == 1
+
+
+class TestDSCVAdapterNDPermutation:
+    """Verify correct axis permutation for non-standard axis_order."""
+
+    def test_txy_order(self):
+        """axis_order=["t","x","y"] should still produce (nt, nx, ny) output."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        # axis_order is ["t", "x", "y"], so u.shape = (nt, nx, ny)
+        T, X, Y = np.meshgrid(t, x, y, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-txy",
+            fields_data={"u": u},
+            coords_1d={"t": t, "x": x, "y": y},
+            axis_order=["t", "x", "y"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        # Output should be (nt, nx, ny) — time first, same as input in this case
+        assert data["u"].shape == (nt, nx, ny)
+        assert data["n_input_dim"] == 2
+        assert len(data["X"]) == 2
+
+    def test_yxt_order(self):
+        """axis_order=["y","x","t"] should permute to (nt, y, x) → (nt, nx_y, nx_x)."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        # axis_order is ["y", "x", "t"], so u.shape = (ny, nx, nt)
+        Y, X, T = np.meshgrid(y, x, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-yxt",
+            fields_data={"u": u},
+            coords_1d={"y": y, "x": x, "t": t},
+            axis_order=["y", "x", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        # Should be permuted to (nt, ny, nx) — time first, then spatial in order
+        assert data["u"].shape == (nt, ny, nx)
+        assert data["n_input_dim"] == 2
+        # X list follows spatial_axes order: ["y", "x"]
+        assert data["X"][0].shape == (ny, 1)
+        assert data["X"][1].shape == (nx, 1)
+
+
+# ==========================================================================
+# function_set Auto-Selection Tests
+# ==========================================================================
+
+
+class TestAutoFunctionSet:
+    """Tests for automatic function_set selection based on n_input_dim."""
+
+    def test_auto_function_set_2d(self, monkeypatch):
+        """2D data should auto-select Diff/Diff2/lap (not 1D diff tokens)."""
+        dataset = _make_nd_2d_dataset()
+        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        model.import_dataset(dataset)
+
+        fs = captured["function_set"]
+        assert "Diff" in fs
+        assert "Diff2" in fs
+        assert "lap" in fs
+        # 1D tokens should not be present
+        assert "diff" not in fs
+        assert "diff2" not in fs
+        assert "diff3" not in fs
+        # Non-diff tokens preserved
+        assert "add" in fs
+        assert "mul" in fs
+
+    def test_auto_function_set_3d(self, monkeypatch):
+        """3D data should auto-select Diff_3/Diff2_3."""
+        dataset = _make_nd_3d_dataset()
+        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        model.import_dataset(dataset)
+
+        fs = captured["function_set"]
+        assert "Diff_3" in fs
+        assert "Diff2_3" in fs
+        assert "diff" not in fs
+
+    def test_user_operator_overrides(self, monkeypatch):
+        """User-specified operator should not be overridden by auto-selection."""
+        dataset = _make_nd_2d_dataset()
+        model = KD_DSCV(
+            n_iterations=1,
+            n_samples_per_batch=10,
+            binary_operators=["add"],
+            unary_operators=["Diff"],
+        )
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        model.import_dataset(dataset)
+
+        fs = captured["function_set"]
+        assert fs == ["add", "Diff"]
+
+    def test_1d_function_set_unchanged(self, monkeypatch):
+        """1D data should keep the default function_set from config."""
+        dataset = load_pde("chafee-infante")
+        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        model.import_dataset(dataset)
+
+        fs = captured["function_set"]
+        # Default config: ["add", "mul", "div", "diff","diff2", "diff3","n2","n3"]
+        assert "diff" in fs
+        assert "diff2" in fs
+        assert "diff3" in fs
+
+    def test_reimport_resets_function_set(self, monkeypatch):
+        """Reusing a KD_DSCV instance across 2D then 1D datasets must reset tokens."""
+        ds_2d = _make_nd_2d_dataset()
+        ds_1d = load_pde("chafee-infante")
+        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+
+        captured = {}
+
+        original_set_task = KD_DSCV.set_task
+
+        def capture_set_task(self):
+            original_set_task(self)
+            captured["function_set"] = list(self.config_task["function_set"])
+
+        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+
+        def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
+            return {"program": None, "expression": "u_t = 0", "r": 0.0}
+
+        monkeypatch.setattr(Searcher, "search", fake_search, raising=False)
+
+        # First import: 2D → should get Diff/Diff2/lap
+        model.import_dataset(ds_2d)
+        fs_2d = captured["function_set"]
+        assert "Diff" in fs_2d
+        assert "diff" not in fs_2d
+
+        # Second import: 1D → must reset back to 1D diff tokens
+        model.import_dataset(ds_1d)
+        fs_1d = captured["function_set"]
+        assert "diff" in fs_1d
+        assert "diff2" in fs_1d
+        assert "Diff" not in fs_1d
+        assert "Diff2" not in fs_1d
+
+
+# ==========================================================================
+# Edge Case Tests (from Codex review)
+# ==========================================================================
+
+
+class TestDSCVAdapterEdgeCases:
+    """Edge cases identified by Codex reviews."""
+
+    def test_1d_via_nd_path_rejected(self):
+        """1D dataset constructed in N-D mode should be rejected by _prepare_nd()."""
+        nx, nt = 10, 15
+        x = np.linspace(0, 1, nx)
+        t = np.linspace(0, 0.5, nt)
+        X, T = np.meshgrid(x, t, indexing="ij")
+        u = np.sin(X) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-1d-nd",
+            fields_data={"u": u},
+            coords_1d={"x": x, "t": t},
+            axis_order=["x", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="2-3 spatial dimensions"):
+            DSCVRegularAdapter(dataset)
+
+    def test_nd_minimum_time_points(self):
+        """N-D adapter requires >= 3 time samples for FiniteDiff."""
+        nx, ny, nt = 8, 10, 2  # only 2 time points
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-2d-short",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="at least 3 samples"):
+            DSCVRegularAdapter(dataset)
+
+    def test_legacy_minimum_time_points(self):
+        """Legacy adapter requires >= 3 time samples for FiniteDiff."""
+        x = np.linspace(0, 1, 10)
+        t = np.array([0.0, 0.5])  # only 2 time points
+        X, T = np.meshgrid(x, t, indexing="ij")
+        u = np.sin(X) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-1d-short",
+            pde_data=None,
+            domain={"x": (0.0, 1.0), "t": (0.0, 0.5)},
+            epi=1e-3,
+            x=x,
+            t=t,
+            usol=u,
+        )
+
+        with pytest.raises(ValueError, match="at least 3 temporal samples"):
+            DSCVRegularAdapter(dataset)
+
+    def test_nd_non_uniform_dt_rejected(self):
+        """Non-uniform time grid should be rejected in N-D mode."""
+        nx, ny = 8, 10
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.array([0.0, 0.1, 0.3, 0.7, 1.0])  # non-uniform
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-2d-nu",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="evenly spaced"):
+            DSCVRegularAdapter(dataset)
+
+    def test_lhs_axis_missing_rejected(self):
+        """Missing lhs_axis in axis_order should raise ValueError at dataset creation."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        # PDEDataset validates lhs_axis at construction time
+        with pytest.raises(ValueError, match="lhs_axis.*must be in axis_order"):
+            PDEDataset(
+                equation_name="synthetic-2d-bad-lhs",
+                fields_data={"u": u},
+                coords_1d={"x": x, "y": y, "t": t},
+                axis_order=["x", "y", "t"],
+                target_field="u",
+                lhs_axis="z",
+            )
+
+    def test_too_many_spatial_dims_rejected(self):
+        """More than 3 spatial dimensions should be rejected."""
+        n = 4
+        axes = ["x", "y", "z", "w", "t"]
+        coords = {a: np.linspace(0, 1, n) for a in axes}
+        grids = np.meshgrid(*[coords[a] for a in axes], indexing="ij")
+        u = grids[0] + grids[1]  # arbitrary
+
+        dataset = PDEDataset(
+            equation_name="synthetic-4d",
+            fields_data={"u": u},
+            coords_1d=coords,
+            axis_order=axes,
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="2-3 spatial dimensions"):
+            DSCVRegularAdapter(dataset)
+
+    def test_legacy_nan_input_rejected(self):
+        """Legacy path should reject u containing NaN."""
+        x = np.linspace(0, 1, 10)
+        t = np.linspace(0, 0.5, 15)
+        X, T = np.meshgrid(x, t, indexing="ij")
+        u = np.sin(X) * np.exp(-T)
+        u[3, 5] = np.nan
+
+        dataset = PDEDataset(
+            equation_name="synthetic-nan",
+            pde_data=None,
+            domain={"x": (0.0, 1.0), "t": (0.0, 0.5)},
+            epi=1e-3,
+            x=x,
+            t=t,
+            usol=u,
+        )
+
+        with pytest.raises(ValueError, match="NaN or Inf"):
+            DSCVRegularAdapter(dataset)
+
+    def test_nd_nan_input_rejected(self):
+        """N-D path should reject u containing NaN."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+        u[2, 3, 4] = np.inf
+
+        dataset = PDEDataset(
+            equation_name="synthetic-2d-inf",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="NaN or Inf"):
+            DSCVRegularAdapter(dataset)
+
+    def test_legacy_zero_delta_t_rejected(self):
+        """Legacy path should reject degenerate time grid (delta_t == 0)."""
+        x = np.linspace(0, 1, 10)
+        t = np.array([0.0, 0.0, 0.0])  # all identical timestamps
+        X, T = np.meshgrid(x, t, indexing="ij")
+        u = np.sin(X) * np.ones_like(T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-zero-dt",
+            pde_data=None,
+            domain={"x": (0.0, 1.0), "t": (0.0, 0.0)},
+            epi=1e-3,
+            x=x,
+            t=t,
+            usol=u,
+        )
+
+        with pytest.raises(ValueError, match="delta_t is zero"):
+            DSCVRegularAdapter(dataset)
+
+    def test_nd_zero_delta_t_rejected(self):
+        """N-D path should reject degenerate time grid (delta_t == 0)."""
+        nx, ny = 8, 10
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.array([1.0, 1.0, 1.0])  # all identical
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.ones_like(T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-2d-zero-dt",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="zero"):
+            DSCVRegularAdapter(dataset)
+
+    def test_xty_permutation(self):
+        """axis_order=["x","t","y"] — t in the middle — should still work."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        t = np.linspace(0, 0.5, nt)
+        y = np.linspace(0, 1, ny)
+        # axis_order is ["x", "t", "y"], so u.shape = (nx, nt, ny)
+        X, T, Y = np.meshgrid(x, t, y, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-xty",
+            fields_data={"u": u},
+            coords_1d={"x": x, "t": t, "y": y},
+            axis_order=["x", "t", "y"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        adapter = DSCVRegularAdapter(dataset)
+        data = adapter.get_data()
+
+        # Should be permuted to (nt, nx, ny)
+        assert data["u"].shape == (nt, nx, ny)
+        assert data["ut"].shape == (nt, nx, ny)
+        assert data["n_input_dim"] == 2
+        assert len(data["X"]) == 2
+        assert data["X"][0].shape == (nx, 1)
+        assert data["X"][1].shape == (ny, 1)

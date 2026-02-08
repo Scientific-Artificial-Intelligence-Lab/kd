@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from kd.model.discover.task.pde.utils_fd import FiniteDiff
 
+# Supported spatial dimensions: 2D and 3D (limited by existing Diff_2/Diff_3).
+# 1D datasets must use the legacy path; the N-D path requires >= 2 spatial dims.
+_MIN_SPATIAL_DIM = 2
+_MAX_SPATIAL_DIM = 3
 
 
 @dataclass
 class DSCVRegularAdapter:
-    """Convert a :class:`~kd.dataset.PDEDataset` into DISCOVER regular-data format."""
+    """Convert a :class:`~kd.dataset.PDEDataset` into DISCOVER regular-data format.
+
+    Supports both legacy 1D datasets (``x/t/usol``) and N-D structured grids
+    (``fields_data/coords_1d/axis_order``).
+    """
 
     dataset: "PDEDataset"
     sym_true: Optional[str] = None
@@ -29,7 +37,24 @@ class DSCVRegularAdapter:
 
         self._data = self._prepare()
 
+    # ------------------------------------------------------------------
+    # Dispatch
+    # ------------------------------------------------------------------
+
     def _prepare(self) -> Dict[str, Any]:
+        """Detect data mode and dispatch to the appropriate builder."""
+        fields_data = getattr(self.dataset, "fields_data", None)
+        coords_1d = getattr(self.dataset, "coords_1d", None)
+
+        if fields_data is not None and coords_1d is not None:
+            return self._prepare_nd()
+        return self._prepare_legacy()
+
+    # ------------------------------------------------------------------
+    # Legacy 1D path (unchanged)
+    # ------------------------------------------------------------------
+
+    def _prepare_legacy(self) -> Dict[str, Any]:
         dataset = self.dataset
 
         x = np.asarray(dataset.x, dtype=float)
@@ -43,14 +68,22 @@ class DSCVRegularAdapter:
                 )
             )
 
-        if t.size < 2:
-            raise ValueError("PDEDataset requires at least two temporal samples for DSCV adapter")
+        if not np.all(np.isfinite(u)):
+            raise ValueError("Input field u contains NaN or Inf values")
+
+        if t.size < 3:
+            raise ValueError(
+                "PDEDataset requires at least 3 temporal samples for DSCV adapter "
+                "(FiniteDiff accesses u[2] and u[n-3])"
+            )
 
         # Ensure evenly spaced time grid when requested.
         dt = np.diff(t)
         if self.enforce_uniform_dt and not np.allclose(dt, dt[0]):
             raise ValueError("Time grid must be evenly spaced for finite-difference evaluation")
         delta_t = float(dt[0])
+        if delta_t == 0.0:
+            raise ValueError("Time step delta_t is zero (degenerate time grid)")
 
         ut = np.zeros_like(u)
         for idx in range(u.shape[0]):
@@ -58,16 +91,13 @@ class DSCVRegularAdapter:
 
         x_column = x.reshape(-1, 1)
 
-        sym_true = self.sym_true
-        if sym_true is None:
-            name = getattr(dataset, "equation_name", None)
-            if isinstance(name, str):
-                try:
-                    from kd.dataset import get_dataset_sym_true
+        if self.n_input_dim is not None and self.n_input_dim != 1:
+            raise ValueError(
+                f"Legacy DSCV data is 1D spatial; n_input_dim must be 1, "
+                f"got {self.n_input_dim}"
+            )
 
-                    sym_true = get_dataset_sym_true(name)
-                except (ImportError, ValueError):
-                    sym_true = None
+        sym_true = self._resolve_sym_true()
 
         data: Dict[str, Any] = {
             "u": u,
@@ -79,6 +109,129 @@ class DSCVRegularAdapter:
             data["sym_true"] = sym_true
 
         return data
+
+    # ------------------------------------------------------------------
+    # N-D path (2D / 3D spatial)
+    # ------------------------------------------------------------------
+
+    def _prepare_nd(self) -> Dict[str, Any]:
+        """Build DISCOVER data dict from an N-D :class:`PDEDataset`.
+
+        The dso engine expects:
+        - 2D spatial: ``u.shape = (nt, nx, ny)`` — time axis first
+        - 3D spatial: ``u.shape = (nt, nx, ny, nz)`` — time axis first
+        - ``ut`` same shape as ``u``
+        - ``X`` follows spatial axis order from ``axis_order`` (minus ``lhs_axis``),
+          each element shaped ``(n_i, 1)``
+        """
+        dataset = self.dataset
+        axis_order: List[str] = list(dataset.axis_order)
+        coords_1d: Dict[str, np.ndarray] = {
+            k: np.asarray(v, dtype=float) for k, v in dataset.coords_1d.items()
+        }
+        target_field: str = getattr(dataset, "target_field", "u") or "u"
+        lhs_axis: str = getattr(dataset, "lhs_axis", "t") or "t"
+
+        u_raw = np.asarray(dataset.fields_data[target_field], dtype=float)
+
+        if not np.all(np.isfinite(u_raw)):
+            raise ValueError("Input field u contains NaN or Inf values")
+
+        # Separate lhs (time) axis from spatial axes.
+        if lhs_axis not in axis_order:
+            raise ValueError(
+                f"lhs_axis '{lhs_axis}' not found in axis_order {axis_order}"
+            )
+        spatial_axes = [a for a in axis_order if a != lhs_axis]
+        n_spatial = len(spatial_axes)
+
+        if n_spatial < _MIN_SPATIAL_DIM or n_spatial > _MAX_SPATIAL_DIM:
+            raise ValueError(
+                f"DSCV N-D mode supports {_MIN_SPATIAL_DIM}-{_MAX_SPATIAL_DIM} "
+                f"spatial dimensions, got {n_spatial}. "
+                "For 1D data, use the legacy path (x/t/usol attributes)."
+            )
+
+        # --- Permute u so that lhs_axis is at position 0 ---
+        # Target axis order: [lhs_axis, *spatial_axes]
+        target_order = [lhs_axis] + spatial_axes
+        perm = [axis_order.index(a) for a in target_order]
+        u = np.transpose(u_raw, perm)
+        # u.shape is now (n_lhs, n_s1, n_s2, ...)
+
+        # --- Validate and compute time derivative ---
+        t_coord = coords_1d[lhs_axis]
+        if t_coord.size < 3:
+            raise ValueError(
+                f"PDEDataset requires at least 3 samples along "
+                f"lhs_axis '{lhs_axis}' for DSCV adapter "
+                "(FiniteDiff accesses u[2] and u[n-3])"
+            )
+
+        dt = np.diff(t_coord)
+        if self.enforce_uniform_dt and not np.allclose(dt, dt[0]):
+            raise ValueError(
+                f"Grid along '{lhs_axis}' must be evenly spaced "
+                "for finite-difference evaluation"
+            )
+        delta_t = float(dt[0])
+        if delta_t == 0.0:
+            raise ValueError(
+                f"Time step along '{lhs_axis}' is zero (degenerate grid)"
+            )
+
+        # Compute ut along axis=0 (the lhs/time axis).
+        # Flatten trailing dims → apply FiniteDiff per column → reshape back.
+        n_t = u.shape[0]
+        spatial_shape = u.shape[1:]
+        n_spatial_pts = int(np.prod(spatial_shape))
+        u_2d = u.reshape(n_t, n_spatial_pts)
+        ut_2d = np.zeros_like(u_2d)
+        for col in range(n_spatial_pts):
+            ut_2d[:, col] = FiniteDiff(u_2d[:, col], delta_t)
+        ut = ut_2d.reshape(u.shape)
+
+        # --- Build X coordinate list ---
+        x_list = [coords_1d[a].reshape(-1, 1) for a in spatial_axes]
+
+        # --- Resolve n_input_dim ---
+        if self.n_input_dim is not None and self.n_input_dim != n_spatial:
+            raise ValueError(
+                f"n_input_dim ({self.n_input_dim}) does not match actual "
+                f"spatial dimension ({n_spatial})"
+            )
+        n_input_dim = self.n_input_dim if self.n_input_dim is not None else n_spatial
+
+        sym_true = self._resolve_sym_true()
+
+        data: Dict[str, Any] = {
+            "u": u,
+            "ut": ut,
+            "X": x_list,
+            "n_input_dim": n_input_dim,
+        }
+        if sym_true is not None:
+            data["sym_true"] = sym_true
+
+        return data
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_sym_true(self) -> Optional[str]:
+        """Try to resolve the ground-truth symbolic expression."""
+        sym_true = self.sym_true
+        if sym_true is None:
+            name = getattr(self.dataset, "equation_name", None)
+            if isinstance(name, str):
+                try:
+                    from kd.dataset import get_dataset_sym_true
+
+                    sym_true = get_dataset_sym_true(name)
+                except (ImportError, ValueError):
+                    sym_true = None
+        return sym_true
 
     def get_data(self) -> Dict[str, Any]:
         """Return the DISCOVER-compatible data dictionary."""
