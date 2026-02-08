@@ -13,6 +13,8 @@ from kd.model.discover.task.pde.utils_fd import FiniteDiff
 # 1D datasets must use the legacy path; the N-D path requires >= 2 spatial dims.
 _MIN_SPATIAL_DIM = 2
 _MAX_SPATIAL_DIM = 3
+# Diff2 boundary stencil accesses indices 0..3 and n-4..n-1, requiring ≥4 points.
+_MIN_SPATIAL_POINTS = 4
 
 
 @dataclass
@@ -46,7 +48,12 @@ class DSCVRegularAdapter:
         fields_data = getattr(self.dataset, "fields_data", None)
         coords_1d = getattr(self.dataset, "coords_1d", None)
 
-        if fields_data is not None and coords_1d is not None:
+        if fields_data is not None or coords_1d is not None:
+            if fields_data is None or coords_1d is None:
+                raise ValueError(
+                    "N-D data requires both fields_data and coords_1d; "
+                    "got only one. Use x/t/usol for legacy 1D data."
+                )
             return self._prepare_nd()
         return self._prepare_legacy()
 
@@ -158,6 +165,16 @@ class DSCVRegularAdapter:
         perm = [axis_order.index(a) for a in target_order]
         u = np.transpose(u_raw, perm)
         # u.shape is now (n_lhs, n_s1, n_s2, ...)
+
+        # --- Validate spatial axis sizes ---
+        for i, axis_name in enumerate(spatial_axes):
+            axis_size = u.shape[i + 1]  # +1 because axis 0 is time
+            if axis_size < _MIN_SPATIAL_POINTS:
+                raise ValueError(
+                    f"Spatial axis '{axis_name}' has {axis_size} points, "
+                    f"but finite-difference stencils require at least "
+                    f"{_MIN_SPATIAL_POINTS}"
+                )
 
         # --- Validate and compute time derivative ---
         t_coord = coords_1d[lhs_axis]

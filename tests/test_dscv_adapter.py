@@ -943,3 +943,40 @@ class TestDSCVAdapterEdgeCases:
         assert len(data["X"]) == 2
         assert data["X"][0].shape == (nx, 1)
         assert data["X"][1].shape == (ny, 1)
+
+    def test_nd_spatial_axis_too_few_points_rejected(self):
+        """Spatial axis with < 4 points should be rejected (Diff2 stencil needs >=4)."""
+        nx, ny, nt = 3, 10, 12  # nx=3 < _MIN_SPATIAL_POINTS=4
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset(
+            equation_name="synthetic-2d-few-x",
+            fields_data={"u": u},
+            coords_1d={"x": x, "y": y, "t": t},
+            axis_order=["x", "y", "t"],
+            target_field="u",
+            lhs_axis="t",
+        )
+
+        with pytest.raises(ValueError, match="at least 4"):
+            DSCVRegularAdapter(dataset)
+
+    def test_partial_nd_data_rejected(self):
+        """Having fields_data but no coords_1d should raise ValueError."""
+        nx, ny, nt = 8, 10, 12
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        t = np.linspace(0, 0.5, nt)
+        X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+        u = np.sin(X) * np.cos(Y) * np.exp(-T)
+
+        dataset = PDEDataset.__new__(PDEDataset)
+        dataset.fields_data = {"u": u}
+        dataset.coords_1d = None
+
+        with pytest.raises(ValueError, match="both fields_data and coords_1d"):
+            DSCVRegularAdapter(dataset)
