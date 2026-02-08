@@ -32,7 +32,7 @@ def python_execute(traversal, u, x):
                 try:
                     if 'diff' in token.name or 'Diff' in token.name:
                         intermediate_result = token(*[*terminals,dim_flag])
-                    elif 'lap' == token.name:
+                    elif token.name in ('lap', 'lap_3', 'lap_t'):
                         intermediate_result = token(*[*terminals, x])
                     else:
                         intermediate_result = token(*terminals)

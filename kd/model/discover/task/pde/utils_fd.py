@@ -200,6 +200,15 @@ def Laplace(u,x):
     return uxt
 
 
+def Laplace_3(u, x):
+    """3D Laplacian: nabla^2 u = d2u/dx2 + d2u/dy2 + d2u/dz2"""
+    x1, x2, x3 = x
+    uxt = Diff2_3(u, x1, name=1)
+    uxt += Diff2_3(u, x2, name=2)
+    uxt += Diff2_3(u, x3, name=3)
+    return uxt
+
+
 def Diff_3(u, dxt, name=1):
     """
     Here dx is a scalar, name is a str indicating what it is
@@ -269,10 +278,13 @@ def Diff2_3(u, dxt, name=1):
         uxt[:,:,0,:] = (2 * u[:,:,0,:] - 5 * u[:,:,1,:] + 4 * u[:,:,2,:] - u[:,:,3,:]) / dxt ** 2
         uxt[:,:,m - 1,:] = (2 * u[:,:,m - 1,:] - 5 * u[:,:,m - 2,:] + 4 * u[:,:,m - 3,:] - u[:,:,m - 4,:]) / dxt ** 2
     elif name == 3:
-        uxt[:,:,:,1:m-1]= (u[:,:,:,2:m] - 2 * u[:,:,:,1:m-1] + u[:,:,:,0:m-2]) / dxt ** 2
+        # Fixed: original DISCOVER had same bug (m instead of p)
+        uxt[:,:,:,1:p-1]= (u[:,:,:,2:p] - 2 * u[:,:,:,1:p-1] + u[:,:,:,0:p-2]) / dxt ** 2
         # uxt[:,:,:,0] = (u[:,:,:,1]+u[:,:,:,-1]-2*u[:,:,:,0])/dxt ** 2
         # uxt[:,:,-1] = (u[:,:,0]+u[:,:,-2]-2*u[:,:,-1])/dxt ** 2  
-        uxt[:,:,0] = (2 * u[:,:,0] - 5 * u[:,:,1] + 4 * u[:,:,2] - u[:,:,3]) / dxt ** 2
-        uxt[:,:,:,p - 1] = (2 * u[:,:,:,p - 1] - 5 * u[:,:,:,p - 2] + 4 * u[:,:,:,p - 3] - u[:,:,:,p- 4]) / dxt ** 2       
+        # Fixed: original DISCOVER used 3D index [:,:,0] instead of 4D [:,:,:,0]
+        uxt[:,:,:,0] = (2 * u[:,:,:,0] - 5 * u[:,:,:,1] + 4 * u[:,:,:,2] - u[:,:,:,3]) / dxt ** 2
+        uxt[:,:,:,p - 1] = (2 * u[:,:,:,p - 1] - 5 * u[:,:,:,p - 2] + 4 * u[:,:,:,p - 3] - u[:,:,:,p- 4]) / dxt ** 2
     else:
         NotImplementedError()
+    return uxt  # Fixed: original DISCOVER missing return in this function

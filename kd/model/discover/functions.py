@@ -6,7 +6,7 @@ from functools import partial
 import torch
 
 from .library import Token, PlaceholderConstant, HardCodedConstant
-from .task.pde.utils_fd import Diff, Diff2, Diff3, Diff4,Diff_2, Diff2_2, Laplace,Diff_3, Diff2_3
+from .task.pde.utils_fd import Diff, Diff2, Diff3, Diff4,Diff_2, Diff2_2, Laplace,Diff_3, Diff2_3, Laplace_3
 from .task.pde.utils_nn import torch_diff,Laplacian_t
 # import kd.model.discover.utils as U
 from . import utils as U
@@ -60,6 +60,7 @@ add_ops = [
     Token(Diff2_2, "Diff2", arity=2, complexity=3),
     Token(Diff_3, "Diff_3", arity=2, complexity=2),
     Token(Diff2_3, "Diff2_3", arity=2, complexity=3),
+    Token(Laplace_3, 'lap_3', arity=1, complexity=4),
     # noise:
     Token(partial(torch_diff,order=1), "diff_t", arity=2, complexity=2),
     Token(partial(torch_diff,order=2), "diff2_t", arity=2, complexity=3),

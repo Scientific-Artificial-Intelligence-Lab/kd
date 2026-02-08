@@ -358,13 +358,13 @@ class KD_DSCV(BaseRL):
     _DIFF_TOKENS_BY_DIM = {
         1: ["diff", "diff2", "diff3"],
         2: ["Diff", "Diff2", "lap"],
-        3: ["Diff_3", "Diff2_3"],
+        3: ["Diff_3", "Diff2_3", "lap_3"],
     }
     # All diff-family tokens across all dimensions (used to strip before replacing).
     _ALL_DIFF_TOKENS = {
         "diff", "diff2", "diff3", "diff4",
         "Diff", "Diff2", "lap",
-        "Diff_3", "Diff2_3",
+        "Diff_3", "Diff2_3", "lap_3",
     }
 
     def set_task(self):
