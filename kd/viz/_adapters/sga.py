@@ -94,8 +94,13 @@ class SGAVizAdapter:
 
         if data.n_spatial_dims == 1:
             fig = self._field_comparison_plot_1d(data, ctx)
-        else:
+        elif data.n_spatial_dims == 2:
             fig = self._field_comparison_plot_nd(data, ctx)
+        else:
+            return VizResult(
+                intent='field_comparison',
+                warnings=[f'field_comparison currently supports up to 2D spatial (got {data.n_spatial_dims}D).'],
+            )
 
         output_path = self._resolve_output(ctx, 'field_comparison.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
@@ -195,6 +200,12 @@ class SGAVizAdapter:
         baseline = self._build_field_comparison_data(context)
         if baseline is None:
             return VizResult(intent='time_slices', warnings=['Context does not expose metadata/original fields.'])
+
+        if baseline.n_spatial_dims != 1:
+            return VizResult(
+                intent='time_slices',
+                warnings=['time_slices currently supports 1D spatial fields only; use field_comparison for 2D+.'],
+            )
 
         slice_option = ctx.options.get('slice_times')
         if slice_option is None:
@@ -470,6 +481,15 @@ class SGAVizAdapter:
         residual_origin = true_ut - rhs_origin
         residual_meta = meta_ut - rhs_meta
 
+        # Permute to (*spatial, t) layout if axis_order is available
+        axis_order = getattr(context, 'axis_order', None)
+        lhs_axis = getattr(context, 'lhs_axis', 't')
+        if axis_order is not None and lhs_axis in axis_order:
+            spatial_axes = [a for a in axis_order if a != lhs_axis]
+            perm = [axis_order.index(a) for a in spatial_axes] + [axis_order.index(lhs_axis)]
+            residual_meta = np.transpose(residual_meta, perm)
+            residual_origin = np.transpose(residual_origin, perm)
+
         residual_data = ResidualPlotData.from_actual_predicted(
             actual=true_ut.reshape(-1),
             predicted=rhs_meta.reshape(-1),
@@ -481,8 +501,13 @@ class SGAVizAdapter:
 
         if ndim <= 2:
             fig = self._residual_plot_2d(residual_meta, residual_origin, bins, ctx)
-        else:
+        elif ndim == 3:
             fig = self._residual_plot_nd(residual_meta, residual_origin, bins, ctx)
+        else:
+            return VizResult(
+                intent='residual',
+                warnings=[f'residual currently supports up to 2D spatial (got {ndim - 1}D).'],
+            )
 
         output_path = self._resolve_output(ctx, 'residual_analysis.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')

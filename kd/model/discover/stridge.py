@@ -1,6 +1,10 @@
-import numpy as np
+import logging
 import math
+
+import numpy as np
 import torch
+
+logger = logging.getLogger(__name__)
 
 from .task.pde.utils_noise import tensor2np,cut_bound
 from .execute import python_execute, python_execute_torch
@@ -161,7 +165,7 @@ class Node(object):
                 return f"{base_op_name}({child_sympy_strings[0]})"
             else: # 元数不匹配的防御性处理
                 args_str = ", ".join(child_sympy_strings)
-                print(f"[Node.to_sympy_string Warning] 函数 '{node_op_name}' 的参数数量与预期不符 尝试通用格式。")
+                logger.warning("函数 '%s' 的参数数量与预期不符，尝试通用格式。", node_op_name)
                 return f"{node_op_name.capitalize()}({args_str})" # 尝试大写，或保持原样
 
         # 对于未在上面显式处理的函数名（例如自定义的函数）
@@ -169,7 +173,7 @@ class Node(object):
             args_str = ", ".join(child_sympy_strings)
             # SymPy 的 parse_expr 对于不认识的函数名 FuncName(args) 会尝试创建 Function('FuncName')(args)
             # 这通常能在后续的 sympy.latex() 中正确显示为 FuncName(args)
-            print(f"[Node.to_sympy_string Warning] 未知的基础操作名 '{base_op_name}' (来自 '{node_op_name}') 将使用通用格式")
+            logger.warning("未知的基础操作名 '%s' (来自 '%s')，将使用通用格式", base_op_name, node_op_name)
             return f"{node_op_name}({args_str})"
 
 def build_tree(traversal):

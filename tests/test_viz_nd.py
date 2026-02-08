@@ -530,3 +530,85 @@ class TestDSCVAdapterND:
         result = viz_core.render(request)
         assert result.paths
         assert (tmp_path / 'dscv' / 'parity_plot.png').exists()
+
+
+# ===== Error path tests (Codex review L6) =====
+
+class TestErrorPaths:
+    def test_infer_axis_unknown_coord(self):
+        """_infer_axis raises ValueError for non-x1/x2/x3 coord names."""
+        from kd.model.discover.stridge import Node
+
+        class FakeToken:
+            def __init__(self, name, arity=0):
+                self.name = name
+                self.arity = arity
+
+        node = Node(FakeToken('y', 0))
+        with pytest.raises(ValueError, match="无法从 'y' 推断空间轴索引"):
+            dscv_viz_module._infer_axis(node, {'x1': 0, 'x2': 1, 'x3': 2})
+
+    def test_finite_difference_nd_order_5_raises(self):
+        """_finite_difference_nd raises ValueError for order > 4."""
+        arr = np.ones((10, 10))
+        with pytest.raises(ValueError, match="只支持1-4阶导数"):
+            dscv_viz_module._finite_difference_nd(arr, 0.1, order=5, axis=0)
+
+    def test_field_comparison_data_3d_spatial(self):
+        """3D spatial coords (x, y, z) contract works."""
+        x = np.linspace(0, 1, 3)
+        y = np.linspace(0, 1, 4)
+        z = np.linspace(0, 1, 5)
+        t = np.linspace(0, 1, 2)
+        field = np.arange(3 * 4 * 5 * 2).reshape(3, 4, 5, 2).astype(float)
+
+        data = FieldComparisonData(
+            spatial_coords=[x, y, z], t_coords=t,
+            true_field=field, predicted_field=field * 0.9,
+        )
+        assert data.n_spatial_dims == 3
+        assert data.true_field.shape == (3, 4, 5, 2)
+
+    def test_field_comparison_data_list_of_lists(self):
+        """list-of-lists spatial_coords is correctly interpreted as multi-axis."""
+        x = [0.0, 0.5, 1.0]
+        y = [0.0, 0.25, 0.5, 0.75]
+        t = np.linspace(0, 1, 2)
+        field = np.arange(3 * 4 * 2).reshape(3, 4, 2).astype(float)
+
+        data = FieldComparisonData(
+            spatial_coords=[x, y], t_coords=t,
+            true_field=field, predicted_field=field,
+        )
+        assert data.n_spatial_dims == 2
+        np.testing.assert_array_equal(data.spatial_coords[0], np.array(x))
+        np.testing.assert_array_equal(data.spatial_coords[1], np.array(y))
+
+    def test_time_slice_data_list_of_lists(self):
+        """list-of-lists also works for TimeSliceComparisonData."""
+        x = [0.0, 0.5, 1.0]
+        y = [0.0, 0.25, 0.5, 0.75]
+        t = np.linspace(0, 1, 2)
+        field = np.arange(3 * 4 * 2).reshape(3, 4, 2).astype(float)
+
+        data = TimeSliceComparisonData(
+            spatial_coords=[x, y], t_coords=t,
+            true_field=field, predicted_field=field,
+            slice_times=np.array([0.5]),
+        )
+        assert data.n_spatial_dims == 2
+
+    def test_sga_time_slices_nd_returns_warning(self, tmp_path):
+        """time_slices returns warning for N-D spatial."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA3D, adapter)
+
+        model = StubSGA3D()
+        request = viz_core.VizRequest(
+            kind='time_slices',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.warnings
+        assert '1D spatial' in result.warnings[0]

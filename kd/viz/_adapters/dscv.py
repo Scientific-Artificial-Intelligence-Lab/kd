@@ -298,8 +298,19 @@ class DSCVVizAdapter:
         return fig
 
     def _residual_plot_nd(self, fields, residuals, ctx):
-        """2D+ spatial: heatmap of residuals at a selected time step + histogram."""
+        """2D spatial: heatmap of residuals at a selected time step + histogram."""
         import matplotlib.pyplot as plt
+
+        n_spatial_dims = fields.get('n_spatial_dims', 2)
+        if n_spatial_dims > 2:
+            # Fallback: histogram only for >2D spatial
+            fig, ax = plt.subplots(figsize=ctx.options.get('figsize', (7, 5)))
+            ax.hist(residuals, bins=int(ctx.options.get('bins', 40)), color='#1f77b4', alpha=0.7, edgecolor='black', density=True)
+            ax.set_xlabel('Residual Value')
+            ax.set_ylabel('Probability Density')
+            ax.set_title('Residual Distribution (>2D spatial — heatmap not available)')
+            ax.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
+            return fig
 
         ut_grid = fields['ut_grid']
         y_hat_grid = fields['y_hat_grid']
@@ -411,8 +422,14 @@ class DSCVVizAdapter:
         return VizResult(intent='field_comparison', paths=[path], metadata={'field_comparison': data})
 
     def _field_comparison_nd(self, data: FieldComparisonData, ctx) -> VizResult:
-        """2D+ spatial field comparison: show 2D heatmaps at selected time steps."""
+        """2D spatial field comparison: show 2D heatmaps at selected time steps."""
         import matplotlib.pyplot as plt
+
+        if data.n_spatial_dims > 2:
+            return VizResult(
+                intent='field_comparison',
+                warnings=[f'field_comparison currently supports up to 2D spatial (got {data.n_spatial_dims}D).'],
+            )
 
         nt = data.t_coords.size
         # Pick up to 3 time steps: first, middle, last

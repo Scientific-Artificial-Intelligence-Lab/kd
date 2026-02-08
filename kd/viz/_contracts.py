@@ -92,6 +92,21 @@ class OptimizationHistoryData:
             self.unique_modules = unique
 
 
+def _normalize_spatial_coords(spatial_coords: Any) -> 'List[np.ndarray]':
+    """Normalize spatial coordinates into a list of 1-D ndarrays.
+
+    Accepts: single ndarray, list/tuple of ndarrays, list/tuple of lists,
+    or a plain flat list of numbers.
+    """
+    if isinstance(spatial_coords, np.ndarray):
+        return [np.asarray(spatial_coords)]
+    if isinstance(spatial_coords, (list, tuple)):
+        if len(spatial_coords) > 0 and isinstance(spatial_coords[0], (np.ndarray, list, tuple)):
+            return [np.asarray(c) for c in spatial_coords]
+        return [np.asarray(spatial_coords)]
+    return [np.asarray(spatial_coords)]
+
+
 @dataclass
 class FieldComparisonData:
     spatial_coords: List[np.ndarray]
@@ -118,22 +133,7 @@ class FieldComparisonData:
         if spatial_coords is None:
             raise TypeError("'spatial_coords' (or 'x_coords') is required")
 
-        # Auto-wrap a single ndarray into a list (1D spatial case)
-        if isinstance(spatial_coords, np.ndarray):
-            if spatial_coords.ndim <= 1:
-                self.spatial_coords = [np.asarray(spatial_coords)]
-            else:
-                # 2D array passed as single coords — wrap it
-                self.spatial_coords = [np.asarray(spatial_coords)]
-        elif isinstance(spatial_coords, list):
-            # Check if it's a list of arrays (multi-dim) or a plain list (single 1D)
-            if len(spatial_coords) > 0 and isinstance(spatial_coords[0], np.ndarray):
-                self.spatial_coords = [np.asarray(c) for c in spatial_coords]
-            else:
-                # Plain list → single 1D coord
-                self.spatial_coords = [np.asarray(spatial_coords)]
-        else:
-            self.spatial_coords = [np.asarray(spatial_coords)]
+        self.spatial_coords = _normalize_spatial_coords(spatial_coords)
 
         self.t_coords = np.asarray(t_coords)
         self.true_field = np.asarray(true_field)
@@ -206,18 +206,7 @@ class TimeSliceComparisonData:
         if spatial_coords is None:
             raise TypeError("'spatial_coords' (or 'x_coords') is required")
 
-        if isinstance(spatial_coords, np.ndarray):
-            if spatial_coords.ndim <= 1:
-                self.spatial_coords = [np.asarray(spatial_coords)]
-            else:
-                self.spatial_coords = [np.asarray(spatial_coords)]
-        elif isinstance(spatial_coords, list):
-            if len(spatial_coords) > 0 and isinstance(spatial_coords[0], np.ndarray):
-                self.spatial_coords = [np.asarray(c) for c in spatial_coords]
-            else:
-                self.spatial_coords = [np.asarray(spatial_coords)]
-        else:
-            self.spatial_coords = [np.asarray(spatial_coords)]
+        self.spatial_coords = _normalize_spatial_coords(spatial_coords)
 
         self.t_coords = np.asarray(t_coords)
         self.true_field = np.asarray(true_field)
