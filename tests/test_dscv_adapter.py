@@ -980,3 +980,12 @@ class TestDSCVAdapterEdgeCases:
 
         with pytest.raises(ValueError, match="both fields_data and coords_1d"):
             DSCVRegularAdapter(dataset)
+
+    def test_partial_nd_coords_only_rejected(self):
+        """Having coords_1d but no fields_data should raise ValueError."""
+        dataset = PDEDataset.__new__(PDEDataset)
+        dataset.fields_data = None
+        dataset.coords_1d = {"x": np.linspace(0, 1, 10), "y": np.linspace(0, 1, 8)}
+
+        with pytest.raises(ValueError, match="both fields_data and coords_1d"):
+            DSCVRegularAdapter(dataset)
