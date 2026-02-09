@@ -306,8 +306,18 @@ def _calculate_pde_fields_nd(
     for dim_idx in range(n_input_dim):
         coord_1d = np.asarray(data_dict['X'][dim_idx]).flatten()
         coord_unique = np.unique(coord_1d)
+        if coord_unique.size < 2:
+            raise ValueError(
+                f"Spatial dimension {dim_idx} has fewer than 2 unique "
+                f"coordinate values"
+            )
+        dx = float(coord_unique[1] - coord_unique[0])
+        if dx == 0.0:
+            raise ValueError(
+                f"Spatial dimension {dim_idx} has zero grid spacing"
+            )
         spatial_coords_list.append(coord_unique)
-        spatial_dxs.append(float(coord_unique[1] - coord_unique[0]))
+        spatial_dxs.append(dx)
 
     num_timesteps = u_trimmed.shape[0]
     spatial_shape = u_trimmed.shape[1:]

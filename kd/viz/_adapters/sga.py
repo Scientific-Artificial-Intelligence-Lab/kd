@@ -13,6 +13,11 @@ from ..equation_renderer import render_latex_to_image
 from ..core import FieldComparisonData, ParityPlotData, ResidualPlotData, TimeSliceComparisonData, VizResult
 from .._contracts import slice_3d_to_2d
 
+try:
+    from kd.model.sga.sgapde.pde import evaluate_mse
+except ImportError:  # pragma: no cover - optional dependency
+    evaluate_mse = None  # type: ignore[assignment]
+
 
 class SGAVizAdapter:
     capabilities: Iterable[str] = {
@@ -93,11 +98,21 @@ class SGAVizAdapter:
         if data is None:
             return VizResult(intent='field_comparison', warnings=['Context does not expose metadata/original fields.'])
 
+        warnings = []
         if data.n_spatial_dims == 1:
             fig = self._field_comparison_plot_1d(data, ctx)
         elif data.n_spatial_dims == 2:
             fig = self._field_comparison_plot_nd(data, ctx)
         else:
+            if data.n_spatial_dims == 3:
+                warnings.append(
+                    "3D spatial visualization is experimental; showing 2D slice."
+                )
+            else:
+                warnings.append(
+                    f"{data.n_spatial_dims}D spatial visualization uses "
+                    f"degraded slice mode."
+                )
             slice_axis = int(ctx.options.get('slice_axis', -1))
             slice_index = ctx.options.get('slice_index')
             if slice_index is not None:
@@ -120,7 +135,7 @@ class SGAVizAdapter:
             },
             'field_comparison_data': data,
         }
-        return VizResult(intent='field_comparison', paths=[output_path], metadata=metadata)
+        return VizResult(intent='field_comparison', paths=[output_path], metadata=metadata, warnings=warnings)
 
     def _field_comparison_plot_1d(self, data: FieldComparisonData, ctx) -> 'plt.Figure':
         fig, axes = plt.subplots(1, 2, figsize=ctx.options.get('figsize', (14, 5)), sharey=True)
@@ -284,9 +299,19 @@ class SGAVizAdapter:
         """2D+ spatial time slices: heatmaps at selected time steps."""
         indices, actual_times, raw_requested = self._resolve_time_indices(baseline, ctx)
 
+        warnings = []
         # For 3D+ spatial, slice to 2D first
         plot_data = baseline
         if baseline.n_spatial_dims >= 3:
+            if baseline.n_spatial_dims == 3:
+                warnings.append(
+                    "3D spatial visualization is experimental; showing 2D slice."
+                )
+            else:
+                warnings.append(
+                    f"{baseline.n_spatial_dims}D spatial visualization uses "
+                    f"degraded slice mode."
+                )
             sa = int(ctx.options.get('slice_axis', -1))
             si = ctx.options.get('slice_index')
             if si is not None:
@@ -347,7 +372,7 @@ class SGAVizAdapter:
                 slice_times=actual_times,
             ),
         }
-        return VizResult(intent='time_slices', paths=[output_path], metadata=metadata)
+        return VizResult(intent='time_slices', paths=[output_path], metadata=metadata, warnings=warnings)
 
     def _build_field_comparison_data(self, context) -> 'FieldComparisonData | None':
         metadata_field = getattr(context, 'u', None)
@@ -567,6 +592,7 @@ class SGAVizAdapter:
             metadata={'mode': 'metadata_vs_groundtruth'},
         )
 
+        warnings: list = []
         bins = int(ctx.options.get('bins', 40))
         ndim = residual_meta.ndim
 
@@ -575,11 +601,24 @@ class SGAVizAdapter:
         elif ndim == 3:
             fig = self._residual_plot_nd(residual_meta, residual_origin, bins, ctx)
         else:
-            # 3D+ spatial: slice along last spatial axis to get 2D spatial
-            slice_axis = ndim - 2  # last spatial axis (time is last)
-            slice_idx = residual_meta.shape[slice_axis] // 2
-            meta_sliced = np.take(residual_meta, slice_idx, axis=slice_axis)
-            orig_sliced = np.take(residual_origin, slice_idx, axis=slice_axis)
+            # 3D+ spatial: iteratively slice until 2D spatial + time remains
+            n_spatial = ndim - 1  # time is last dim
+            if n_spatial == 3:
+                warnings.append(
+                    "3D spatial visualization is experimental; showing 2D slice."
+                )
+            else:
+                warnings.append(
+                    f"{n_spatial}D spatial visualization uses "
+                    f"degraded slice mode."
+                )
+            meta_sliced = residual_meta
+            orig_sliced = residual_origin
+            while meta_sliced.ndim > 3:  # target: 2 spatial + 1 time = 3
+                slice_ax = meta_sliced.ndim - 2  # last spatial axis
+                slice_idx = meta_sliced.shape[slice_ax] // 2
+                meta_sliced = np.take(meta_sliced, slice_idx, axis=slice_ax)
+                orig_sliced = np.take(orig_sliced, slice_idx, axis=slice_ax)
             fig = self._residual_plot_nd(meta_sliced, orig_sliced, bins, ctx)
 
         output_path = self._resolve_output(ctx, 'residual_analysis.png')
@@ -603,7 +642,7 @@ class SGAVizAdapter:
             'residual_data': residual_data,
             'summary': residual_summary,
         }
-        return VizResult(intent='residual', paths=[output_path], metadata=metadata)
+        return VizResult(intent='residual', paths=[output_path], metadata=metadata, warnings=warnings)
 
     def _residual_plot_2d(self, residual_meta, residual_origin, bins, ctx):
         """1D spatial (2D array): histogram + imshow heatmap."""

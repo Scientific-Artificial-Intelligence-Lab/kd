@@ -255,6 +255,17 @@ class DSCVVizAdapter:
 
         import matplotlib.pyplot as plt
 
+        warnings: list = []
+        if n_spatial_dims == 3:
+            warnings.append(
+                "3D spatial visualization is experimental; showing 2D slice."
+            )
+        elif n_spatial_dims > 3:
+            warnings.append(
+                f"{n_spatial_dims}D spatial visualization uses "
+                f"degraded slice mode."
+            )
+
         if n_spatial_dims == 1 and coords is None:
             return VizResult(intent='residual', warnings=['1D residual plot requires coordinate data but coords is None.'])
         if n_spatial_dims == 1:
@@ -275,7 +286,11 @@ class DSCVVizAdapter:
             'max_abs': float(np.max(np.abs(residuals))),
             'count': int(residuals.size),
         }
-        return VizResult(intent='residual', paths=[path], metadata={'residual': residual_data, 'summary': summary})
+        return VizResult(
+            intent='residual', paths=[path],
+            metadata={'residual': residual_data, 'summary': summary},
+            warnings=warnings,
+        )
 
     def _residual_plot_1d(self, residuals, coords, ctx):
         import matplotlib.pyplot as plt
@@ -440,6 +455,17 @@ class DSCVVizAdapter:
         """2D+ spatial field comparison: show 2D heatmaps at selected time steps."""
         import matplotlib.pyplot as plt
 
+        warnings: list = []
+        if data.n_spatial_dims == 3:
+            warnings.append(
+                "3D spatial visualization is experimental; showing 2D slice."
+            )
+        elif data.n_spatial_dims > 3:
+            warnings.append(
+                f"{data.n_spatial_dims}D spatial visualization uses "
+                f"degraded slice mode."
+            )
+
         plot_data = data
         if data.n_spatial_dims > 2:
             plot_data = self._slice_3d_to_2d(data, ctx)
@@ -495,7 +521,10 @@ class DSCVVizAdapter:
         except Exception:
             pass
 
-        return VizResult(intent='field_comparison', paths=[path], metadata={'field_comparison': data})
+        return VizResult(
+            intent='field_comparison', paths=[path],
+            metadata={'field_comparison': data}, warnings=warnings,
+        )
 
     def _parity(self, model, ctx) -> VizResult:
         program = self._get_best_program(model)

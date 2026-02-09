@@ -173,41 +173,57 @@ def slice_3d_to_2d(
     slice_axis: int = -1,
     slice_index: Optional[int] = None,
 ) -> FieldComparisonData:
-    """Slice 3D+ spatial data along one axis to produce a 2D spatial view.
+    """Slice 3D+ spatial data to produce a 2D spatial view.
+
+    For ``n_spatial_dims > 3``, iteratively slices along the last spatial axis
+    (at the midpoint) until only 2 spatial dimensions remain.  The first
+    iteration respects *slice_axis* and *slice_index*.
 
     Parameters
     ----------
     data : FieldComparisonData
         Must have ``n_spatial_dims >= 3``.
     slice_axis : int
-        Spatial axis to slice.  Clamped to ``[0, n_spatial_dims - 1]``.
-        Default ``-1`` means the last spatial axis.
+        Spatial axis to slice on the first iteration.  Clamped to
+        ``[0, n_spatial_dims - 1]``.  Default ``-1`` means the last spatial
+        axis.
     slice_index : int, optional
-        Index along *slice_axis*.  Clamped to valid range.
-        Defaults to midpoint.
+        Index along *slice_axis* on the first iteration.  Clamped to valid
+        range.  Defaults to midpoint.
     """
-    n_sp = data.n_spatial_dims
-    # Clamp slice_axis
-    if slice_axis < 0:
-        slice_axis = n_sp + slice_axis
-    slice_axis = max(0, min(slice_axis, n_sp - 1))
+    result = data
+    first = True
+    while result.n_spatial_dims > 2:
+        n_sp = result.n_spatial_dims
+        sa = slice_axis if first else -1
+        si = slice_index if first else None
+        first = False
 
-    # Clamp slice_index
-    axis_size = data.spatial_coords[slice_axis].size
-    if slice_index is None:
-        slice_index = axis_size // 2
-    slice_index = max(0, min(slice_index, axis_size - 1))
+        # Clamp slice_axis
+        if sa < 0:
+            sa = n_sp + sa
+        sa = max(0, min(sa, n_sp - 1))
 
-    true_sliced = np.take(data.true_field, slice_index, axis=slice_axis)
-    pred_sliced = np.take(data.predicted_field, slice_index, axis=slice_axis)
-    remaining_coords = [c for i, c in enumerate(data.spatial_coords) if i != slice_axis]
+        # Clamp slice_index
+        axis_size = result.spatial_coords[sa].size
+        if si is None:
+            si = axis_size // 2
+        si = max(0, min(si, axis_size - 1))
 
-    return FieldComparisonData(
-        spatial_coords=remaining_coords,
-        t_coords=data.t_coords,
-        true_field=true_sliced,
-        predicted_field=pred_sliced,
-    )
+        true_sliced = np.take(result.true_field, si, axis=sa)
+        pred_sliced = np.take(result.predicted_field, si, axis=sa)
+        resid_sliced = np.take(result.residual_field, si, axis=sa)
+        remaining_coords = [c for i, c in enumerate(result.spatial_coords) if i != sa]
+
+        result = FieldComparisonData(
+            spatial_coords=remaining_coords,
+            t_coords=result.t_coords,
+            true_field=true_sliced,
+            predicted_field=pred_sliced,
+            residual_field=resid_sliced,
+        )
+
+    return result
 
 
 __all__ = [

@@ -166,7 +166,7 @@ class DSCVRegularAdapter:
         u = np.transpose(u_raw, perm)
         # u.shape is now (n_lhs, n_s1, n_s2, ...)
 
-        # --- Validate spatial axis sizes ---
+        # --- Validate spatial axis sizes and grid spacing ---
         for i, axis_name in enumerate(spatial_axes):
             axis_size = u.shape[i + 1]  # +1 because axis 0 is time
             if axis_size < _MIN_SPATIAL_POINTS:
@@ -174,6 +174,13 @@ class DSCVRegularAdapter:
                     f"Spatial axis '{axis_name}' has {axis_size} points, "
                     f"but finite-difference stencils require at least "
                     f"{_MIN_SPATIAL_POINTS}"
+                )
+            coord = coords_1d[axis_name]
+            dx_vals = np.diff(coord)
+            if np.any(np.isclose(dx_vals, 0.0)):
+                raise ValueError(
+                    f"Spatial axis '{axis_name}' has zero spacing "
+                    f"between consecutive points"
                 )
 
         # --- Validate and compute time derivative ---
@@ -425,31 +432,42 @@ class DSCVSparseAdapter:
         spatial_axes = [a for a in axis_order if a != lhs_axis]
         n_spatial = len(spatial_axes)
 
-        # Build the full N-D mesh and flatten
+        # Build coordinate arrays
         spatial_coords = [coords_1d[a] for a in spatial_axes]
         t_coord = coords_1d[lhs_axis]
         all_coords = spatial_coords + [t_coord]
-
-        grids = np.meshgrid(*all_coords, indexing="ij")
-        # Flatten into (n_total, n_spatial + 1) point matrix
-        points = np.column_stack([g.ravel() for g in grids])
+        axis_sizes = tuple(c.size for c in all_coords)
+        total_points = int(np.prod(axis_sizes))
 
         # Reorder u to match (spatial_axes..., time) axis layout
         target_order = spatial_axes + [lhs_axis]
         perm = [axis_order.index(a) for a in target_order]
         u = np.transpose(u_raw, perm)
-        values = u.ravel(order="C").reshape(-1, 1)
 
-        assert points.shape[0] == values.shape[0], (
-            f"Point/value count mismatch: {points.shape[0]} vs {values.shape[0]}"
-        )
+        # --- Index-based sampling (avoids full meshgrid materialization) ---
+        rng = np.random.default_rng(self.random_state)
+        if self.sample is not None:
+            n_samples = int(self.sample)
+        else:
+            ratio = float(self.sample_ratio)
+            if not 0 < ratio <= 1:
+                raise ValueError("sample_ratio must be within (0, 1]")
+            n_samples = max(1, int(total_points * ratio))
 
-        # Sample points
-        xt, sampled_values = self._sample_points_nd(points, values)
+        if n_samples > total_points:
+            raise ValueError(
+                f"Requested {n_samples} samples, but only {total_points} points"
+            )
+
+        sample_idx = rng.choice(total_points, n_samples, replace=False)
+        multi_idx = np.unravel_index(sample_idx, axis_sizes)
+        xt = np.column_stack([
+            all_coords[i][multi_idx[i]] for i in range(len(all_coords))
+        ])
+        sampled_values = u[multi_idx].reshape(-1, 1)
 
         if self.noise_level:
             std = float(self.noise_level) * np.std(sampled_values)
-            rng = np.random.default_rng(self.random_state)
             sampled_values = sampled_values + rng.normal(
                 scale=std, size=sampled_values.shape
             )
@@ -469,32 +487,21 @@ class DSCVSparseAdapter:
         result['n_input_dim'] = n_spatial
         result['measured_points'] = xt
         result['sampling_strategy'] = 'random'
-        result['X_star'] = points
-        result['u_star'] = values
+
+        # Build full X_star without meshgrid (stride-based coordinate expansion)
+        n_dims = len(all_coords)
+        X_star = np.empty((total_points, n_dims), dtype=float)
+        stride = 1
+        for i in range(n_dims - 1, -1, -1):
+            coord = all_coords[i]
+            n_tiles = total_points // (coord.size * stride)
+            X_star[:, i] = np.tile(np.repeat(coord, stride), n_tiles)
+            stride *= coord.size
+        result['X_star'] = X_star
+        result['u_star'] = u.ravel(order="C").reshape(-1, 1)
         result['shape'] = u.shape
 
         return result
-
-    def _sample_points_nd(
-        self, points: np.ndarray, values: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Random-sample from the full N-D point set."""
-        total = points.shape[0]
-        if self.sample is not None:
-            n_samples = int(self.sample)
-        else:
-            ratio = float(self.sample_ratio)
-            if not 0 < ratio <= 1:
-                raise ValueError("sample_ratio must be within (0, 1]")
-            n_samples = max(1, int(total * ratio))
-
-        if n_samples > total:
-            raise ValueError(
-                f"Requested {n_samples} samples, but only {total} points"
-            )
-        rng = np.random.default_rng(self.random_state)
-        indices = rng.choice(total, n_samples, replace=False)
-        return points[indices], values[indices]
 
     def _sample_points(self, x: np.ndarray, t: np.ndarray, u: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         mesh_x, mesh_t = np.meshgrid(x, t, indexing='ij')

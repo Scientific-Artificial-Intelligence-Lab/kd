@@ -670,7 +670,7 @@ class TestPhase2SGA3DSpatialSlice:
     """Phase 2: 3D spatial field_comparison and residual should produce 2D slice heatmaps."""
 
     def test_sga_field_comparison_3d_spatial(self, tmp_path):
-        """3D spatial field comparison should generate a figure (2D slice heatmap), not a warning."""
+        """3D spatial field comparison should generate a figure with experimental warning."""
         adapter = SGAVizAdapter()
         viz_registry.register_adapter(StubSGA4D, adapter)
 
@@ -682,8 +682,10 @@ class TestPhase2SGA3DSpatialSlice:
         )
         result = viz_core.render(request)
 
-        # Should NOT return a warning about unsupported spatial dims
-        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        # 3D spatial should produce an experimental warning
+        assert any("experimental" in w for w in result.warnings), (
+            f"Expected 3D experimental warning, got: {result.warnings}"
+        )
 
         # Should produce output file
         path = tmp_path / 'sga' / 'field_comparison.png'
@@ -698,7 +700,7 @@ class TestPhase2SGA3DSpatialSlice:
         assert field_data.true_field.shape == (3, 4, 5, 6)
 
     def test_sga_residual_3d_spatial(self, tmp_path):
-        """3D spatial residual should generate a 2D slice heatmap, not a warning."""
+        """3D spatial residual should generate a 2D slice heatmap with experimental warning."""
         adapter = SGAVizAdapter()
         viz_registry.register_adapter(StubSGA4D, adapter)
 
@@ -710,8 +712,10 @@ class TestPhase2SGA3DSpatialSlice:
         )
         result = viz_core.render(request)
 
-        # Should NOT return a warning about unsupported spatial dims
-        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        # 3D spatial residual should include experimental warning
+        assert any("experimental" in w for w in result.warnings), (
+            f"Expected 3D experimental warning, got: {result.warnings}"
+        )
 
         # Should produce output file
         path = tmp_path / 'sga' / 'residual_analysis.png'
@@ -734,7 +738,8 @@ class TestPhase2SGA3DSpatialSlice:
         )
         result = viz_core.render(request)
 
-        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        # 3D experimental warning expected
+        assert any("experimental" in w for w in result.warnings)
         path = tmp_path / 'sga' / 'field_comparison.png'
         assert path.exists()
 
@@ -783,8 +788,10 @@ class TestPhase2DSCV3DSpatialSlice:
         )
         result = viz_core.render(request)
 
-        # Should NOT return the "up to 2D spatial" warning
-        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        # 3D spatial should produce an experimental warning, but still generate output
+        assert any("experimental" in w for w in result.warnings), (
+            f"Expected 3D experimental warning, got: {result.warnings}"
+        )
         assert result.paths
         assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
 
@@ -900,8 +907,10 @@ class TestPhase2SGATimeSlices2D:
         )
         result = viz_core.render(request)
 
-        # Phase 2: should work without warnings
-        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        # 3D spatial should produce experimental warning
+        assert any("experimental" in w for w in result.warnings), (
+            f"Expected 3D experimental warning, got: {result.warnings}"
+        )
 
         path = tmp_path / 'sga' / 'time_slices_comparison.png'
         assert path.exists(), f"Expected file at {path}"
