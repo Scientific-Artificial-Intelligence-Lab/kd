@@ -30,17 +30,21 @@ def plot_optimization(model: Any, *, show_info: bool = True, **options: Any) -> 
 def plot_time_slices(
     model: Any,
     *,
-    x_coords: Any,
+    x_coords: Any = None,
     t_coords: Any,
     true_field: Any,
     predicted_field: Any,
     slice_times: Optional[Any] = None,
+    spatial_coords: Optional[Any] = None,
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
     """Plot time slices of a 2D field at selected times."""
     payload = dict(options)
-    payload['x_coords'] = x_coords
+    if spatial_coords is not None:
+        payload['spatial_coords'] = spatial_coords
+    if x_coords is not None:
+        payload['x_coords'] = x_coords
     payload['t_coords'] = t_coords
     payload['true_field'] = true_field
     payload['predicted_field'] = predicted_field
@@ -75,17 +79,21 @@ def plot_residuals(
 def plot_field_comparison(
     model: Any,
     *,
-    x_coords: Any,
+    x_coords: Any = None,
     t_coords: Any,
     true_field: Any,
     predicted_field: Any,
     residual_field: Optional[Any] = None,
+    spatial_coords: Optional[Any] = None,
     show_info: bool = True,
     **options: Any,
 ) -> VizResult:
     """Compare true and predicted 2D fields, optionally with residuals."""
     payload = dict(options)
-    payload['x_coords'] = x_coords
+    if spatial_coords is not None:
+        payload['spatial_coords'] = spatial_coords
+    if x_coords is not None:
+        payload['x_coords'] = x_coords
     payload['t_coords'] = t_coords
     payload['true_field'] = true_field
     payload['predicted_field'] = predicted_field

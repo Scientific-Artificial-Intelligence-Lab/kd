@@ -512,6 +512,7 @@ def plot_actual_vs_predicted(model, best_program):
 def _calculate_pinn_fields(model, best_program):
     """
     一个专为 KD_DSCV_Pinn 模型设计的、统一的私有核心计算函数。
+    支持 1D 和 N-D spatial。
     """
     # 1. 触发奖励计算以填充缓存
     _ = best_program.r_ridge
@@ -526,28 +527,34 @@ def _calculate_pinn_fields(model, best_program):
     # 3. 从 Program.task 获取对应的、已被裁剪的数据
     task = Program.task
     ut_full = task.ut
-    x_coords_tensor = task.x[0] 
-    t_coords_tensor = task.t     
+    t_coords_tensor = task.t
 
-    # 4. 将坐标从 Tensor 转换为 NumPy 数组
-    x_coords_np = x_coords_tensor.cpu().detach().numpy()
+    # 4. 检测空间维度数
+    n_spatial = len(task.x)
+
+    # 5. 将坐标从 Tensor 转换为 NumPy 数组
+    spatial_coords = [task.x[i].cpu().detach().numpy().flatten() for i in range(n_spatial)]
     t_coords_np = t_coords_tensor.cpu().detach().numpy()
-    
-    # 5. 计算残差
+
+    # 6. 计算残差
     physical_residual = ut_full.flatten() - y_hat_rhs.flatten()
-    
-    # 6. 安全地重组坐标，创建一个 (N, 2) 的数组
-    coords_for_plot = np.hstack([x_coords_np, t_coords_np])
-    
-    # 7. 将所有需要的计算结果打包成一个完整的字典返回
-    return {
+
+    # 7. 组装坐标: (N, n_spatial+1)
+    all_coords = [sc.reshape(-1, 1) for sc in spatial_coords] + [t_coords_np.reshape(-1, 1)]
+    coords_for_plot = np.hstack(all_coords)
+
+    # 8. 将所有需要的计算结果打包成一个完整的字典返回
+    result = {
         "residual": physical_residual,
         "coords": coords_for_plot,
-        "coords_x": x_coords_np.flatten(),
+        "coords_x": spatial_coords[0],
         "coords_t": t_coords_np.flatten(),
         "y_true": ut_full.flatten(),
-        "y_pred": y_hat_rhs.flatten()
+        "y_pred": y_hat_rhs.flatten(),
+        "n_spatial_dims": n_spatial,
+        "spatial_coords_list": spatial_coords,
     }
+    return result
 
 def plot_spr_residual_analysis(model, best_program):
     """

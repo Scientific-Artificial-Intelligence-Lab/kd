@@ -168,6 +168,48 @@ class FieldComparisonData:
         return len(self.spatial_coords)
 
 
+def slice_3d_to_2d(
+    data: FieldComparisonData,
+    slice_axis: int = -1,
+    slice_index: Optional[int] = None,
+) -> FieldComparisonData:
+    """Slice 3D+ spatial data along one axis to produce a 2D spatial view.
+
+    Parameters
+    ----------
+    data : FieldComparisonData
+        Must have ``n_spatial_dims >= 3``.
+    slice_axis : int
+        Spatial axis to slice.  Clamped to ``[0, n_spatial_dims - 1]``.
+        Default ``-1`` means the last spatial axis.
+    slice_index : int, optional
+        Index along *slice_axis*.  Clamped to valid range.
+        Defaults to midpoint.
+    """
+    n_sp = data.n_spatial_dims
+    # Clamp slice_axis
+    if slice_axis < 0:
+        slice_axis = n_sp + slice_axis
+    slice_axis = max(0, min(slice_axis, n_sp - 1))
+
+    # Clamp slice_index
+    axis_size = data.spatial_coords[slice_axis].size
+    if slice_index is None:
+        slice_index = axis_size // 2
+    slice_index = max(0, min(slice_index, axis_size - 1))
+
+    true_sliced = np.take(data.true_field, slice_index, axis=slice_axis)
+    pred_sliced = np.take(data.predicted_field, slice_index, axis=slice_axis)
+    remaining_coords = [c for i, c in enumerate(data.spatial_coords) if i != slice_axis]
+
+    return FieldComparisonData(
+        spatial_coords=remaining_coords,
+        t_coords=data.t_coords,
+        true_field=true_sliced,
+        predicted_field=pred_sliced,
+    )
+
+
 __all__ = [
     'ResidualPlotData',
     'OptimizationHistoryData',
@@ -177,6 +219,7 @@ __all__ = [
     'TermRelationshipData',
     'ParityPlotData',
     'RewardEvolutionData',
+    'slice_3d_to_2d',
 ]
 
 

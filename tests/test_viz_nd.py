@@ -598,8 +598,8 @@ class TestErrorPaths:
         )
         assert data.n_spatial_dims == 2
 
-    def test_sga_time_slices_nd_returns_warning(self, tmp_path):
-        """time_slices returns warning for N-D spatial."""
+    def test_sga_time_slices_nd_generates_plot(self, tmp_path):
+        """time_slices works for 2D spatial (Phase 2)."""
         adapter = SGAVizAdapter()
         viz_registry.register_adapter(StubSGA3D, adapter)
 
@@ -610,5 +610,521 @@ class TestErrorPaths:
             options={'output_dir': tmp_path},
         )
         result = viz_core.render(request)
-        assert result.warnings
-        assert '1D spatial' in result.warnings[0]
+        assert not result.warnings, f"Unexpected warnings: {result.warnings}"
+        path = tmp_path / 'sga' / 'time_slices_comparison.png'
+        assert path.exists()
+
+
+# =============================================================================
+# Phase 2 Tests — TDD RED phase
+# =============================================================================
+
+# ===== 4D context helpers (3D spatial + time) =====
+
+class DummySGAContext4D:
+    """4D context with axis_order=['x', 'y', 'z', 't'] for 3D spatial tests."""
+
+    def __init__(self):
+        nx, ny, nz, nt = 3, 4, 5, 6
+        self.axis_order = ['x', 'y', 'z', 't']
+        self.lhs_axis = 't'
+
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        z = np.linspace(0, 1, nz)
+        t = np.linspace(0, 1, nt)
+        self.coords_1d = {'x': x, 'y': y, 'z': z, 't': t}
+
+        # Fields in axis_order layout: (x, y, z, t)
+        self.u = np.arange(nx * ny * nz * nt).reshape(nx, ny, nz, nt).astype(float)
+        self.u_origin = self.u + 0.1
+        self.ut = self.u * 0.5
+        self.ut_origin = self.u_origin * 0.5
+        self.right_side_full = self.ut - 0.02
+        self.right_side_full_origin = self.ut_origin - 0.01
+        self.default_terms = self.u.reshape(-1, 1)
+        self.default_names = ['u']
+        self.num_default = 1
+
+
+class StubSGA4D:
+    """Wraps DummySGAContext4D for 3D spatial SGA tests."""
+
+    def __init__(self, latex: str = 'u_t = u_{xx} + u_{yy} + u_{zz}', structure: Optional[str] = None):
+        self._latex = latex
+        self._structure = structure or latex
+        self.context_ = DummySGAContext4D()
+        self.best_equation_details_ = SGAEquationDetails(
+            lhs='u_t',
+            terms=[SGAEquationTerm(label='u', source='default', coefficient=1.0, tree=None)],
+            predicted_rhs=self.context_.ut.copy(),
+        )
+
+    def equation_latex(self, *, include_coefficients: bool = True):
+        return self._latex if include_coefficients else self._structure
+
+
+# ===== Phase 2 Test: SGA 3D Spatial Slice =====
+
+class TestPhase2SGA3DSpatialSlice:
+    """Phase 2: 3D spatial field_comparison and residual should produce 2D slice heatmaps."""
+
+    def test_sga_field_comparison_3d_spatial(self, tmp_path):
+        """3D spatial field comparison should generate a figure (2D slice heatmap), not a warning."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA4D, adapter)
+
+        model = StubSGA4D()
+        request = viz_core.VizRequest(
+            kind='field_comparison',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+
+        # Should NOT return a warning about unsupported spatial dims
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+
+        # Should produce output file
+        path = tmp_path / 'sga' / 'field_comparison.png'
+        assert path.exists(), f"Expected file at {path}"
+        assert result.paths == [path]
+
+        # Metadata should contain FieldComparisonData with 3D spatial
+        field_data = result.metadata['field_comparison_data']
+        assert isinstance(field_data, FieldComparisonData)
+        assert field_data.n_spatial_dims == 3
+        # Shape: (nx, ny, nz, nt) = (3, 4, 5, 6)
+        assert field_data.true_field.shape == (3, 4, 5, 6)
+
+    def test_sga_residual_3d_spatial(self, tmp_path):
+        """3D spatial residual should generate a 2D slice heatmap, not a warning."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA4D, adapter)
+
+        model = StubSGA4D()
+        request = viz_core.VizRequest(
+            kind='residual',
+            target=model,
+            options={'output_dir': tmp_path, 'bins': 10},
+        )
+        result = viz_core.render(request)
+
+        # Should NOT return a warning about unsupported spatial dims
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+
+        # Should produce output file
+        path = tmp_path / 'sga' / 'residual_analysis.png'
+        assert path.exists(), f"Expected file at {path}"
+
+    def test_sga_field_comparison_3d_slice_axis_option(self, tmp_path):
+        """3D spatial field comparison respects slice_axis and slice_index options."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA4D, adapter)
+
+        model = StubSGA4D()
+        request = viz_core.VizRequest(
+            kind='field_comparison',
+            target=model,
+            options={
+                'output_dir': tmp_path,
+                'slice_axis': 0,       # slice along x (first spatial axis)
+                'slice_index': 1,      # pick index 1 of x
+            },
+        )
+        result = viz_core.render(request)
+
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        path = tmp_path / 'sga' / 'field_comparison.png'
+        assert path.exists()
+
+
+# ===== Phase 2 Test: DSCV 3D Spatial Slice =====
+
+class TestPhase2DSCV3DSpatialSlice:
+    """Phase 2: DSCV field_comparison and residual should handle 3D spatial via slicing."""
+
+    def test_dscv_field_comparison_3d_spatial(self, tmp_path, monkeypatch):
+        """DSCV field comparison should work with 3D spatial data (slice to 2D)."""
+        adapter = DSCVVizAdapter()
+
+        class StubDSCV:
+            def __init__(self):
+                self.best_p = type('P', (), {'traversal': []})()
+                self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
+
+        viz_registry.register_adapter(StubDSCV, adapter)
+        model = StubDSCV()
+
+        nx, ny, nz, nt = 3, 4, 5, 6
+        x1 = np.linspace(0, 1, nx)
+        x2 = np.linspace(0, 1, ny)
+        x3 = np.linspace(0, 1, nz)
+
+        def fake_fields(_model, _program):
+            ut = np.arange(nt * nx * ny * nz).reshape(nt, nx, ny, nz).astype(float)
+            return {
+                'x_axis': x1,
+                't_axis': np.arange(nt),
+                'ut_grid': ut,
+                'y_hat_grid': ut * 0.9,
+                'residual': (ut - ut * 0.9).flatten(),
+                'coords': None,
+                'n_spatial_dims': 3,
+                'spatial_coords_list': [x1, x2, x3],
+            }
+
+        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+
+        request = viz_core.VizRequest(
+            kind='field_comparison',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+
+        # Should NOT return the "up to 2D spatial" warning
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        assert result.paths
+        assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
+
+    def test_dscv_residual_3d_spatial_has_heatmap(self, tmp_path, monkeypatch):
+        """DSCV residual for 3D spatial should produce a 2D slice heatmap, not just histogram."""
+        import matplotlib.pyplot as plt
+        adapter = DSCVVizAdapter()
+
+        class StubDSCV:
+            def __init__(self):
+                self.best_p = type('P', (), {'traversal': []})()
+                self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
+
+        viz_registry.register_adapter(StubDSCV, adapter)
+        model = StubDSCV()
+
+        nx, ny, nz, nt = 3, 4, 5, 6
+        x1 = np.linspace(0, 1, nx)
+        x2 = np.linspace(0, 1, ny)
+        x3 = np.linspace(0, 1, nz)
+
+        created_figures = []
+        original_figure = plt.figure
+
+        def tracking_figure(*args, **kwargs):
+            fig = original_figure(*args, **kwargs)
+            created_figures.append(fig)
+            return fig
+
+        monkeypatch.setattr(plt, 'figure', tracking_figure)
+
+        def fake_fields(_model, _program):
+            ut = np.arange(nt * nx * ny * nz).reshape(nt, nx, ny, nz).astype(float)
+            yhat = ut * 0.9
+            return {
+                'x_axis': x1,
+                't_axis': np.arange(nt),
+                'ut_grid': ut,
+                'y_hat_grid': yhat,
+                'residual': (ut - yhat).flatten(),
+                'coords': None,
+                'n_spatial_dims': 3,
+                'spatial_coords_list': [x1, x2, x3],
+            }
+
+        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+
+        request = viz_core.VizRequest(
+            kind='residual',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+
+        assert result.paths
+        path = tmp_path / 'dscv' / 'residual_analysis.png'
+        assert path.exists()
+
+        # Phase 2 requirement: the residual plot must contain a 2D heatmap subplot
+        # (not just a single histogram). The current code for >2D spatial creates
+        # only 1 axis (histogram). Phase 2 should create 2+ axes (heatmap + histogram).
+        assert len(created_figures) > 0, "Expected at least one figure to be created"
+        fig = created_figures[-1]
+        n_axes = len(fig.get_axes())
+        assert n_axes >= 2, (
+            f"Expected at least 2 axes (heatmap + histogram) for 3D spatial residual, "
+            f"got {n_axes}. Currently falls back to histogram only."
+        )
+
+
+# ===== Phase 2 Test: SGA Time Slices 2D =====
+
+class TestPhase2SGATimeSlices2D:
+    """Phase 2: time_slices should work for 2D spatial (heatmap) and 3D spatial (slice+heatmap)."""
+
+    def test_sga_time_slices_2d_spatial(self, tmp_path):
+        """2D spatial time_slices should produce heatmaps, not a warning."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA3D, adapter)
+
+        model = StubSGA3D()  # axis_order=['x','y','t'] => 2D spatial
+        request = viz_core.VizRequest(
+            kind='time_slices',
+            target=model,
+            options={'output_dir': tmp_path, 'slice_count': 3},
+        )
+        result = viz_core.render(request)
+
+        # Phase 2: should NOT return '1D spatial' warning
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+
+        # Should produce output file
+        path = tmp_path / 'sga' / 'time_slices_comparison.png'
+        assert path.exists(), f"Expected file at {path}"
+        assert result.paths == [path]
+
+        # Metadata should contain TimeSliceComparisonData with 2D spatial
+        ts_data = result.metadata.get('time_slices_data')
+        assert ts_data is not None, "Expected 'time_slices_data' in metadata"
+        assert isinstance(ts_data, TimeSliceComparisonData)
+        assert ts_data.n_spatial_dims == 2
+
+    def test_sga_time_slices_3d_spatial(self, tmp_path):
+        """3D spatial time_slices should also work (slice spatial to 2D, then heatmap)."""
+        adapter = SGAVizAdapter()
+        viz_registry.register_adapter(StubSGA4D, adapter)
+
+        model = StubSGA4D()  # axis_order=['x','y','z','t'] => 3D spatial
+        request = viz_core.VizRequest(
+            kind='time_slices',
+            target=model,
+            options={'output_dir': tmp_path, 'slice_count': 2},
+        )
+        result = viz_core.render(request)
+
+        # Phase 2: should work without warnings
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+
+        path = tmp_path / 'sga' / 'time_slices_comparison.png'
+        assert path.exists(), f"Expected file at {path}"
+
+        ts_data = result.metadata.get('time_slices_data')
+        assert ts_data is not None
+        assert isinstance(ts_data, TimeSliceComparisonData)
+        assert ts_data.n_spatial_dims == 3
+
+
+# ===== Phase 2 Test: SPR/PINN N-D =====
+
+class TestPhase2SPRPinnND:
+    """Phase 2: SPR/PINN field comparison and _calculate_pinn_fields should support N-D."""
+
+    def test_calculate_pinn_fields_nd(self, monkeypatch):
+        """_calculate_pinn_fields should return spatial_coords_list and n_spatial_dims for N-D."""
+        import torch
+
+        # Mock Program.task with 2D spatial (x1, x2) PINN data
+        n_points = 50
+        x1_tensor = torch.rand(n_points, 1)
+        x2_tensor = torch.rand(n_points, 1)
+        t_tensor = torch.rand(n_points, 1)
+        ut_np = np.random.randn(n_points, 1)
+
+        class FakeTask:
+            x = [x1_tensor, x2_tensor]  # 2D spatial: list of 2 tensors
+            t = t_tensor
+            ut = ut_np
+            u = [torch.rand(n_points, 1)]
+
+        # Monkeypatch Program.task
+        monkeypatch.setattr('kd.viz.dscv_viz.Program', type('MockProgram', (), {'task': FakeTask()}))
+
+        class FakeBestProgram:
+            y_hat_rhs = np.random.randn(n_points, 1)
+            Theta = np.random.randn(n_points, 3)
+
+            @property
+            def r_ridge(self):
+                return 0.5  # trigger cache fill
+
+        result = dscv_viz_module._calculate_pinn_fields(None, FakeBestProgram())
+
+        # Phase 2: should return N-D metadata
+        assert 'n_spatial_dims' in result, "Expected 'n_spatial_dims' in result"
+        assert result['n_spatial_dims'] == 2
+        assert 'spatial_coords_list' in result, "Expected 'spatial_coords_list' in result"
+        assert len(result['spatial_coords_list']) == 2
+        # coords should be (N, n_spatial+1) = (N, 3) for 2D spatial + time
+        assert result['coords'].shape == (n_points, 3)
+
+    def test_spr_field_comparison_nd(self, tmp_path, monkeypatch):
+        """SPR field comparison should use time-slice + spatial griddata for 2D spatial."""
+        adapter = DSCVVizAdapter()
+
+        class StubDSCV:
+            def __init__(self):
+                self.best_p = type('P', (), {'traversal': []})()
+                self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
+
+        viz_registry.register_adapter(StubDSCV, adapter)
+        model = StubDSCV()
+
+        n_points = 100
+        x1 = np.random.rand(n_points)
+        x2 = np.random.rand(n_points)
+        t = np.random.rand(n_points)
+        y_true = np.sin(x1) * np.cos(x2)
+        y_pred = y_true * 0.95
+
+        def fake_pinn_fields(_model, _program):
+            return {
+                'residual': y_true - y_pred,
+                'coords': np.column_stack([x1, x2, t]),  # (N, 3)
+                'coords_x': x1,   # legacy 1D key — not enough for 2D spatial
+                'coords_t': t,
+                'y_true': y_true,
+                'y_pred': y_pred,
+                'n_spatial_dims': 2,
+                'spatial_coords_list': [x1, x2],
+            }
+
+        monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+
+        request = viz_core.VizRequest(
+            kind='spr_field_comparison',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+
+        # Phase 2: should produce a field comparison plot for 2D spatial
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        assert result.paths
+        assert (tmp_path / 'dscv' / 'spr_field_comparison.png').exists()
+
+        # Phase 2: metadata should contain FieldComparisonData with 2D spatial
+        fc_data = result.metadata.get('field_comparison')
+        assert fc_data is not None, "Expected 'field_comparison' in metadata"
+        assert isinstance(fc_data, FieldComparisonData)
+        assert fc_data.n_spatial_dims == 2, (
+            f"Expected 2D spatial FieldComparisonData, got {fc_data.n_spatial_dims}D"
+        )
+
+    def test_spr_residual_nd_metadata(self, tmp_path, monkeypatch):
+        """SPR residual should store n_spatial_dims in metadata for N-D spatial."""
+        adapter = DSCVVizAdapter()
+
+        class StubDSCV:
+            def __init__(self):
+                self.best_p = type('P', (), {'traversal': []})()
+                self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
+
+        viz_registry.register_adapter(StubDSCV, adapter)
+        model = StubDSCV()
+
+        n_points = 80
+        x1 = np.random.rand(n_points)
+        x2 = np.random.rand(n_points)
+        t = np.random.rand(n_points)
+        y_true = np.sin(x1) * np.cos(x2)
+        y_pred = y_true * 0.9
+        coords_3col = np.column_stack([x1, x2, t])  # (N, 3)
+
+        def fake_pinn_fields(_model, _program):
+            return {
+                'residual': y_true - y_pred,
+                'coords': coords_3col,           # (N, 3) for 2D spatial + time
+                'coords_x': x1,
+                'coords_t': t,
+                'y_true': y_true,
+                'y_pred': y_pred,
+                'n_spatial_dims': 2,
+                'spatial_coords_list': [x1, x2],
+            }
+
+        monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+
+        request = viz_core.VizRequest(
+            kind='spr_residual',
+            target=model,
+            options={'output_dir': tmp_path},
+        )
+        result = viz_core.render(request)
+
+        assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
+        assert result.paths
+
+        # Phase 2: metadata should include n_spatial_dims for downstream consumers
+        assert 'n_spatial_dims' in result.metadata, (
+            "Expected 'n_spatial_dims' in result.metadata for SPR residual N-D"
+        )
+        assert result.metadata['n_spatial_dims'] == 2
+
+
+# ===== Phase 2 Test: API N-D =====
+
+class TestPhase2APINd:
+    """Phase 2: API layer should accept spatial_coords parameter."""
+
+    def test_api_field_comparison_spatial_coords(self, tmp_path, monkeypatch):
+        """plot_field_comparison should accept spatial_coords as an alternative to x_coords."""
+        from kd.viz import api as viz_api
+
+        # We test that the API function accepts spatial_coords and passes it through
+        # to the VizRequest options.
+        captured_options = {}
+
+        def fake_dispatch(kind, model, *, show_info, options):
+            captured_options.update(options)
+            return viz_core.VizResult(intent=kind)
+
+        monkeypatch.setattr(viz_api, '_dispatch', fake_dispatch)
+
+        x = np.linspace(0, 1, 5)
+        y = np.linspace(0, 1, 6)
+        t = np.linspace(0, 1, 4)
+        field = np.zeros((5, 6, 4))
+
+        # Phase 2: spatial_coords should be accepted as keyword argument
+        viz_api.plot_field_comparison(
+            None,
+            spatial_coords=[x, y],
+            t_coords=t,
+            true_field=field,
+            predicted_field=field,
+            output_dir=tmp_path,
+            show_info=False,
+        )
+
+        assert 'spatial_coords' in captured_options, (
+            "Expected 'spatial_coords' to be passed through to options"
+        )
+
+    def test_api_time_slices_spatial_coords(self, tmp_path, monkeypatch):
+        """plot_time_slices should accept spatial_coords parameter."""
+        from kd.viz import api as viz_api
+
+        captured_options = {}
+
+        def fake_dispatch(kind, model, *, show_info, options):
+            captured_options.update(options)
+            return viz_core.VizResult(intent=kind)
+
+        monkeypatch.setattr(viz_api, '_dispatch', fake_dispatch)
+
+        x = np.linspace(0, 1, 5)
+        y = np.linspace(0, 1, 6)
+        t = np.linspace(0, 1, 4)
+        field = np.zeros((5, 6, 4))
+
+        viz_api.plot_time_slices(
+            None,
+            spatial_coords=[x, y],
+            t_coords=t,
+            true_field=field,
+            predicted_field=field,
+            output_dir=tmp_path,
+            show_info=False,
+        )
+
+        assert 'spatial_coords' in captured_options, (
+            "Expected 'spatial_coords' to be passed through to options"
+        )

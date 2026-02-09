@@ -11,6 +11,7 @@ import numpy as np
 
 from ..equation_renderer import render_latex_to_image
 from ..core import FieldComparisonData, ParityPlotData, ResidualPlotData, TimeSliceComparisonData, VizResult
+from .._contracts import slice_3d_to_2d
 
 
 class SGAVizAdapter:
@@ -97,10 +98,12 @@ class SGAVizAdapter:
         elif data.n_spatial_dims == 2:
             fig = self._field_comparison_plot_nd(data, ctx)
         else:
-            return VizResult(
-                intent='field_comparison',
-                warnings=[f'field_comparison currently supports up to 2D spatial (got {data.n_spatial_dims}D).'],
-            )
+            slice_axis = int(ctx.options.get('slice_axis', -1))
+            slice_index = ctx.options.get('slice_index')
+            if slice_index is not None:
+                slice_index = int(slice_index)
+            plot_data_2d = slice_3d_to_2d(data, slice_axis=slice_axis, slice_index=slice_index)
+            fig = self._field_comparison_plot_nd(plot_data_2d, ctx)
 
         output_path = self._resolve_output(ctx, 'field_comparison.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
@@ -201,12 +204,12 @@ class SGAVizAdapter:
         if baseline is None:
             return VizResult(intent='time_slices', warnings=['Context does not expose metadata/original fields.'])
 
-        if baseline.n_spatial_dims != 1:
-            return VizResult(
-                intent='time_slices',
-                warnings=['time_slices currently supports 1D spatial fields only; use field_comparison for 2D+.'],
-            )
+        if baseline.n_spatial_dims == 1:
+            return self._time_slices_1d(baseline, ctx)
+        return self._time_slices_nd(baseline, ctx)
 
+    def _resolve_time_indices(self, baseline: FieldComparisonData, ctx):
+        """Resolve time slice indices from options."""
         slice_option = ctx.options.get('slice_times')
         if slice_option is None:
             slice_count = int(ctx.options.get('slice_count', 3))
@@ -220,8 +223,6 @@ class SGAVizAdapter:
                 raw_requested = baseline.t_coords
 
         requested_times = np.asarray(raw_requested, dtype=float)
-
-        # Map requested times to nearest available grid points
         t_coords = baseline.t_coords.reshape(-1)
         t_min, t_max = float(t_coords.min()), float(t_coords.max())
         requested_times = np.clip(requested_times, t_min, t_max)
@@ -231,13 +232,15 @@ class SGAVizAdapter:
 
         indices = [int(np.argmin(np.abs(t_coords - t_val))) for t_val in requested_times]
         actual_times = np.asarray([t_coords[idx] for idx in indices], dtype=float)
+        return indices, actual_times, raw_requested
 
-        t_coords = baseline.t_coords.reshape(-1)
+    def _time_slices_1d(self, baseline: FieldComparisonData, ctx) -> VizResult:
+        """1D spatial time slices: line plots at selected time steps."""
+        indices, actual_times, raw_requested = self._resolve_time_indices(baseline, ctx)
         x_coords = baseline.x_coords.reshape(-1)
 
         fig, axes = plt.subplots(
-            1,
-            len(indices),
+            1, len(indices),
             figsize=ctx.options.get('figsize', (max(4 * len(indices), 6), 4)),
             sharey=True,
         )
@@ -254,7 +257,6 @@ class SGAVizAdapter:
         axes[0].set_ylabel(ctx.options.get('field_label', 'u(x, t)'))
         legend_target = axes[len(indices) // 2] if len(indices) > 1 else axes[0]
         legend_target.legend()
-
         fig.tight_layout()
 
         output_path = self._resolve_output(ctx, 'time_slices_comparison.png')
@@ -270,6 +272,75 @@ class SGAVizAdapter:
             },
             'time_slices_data': TimeSliceComparisonData(
                 x_coords=baseline.x_coords,
+                t_coords=baseline.t_coords,
+                true_field=baseline.true_field,
+                predicted_field=baseline.predicted_field,
+                slice_times=actual_times,
+            ),
+        }
+        return VizResult(intent='time_slices', paths=[output_path], metadata=metadata)
+
+    def _time_slices_nd(self, baseline: FieldComparisonData, ctx) -> VizResult:
+        """2D+ spatial time slices: heatmaps at selected time steps."""
+        indices, actual_times, raw_requested = self._resolve_time_indices(baseline, ctx)
+
+        # For 3D+ spatial, slice to 2D first
+        plot_data = baseline
+        if baseline.n_spatial_dims >= 3:
+            sa = int(ctx.options.get('slice_axis', -1))
+            si = ctx.options.get('slice_index')
+            if si is not None:
+                si = int(si)
+            plot_data = slice_3d_to_2d(baseline, slice_axis=sa, slice_index=si)
+
+        n_cols = len(indices)
+        fig, axes = plt.subplots(2, n_cols, figsize=ctx.options.get('figsize', (5 * n_cols, 8)))
+        fig.suptitle(ctx.options.get('title', 'Time Slices (2D spatial)'), fontsize=16)
+        if n_cols == 1:
+            axes = axes.reshape(2, 1)
+
+        vmin = float(np.nanmin([plot_data.true_field.min(), plot_data.predicted_field.min()]))
+        vmax = float(np.nanmax([plot_data.true_field.max(), plot_data.predicted_field.max()]))
+        cmap = ctx.options.get('cmap', 'viridis')
+
+        y_coords = plot_data.spatial_coords[0]
+        x_coords = plot_data.spatial_coords[1]
+
+        for col_idx, t_idx in enumerate(indices):
+            true_slice = plot_data.true_field[..., t_idx]
+            pred_slice = plot_data.predicted_field[..., t_idx]
+
+            axes[0, col_idx].pcolormesh(
+                x_coords, y_coords, true_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[0, col_idx].set_title(f'True (t={actual_times[col_idx]:.2f})')
+            if col_idx == 0:
+                axes[0, col_idx].set_ylabel('$x_1$')
+
+            im = axes[1, col_idx].pcolormesh(
+                x_coords, y_coords, pred_slice,
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[1, col_idx].set_title(f'Predicted (t={actual_times[col_idx]:.2f})')
+            axes[1, col_idx].set_xlabel('$x_2$')
+            if col_idx == 0:
+                axes[1, col_idx].set_ylabel('$x_1$')
+
+        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
+        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+
+        output_path = self._resolve_output(ctx, 'time_slices_comparison.png')
+        fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        plt.close(fig)
+
+        metadata = {
+            'time_slices_summary': {
+                'requested_slice_times': np.asarray(raw_requested, dtype=float).tolist(),
+                'actual_slice_times': actual_times.tolist(),
+            },
+            'time_slices_data': TimeSliceComparisonData(
+                spatial_coords=baseline.spatial_coords,
                 t_coords=baseline.t_coords,
                 true_field=baseline.true_field,
                 predicted_field=baseline.predicted_field,
@@ -504,10 +575,12 @@ class SGAVizAdapter:
         elif ndim == 3:
             fig = self._residual_plot_nd(residual_meta, residual_origin, bins, ctx)
         else:
-            return VizResult(
-                intent='residual',
-                warnings=[f'residual currently supports up to 2D spatial (got {ndim - 1}D).'],
-            )
+            # 3D+ spatial: slice along last spatial axis to get 2D spatial
+            slice_axis = ndim - 2  # last spatial axis (time is last)
+            slice_idx = residual_meta.shape[slice_axis] // 2
+            meta_sliced = np.take(residual_meta, slice_idx, axis=slice_axis)
+            orig_sliced = np.take(residual_origin, slice_idx, axis=slice_axis)
+            fig = self._residual_plot_nd(meta_sliced, orig_sliced, bins, ctx)
 
         output_path = self._resolve_output(ctx, 'residual_analysis.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')

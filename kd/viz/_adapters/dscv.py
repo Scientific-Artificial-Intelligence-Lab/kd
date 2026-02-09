@@ -12,6 +12,7 @@ from .._contracts import (
     ParityPlotData,
     RewardEvolutionData,
     ResidualPlotData,
+    slice_3d_to_2d,
 )
 from ..core import VizResult
 from ..discover_eq2latex import discover_program_to_latex
@@ -254,6 +255,8 @@ class DSCVVizAdapter:
 
         import matplotlib.pyplot as plt
 
+        if n_spatial_dims == 1 and coords is None:
+            return VizResult(intent='residual', warnings=['1D residual plot requires coordinate data but coords is None.'])
         if n_spatial_dims == 1:
             fig = self._residual_plot_1d(residuals, coords, ctx)
         else:
@@ -298,35 +301,38 @@ class DSCVVizAdapter:
         return fig
 
     def _residual_plot_nd(self, fields, residuals, ctx):
-        """2D spatial: heatmap of residuals at a selected time step + histogram."""
+        """2D+ spatial: heatmap of residuals at a selected time step + histogram."""
         import matplotlib.pyplot as plt
 
         n_spatial_dims = fields.get('n_spatial_dims', 2)
-        if n_spatial_dims > 2:
-            # Fallback: histogram only for >2D spatial
-            fig, ax = plt.subplots(figsize=ctx.options.get('figsize', (7, 5)))
-            ax.hist(residuals, bins=int(ctx.options.get('bins', 40)), color='#1f77b4', alpha=0.7, edgecolor='black', density=True)
-            ax.set_xlabel('Residual Value')
-            ax.set_ylabel('Probability Density')
-            ax.set_title('Residual Distribution (>2D spatial — heatmap not available)')
-            ax.axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
-            return fig
-
         ut_grid = fields['ut_grid']
         y_hat_grid = fields['y_hat_grid']
         spatial_coords = fields['spatial_coords_list']
+        if len(spatial_coords) < 2:
+            raise ValueError(
+                f"_residual_plot_nd requires >= 2 spatial coords, got {len(spatial_coords)}"
+            )
         t_axis = fields['t_axis']
 
         residual_grid = ut_grid - y_hat_grid
         # Pick middle time step
         t_idx = residual_grid.shape[0] // 2
+        residual_slice = residual_grid[t_idx]
+
+        # For 3D+ spatial, slice along last spatial axis to get 2D
+        plot_coords = spatial_coords
+        if n_spatial_dims > 2:
+            for _ in range(n_spatial_dims - 2):
+                slice_axis = residual_slice.ndim - 1  # last spatial axis
+                slice_idx = residual_slice.shape[slice_axis] // 2
+                residual_slice = np.take(residual_slice, slice_idx, axis=slice_axis)
+                plot_coords = plot_coords[:-1]
 
         fig = plt.figure(figsize=ctx.options.get('figsize', (12, 5)))
         ax1 = fig.add_subplot(1, 2, 1)
 
-        y_coords = spatial_coords[0]
-        x_coords = spatial_coords[1]
-        residual_slice = residual_grid[t_idx]
+        y_coords = plot_coords[0]
+        x_coords = plot_coords[1]
         vabs = float(np.max(np.abs(residual_slice)))
         im = ax1.pcolormesh(
             x_coords, y_coords, residual_slice,
@@ -421,17 +427,24 @@ class DSCVVizAdapter:
 
         return VizResult(intent='field_comparison', paths=[path], metadata={'field_comparison': data})
 
+    @staticmethod
+    def _slice_3d_to_2d(data: FieldComparisonData, ctx) -> FieldComparisonData:
+        """Slice 3D+ spatial data along one axis to produce a 2D spatial view."""
+        sa = int(ctx.options.get('slice_axis', -1))
+        si = ctx.options.get('slice_index')
+        if si is not None:
+            si = int(si)
+        return slice_3d_to_2d(data, slice_axis=sa, slice_index=si)
+
     def _field_comparison_nd(self, data: FieldComparisonData, ctx) -> VizResult:
-        """2D spatial field comparison: show 2D heatmaps at selected time steps."""
+        """2D+ spatial field comparison: show 2D heatmaps at selected time steps."""
         import matplotlib.pyplot as plt
 
+        plot_data = data
         if data.n_spatial_dims > 2:
-            return VizResult(
-                intent='field_comparison',
-                warnings=[f'field_comparison currently supports up to 2D spatial (got {data.n_spatial_dims}D).'],
-            )
+            plot_data = self._slice_3d_to_2d(data, ctx)
 
-        nt = data.t_coords.size
+        nt = plot_data.t_coords.size
         # Pick up to 3 time steps: first, middle, last
         if nt <= 3:
             t_indices = list(range(nt))
@@ -444,22 +457,22 @@ class DSCVVizAdapter:
         if n_cols == 1:
             axes = axes.reshape(2, 1)
 
-        vmin = float(np.min([data.true_field.min(), data.predicted_field.min()]))
-        vmax = float(np.max([data.true_field.max(), data.predicted_field.max()]))
+        vmin = float(np.min([plot_data.true_field.min(), plot_data.predicted_field.min()]))
+        vmax = float(np.max([plot_data.true_field.max(), plot_data.predicted_field.max()]))
         cmap = ctx.options.get('cmap', 'viridis')
 
-        y_coords = data.spatial_coords[0]
-        x_coords = data.spatial_coords[1]
+        y_coords = plot_data.spatial_coords[0]
+        x_coords = plot_data.spatial_coords[1]
 
         for col_idx, t_idx in enumerate(t_indices):
-            true_slice = data.true_field[..., t_idx]
-            pred_slice = data.predicted_field[..., t_idx]
+            true_slice = plot_data.true_field[..., t_idx]
+            pred_slice = plot_data.predicted_field[..., t_idx]
 
             im0 = axes[0, col_idx].pcolormesh(
                 x_coords, y_coords, true_slice,
                 cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
             )
-            axes[0, col_idx].set_title(f'True (t={data.t_coords[t_idx]:.2f})')
+            axes[0, col_idx].set_title(f'True (t={plot_data.t_coords[t_idx]:.2f})')
             axes[0, col_idx].set_xlabel('$x_2$')
             if col_idx == 0:
                 axes[0, col_idx].set_ylabel('$x_1$')
@@ -468,7 +481,7 @@ class DSCVVizAdapter:
                 x_coords, y_coords, pred_slice,
                 cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
             )
-            axes[1, col_idx].set_title(f'Predicted (t={data.t_coords[t_idx]:.2f})')
+            axes[1, col_idx].set_title(f'Predicted (t={plot_data.t_coords[t_idx]:.2f})')
             axes[1, col_idx].set_xlabel('$x_2$')
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel('$x_1$')
@@ -567,7 +580,11 @@ class DSCVVizAdapter:
         except Exception:
             pass
 
-        return VizResult(intent='spr_residual', paths=[path], metadata={'residual': data})
+        n_spatial_dims = pinn_fields.get('n_spatial_dims', 1)
+        return VizResult(
+            intent='spr_residual', paths=[path],
+            metadata={'residual': data, 'n_spatial_dims': n_spatial_dims},
+        )
 
     def _spr_field_comparison(self, model, ctx) -> VizResult:
         try:
@@ -575,8 +592,9 @@ class DSCVVizAdapter:
         except Exception as exc:
             return VizResult(intent='spr_field_comparison', warnings=[f'Unable to compute PINN fields: {exc}'])
 
+        n_spatial_dims = pinn_fields.get('n_spatial_dims', 1)
+
         try:
-            x = np.asarray(pinn_fields['coords_x']).reshape(-1)
             t = np.asarray(pinn_fields['coords_t']).reshape(-1)
             true_vals = np.asarray(pinn_fields['y_true']).reshape(-1)
             pred_vals = np.asarray(pinn_fields['y_pred']).reshape(-1)
@@ -587,6 +605,12 @@ class DSCVVizAdapter:
             from scipy.interpolate import griddata
         except Exception as exc:  # pragma: no cover - optional dependency
             return VizResult(intent='spr_field_comparison', warnings=[f'scipy is required for SPR field comparison: {exc}'])
+
+        if n_spatial_dims >= 2:
+            return self._spr_field_comparison_nd(pinn_fields, ctx, griddata)
+
+        # Legacy 1D path
+        x = np.asarray(pinn_fields['coords_x']).reshape(-1)
 
         grid_x, grid_t = np.mgrid[x.min():x.max():100j, t.min():t.max():100j]
         grid_true = griddata((x, t), true_vals, (grid_x, grid_t), method='cubic')
@@ -622,6 +646,105 @@ class DSCVVizAdapter:
         axes[1].set_xlabel('Time')
 
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        _, path = self._resolve_output(ctx, 'spr_field_comparison.png')
+        fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
+        try:
+            plt.close(fig)
+        except Exception:
+            pass
+
+        return VizResult(intent='spr_field_comparison', paths=[path], metadata={'field_comparison': data})
+
+    def _spr_field_comparison_nd(self, pinn_fields, ctx, griddata) -> VizResult:
+        """N-D spatial SPR field comparison: time-bin + spatial griddata interpolation."""
+        import matplotlib.pyplot as plt
+
+        n_spatial_dims = pinn_fields['n_spatial_dims']
+        spatial_coords_list = pinn_fields['spatial_coords_list']
+        t = np.asarray(pinn_fields['coords_t']).reshape(-1)
+        true_vals = np.asarray(pinn_fields['y_true']).reshape(-1)
+        pred_vals = np.asarray(pinn_fields['y_pred']).reshape(-1)
+
+        # Time binning: pick a few time bins
+        n_t_bins = 5
+        t_edges = np.linspace(t.min(), t.max(), n_t_bins + 1)
+        t_centers = 0.5 * (t_edges[:-1] + t_edges[1:])
+
+        # Build spatial grid
+        grid_n = 50
+        grid_axes = [np.linspace(sc.min(), sc.max(), grid_n) for sc in spatial_coords_list]
+
+        # Use only first 2 spatial dims for interpolation and display
+        s0 = spatial_coords_list[0]
+        s1 = spatial_coords_list[1]
+
+        grid_s0, grid_s1 = np.meshgrid(grid_axes[0], grid_axes[1], indexing='ij')
+
+        # Average across time bins and interpolate
+        method = 'linear' if n_spatial_dims > 2 else 'cubic'
+        true_grids = []
+        pred_grids = []
+        for i in range(n_t_bins):
+            mask = (t >= t_edges[i]) & (t < t_edges[i + 1])
+            if i == n_t_bins - 1:
+                mask = mask | np.isclose(t, t_edges[i + 1])
+            if mask.sum() < 4:
+                true_grids.append(np.full_like(grid_s0, np.nan))
+                pred_grids.append(np.full_like(grid_s0, np.nan))
+                continue
+            gt = griddata((s0[mask], s1[mask]), true_vals[mask], (grid_s0, grid_s1), method=method)
+            gp = griddata((s0[mask], s1[mask]), pred_vals[mask], (grid_s0, grid_s1), method=method)
+            true_grids.append(np.nan_to_num(gt))
+            pred_grids.append(np.nan_to_num(gp))
+
+        # Stack: shape (grid_n, grid_n, n_t_bins)
+        true_field = np.stack(true_grids, axis=-1)
+        pred_field = np.stack(pred_grids, axis=-1)
+
+        data = FieldComparisonData(
+            spatial_coords=[grid_axes[0], grid_axes[1]],
+            t_coords=t_centers,
+            true_field=true_field,
+            predicted_field=pred_field,
+        )
+
+        # Plot 2D heatmaps at selected time bins
+        if n_t_bins <= 3:
+            t_indices = list(range(n_t_bins))
+        else:
+            t_indices = [0, n_t_bins // 2, n_t_bins - 1]
+
+        n_cols = len(t_indices)
+        fig, axes = plt.subplots(2, n_cols, figsize=ctx.options.get('figsize', (5 * n_cols, 8)))
+        fig.suptitle(ctx.options.get('title', 'SPR Field Comparison (N-D spatial)'), fontsize=16)
+        if n_cols == 1:
+            axes = axes.reshape(2, 1)
+
+        vmin = float(np.nanmin([true_field, pred_field]))
+        vmax = float(np.nanmax([true_field, pred_field]))
+        cmap = ctx.options.get('cmap', 'viridis')
+
+        for col_idx, t_idx in enumerate(t_indices):
+            axes[0, col_idx].pcolormesh(
+                grid_axes[1], grid_axes[0], true_field[..., t_idx],
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[0, col_idx].set_title(f'True (t~{t_centers[t_idx]:.2f})')
+            if col_idx == 0:
+                axes[0, col_idx].set_ylabel('$x_1$')
+
+            im = axes[1, col_idx].pcolormesh(
+                grid_axes[1], grid_axes[0], pred_field[..., t_idx],
+                cmap=cmap, vmin=vmin, vmax=vmax, shading='auto',
+            )
+            axes[1, col_idx].set_title(f'Predicted (t~{t_centers[t_idx]:.2f})')
+            axes[1, col_idx].set_xlabel('$x_2$')
+            if col_idx == 0:
+                axes[1, col_idx].set_ylabel('$x_1$')
+
+        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
+        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+
         _, path = self._resolve_output(ctx, 'spr_field_comparison.png')
         fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
         try:
