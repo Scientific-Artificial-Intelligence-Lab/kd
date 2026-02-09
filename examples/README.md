@@ -41,17 +41,6 @@ paths, please refer to the comments inside each script.
     comparison, residual plots, time-slice comparisons, derivative-term
     relationships and parity plots. This is the main DLGA + viz example.
 
-- `kd_dlga_viz_api_example.py`  
-  - Goal: Showcase DLGA integration with the unified `kd.viz.api`
-    (advanced / developer example).  
-  - Data: `load_pde("kdv")`.  
-  - Usage: `python examples/kd_dlga_viz_api_example.py`  
-  - Notes: Focuses on the `kd.viz` façade rather than DLGA internals. It
-    drives all available intents via high-level helpers (such as
-    `plot_training_curve`, `plot_field_comparison`, `plot_parity`,
-    etc.), and is useful as a reference when extending adapters or
-    building custom analysis pipelines.
-
 ---
 
 ## 3. DSCV – DISCOVER-based PDE discovery (Regular / SPR modes)
@@ -104,7 +93,7 @@ paths, please refer to the comments inside each script.
 
 ## 4. PySR – Generic symbolic regression (optional dependency)
 
-- `kd_pysr_minimal.py`  
+- `kd_pysr_example.py`  
   - Goal: Demonstrate KD’s wrapper around PySR (`KD_PySR`).  
   - Data: simple synthetic regression dataset `(X, y)`.  
   - Usage: `python examples/kd_pysr_minimal.py`
@@ -115,7 +104,23 @@ paths, please refer to the comments inside each script.
 
 ---
 
-## 5. Usage suggestions
+## 5. N-D Spatial Examples (2D/3D)
+
+- `kd_sga_nd_example.py`
+  - Goal: SGA PDE discovery on 2D/3D spatial data.
+  - Usage: `python examples/kd_sga_nd_example.py`
+
+- `kd_dscv_nd_example.py`
+  - Goal: DSCV Regular mode on 2D/3D spatial data.
+  - Usage: `python examples/kd_dscv_nd_example.py`
+
+- `kd_dscvspr_nd_example.py`
+  - Goal: DSCV Sparse/PINN mode on 2D/3D spatial data.
+  - Usage: `python examples/kd_dscvspr_nd_example.py`
+
+---
+
+## 6. Usage suggestions
 
 - Beginners / quick start:  
   Start with the `*_example.py` scripts (e.g.

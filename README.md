@@ -26,11 +26,8 @@ PySR, and high-quality visual diagnostics in a single workflow.
 conda create -n kd-env python=3.9
 conda activate kd-env
 
-# 2) install dependencies for working from the repo
-pip install -r requirements.txt
-
-# (optional) install KD as a package in the same environment
-pip install .
+# 2) install KD in editable mode (recommended for development)
+pip install -e .
 
 # (optional) enable PySR-based symbolic regression
 pip install 'kd[pysr]'
@@ -70,7 +67,7 @@ A minimal SGA workflow (imports omitted for brevity):
 dataset = load_pde("burgers")
 model = KD_SGA()
 model.fit_dataset(dataset)
-print(model.best_equation_latex_)
+print(model.best_equation_)  # discovered PDE as string
 ```
 
 To generate basic diagnostics and figures with the unified visualization façade:
@@ -105,7 +102,7 @@ kd/
 ├── dataset/     # PDEDataset, registry, PDE loaders (load_pde, etc.)
 ├── model/       # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR and related backends
 ├── viz/         # kd.viz façade, adapters, legacy visualisers
-└── utils.py     # general utilities
+└── utils/       # general utilities (logging, FD helpers, solver, etc.)
 ```
 
 Runnable scripts live under `examples/`, and automated tests under `tests/`.
