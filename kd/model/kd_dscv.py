@@ -277,10 +277,12 @@ class KD_DSCV(BaseRL):
         Args:
             config: Configuration dictionary or path.
         """
-        if config is not None:
+        if isinstance(config, str):
             config = load_config(config)
+        elif config is None:
+            config = {}
 
-        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), self.base_config_file), encoding='utf-8') as f:    
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), self.base_config_file), encoding='utf-8') as f:
             base_config = json.load(f)
         config_update = safe_merge_dicts(base_config, config)
         self.config = defaultdict(dict, config_update)

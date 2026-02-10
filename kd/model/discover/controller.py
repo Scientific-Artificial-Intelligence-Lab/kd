@@ -420,7 +420,7 @@ class Controller(object):
         # Priority queue training loss
         if self.pqt:
             pqt_neglogp, _ = self.make_neglogp_and_entropy(pqt_batch)
-            pqt_loss = self.pqt_weight * torch.mean(neglogp)
+            pqt_loss = self.pqt_weight * torch.mean(pqt_neglogp)
             loss += pqt_loss
         loss.backward()
         self.optimizer.step()
