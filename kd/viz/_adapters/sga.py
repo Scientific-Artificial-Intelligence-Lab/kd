@@ -59,9 +59,17 @@ class SGAVizAdapter:
         if not hasattr(model, 'equation_latex'):
             return VizResult(intent='equation', warnings=['Model does not expose equation LaTeX helper.'])
 
+        notation = ctx.options.get('notation', 'subscript')
         try:
-            latex_plain = model.equation_latex()
-            structure_plain = model.equation_latex(include_coefficients=False)
+            latex_plain = model.equation_latex(notation=notation)
+            structure_plain = model.equation_latex(include_coefficients=False, notation=notation)
+        except TypeError:
+            # Model does not accept notation kwarg; fall back without it.
+            try:
+                latex_plain = model.equation_latex()
+                structure_plain = model.equation_latex(include_coefficients=False)
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                return VizResult(intent='equation', warnings=[f'Failed to obtain SGA equation: {exc}'])
         except Exception as exc:  # pragma: no cover - defensive fallback
             return VizResult(intent='equation', warnings=[f'Failed to obtain SGA equation: {exc}'])
 

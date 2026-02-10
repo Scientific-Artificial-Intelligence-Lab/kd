@@ -114,15 +114,21 @@ def extract_equation_details(pde, context, *, coefficient_tol: float = _DEFAULT_
     return SGAEquationDetails(lhs=lhs_label, terms=tuple(term_list), predicted_rhs=predicted_rhs)
 
 
+_VALID_NOTATIONS = ("subscript", "leibniz")
+
+
 def sga_equation_to_latex(
     details: SGAEquationDetails,
     *,
     include_coefficients: bool = True,
+    notation: str = "subscript",
 ) -> str:
     """Convert structured equation details into a LaTeX string."""
 
     if details is None:
         raise ValueError('SGA equation details must not be None.')
+    if notation not in _VALID_NOTATIONS:
+        raise ValueError(f"notation must be one of {_VALID_NOTATIONS}, got {notation!r}")
 
     lhs = _format_lhs(details.lhs)
     terms = list(details.nonzero_terms())
@@ -131,7 +137,7 @@ def sga_equation_to_latex(
 
     formatted_terms = []
     for index, term in enumerate(terms):
-        sign, body = _format_term(term, include_coefficients=include_coefficients)
+        sign, body = _format_term(term, include_coefficients=include_coefficients, notation=notation)
         if index == 0:
             formatted_terms.append(body if sign == '+' else f"- {body}")
         else:
@@ -140,10 +146,10 @@ def sga_equation_to_latex(
     return f"{lhs} = {rhs}"
 
 
-def sga_equation_structure(details: SGAEquationDetails) -> str:
+def sga_equation_structure(details: SGAEquationDetails, *, notation: str = "subscript") -> str:
     """Return a LaTeX string showing equation structure without coefficients."""
 
-    return sga_equation_to_latex(details, include_coefficients=False)
+    return sga_equation_to_latex(details, include_coefficients=False, notation=notation)
 
 
 def _format_lhs(lhs: str) -> str:
@@ -153,12 +159,12 @@ def _format_lhs(lhs: str) -> str:
     return _sanitize_label(raw)
 
 
-def _format_term(term: SGAEquationTerm, *, include_coefficients: bool) -> tuple[str, str]:
+def _format_term(term: SGAEquationTerm, *, include_coefficients: bool, notation: str = "subscript") -> tuple[str, str]:
     coeff = term.coefficient
     magnitude = abs(coeff)
     sign = '-' if coeff < 0 else '+'
 
-    expr = _render_term_expression(term)
+    expr = _render_term_expression(term, notation=notation)
     if not expr:
         expr = '1'
 
@@ -180,10 +186,10 @@ def _expression_is_scalar(expr: str) -> bool:
     return expr in {'1', '0'}
 
 
-def _render_term_expression(term: SGAEquationTerm) -> str:
+def _render_term_expression(term: SGAEquationTerm, *, notation: str = "subscript") -> str:
     if term.tree is not None and hasattr(term.tree, 'tree'):
         try:
-            return _render_tree(term.tree)
+            return _render_tree(term.tree, notation=notation)
         except Exception:
             pass
     return _sanitize_label(term.label)
@@ -207,7 +213,7 @@ def _sanitize_label(label: str) -> str:
     return cleaned
 
 
-def _render_tree(tree) -> str:
+def _render_tree(tree, *, notation: str = "subscript") -> str:
     nodes = getattr(tree, 'tree', None)
     if not nodes:
         return '1'
@@ -227,7 +233,7 @@ def _render_tree(tree) -> str:
             else:
                 child_expressions.append(helper(next_depth, child_idx))
         children = child_expressions
-        return _combine_node(name, children)
+        return _combine_node(name, children, notation=notation)
 
     return helper(0, 0)
 
@@ -247,7 +253,7 @@ def _render_leaf(name: str) -> str:
     return mapping.get(name, name)
 
 
-def _combine_node(name: str, children: Sequence[str]) -> str:
+def _combine_node(name: str, children: Sequence[str], *, notation: str = "subscript") -> str:
     if name == '+':
         return f"({children[0]} + {children[1]})"
     if name == '-':
@@ -265,11 +271,15 @@ def _combine_node(name: str, children: Sequence[str]) -> str:
     if name == 'd':
         var = _render_derivative_variable(children)
         operand = children[0]
+        if notation == "subscript":
+            return f"{operand}_{{{var}}}"
         return f"\\frac{{\\partial {operand}}}{{\\partial {var}}}"
     if name == 'd^2':
         var = _render_derivative_variable(children)
         operand = children[0]
-        return f"\\frac{{\\partial^{2} {operand}}}{{\\partial {var}^{2}}}"
+        if notation == "subscript":
+            return f"{operand}_{{{var}{var}}}"
+        return f"\\frac{{\\partial^{{2}} {operand}}}{{\\partial {var}^{{2}}}}"
     if not children:
         return name
     return f"{name}({', '.join(children)})"

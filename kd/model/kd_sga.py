@@ -89,13 +89,14 @@ class KD_SGA(BaseEstimator):
         self,
         *,
         include_coefficients: bool = True,
+        notation: str = "subscript",
     ) -> str:
         """Return the discovered equation formatted as LaTeX."""
 
         details = getattr(self, 'best_equation_details_', None)
         if details is None:
             raise RuntimeError('Equation details are not available. Call fit_dataset() first.')
-        return sga_equation_to_latex(details, include_coefficients=include_coefficients)
+        return sga_equation_to_latex(details, include_coefficients=include_coefficients, notation=notation)
 
     def equation_structure_latex(self) -> str:
         """Return the equation structure without coefficients."""

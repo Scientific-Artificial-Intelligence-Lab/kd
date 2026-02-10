@@ -210,7 +210,8 @@ class DSCVVizAdapter:
             return VizResult(intent='equation', warnings=['No best program available for equation rendering.'])
 
         try:
-            latex = discover_program_to_latex(program)
+            notation = ctx.options.get('notation', 'subscript')
+            latex = discover_program_to_latex(program, notation=notation)
         except Exception as exc:  # pragma: no cover - dependent on program internals
             return VizResult(intent='equation', warnings=[f'Failed to convert program to LaTeX: {exc}'])
 
