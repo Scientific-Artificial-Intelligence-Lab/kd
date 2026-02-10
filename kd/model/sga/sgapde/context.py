@@ -570,12 +570,6 @@ class ProblemContext:
                     )
 
                 self.grad_fields[key] = grad
-        if self.target_field in self.fields:
-            key = build_derivative_key(self.target_field, self.primary_spatial_axis, order=1)
-            grad = self.grad_fields.get(key)
-            if grad is not None and "ux" not in self.fields and "ux" not in self.grad_fields:
-                # Legacy alias for backward compatibility on the primary spatial axis.
-                self.grad_fields["ux"] = grad
 
     @staticmethod
     def _finite_diff_along_axis(data, delta, axis, order=1):
@@ -968,6 +962,7 @@ class ProblemContext:
         # Guardrail: grad_fields must exclude lhs-axis derivatives (avoid trivial ut=ut).
         self._assert_no_lhs_in_grad_fields()
         self.VARS = self._build_vars(include_grad=True)
+        self._assert_no_lhs_in_vars()
 
         # Find and update ux in ALL array
         for i, op in enumerate(self.ALL):
@@ -981,17 +976,28 @@ class ProblemContext:
             vars_list.append([field_name, 0, field_value])
 
         for axis in self.axis_order:
+            if axis == self.lhs_axis:
+                continue
             coord = self.coord_grids.get(axis)
             if coord is not None:
                 vars_list.append([axis, 0, coord])
+
+        vars_list.append(['0', 0, self.zeros])
 
         if include_grad:
             for name, value in self.grad_fields.items():
                 vars_list.append([name, 0, value])
 
-        vars_list.append(['0', 0, self.zeros])
-
         return np.array(vars_list, dtype=object)
+
+    def _assert_no_lhs_in_vars(self) -> None:
+        """Fail fast if lhs_axis appears as a coordinate terminal in VARS."""
+        var_names = {entry[0] for entry in self.VARS}
+        if self.lhs_axis in var_names:
+            raise ValueError(
+                f"VARS contains lhs_axis '{self.lhs_axis}'. "
+                f"Only spatial coordinates belong in VARS."
+            )
 
     def _assert_no_lhs_in_den(self):
         """Fail fast if lhs_axis appears in derivative denominators."""

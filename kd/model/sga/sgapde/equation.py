@@ -238,6 +238,7 @@ def _render_leaf(name: str) -> str:
         'x': 'x',
         't': 't',
         'ux': 'u_{x}',
+        'u_x': 'u_{x}',
         'uxx': 'u_{xx}',
         'uxxx': 'u_{xxx}',
         'ut': 'u_{t}',

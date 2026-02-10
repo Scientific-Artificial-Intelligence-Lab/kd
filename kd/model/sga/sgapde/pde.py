@@ -28,17 +28,17 @@ _DIVISION_STRATEGY_OVERRIDE: str | None = None
 def _resolve_division_strategy() -> str:
     if _DIVISION_STRATEGY_OVERRIDE is not None:
         return _DIVISION_STRATEGY_OVERRIDE
-    raw = os.getenv(_DIVISION_STRATEGY_ENV, _DIVISION_STRATEGY_GUARD)
+    raw = os.getenv(_DIVISION_STRATEGY_ENV, _DIVISION_STRATEGY_LEGACY)
     if not raw:
-        return _DIVISION_STRATEGY_GUARD
+        return _DIVISION_STRATEGY_LEGACY
     normalized = raw.strip().lower()
     if normalized not in _DIVISION_STRATEGIES:
         _LOGGER.debug(
             "Unknown KD_SGA division strategy '%s'; falling back to '%s'",
             normalized,
-            _DIVISION_STRATEGY_GUARD,
+            _DIVISION_STRATEGY_LEGACY,
         )
-        return _DIVISION_STRATEGY_GUARD
+        return _DIVISION_STRATEGY_LEGACY
     return normalized
 
 
