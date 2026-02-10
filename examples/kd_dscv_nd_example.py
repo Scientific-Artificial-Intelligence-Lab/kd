@@ -105,15 +105,11 @@ plot_density(model, epoches=[2, 5, 10])
 print("  plot_evolution...")
 plot_evolution(model)
 
-# TODO: [viz-nd] plot_pde_residual_analysis fails with N-D data:
-#   TypeError: 'NoneType' object is not subscriptable
-#   coords_for_plot is None for N-D datasets (scatter expects 2D coords)
+# NOTE: Legacy plot_pde_residual_analysis / dscv_plot_field_comparison do not
+# support N-D data (they assume 2D (x, t) layout). Use the unified API
+# (plot_field_comparison, plot_residuals from kd.viz) as N-D alternatives.
 # print("  plot_pde_residual_analysis...")
 # plot_pde_residual_analysis(model, step_output['program'])
-
-# TODO: [viz-nd] dscv plot_field_comparison fails with N-D data:
-#   TypeError: Dimensions of C (30, 20, 20) are incompatible with X (30) and Y (20)
-#   Legacy DSCV viz assumes 2D (x, t) field; N-D gives 3D array
 # print("  plot_field_comparison (legacy DSCV)...")
 # dscv_plot_field_comparison(model, step_output['program'])
 
@@ -128,6 +124,8 @@ from kd.viz import (
     configure,
     render_equation,
     plot_parity,
+    plot_field_comparison,
+    plot_residuals,
 )
 
 SAVE_DIR = PROJECT_ROOT / "artifacts" / "dscv_nd_viz"
@@ -140,5 +138,11 @@ render_equation(model)
 
 print("  plot_parity...")
 plot_parity(model, title="KD_DSCV N-D Parity")
+
+print("  plot_field_comparison...")
+plot_field_comparison(model, x_coords=None, t_coords=None, true_field=None, predicted_field=None)
+
+print("  plot_residuals...")
+plot_residuals(model, actual=None, predicted=None, bins=40)
 
 print("\n[DSCV N-D] Done!")

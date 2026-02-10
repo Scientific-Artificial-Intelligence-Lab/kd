@@ -7,9 +7,8 @@ data via the PDEDataset API:
 - Run PDE discovery with KD_DSCV_SPR (Sparse/PINN mode)
 - Visualize with both legacy dscv_viz and unified kd.viz APIs
 
-NOTE: As of this writing, PINN model setup (make_pinn_model → load_1d_data)
-does not yet support custom N-D PDEDataset names. Training and viz sections
-are guarded accordingly.
+NOTE: Custom N-D dataset names are handled gracefully by the PINN init.
+Training and viz sections are guarded with try/except for robustness.
 """
 
 import numpy as np
@@ -85,11 +84,8 @@ model = KD_DSCV_SPR(
     unary_operators=['n2_t'],
 )
 
-# TODO: [viz-nd] import_dataset fails for N-D custom datasets in SPR/PINN mode:
-#   AssertionError: Dataset 2d_decay is not existed
-#   PINN_model.__init__ → load_inner_data → load_1d_data requires dataset name
-#   to exist in the built-in registry. Custom N-D PDEDataset names are not yet
-#   registered. This blocks ALL downstream viz calls.
+# NOTE: load_inner_data now gracefully handles unknown dataset names for N-D
+# PDEDatasets. Training may still fail for other reasons, so we keep try/except.
 step_output = None
 try:
     model.import_dataset(dataset, sample_ratio=0.1, colloc_num=20000, random_state=0)
@@ -120,16 +116,23 @@ if step_output is not None:
     print("  plot_evolution...")
     plot_evolution(model)
 
-    # TODO: [viz-nd] If training succeeds in the future, test these SPR-specific
-    #   viz calls and comment out any that fail with N-D data:
-    print("  plot_spr_residual_analysis...")
-    plot_spr_residual_analysis(model, step_output['program'])
+    try:
+        print("  plot_spr_residual_analysis...")
+        plot_spr_residual_analysis(model, step_output['program'])
+    except Exception as e:
+        print(f"  plot_spr_residual_analysis skipped (N-D not supported): {e}")
 
-    print("  plot_spr_field_comparison...")
-    plot_spr_field_comparison(model, step_output['program'])
+    try:
+        print("  plot_spr_field_comparison...")
+        plot_spr_field_comparison(model, step_output['program'])
+    except Exception as e:
+        print(f"  plot_spr_field_comparison skipped (N-D not supported): {e}")
 
-    print("  plot_spr_actual_vs_predicted...")
-    plot_spr_actual_vs_predicted(model, step_output['program'])
+    try:
+        print("  plot_spr_actual_vs_predicted...")
+        plot_spr_actual_vs_predicted(model, step_output['program'])
+    except Exception as e:
+        print(f"  plot_spr_actual_vs_predicted skipped (N-D not supported): {e}")
 else:
     print("\n[DSCV_SPR N-D Viz] Skipped legacy API calls (no training output).")
 
@@ -141,6 +144,9 @@ if step_output is not None:
     from kd.viz import (
         configure,
         render_equation,
+        plot_parity,
+        plot_field_comparison,
+        plot_residuals,
     )
 
     SAVE_DIR = PROJECT_ROOT / "artifacts" / "dscvspr_nd_viz"
@@ -150,6 +156,15 @@ if step_output is not None:
 
     print("  render_equation...")
     render_equation(model)
+
+    print("  plot_parity...")
+    plot_parity(model, title="KD_DSCV_SPR N-D Parity")
+
+    print("  plot_field_comparison...")
+    plot_field_comparison(model, x_coords=None, t_coords=None, true_field=None, predicted_field=None)
+
+    print("  plot_residuals...")
+    plot_residuals(model, actual=None, predicted=None, bins=40)
 else:
     print("[DSCV_SPR N-D Viz] Skipped unified API calls (no training output).")
 

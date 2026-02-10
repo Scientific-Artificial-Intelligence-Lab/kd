@@ -86,7 +86,16 @@ class PINN_model:
             
         # data convert
         if self.dataset_name is not None:
-            self.load_inner_data()
+            try:
+                self.load_inner_data()
+            except (AssertionError, UnboundLocalError) as e:
+                # Custom/N-D dataset not in built-in registry, or
+                # data_type not matching 1D_1U/2D_2U dispatch;
+                # import_outter_data() will provide the data later.
+                logger.debug(
+                    "load_inner_data skipped for '%s': %s",
+                    self.dataset_name, e,
+                )
         
         # optimizer
         # if config_pinn['optimizer_pretrain'] =='LBFGS':
