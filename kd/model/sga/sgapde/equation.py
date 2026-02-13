@@ -249,6 +249,18 @@ def _render_leaf(name: str) -> str:
         'uxxx': 'u_{xxx}',
         'ut': 'u_{t}',
         '0': '0',
+        # Common Greek letters for parameter fields.
+        'alpha': '\\alpha',
+        'beta': '\\beta',
+        'gamma': '\\gamma',
+        'delta': '\\delta',
+        'epsilon': '\\epsilon',
+        'kappa': '\\kappa',
+        'lambda': '\\lambda',
+        'mu': '\\mu',
+        'nu': '\\nu',
+        'rho': '\\rho',
+        'sigma': '\\sigma',
     }
     return mapping.get(name, name)
 

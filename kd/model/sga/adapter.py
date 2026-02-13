@@ -34,7 +34,7 @@ class SGADataAdapter:
             axis_order = getattr(self.dataset, "axis_order", None) or list(coords_1d.keys())
             target_field = getattr(self.dataset, "target_field", "u")
             lhs_axis = getattr(self.dataset, "lhs_axis", "t")
-            return {
+            kwargs = {
                 "fields_data": {k: np.asarray(v) for k, v in fields_data.items()},
                 "coords_1d": {k: np.asarray(v) for k, v in coords_1d.items()},
                 "axis_order": list(axis_order),
@@ -42,6 +42,10 @@ class SGADataAdapter:
                 "lhs_axis": lhs_axis,
                 "problem_name": getattr(self.dataset, "equation_name", "custom_dataset") or "custom_dataset",
             }
+            param_fields = getattr(self.dataset, "param_fields", None)
+            if param_fields:
+                kwargs["param_fields"] = {k: np.asarray(v) for k, v in param_fields.items()}
+            return kwargs
 
         x = np.asarray(self.dataset.x, dtype=float).flatten()
         t = np.asarray(self.dataset.t, dtype=float).flatten()

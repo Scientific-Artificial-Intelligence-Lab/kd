@@ -665,13 +665,17 @@ class DiffConstraint_right(RelationalConstraint):
     """Class that constrains terminal tokens are the only tokens."""
 
     def __init__(self, library):
-        targets = np.concatenate([library.unary_tokens,
-                                    library.binary_tokens])
-        input_dim =len(library.input_tokens)
-        if library.const_token is not None:
-            targets = np.concatenate([targets,library.terminal_tokens[-2:]])
-        else:
-            targets = np.concatenate([targets,library.terminal_tokens[input_dim:]])
+        # All non-input terminal tokens should be prohibited as diff right child.
+        # Use input_tokens set exclusion instead of hardcoded [-2:] offset.
+        input_set = set(library.input_tokens.tolist())
+        non_input_terminals = np.array(
+            [t for t in library.terminal_tokens if t not in input_set],
+            dtype=np.int32)
+        targets = np.concatenate([
+            library.unary_tokens,
+            library.binary_tokens,
+            non_input_terminals,
+        ])
             # import pdb;pdb.set_trace()
         effectors = []
         for diff_name in library.names:

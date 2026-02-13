@@ -35,16 +35,19 @@ class Token():
         Call the Token's function according to input.
     """
 
-    def __init__(self, function, name, arity, complexity, input_var=None,state_var=None):
+    def __init__(self, function, name, arity, complexity, input_var=None, state_var=None, param_var=None):
         self.function = function
         self.name = name
         self.arity = arity
         self.complexity = complexity
         self.input_var = input_var
         self.state_var = state_var
-        if input_var is not None or state_var is not None :
-            assert function is None, "Input variables should not have functions."
-            assert arity == 0, "Input variables should have arity zero."
+        self.param_var = param_var
+        # Reference to param data array, set externally by PDETask.load_data.
+        self._param_data_ref = None
+        if input_var is not None or state_var is not None or param_var is not None:
+            assert function is None, "Input/state/param variables should not have functions."
+            assert arity == 0, "Input/state/param variables should have arity zero."
 
     def __call__(self, *args):
         assert self.function is not None, \
@@ -131,7 +134,7 @@ class Library():
         self.names = [t.name for t in tokens]
         self.name_arites = { t.name : t.arity for t in tokens}
 
-        self.np_names = [t.name for t in tokens if t.name not in ['const'] and ('u' not in t.name or t.name=='mul') and t.input_var is None]
+        self.np_names = [t.name for t in tokens if t.name not in ['const'] and ('u' not in t.name or t.name=='mul') and t.input_var is None and t.param_var is None]
         #sub child of operator
         self.arities = np.array([t.arity for t in tokens], dtype=np.int32)
 
@@ -141,8 +144,11 @@ class Library():
         self.state_tokens = np.array(
             [i for i, t in enumerate(self.tokens) if t.state_var is not None],
             dtype=np.int32)
-        
-        
+        self.param_tokens = np.array(
+            [i for i, t in enumerate(self.tokens) if t.param_var is not None],
+            dtype=np.int32)
+
+
         if len(self.input_tokens) == 0:
             assert  len(self.state_tokens)
             self.input_tokens = self.state_tokens

@@ -295,6 +295,7 @@ class PDEDataset(MetaData):
         axis_order: Optional[List[str]] = None,
         target_field: str = "u",
         lhs_axis: str = "t",
+        param_fields: Optional[Dict[str, np.ndarray]] = None,
     ):
         """
         Initializes the PDE dataset, supporting three input methods:
@@ -315,6 +316,9 @@ class PDEDataset(MetaData):
         :param axis_order: List of axis names defining array dimension order (N-D mode).
         :param target_field: Name of the target field in fields_data (default: "u").
         :param lhs_axis: Axis for LHS derivative (default: "t").
+        :param param_fields: Dict mapping parameter names to arrays with the same shape
+            as the target field. Parameters appear in discovered equations but are not
+            differentiated. For constant parameters use ``np.full_like(u, value)``.
         """
         super().__init__(equation_name)
 
@@ -344,6 +348,23 @@ class PDEDataset(MetaData):
             raise ValueError(
                 "Either `pde_data`, `x/t/usol`, or `fields_data/coords_1d` must be provided."
             )
+
+        # Store parameter fields (non-differentiated variables).
+        self.param_fields: Dict[str, np.ndarray] = {}
+        if param_fields:
+            target_shape = self.usol.shape
+            for name, arr in param_fields.items():
+                arr = np.asarray(arr)
+                if arr.shape != target_shape:
+                    raise ValueError(
+                        f"param_fields['{name}'] shape {arr.shape} does not match "
+                        f"target field shape {target_shape}."
+                    )
+                if not np.all(np.isfinite(arr)):
+                    raise ValueError(
+                        f"param_fields['{name}'] contains NaN or Inf values."
+                    )
+                self.param_fields[name] = arr
 
         self.u = self.usol
         self.equation_name = equation_name

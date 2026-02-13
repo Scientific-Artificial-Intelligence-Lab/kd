@@ -115,6 +115,18 @@ class DSCVRegularAdapter:
         if sym_true is not None:
             data["sym_true"] = sym_true
 
+        # Parameter fields — same shape as u, not differentiated.
+        param_fields = getattr(self.dataset, "param_fields", None) or {}
+        if param_fields:
+            param_data_list: List[np.ndarray] = []
+            param_names: List[str] = []
+            for name, arr in param_fields.items():
+                param_data_list.append(np.asarray(arr, dtype=float))
+                param_names.append(name)
+            data["param_data"] = param_data_list
+            data["n_param_var"] = len(param_data_list)
+            data["param_names"] = param_names
+
         return data
 
     # ------------------------------------------------------------------
@@ -236,6 +248,21 @@ class DSCVRegularAdapter:
         }
         if sym_true is not None:
             data["sym_true"] = sym_true
+
+        # Parameter fields — apply same permute as u so shapes align.
+        param_fields = getattr(self.dataset, "param_fields", None) or {}
+        if param_fields:
+            param_data_list: List[np.ndarray] = []
+            param_names: List[str] = []
+            for name, arr in param_fields.items():
+                p_raw = np.asarray(arr, dtype=float)
+                # Same transpose as u: axis_order → [lhs_axis, *spatial_axes]
+                p = np.transpose(p_raw, perm)
+                param_data_list.append(p)
+                param_names.append(name)
+            data["param_data"] = param_data_list
+            data["n_param_var"] = len(param_data_list)
+            data["param_names"] = param_names
 
         return data
 
@@ -381,6 +408,18 @@ class DSCVSparseAdapter:
         result['u_star'] = u.reshape(-1, 1)
         result['shape'] = u.shape
 
+        # Parameter fields — raw arrays, not sampled.
+        param_fields = getattr(self.dataset, "param_fields", None) or {}
+        if param_fields:
+            param_data_list: List[np.ndarray] = []
+            param_names: List[str] = []
+            for name, arr in param_fields.items():
+                param_data_list.append(np.asarray(arr, dtype=float))
+                param_names.append(name)
+            result["param_data"] = param_data_list
+            result["n_param_var"] = len(param_data_list)
+            result["param_names"] = param_names
+
         return result
 
     # ------------------------------------------------------------------
@@ -500,6 +539,20 @@ class DSCVSparseAdapter:
         result['X_star'] = X_star
         result['u_star'] = u.ravel(order="C").reshape(-1, 1)
         result['shape'] = u.shape
+
+        # Parameter fields — apply same perm as u (time-last for Sparse).
+        param_fields = getattr(self.dataset, "param_fields", None) or {}
+        if param_fields:
+            param_data_list: List[np.ndarray] = []
+            param_names: List[str] = []
+            for name, arr in param_fields.items():
+                p_raw = np.asarray(arr, dtype=float)
+                p = np.transpose(p_raw, perm)
+                param_data_list.append(p)
+                param_names.append(name)
+            result["param_data"] = param_data_list
+            result["n_param_var"] = len(param_data_list)
+            result["param_names"] = param_names
 
         return result
 

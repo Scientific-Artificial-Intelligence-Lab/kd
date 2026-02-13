@@ -63,6 +63,8 @@ class SolverConfig:
     lhs_axis: str = "t"
     # Optional override for the legacy ux/uxx/uxxx axis when no 'x' axis exists.
     primary_spatial_axis: Optional[str] = None
+    # Parameter fields: variables that appear in the equation but are not differentiated.
+    param_fields: Optional[Dict[str, np.ndarray]] = None
     enforce_uniform_grid: bool = True
 
     # SGA parameters

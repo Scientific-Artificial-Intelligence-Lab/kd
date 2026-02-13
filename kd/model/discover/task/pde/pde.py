@@ -118,19 +118,33 @@ class PDETask(HierarchicalTask):
         self.x = dataset['X']
         self.ut = dataset['ut'].reshape(-1,1)
         if torch.is_tensor(self.ut):
-            self.ut = tensor2np(self.ut)        
+            self.ut = tensor2np(self.ut)
         self.sym_true = dataset.get('sym_true', '')
         self.n_input_var = dataset.get('n_input_dim', 1)
         self.u_test,self.ut_test = dataset.get('u_test',None),dataset.get('ut_test', None)
 
-        # Set the Library 
+        # Parameter fields (non-differentiated variables).
+        self.param_data = dataset.get('param_data', None)
+        self.n_param_var = dataset.get('n_param_var', 0)
+        self.param_names = dataset.get('param_names', None)
+
+        # Set the Library
         tokens = create_tokens(n_input_var=self.n_input_var,
                                function_set=self.function_set,
                                protected=self.protected,
                                n_state_var=len(self.u),
                                decision_tree_threshold_set=self.decision_tree_threshold_set,
-                               task_type='pde')
+                               task_type='pde',
+                               n_param_var=self.n_param_var,
+                               param_names=self.param_names)
         self.library = Library(tokens)
+
+        # Bind param data references onto param tokens so that execute.py
+        # can retrieve the data without changing call signatures.
+        if self.param_data:
+            for token in self.library.tokens:
+                if token.param_var is not None and token.param_var < len(self.param_data):
+                    token._param_data_ref = self.param_data[token.param_var]
             
         # if '2D' in dataset:
         #     load_class = load_data_2D 

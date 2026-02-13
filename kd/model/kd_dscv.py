@@ -572,6 +572,9 @@ class KD_DSCV_SPR(KD_DSCV):
         self.config_pinn["input_dim"] = self._base_pinn_input_dim
         self.config_pinn["generation_type"] = self._base_generation_type
         self.config_task["n_input_var"] = self._base_n_input_var
+        # Reset param baseline.
+        self.config_task["n_param_var"] = 0
+        self.config_task.pop("param_names", None)
 
         data = self.data_class.get_data()
         n_spatial: int = data.get("n_input_dim", 1)
@@ -579,6 +582,12 @@ class KD_DSCV_SPR(KD_DSCV):
             self.config_pinn["input_dim"] = n_spatial + 1
             self.config_pinn["generation_type"] = "multi_AD"
             self.config_task["n_input_var"] = n_spatial
+
+        # Inject param_fields config (independent of n_spatial).
+        n_param_var = data.get("n_param_var", 0)
+        if n_param_var > 0:
+            self.config_task["n_param_var"] = n_param_var
+            self.config_task["param_names"] = data.get("param_names")
 
     def make_pinn_model(self):
         """Create PINN model.

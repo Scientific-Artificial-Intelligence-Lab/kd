@@ -982,6 +982,13 @@ class ProblemContext:
             if coord is not None:
                 vars_list.append([axis, 0, coord])
 
+        # Parameter fields: appear as terminals but are not differentiated
+        # (they are deliberately excluded from `den`, so SGA will not compute
+        # derivatives with respect to them).
+        param_fields = getattr(self.config, "param_fields", None) or {}
+        for name, value in param_fields.items():
+            vars_list.append([name, 0, value])
+
         vars_list.append(['0', 0, self.zeros])
 
         if include_grad:

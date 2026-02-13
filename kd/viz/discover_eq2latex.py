@@ -9,14 +9,18 @@ from kd.viz.dlga_eq2latex import _format_full_latex_term
 # FIXME: This list is static; ideally it should be derived from Program.library
 # or injected as a parameter.
 DEEPRL_SYMBOLS_FOR_SYMPY = {
-    name: sympy.Symbol(name) for name in ['u1', 'x1', 'x2', 'x3', 'c'] # 'c' 代表可能的常数符号
+    name: sympy.Symbol(name)
+    for name in ['u1', 'x1', 'x2', 'x3', 'c', 'p1', 'p2', 'p3']
 }
 
 # ... (imports, DEEPRL_SYMBOLS_FOR_SYMPY, DEBUG_RENDERER_MODE) ...
 
 DEBUG_RENDERER_MODE = False  # Whether to enable verbose debug logging.
 
-_SYMBOL_DISPLAY = {"u1": "u", "x1": "x", "x2": "y", "x3": "z"}
+_SYMBOL_DISPLAY = {
+    "u1": "u", "x1": "x", "x2": "y", "x3": "z",
+    "p1": "p_{1}", "p2": "p_{2}", "p3": "p_{3}",
+}
 
 # Function-based symbols for Leibniz mode (produces \partial instead of d)
 _x1, _x2, _x3 = sympy.symbols('x1 x2 x3')
@@ -24,6 +28,7 @@ _LEIBNIZ_SYMBOLS_FOR_SYMPY = {
     'u1': sympy.Function('u1')(_x1, _x2, _x3),
     'x1': _x1, 'x2': _x2, 'x3': _x3,
     'c': sympy.Symbol('c'),
+    'p1': sympy.Symbol('p1'), 'p2': sympy.Symbol('p2'), 'p3': sympy.Symbol('p3'),
 }
 
 

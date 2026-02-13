@@ -203,7 +203,10 @@ UNARY_TOKENS    = set([op.name for op in function_map.values() if op.arity == 1]
 BINARY_TOKENS   = set([op.name for op in function_map.values() if op.arity == 2])
 
 
-def create_tokens(n_input_var, function_set, protected,n_state_var=1, torch_add=False, decision_tree_threshold_set=None, task_type ='regression'):
+def create_tokens(n_input_var, function_set, protected, n_state_var=1,
+                   torch_add=False, decision_tree_threshold_set=None,
+                   task_type='regression',
+                   n_param_var=0, param_names=None):
     """
     Helper function to create Tokens.
 
@@ -220,6 +223,14 @@ def create_tokens(n_input_var, function_set, protected,n_state_var=1, torch_add=
 
     decision_tree_threshold_set : list
         A set of constants {tj} for constructing nodes (xi < tj) in decision trees.
+
+    n_param_var : int
+        Number of parameter variable Tokens (appear in equations but are not
+        differentiated).
+
+    param_names : list of str or None
+        Custom display names for parameter tokens.  Falls back to ``p1``,
+        ``p2``, … when *None*.
     """
 
     tokens = []
@@ -237,6 +248,22 @@ def create_tokens(n_input_var, function_set, protected,n_state_var=1, torch_add=
                         function=None, state_var=i)
 
             tokens.append(token)
+
+    # Parameter variable Tokens (not differentiated)
+    # Collect names already used by input/state tokens to detect collisions.
+    _reserved = {t.name for t in tokens}
+    _reserved.update(function_map.keys())
+    _reserved.add("const")
+    for i in range(n_param_var):
+        name = param_names[i] if param_names and i < len(param_names) else "p{}".format(i + 1)
+        if name in _reserved:
+            raise ValueError(
+                f"param name '{name}' collides with an existing token name. "
+                f"Choose a different name for parameter {i}."
+            )
+        token = Token(name=name, arity=0, complexity=1,
+                      function=None, param_var=i)
+        tokens.append(token)
 
     for op in function_set:
 

@@ -43,7 +43,7 @@ dataset = load_pde(DATASET_NAME)
 
 # 4. Create and train KD_SGA / 创建并训练 KD_SGA 模型
 model = KD_SGA(
-    sga_run=100,
+    sga_run=30,
     num=20,
     depth=4,
     width=5,
@@ -78,6 +78,7 @@ render_equation(model)
 # 7. Additional visualizations via named helpers /
 #    使用辅助函数进行额外可视化
 #
+
 # For KD_SGA the adapter reads everything from model.context_, so the
 # generic arguments (x_coords, actual, predicted, etc.) are not used.
 # We still pass None to match the shared API shape.

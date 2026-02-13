@@ -32,12 +32,14 @@ class PDEPINNTask(PDETask):
                  sym_true_input =None,
                  max_depth=4,
                  normalize_variance=False, protected=False,
-                 spatial_error = True, 
+                 spatial_error = True,
                  decision_tree_threshold_set=None,
                  cut_ratio = 0.03,
                  n_input_var = 1,
                  add_const = False,
-                 eq_num=1
+                 eq_num=1,
+                 n_param_var=0,
+                 param_names=None,
                  ):
 
 
@@ -80,13 +82,17 @@ class PDEPINNTask(PDETask):
         self.rng = None
         self.scale = None
             
-        # Set the Library 
+        self.n_param_var = n_param_var
+        self.param_names = param_names
+        # Set the Library
         tokens = create_tokens(n_input_var=n_input_var, # if n_input_var is not None else 1,
                                function_set=function_set,
                                protected=protected,
                                n_state_var=self.n_state_var,
                                decision_tree_threshold_set=decision_tree_threshold_set,
-                               task_type='pde')
+                               task_type='pde',
+                               n_param_var=n_param_var,
+                               param_names=param_names)
         self.library = Library(tokens)
         
         if use_torch:
@@ -105,11 +111,39 @@ class PDEPINNTask(PDETask):
             self.wf = WeakEvaluate()
             self.wf_flag = True
 
-    def load_data(self,data):
-        """
-        load external data
-        """
-        pass
+    def load_data(self, data):
+        """Load external data including param_fields for sparse mode."""
+        self._param_fields_raw = data.get('param_data', None)
+        if self._param_fields_raw:
+            for token in self.library.tokens:
+                if token.param_var is not None and token.param_var < len(self._param_fields_raw):
+                    token._param_data_ref = self._param_fields_raw[token.param_var]
+
+    def _refresh_param_refs(self):
+        """Update param token _param_data_ref to match current u shape/dtype/device."""
+        if not getattr(self, '_param_fields_raw', None):
+            return
+        u_ref = self.u[0]
+        for token in self.library.tokens:
+            if token.param_var is None or token.param_var >= len(self._param_fields_raw):
+                continue
+            raw = self._param_fields_raw[token.param_var]
+            if not np.allclose(raw, raw.flat[0]):
+                raise NotImplementedError(
+                    f"Spatially-varying param '{token.name}' not supported "
+                    "in PINN mode. Use constant parameters or Regular mode."
+                )
+            const_val = float(raw.flat[0])
+            try:
+                import torch
+                if isinstance(u_ref, torch.Tensor):
+                    token._param_data_ref = torch.full(
+                        u_ref.shape, const_val,
+                        dtype=u_ref.dtype, device=u_ref.device)
+                else:
+                    token._param_data_ref = np.full_like(u_ref, const_val)
+            except ImportError:
+                token._param_data_ref = np.full_like(u_ref, const_val)
 
     def reward_function(self,p):
         
@@ -196,16 +230,18 @@ class PDEPINNTask(PDETask):
         #     return 
 
         if generation_type=='AD':
-            self.AD_generate_1D(x,model)     
+            self.AD_generate_1D(x,model)
         elif generation_type == 'multi_AD':
             self.AD_generate_mD(model)
-        elif generation_type =='FD':  
+        elif generation_type =='FD':
             self.FD_generate(u)
         elif generation_type =='FD_generate_2d':
             self.FD_generate_2d(u)
         else:
             print(generation_type)
             assert False
+
+        self._refresh_param_refs()
 
     def weak_form_cal(self, x, model):
 

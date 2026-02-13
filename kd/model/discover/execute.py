@@ -22,12 +22,14 @@ def python_execute(traversal, u, x):
             
             if token.input_var is not None:
                 # import pdb;pdb.set_trace()
-                
-                intermediate_result =  x[token.input_var] 
+
+                intermediate_result =  x[token.input_var]
                 dim_flag = token.input_var+1
+            elif token.param_var is not None:
+                intermediate_result = token._param_data_ref
             elif token.state_var is not None:
                 intermediate_result = u[token.state_var]
-            
+
             else:
                 try:
                     if 'diff' in token.name or 'Diff' in token.name:
@@ -62,10 +64,12 @@ def python_execute_torch(traversal, u, x):
             terminals = apply_stack[-1][1:]
            
             if token.input_var is not None:
-                
-                intermediate_result =  x[token.input_var] 
+
+                intermediate_result =  x[token.input_var]
                 dim_flag = token.input_var+1
-                
+
+            elif token.param_var is not None:
+                intermediate_result = token._param_data_ref
             elif token.state_var is not None:
                 if isinstance(u, list):
                     
