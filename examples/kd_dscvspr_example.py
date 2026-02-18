@@ -17,6 +17,8 @@ from kd.viz.equation_renderer import render_latex_to_image
 from kd.viz.dscv_viz import *
 from kd.dataset import load_pde
 
+SAVE_DIR = str(PROJECT_ROOT / "artifacts" / "dscvspr_viz")
+
 np.random.seed(42)
 
 # 1. 通过统一入口加载 Burgers 数据集
@@ -48,24 +50,24 @@ render_latex_to_image(discover_program_to_latex(step_output['program']))
 
 # 将最终发现方程的结构可视化为表达式树
 # Visualizes the structure of the finally discovered equation as an expression tree.
-plot_expression_tree(model)
+plot_expression_tree(model, output_dir=SAVE_DIR)
 
 # 绘制奖励值的概率密度分布图，以观察已发现解的质量分布
 # Plots the probability density distribution of the reward values to observe the quality distribution of the discovered solutions.
-plot_density(model)
+plot_density(model, output_dir=SAVE_DIR)
 
 # 绘制最优奖励值随训练轮次的进化曲线
 # Plots the evolution curve of the optimal reward value over training epochs.
-plot_evolution(model)
+plot_evolution(model, output_dir=SAVE_DIR)
 
 # 分析由最终发现的PDE的残差
 # Analyzes the residuals of the PDE discovered by the final model.
-plot_spr_residual_analysis(model, step_output['program'])
+plot_spr_residual_analysis(model, step_output['program'], output_dir=SAVE_DIR)
 
 # 将PINN预测的解场与真实的解场进行热图对比
 # Compares the predicted solution field by the PINN with the true solution field via heatmaps.
-plot_spr_field_comparison(model, step_output['program'])
+plot_spr_field_comparison(model, step_output['program'], output_dir=SAVE_DIR)
 
-# 生成“奇偶图”，逐点对比PINN的预测值与真实值，以量化最终方程的预测精度
+# 生成"奇偶图"，逐点对比PINN的预测值与真实值，以量化最终方程的预测精度
 # Generates a "scatter plot" to compare the PINN's predictions with the true values point by point, quantifying the prediction accuracy of the final equation.
-plot_spr_actual_vs_predicted(model, step_output['program'])
+plot_spr_actual_vs_predicted(model, step_output['program'], output_dir=SAVE_DIR)

@@ -44,7 +44,7 @@ print(f"Current best expression is {step_output['expression']} and its reward is
 
 
 # --- Unified façade configuration ----------------------------------------------
-output_root = Path('artifacts') / 'dscvspr_viz'
+output_root = PROJECT_ROOT / 'artifacts' / 'dscvspr_viz'
 configure(save_dir=output_root)
 
 caps = list_capabilities(model)

@@ -38,6 +38,8 @@ from kd.viz.dscv_viz import (
 from kd.viz.discover_eq2latex import discover_program_to_latex
 from kd.viz.equation_renderer import render_latex_to_image
 
+LEGACY_SAVE_DIR = str(PROJECT_ROOT / "artifacts" / "dscvspr_nd_viz" / "legacy")
+
 np.random.seed(42)
 
 
@@ -108,29 +110,29 @@ if step_output is not None:
     render_latex_to_image(discover_program_to_latex(step_output['program']))
 
     print("  plot_expression_tree...")
-    plot_expression_tree(model)
+    plot_expression_tree(model, output_dir=LEGACY_SAVE_DIR)
 
     print("  plot_density...")
-    plot_density(model)
+    plot_density(model, output_dir=LEGACY_SAVE_DIR)
 
     print("  plot_evolution...")
-    plot_evolution(model)
+    plot_evolution(model, output_dir=LEGACY_SAVE_DIR)
 
     try:
         print("  plot_spr_residual_analysis...")
-        plot_spr_residual_analysis(model, step_output['program'])
+        plot_spr_residual_analysis(model, step_output['program'], output_dir=LEGACY_SAVE_DIR)
     except Exception as e:
         print(f"  plot_spr_residual_analysis skipped (N-D not supported): {e}")
 
     try:
         print("  plot_spr_field_comparison...")
-        plot_spr_field_comparison(model, step_output['program'])
+        plot_spr_field_comparison(model, step_output['program'], output_dir=LEGACY_SAVE_DIR)
     except Exception as e:
         print(f"  plot_spr_field_comparison skipped (N-D not supported): {e}")
 
     try:
         print("  plot_spr_actual_vs_predicted...")
-        plot_spr_actual_vs_predicted(model, step_output['program'])
+        plot_spr_actual_vs_predicted(model, step_output['program'], output_dir=LEGACY_SAVE_DIR)
     except Exception as e:
         print(f"  plot_spr_actual_vs_predicted skipped (N-D not supported): {e}")
 else:

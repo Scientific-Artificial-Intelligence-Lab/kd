@@ -35,6 +35,8 @@ from kd.viz.dscv_viz import (
 from kd.viz.discover_eq2latex import discover_program_to_latex
 from kd.viz.equation_renderer import render_latex_to_image
 
+LEGACY_SAVE_DIR = str(PROJECT_ROOT / "artifacts" / "dscv_nd_viz" / "legacy")
+
 np.random.seed(42)
 
 
@@ -97,13 +99,13 @@ print("  render_latex_to_image...")
 render_latex_to_image(discover_program_to_latex(step_output['program']))
 
 print("  plot_expression_tree...")
-plot_expression_tree(model)
+plot_expression_tree(model, output_dir=LEGACY_SAVE_DIR)
 
 print("  plot_density...")
-plot_density(model, epoches=[2, 5, 10])
+plot_density(model, epoches=[2, 5, 10], output_dir=LEGACY_SAVE_DIR)
 
 print("  plot_evolution...")
-plot_evolution(model)
+plot_evolution(model, output_dir=LEGACY_SAVE_DIR)
 
 # NOTE: Legacy plot_pde_residual_analysis / dscv_plot_field_comparison do not
 # support N-D data (they assume 2D (x, t) layout). Use the unified API
@@ -114,7 +116,7 @@ plot_evolution(model)
 # dscv_plot_field_comparison(model, step_output['program'])
 
 print("  plot_actual_vs_predicted...")
-plot_actual_vs_predicted(model, step_output['program'])
+plot_actual_vs_predicted(model, step_output['program'], output_dir=LEGACY_SAVE_DIR)
 
 
 # 5. Unified kd.viz API

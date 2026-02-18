@@ -6,29 +6,37 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib as mpl
 from PIL import Image
 import io
+from pathlib import Path
 
 from kd.model.discover.program import Program
-
-# TODO: 保存到文件
 
 def plot_expression_tree(model, output_dir: str = None):
 
     graph = model.searcher.plotter.tree_plot(model.searcher.best_p)
-    
-    if output_dir is None:
+
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        graph.render(str(viz_dir / 'expression_tree'), format='png', cleanup=True)
+    else:
         png_bytes = graph.pipe(format='png')
         image = Image.open(io.BytesIO(png_bytes))
         plt.imshow(image)
         plt.axis('off')
         plt.show()
         plt.close()
+
+
+def plot_density(model, epoches=None, output_dir: str = None):
+
+    fig = model.plot(fig_type='density', epoches=epoches)
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(viz_dir / 'density.png', dpi=300, bbox_inches='tight')
     else:
-        pass
-
-
-def plot_density(model, epoches = None, output_dir: str = None):
-
-    model.plot(fig_type='density', epoches=epoches)
+        plt.show()
+    plt.close(fig)
 
 
 
@@ -56,17 +64,14 @@ PLOT_STYLE = {
     'axes.unicode_minus': False,
 }
 
-# TODO
-def plot_evolution(model, figsize=(10, 6)):
+def plot_evolution(model, figsize=(10, 6), output_dir: str = None):
     """
     Plot reward changes during training.
-    
+
     Parameters:
         model: Trained KD_DSCV model.
         figsize (tuple, optional): Figure size.
-        
-    Returns:
-        matplotlib.figure.Figure: Generated figure object.
+        output_dir (str, optional): Directory to save the figure.
     """
     with plt.style.context(PLOT_STYLE):
         fig, ax = plt.subplots(figsize=figsize)
@@ -90,8 +95,12 @@ def plot_evolution(model, figsize=(10, 6)):
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.legend(loc='best', frameon=False)
 
-        plt.show()
-
+        if output_dir:
+            viz_dir = Path(output_dir)
+            viz_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(viz_dir / 'evolution.png', dpi=300, bbox_inches='tight')
+        else:
+            plt.show()
         plt.close()
 
 
@@ -364,7 +373,7 @@ def _calculate_pde_fields_nd(
 
 
 
-def plot_pde_residual_analysis(model, best_program, show_plot=True):
+def plot_pde_residual_analysis(model, best_program, show_plot=True, output_dir: str = None):
     """
     计算并可视化物理残差
     """
@@ -374,8 +383,8 @@ def plot_pde_residual_analysis(model, best_program, show_plot=True):
     if show_plot:
         physical_residual = fields["residual"]
         coords_for_plot = fields["coords"]
-        
-        plt.figure(figsize=(12, 5))
+
+        fig = plt.figure(figsize=(12, 5))
         plt.subplot(1, 2, 1)
         sc = plt.scatter(coords_for_plot[:, 1], coords_for_plot[:, 0], c=physical_residual, cmap='coolwarm', s=15, alpha=0.8)
         plt.colorbar(sc, label='Physical Residual ($u_t$ - RHS)')
@@ -388,14 +397,21 @@ def plot_pde_residual_analysis(model, best_program, show_plot=True):
         plt.ylabel('Probability Density')
         plt.title('Residual Distribution')
         plt.tight_layout()
-        plt.show()
+
+        if output_dir:
+            viz_dir = Path(output_dir)
+            viz_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(viz_dir / 'residual_analysis.png', dpi=300, bbox_inches='tight')
+        else:
+            plt.show()
+        plt.close()
     else:
         return fields["residual"], fields["coords"]
     
 
-def plot_field_comparison(model, best_program, show_plot=True):
+def plot_field_comparison(model, best_program, show_plot=True, output_dir: str = None):
     """
-    计算并可视化“预测场”与“真实场”的对比图。
+    计算并可视化"预测场"与"真实场"的对比图。
     """
     # 同样调用核心函数获取所有计算结果
     fields = _calculate_pde_fields(model, best_program)
@@ -430,36 +446,46 @@ def plot_field_comparison(model, best_program, show_plot=True):
         ax1.set_xlabel("Time (trimmed, index)", fontsize=12)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.show()
+
+        if output_dir:
+            viz_dir = Path(output_dir)
+            viz_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(viz_dir / 'field_comparison.png', dpi=300, bbox_inches='tight')
+        else:
+            plt.show()
+        plt.close()
     else:
         return ut_grid, y_hat_grid, x_axis, t_axis
     
 
-def plot_actual_vs_predicted(model, best_program):
+def plot_actual_vs_predicted(model, best_program, output_dir: str = None):
     """
     Plots an "Actual vs. Predicted" scatter plot with a 45-degree reference line.
-    
+
     Args:
         model: The trained KD_DSCV model instance.
         best_program: The final Program object discovered by the model.
+        output_dir: Directory to save the figure.
     """
-    print("Generating 'Actual vs. Predicted' plot...")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Generating 'Actual vs. Predicted' plot...")
     # Call the helper function to get all computed fields
     fields = _calculate_pde_fields(model, best_program)
-    
+
     y_true = fields["ut_grid"]
     y_pred = fields["y_hat_grid"]
 
-    plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(8, 8))
     plt.scatter(y_true, y_pred, alpha=0.3, s=10, label='Predicted Points')
-    
+
     min_val = min(y_true.min(), y_pred.min())
     max_val = max(y_true.max(), y_pred.max())
     margin = 0.1 * (max_val - min_val) if (max_val - min_val) > 0 else 0.1
     plot_limit = (min_val - margin, max_val + margin)
-    
+
     plt.plot(plot_limit, plot_limit, 'r--', label='Perfect Prediction (y=x)')
-    
+
     plt.xlabel('True Values (Ground Truth, $u_t$)')
     plt.ylabel('Predicted Values (RHS)')
     plt.title('Actual vs. Predicted')
@@ -468,7 +494,14 @@ def plot_actual_vs_predicted(model, best_program):
     plt.axis('equal')
     plt.xlim(plot_limit)
     plt.ylim(plot_limit)
-    plt.show()
+
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(viz_dir / 'actual_vs_predicted.png', dpi=300, bbox_inches='tight')
+    else:
+        plt.show()
+    plt.close()
 
 
 
@@ -566,7 +599,7 @@ def _calculate_pinn_fields(model, best_program):
     }
     return result
 
-def plot_spr_residual_analysis(model, best_program):
+def plot_spr_residual_analysis(model, best_program, output_dir: str = None):
     """
     计算并可视化 KD_DSCV_Pinn 模型的物理残差。
     这个版本专门处理由 PINN 生成的稀疏/散点元数据。
@@ -574,20 +607,21 @@ def plot_spr_residual_analysis(model, best_program):
     Args:
         model: 训练完成的 KD_DSCV_Pinn 模型实例。
         best_program: 模型发现的最佳 Program 对象。
+        output_dir: Directory to save the figure.
     """
-    
+
     # 调用为 PINN 定制的辅助函数
     fields = _calculate_pinn_fields(model, best_program)
 
     physical_residual = fields["residual"]
     coords_for_plot = fields["coords"] # 现在这个坐标是正确的 (N, 2) 格式
-    
+
     # 检查维度是否匹配
     if coords_for_plot.shape[0] != len(physical_residual):
         raise ValueError(f"坐标点数量 ({coords_for_plot.shape[0]}) 与残差值数量 ({len(physical_residual)}) 不匹配。")
 
-    plt.figure(figsize=(12, 5))
-    
+    fig = plt.figure(figsize=(12, 5))
+
     # 左图: 残差时空分布图
     plt.subplot(1, 2, 1)
     # coords_for_plot[:, 1] 是时间, coords_for_plot[:, 0] 是空间
@@ -596,38 +630,47 @@ def plot_spr_residual_analysis(model, best_program):
     plt.xlabel('Time')
     plt.ylabel('Space')
     plt.title('Spatiotemporal Distribution of Residuals (on meta-data points)')
-    
+
     # 右图: 残差统计直方图
     plt.subplot(1, 2, 2)
     plt.hist(physical_residual, bins=50, density=True, edgecolor='black', alpha=0.7)
     plt.xlabel('Residual Value')
     plt.ylabel('Probability Density')
     plt.title('Residual Distribution')
-    
+
     plt.tight_layout()
-    plt.show()
+
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(viz_dir / 'spr_residual_analysis.png', dpi=300, bbox_inches='tight')
+    else:
+        plt.show()
+    plt.close()
 
 
-def plot_spr_actual_vs_predicted(model, best_program):
+def plot_spr_actual_vs_predicted(model, best_program, output_dir: str = None):
     """
-    为 KD_DSCV_Pinn 模型绘制“真值 vs. 预测值”的45度线图
+    为 KD_DSCV_Pinn 模型绘制"真值 vs. 预测值"的45度线图
     """
-    print("Generating 'Actual vs. Predicted' plot for PINN model...")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Generating 'Actual vs. Predicted' plot for PINN model...")
     fields = _calculate_pinn_fields(model, best_program)
-    
+
     y_true = fields["y_true"]
     y_pred = fields["y_pred"]
-    
-    plt.figure(figsize=(8, 8))
+
+    fig = plt.figure(figsize=(8, 8))
     plt.scatter(y_true, y_pred, alpha=0.3, s=10, label='Predicted Points')
-    
+
     min_val = min(y_true.min(), y_pred.min())
     max_val = max(y_true.max(), y_pred.max())
     margin = 0.1 * (max_val - min_val) if (max_val - min_val) > 0 else 0.1
     plot_limit = (min_val - margin, max_val + margin)
-    
+
     plt.plot(plot_limit, plot_limit, 'r--', label='Perfect Prediction (y=x)')
-    
+
     plt.xlabel('True Values (Ground Truth, $u_t$)')
     plt.ylabel('Predicted Values (RHS)')
     plt.title('Actual vs. Predicted (for PINN model)')
@@ -636,14 +679,23 @@ def plot_spr_actual_vs_predicted(model, best_program):
     plt.axis('equal')
     plt.xlim(plot_limit)
     plt.ylim(plot_limit)
-    plt.show()
 
-def plot_spr_field_comparison(model, best_program):
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(viz_dir / 'spr_actual_vs_predicted.png', dpi=300, bbox_inches='tight')
+    else:
+        plt.show()
+    plt.close()
+
+def plot_spr_field_comparison(model, best_program, output_dir: str = None):
     """
-    为 KD_DSCV_Pinn 模型计算并可视化“预测场”与“真实场”的对比图。
+    为 KD_DSCV_Pinn 模型计算并可视化"预测场"与"真实场"的对比图。
     注意：此函数使用三角剖分来可视化稀疏散点数据
     """
-    print("Generating field comparison plot for PINN model...")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Generating field comparison plot for PINN model...")
     fields = _calculate_pinn_fields(model, best_program)
 
     x, t, ut, y_hat = fields["coords_x"], fields["coords_t"], fields["y_true"], fields["y_pred"]
@@ -651,7 +703,7 @@ def plot_spr_field_comparison(model, best_program):
     # 使用三角剖分来处理散点数据
     from scipy.interpolate import griddata
     grid_x, grid_t = np.mgrid[min(x):max(x):100j, min(t):max(t):100j]
-    
+
     grid_ut = griddata((x, t), ut, (grid_x, grid_t), method='cubic')
     grid_yhat = griddata((x, t), y_hat, (grid_x, grid_t), method='cubic')
 
@@ -664,7 +716,7 @@ def plot_spr_field_comparison(model, best_program):
 
     # 绘制左图：真实场
     ax0 = axes[0]
-    im0 = ax0.imshow(grid_ut.T, extent=(min(t),max(t),min(x),max(x)), origin='lower', 
+    im0 = ax0.imshow(grid_ut.T, extent=(min(t),max(t),min(x),max(x)), origin='lower',
                      aspect='auto', cmap='viridis', vmin=vmin, vmax=vmax)
     fig.colorbar(im0, ax=ax0, label='Value')
     ax0.set_title("True Field ($u_t$)")
@@ -673,11 +725,18 @@ def plot_spr_field_comparison(model, best_program):
 
     # 绘制右图：预测场
     ax1 = axes[1]
-    im1 = ax1.imshow(grid_yhat.T, extent=(min(t),max(t),min(x),max(x)), origin='lower', 
+    im1 = ax1.imshow(grid_yhat.T, extent=(min(t),max(t),min(x),max(x)), origin='lower',
                      aspect='auto', cmap='viridis', vmin=vmin, vmax=vmax)
     fig.colorbar(im1, ax=ax1, label='Value')
     ax1.set_title("Predicted Field (RHS)")
     ax1.set_xlabel("Time")
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+
+    if output_dir:
+        viz_dir = Path(output_dir)
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(viz_dir / 'spr_field_comparison.png', dpi=300, bbox_inches='tight')
+    else:
+        plt.show()
+    plt.close()

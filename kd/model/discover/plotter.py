@@ -138,7 +138,4 @@ class Plotter:
             ax.set_xlabel('Reward')   
             ax.set_ylabel('Density')
             ax.legend( loc = 'best', frameon=False)
-        plt.show()     
-        # ax.set_xlim(0.4, 1.0)
-        # plt.savefig(save_path+'.png', bbox_inches='tight', dpi = 600)
-        # plt.savefig(save_path+'.pdf', bbox_inches='tight')
+        return f

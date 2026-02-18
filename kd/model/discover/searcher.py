@@ -328,7 +328,7 @@ class Searcher:
         elif fig_type == 'evolution':
             self.plotter.evolution_plot(self.r_train)
         elif fig_type == 'density':
-           self.plotter.density_plot(self.r_history, **kwargs)
+           return self.plotter.density_plot(self.r_history, **kwargs)
         else:
             assert False, "not supported figure type"
 

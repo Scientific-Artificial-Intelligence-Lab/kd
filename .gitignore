@@ -217,6 +217,7 @@ RUNBOOK.md
 CLAUDE.md
 TASKS/
 .session/
+.mcp.json
 
 
 
@@ -233,3 +234,4 @@ notes*/
 ref_*/
 
 outputs/
+tests/verify_examples/outputs/
