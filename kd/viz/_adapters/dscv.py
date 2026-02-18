@@ -513,8 +513,9 @@ class DSCVVizAdapter:
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel('$x_1$')
 
-        fig.colorbar(im0, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
-        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+        fig.tight_layout(rect=[0, 0.03, 0.88, 0.95])
+        cbar_ax = fig.add_axes([0.90, 0.08, 0.02, 0.82])
+        fig.colorbar(im0, cax=cbar_ax, label='Value')
         _, path = self._resolve_output(ctx, 'field_comparison.png')
         fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
         try:
@@ -772,8 +773,9 @@ class DSCVVizAdapter:
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel('$x_1$')
 
-        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
-        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+        fig.tight_layout(rect=[0, 0.03, 0.88, 0.95])
+        cbar_ax = fig.add_axes([0.90, 0.08, 0.02, 0.82])
+        fig.colorbar(im, cax=cbar_ax, label='Value')
 
         _, path = self._resolve_output(ctx, 'spr_field_comparison.png')
         fig.savefig(str(path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')

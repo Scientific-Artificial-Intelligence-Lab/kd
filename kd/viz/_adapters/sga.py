@@ -214,8 +214,9 @@ class SGAVizAdapter:
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel('$x_1$')
 
-        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
-        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+        fig.tight_layout(rect=[0, 0.03, 0.88, 0.95])
+        cbar_ax = fig.add_axes([0.90, 0.08, 0.02, 0.82])
+        fig.colorbar(im, cax=cbar_ax, label='Value')
         return fig
 
     def _time_slices(self, model, ctx) -> VizResult:
@@ -360,8 +361,9 @@ class SGAVizAdapter:
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel('$x_1$')
 
-        fig.colorbar(im, ax=axes.ravel().tolist(), label='Value', shrink=0.8)
-        fig.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+        fig.tight_layout(rect=[0, 0.03, 0.88, 0.95])
+        cbar_ax = fig.add_axes([0.90, 0.08, 0.02, 0.82])
+        fig.colorbar(im, cax=cbar_ax, label='Value')
 
         output_path = self._resolve_output(ctx, 'time_slices_comparison.png')
         fig.savefig(str(output_path), dpi=ctx.options.get('dpi', 300), bbox_inches='tight')
