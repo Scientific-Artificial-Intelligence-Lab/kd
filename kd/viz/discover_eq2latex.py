@@ -1,6 +1,9 @@
+import logging
 from typing import Optional
 
 import sympy
+
+logger = logging.getLogger(__name__)
 from sympy.parsing.sympy_parser import parse_expr
 from sympy.printing.latex import LatexPrinter
 
@@ -69,7 +72,7 @@ def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None, *, not
         sympy_expr_str = term_node_obj.to_sympy_string()
 
         if DEBUG_RENDERER_MODE:
-             print(f"[discover_eq2latex INFO] Node '{repr(term_node_obj)}'.to_sympy_string() -> '{sympy_expr_str}'")
+             logger.debug("Node '%r'.to_sympy_string() -> '%s'", term_node_obj, sympy_expr_str)
 
         parsed_sympy_expr = parse_expr(
             sympy_expr_str,
@@ -77,7 +80,7 @@ def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None, *, not
             transformations='all',  # allow a broad set of SymPy-compatible transformations
         )
         if DEBUG_RENDERER_MODE:
-            print(f"[discover_eq2latex INFO] Parsed SymPy expression: {parsed_sympy_expr}")
+            logger.debug("Parsed SymPy expression: %s", parsed_sympy_expr)
 
         if notation == "subscript":
             latex_output = _SubscriptLatexPrinter().doprint(parsed_sympy_expr)
@@ -88,13 +91,12 @@ def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None, *, not
         import traceback
         error_repr = repr(term_node_obj) if term_node_obj else "None"
         sympy_str_val = sympy_expr_str if 'sympy_expr_str' in locals() else "<sympy string not generated>"
-        print(
-            "[discover_eq2latex ERROR] "
-            f"_discover_term_node_to_latex failed for node '{error_repr}' "
-            f"(SymPy str: '{sympy_str_val}'): {e}"
+        logger.error(
+            "_discover_term_node_to_latex failed for node '%s' "
+            "(SymPy str: '%s'): %s", error_repr, sympy_str_val, e,
         )
         if DEBUG_RENDERER_MODE:
-             traceback.print_exc()
+             logger.debug("Traceback:", exc_info=True)
         return f"\\text{{Error converting node: {error_repr}}}"
 
 _VALID_NOTATIONS = ("subscript", "leibniz")
@@ -140,13 +142,13 @@ def discover_program_to_latex(program_object, # lhs_name_str,
                     '<STRidge.terms not found>',
                 )
             )
-            print("[discover_eq2latex WARNING] program_object is invalid or missing w/STRidge.terms.")
-            print(f"  program_object: {program_object}")
-            print(f"  w: {w_status}")
-            print(f"  STRidge.terms: {terms_status}")
+            logger.warning("program_object is invalid or missing w/STRidge.terms.")
+            logger.warning("  program_object: %s", program_object)
+            logger.warning("  w: %s", w_status)
+            logger.warning("  STRidge.terms: %s", terms_status)
             if hasattr(program_object, 'w') and hasattr(program_object.STRidge, 'terms') and \
                program_object.w is not None and program_object.STRidge.terms is not None:
-                 print(f"  len(w)={len(program_object.w)}, len(STRidge.terms)={len(program_object.STRidge.terms)}")
+                 logger.warning("  len(w)=%d, len(STRidge.terms)=%d", len(program_object.w), len(program_object.STRidge.terms))
         return f"${lhs_latex} = 0 \\; (\\text{{Error: Invalid program structure}})$"
 
     coefficients = program_object.w
@@ -179,9 +181,9 @@ def discover_program_to_latex(program_object, # lhs_name_str,
         )
 
         if DEBUG_RENDERER_MODE and "\\text{Error" in base_term_latex:
-            print(
-                "[discover_eq2latex WARNING] base term conversion failed; "
-                f"node={repr(term_node)}, latex={base_term_latex}"
+            logger.warning(
+                "base term conversion failed; node=%r, latex=%s",
+                term_node, base_term_latex,
             )
 
         is_first = (processed_terms_count == 0)

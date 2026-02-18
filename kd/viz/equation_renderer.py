@@ -1,6 +1,9 @@
 # equation_renderer.py
 
+import logging
 import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
 from .dlga_eq2latex import dlga_eq2latex
 from .discover_eq2latex import discover_program_to_latex
 
@@ -40,14 +43,14 @@ def render_latex_to_image(
         
         if output_path is not None:
             plt.savefig(output_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor=background_color)
-            print(f"[Equation Renderer INFO] Image successfully saved to: {output_path}")
+            logger.info("Image successfully saved to: %s", output_path)
         
         if show:
             plt.show()
         
     except Exception as e:
-        print(f"[Equation Renderer ERROR] Failed to render LaTeX to image: {e}")
-        print(f"  Offending LaTeX content: {latex_str}")
+        logger.error("Failed to render LaTeX to image: %s", e)
+        logger.error("  Offending LaTeX content: %s", latex_str)
     finally:
         if 'fig' in locals():
             try:

@@ -1,10 +1,13 @@
 """Visualization module for DLGA results (v0.2).
 
-This module provides visualization tools for analyzing and plotting results 
+This module provides visualization tools for analyzing and plotting results
 from Deep Learning Genetic Algorithm (DLGA) model runs.
 """
 
+import logging
 import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 import torch
 import numpy as np
@@ -226,7 +229,7 @@ def plot_equation_terms(
         y_vars = terms.get('y_term', {}).get('vars', [])
 
         if not x_vars or not y_vars:
-            print("Warning: Insufficient terms specified, cannot plot")
+            logger.warning("Insufficient terms specified, cannot plot")
             return
 
         # 1. 收集本次绘图所需的所有变量名
@@ -239,7 +242,7 @@ def plot_equation_terms(
         
         # 3. 如果有任何缺失的变量，则打印清晰的错误信息并退出，而不是崩溃
         if missing_vars:
-            print(f"警告: 无法绘制该图表，因为以下必需的项在元数据中缺失: {missing_vars}")
+            logger.warning("无法绘制该图表，因为以下必需的项在元数据中缺失: %s", missing_vars)
             return
 
         # Dynamically calculate term products
@@ -338,13 +341,13 @@ def plot_evolution(model, output_dir: str = None):
             plt.show()
         plt.close()
 
-        # Print evolution statistics
-        print("\nEvolution Analysis Summary:")
-        print(f"Initial fitness: {fitness[0]:.4f}")
-        print(f"Final fitness: {fitness[-1]:.4f}")
-        print(f"Improvement: {((fitness[0] - fitness[-1]) / fitness[0]):.2%}")
-        print(f"Initial complexity: {complexity[0]}")
-        print(f"Final complexity: {complexity[-1]}")
+        # Log evolution statistics
+        logger.info("Evolution Analysis Summary:")
+        logger.info("Initial fitness: %.4f", fitness[0])
+        logger.info("Final fitness: %.4f", fitness[-1])
+        logger.info("Improvement: %.2f%%", ((fitness[0] - fitness[-1]) / fitness[0]) * 100)
+        logger.info("Initial complexity: %s", complexity[0])
+        logger.info("Final complexity: %s", complexity[-1])
 
 
 def plot_optimization_analysis(model, output_dir: str = None):
@@ -438,19 +441,19 @@ def plot_optimization_analysis(model, output_dir: str = None):
             plt.show()
         plt.close()
 
-        # Print detailed analysis summary (avoid index out of range)
-        print("\nOptimization Analysis Summary:")
-        print(f"Initial fitness: {fitness_history[0]:.4f}")
-        print(f"Final fitness: {fitness_history[-1]:.4f}")
-        print(f"Major improvements occurred in first {show_gens} generations")
+        # Log detailed analysis summary
+        logger.info("Optimization Analysis Summary:")
+        logger.info("Initial fitness: %.4f", fitness_history[0])
+        logger.info("Final fitness: %.4f", fitness_history[-1])
+        logger.info("Major improvements occurred in first %d generations", show_gens)
         if show_gens > 0:
             early_improvement = ((fitness_history[0] - fitness_history[show_gens]) / fitness_history[0])
-            print(f"Improvement in major change period: {early_improvement:.2%}")
+            logger.info("Improvement in major change period: %.2f%%", early_improvement * 100)
         total_improvement = ((fitness_history[0] - fitness_history[-1]) / fitness_history[0])
-        print(f"Total improvement: {total_improvement:.2%}")
-        print(f"Average population size: {np.mean(pop_sizes):.1f}")
-        print(f"Average unique modules: {np.mean(unique_modules):.1f}")
-        print(f"Diversity ratio: {np.mean(unique_modules) / np.mean(pop_sizes):.2%}")
+        logger.info("Total improvement: %.2f%%", total_improvement * 100)
+        logger.info("Average population size: %.1f", np.mean(pop_sizes))
+        logger.info("Average unique modules: %.1f", np.mean(unique_modules))
+        logger.info("Diversity ratio: %.2f%%", np.mean(unique_modules) / np.mean(pop_sizes) * 100)
 
 
 def plot_time_slices(x, t, u_true, u_pred, slice_times, output_dir: str = None):
@@ -523,7 +526,7 @@ def plot_derivative_relationships(model, top_n_terms: int = 4, output_dir: str =
     """
     # --- Step 1: Securely extract results from the trained model ---
     if not hasattr(model, 'Chrom') or not model.Chrom or not model.Chrom[0]:
-        print("Warning: Model has not found a valid solution. Cannot generate term relationship plot.")
+        logger.warning("Model has not found a valid solution. Cannot generate term relationship plot.")
         return
 
     best_chrom = model.Chrom[0]
@@ -533,16 +536,16 @@ def plot_derivative_relationships(model, top_n_terms: int = 4, output_dir: str =
     metadata = model.metadata
 
     if lhs_name not in metadata:
-        print(f"Warning: LHS term '{lhs_name}' not found in metadata. Cannot generate plot.")
+        logger.warning("LHS term '%s' not found in metadata. Cannot generate plot.", lhs_name)
         return
-    
+
     lhs_values = metadata[lhs_name].flatten()
 
     # --- Step 2: Parse the chromosome to identify and calculate RHS terms ---
     discovered_terms = []
     for i, module in enumerate(best_chrom):
         if any(gene >= len(operator_names) for gene in module):
-            print(f"Warning: Invalid gene found in module {module}. Skipping this term.")
+            logger.warning("Invalid gene found in module %s. Skipping this term.", module)
             continue
 
         term_label = ' * '.join([operator_names[gene] for gene in module])
@@ -559,7 +562,7 @@ def plot_derivative_relationships(model, top_n_terms: int = 4, output_dir: str =
     terms_to_plot = discovered_terms[:top_n_terms]
 
     if not terms_to_plot:
-        print("Warning: Could not parse any valid terms from the solution to plot.")
+        logger.warning("Could not parse any valid terms from the solution to plot.")
         return
 
     # --- Step 4: Dynamically create subplot grid and generate plots ---
@@ -615,7 +618,7 @@ def plot_pde_parity(model, title: str = "Parity Plot for Discovered PDE", output
     """
     # Step 1: Securely extract results from the trained model
     if not hasattr(model, 'Chrom') or not model.Chrom or not model.Chrom[0]:
-        print("Warning: Model has not found a valid solution. Cannot generate parity plot.")
+        logger.warning("Model has not found a valid solution. Cannot generate parity plot.")
         return
 
     best_chrom = model.Chrom[0]
@@ -625,7 +628,7 @@ def plot_pde_parity(model, title: str = "Parity Plot for Discovered PDE", output
     metadata = model.metadata
 
     if lhs_name not in metadata:
-        print(f"Warning: LHS term '{lhs_name}' not found in metadata. Cannot generate plot.")
+        logger.warning("LHS term '%s' not found in metadata. Cannot generate plot.", lhs_name)
         return
 
     # Step 2: Calculate the "true" LHS and "predicted" RHS values
