@@ -569,6 +569,18 @@ def _calculate_pinn_fields(model, best_program):
 
     # 3. 从 Program.task 获取对应的、已被裁剪的数据
     task = Program.task
+
+    # Defensive check: if task.ut was never set (e.g. AD_generate_mD path
+    # before the reset_ut fix), try to recover from ut_cache.
+    if not hasattr(task, 'ut') or task.ut is None:
+        if hasattr(task, 'ut_cache') and task.ut_cache:
+            task.reset_ut(0)
+        else:
+            raise AttributeError(
+                "PDEPINNTask has no 'ut' attribute and no 'ut_cache' to "
+                "recover from. Ensure generate_meta_data() was called."
+            )
+
     ut_full = task.ut
     t_coords_tensor = task.t
 

@@ -150,9 +150,17 @@ class Searcher:
       
         # Compute rewards (or retrieve cached rewards)
         r = np.array([p.r_ridge for p in programs])
-        reserved = quantile_select(actions, obs, priors, programs, r, self.args['epsilon'])
+        reserved = quantile_select(actions, obs, priors, programs, r.copy(), self.args['epsilon'])
         if reserved is None:
-            return 
+            # Even when no valid programs pass the quantile filter, keep the
+            # best-reward program so that self.best_p is not None after search.
+            if programs:
+                r_safe = np.where(np.isfinite(r), r, -np.inf)
+                best_idx = int(np.argmax(r_safe))
+                if np.isfinite(r[best_idx]) and (self.best_p is None or r[best_idx] > self.r_best):
+                    self.best_p = programs[best_idx]
+                    self.r_best = r[best_idx]
+            return
         programs, r, r_train, r_full_valid, p_train, priors,on_policy,obs, actions, baseline_r = reserved
         
         r_max = np.max(r_full_valid)
@@ -271,23 +279,24 @@ class Searcher:
             cv_list = []
             final_mse=  [fp.evaluate['nmse_test'] for fp in final_p_list]
             p_candidate, _ = drop_duplicates(final_p_list, final_mse)
-            
-            for i, p_sel in enumerate(p_candidate[:self.stability_selection]):
-                print(f"The {i+0} candidate is: ", p_sel.str_expression)
-                mse, cv= p_sel.execute_stability_test()
-                mse_list.append(mse)
-                cv_list.append(cv)
-                
-            mse_cv = criterion(mse_list, cv_list, type = 'multiply')
-            try:
-                ranking = np.argsort(mse_cv, axis = 0)[0]
-            except:
-                import pdb;pdb.set_trace()
-            best_count = np.bincount(ranking)
-            best_ind = np.argmax(best_count)
-            print(f"Overall voting reusult is {best_count}; with No.{best_ind+1} candidate ranks first")
-            p_r_best = p_candidate[best_ind]
-            self.best_p = p_r_best
+
+            if len(p_candidate) > 0:
+                for i, p_sel in enumerate(p_candidate[:self.stability_selection]):
+                    print(f"The {i+0} candidate is: ", p_sel.str_expression)
+                    mse, cv= p_sel.execute_stability_test()
+                    mse_list.append(mse)
+                    cv_list.append(cv)
+
+                mse_cv = criterion(mse_list, cv_list, type = 'multiply')
+                try:
+                    ranking = np.argsort(mse_cv, axis = 0)[0]
+                    best_count = np.bincount(ranking)
+                    best_ind = np.argmax(best_count)
+                    print(f"Overall voting reusult is {best_count}; with No.{best_ind+1} candidate ranks first")
+                except Exception:
+                    best_ind = 0
+                p_r_best = p_candidate[best_ind]
+                self.best_p = p_r_best
             # Return statistics of best Program
         result = {
             "r" : self.best_p.r_ridge,

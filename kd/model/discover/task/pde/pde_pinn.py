@@ -57,6 +57,7 @@ class PDEPINNTask(PDETask):
         #     self.ut_true = [ut_true]
             
 
+        self.sym_true_input = sym_true_input
         self.noise_level = data_noise_level
         self.max_depth = max_depth
         self.cut_ratio = cut_ratio
@@ -233,6 +234,7 @@ class PDEPINNTask(PDETask):
             self.AD_generate_1D(x,model)
         elif generation_type == 'multi_AD':
             self.AD_generate_mD(model)
+            self.reset_ut(0)
         elif generation_type =='FD':
             self.FD_generate(u)
         elif generation_type =='FD_generate_2d':
@@ -389,13 +391,12 @@ class PDEPINNTask(PDETask):
         
     def cal_mse_cv(self,p, repeat_num = 100):
 
-        try:
-            y_hat,y_right, w = p.execute(self.u, self.x, self.ut, wf = self.wf_flag)
-            assert self.ut.shape[0] == y_right.shape[0]
-        except Exception as e:
-            print(e)
-            import pdb;pdb.set_trace()
-            print(self.ut.shape, y_right.shape)
+        y_hat, y_right, w = p.execute(self.u, self.x, self.ut, wf=self.wf_flag)
+        if self.ut.shape[0] != y_right.shape[0]:
+            raise ValueError(
+                f"Shape mismatch in cal_mse_cv: "
+                f"ut.shape={self.ut.shape}, y_right.shape={y_right.shape}"
+            )
             
         N = self.ut.shape[0]
         cv = []
