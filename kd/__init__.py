@@ -4,7 +4,7 @@ This package provides tools for discovering governing equations of PDEs
 using deep learning and symbolic regression approaches.
 """
 
-__version__ = '0.1.0'
+__version__ = '1.0.0'
 
 __pkg_name__ = 'KD'
 
