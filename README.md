@@ -1,122 +1,139 @@
-# Knowledge Discovery (KD) – Symbolic Equation Discovery Toolkit
+<div align="center">
 
-Knowledge Discovery (KD) is a modular toolkit for symbolic modelling and
-equation discovery, with a strong focus on partial differential equations
-(PDEs). It combines reinforcement-learning search (DSCV), genetic algorithms
-(DLGA), sparse regression (SGA), an optional generic SR backend powered by
-PySR, and high-quality visual diagnostics in a single workflow.
+# KD
 
-## Models at a glance
+**Symbolic PDE Discovery from Data**
 
-- `KD_SGA` – sparse-regression–based PDE discovery on hand-crafted libraries,
-  targeting local PDEs of the form `u_t = N(u, u_x, ...)`.
-- `KD_DLGA` – deep-learning–aided genetic algorithm for PDE discovery, with
-  rich optimisation and search diagnostics.
-- `KD_DSCV` – DISCOVER-based local PDE discovery in regular (STRidge) mode.
-- `KD_DSCV_SPR` – DISCOVER sparse + PINN mode for PDE discovery with
-  physics-informed neural networks.
-- `KD_PySR` (optional) – thin wrapper around
-  [PySR](https://github.com/MilesCranmer/PySR) for generic symbolic regression
-  tasks `fit(X, y)`.
+Discover the governing partial differential equations hidden in your data — automatically.
 
-## Quick start
+</div>
+
+---
+
+KD is a modular toolkit for symbolic equation discovery, with a strong focus on
+partial differential equations (PDEs). It ships four complementary discovery
+engines, a unified dataset interface, and built-in publication-quality
+visualisation.
+
+## Highlights
+
+- **4 discovery methods** covering sparse regression, genetic algorithms, deep
+  reinforcement learning, and physics-informed neural networks
+- **Unified `PDEDataset`** — load built-in benchmarks in one line or bring your
+  own gridded data
+- **Built-in visualisation** — discovered equations, field comparisons, residual
+  diagnostics, expression trees, and more
+- **N-D support** — works with 1-D, 2-D, and 3-D spatial data out of the box
+
+## Quick Start
+
+### Installation
+
+Requires **Python >= 3.9** and PyTorch.
 
 ```bash
-# 1) create the recommended environment
-conda create -n kd-env python=3.9
-conda activate kd-env
-
-# 2) install KD in editable mode (recommended for development)
 pip install -e .
 
 # (optional) enable PySR-based symbolic regression
 pip install 'kd[pysr]'
 ```
 
-Run a minimal end-to-end example:
-
-```bash
-# SGA – Burgers benchmark with unified viz
-python examples/kd_sga_example.py
-
-# DLGA – KdV benchmark with unified viz
-python examples/kd_dlga_example.py
-
-# DSCV – Burgers benchmark (regular mode)
-python examples/kd_dscv_example.py
-
-# DSCV_SPR – Burgers benchmark with PINN (sparse mode)
-python examples/kd_dscvspr_example.py
-
-# PySR (optional) – generic SR on synthetic (X, y)
-python examples/kd_pysr_example.py
-```
-
-For a full catalogue of example scripts and their intended usage, see
-`examples/README.md`.
-
-Figures are written under `artifacts/` by default. Graphviz (for equation trees)
-can be installed via `conda install python-graphviz` or your system package
-manager.
-
-## Usage
-
-A minimal SGA workflow (imports omitted for brevity):
+### Discover a PDE in 3 lines
 
 ```python
+from kd.dataset import load_pde
+from kd.model import KD_SGA
+
 dataset = load_pde("burgers")
-model = KD_SGA()
+model = KD_SGA(sga_run=30, num=20, depth=4, width=5)
 model.fit_dataset(dataset)
-print(model.best_equation_)  # discovered PDE as string
+print(model.equation_latex())  # u_t = -1.00 u u_x + 0.10 u_xx
 ```
 
-To generate basic diagnostics and figures with the unified visualization façade:
+### Visualise results
 
 ```python
-configure(save_dir="artifacts/run-1")
-plot_training_curve(model)
-plot_residuals(model, actual=y_true, predicted=y_hat, coordinates=X)
-plot_field_comparison(
-    model,
-    x_coords=x,
-    t_coords=t,
-    true_field=u_true,
-    predicted_field=u_pred,
+from kd.viz import configure, render_equation, plot_field_comparison
+from pathlib import Path
+
+configure(save_dir=Path("artifacts/my_run"))
+render_equation(model)               # equation as LaTeX-rendered PNG
+plot_field_comparison(model, ...)     # predicted vs true field heatmap
+```
+
+<div align="center">
+<img src="docs/images/field_comparison_dlga.png" width="700" alt="Field comparison">
+<p><em>Exact vs predicted solution — KdV equation via KD_DLGA.</em></p>
+</div>
+
+## Models at a Glance
+
+| Model | Method | Strengths | Sparse&nbsp;Data | N-D |
+|-------|--------|-----------|:-:|:-:|
+| **KD_SGA** | Sparse genetic algorithm | Fast, interpretable, built-in LaTeX output | &check; | &check; |
+| **KD_DLGA** | Deep-learning genetic algorithm | Rich optimisation diagnostics, neural surrogate | &check; | &check; |
+| **KD_DSCV** | DISCOVER (RL + STRidge) | Flexible operator search, expression trees | &check; | &check; |
+| **KD_DSCV_SPR** | DISCOVER + PINN | Handles very sparse / noisy observations | &check;&check; | &check; |
+| **KD_PySR** | PySR wrapper (optional) | General symbolic regression `fit(X, y)` | &check; | &mdash; |
+
+## Example Gallery
+
+<table>
+<tr>
+<td align="center" colspan="2"><img src="docs/images/equation_dlga.png" width="480"><br><em>KdV equation discovered by KD_DLGA</em></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/field_comparison_dscv.png" width="420"><br><em>Burgers — DSCV field comparison</em></td>
+<td align="center"><img src="docs/images/expression_tree_dscv.png" width="280"><br><em>Discovered expression tree</em></td>
+</tr>
+</table>
+
+See [`examples/`](examples/) for 14+ runnable scripts covering every model and
+visualisation mode.
+
+## Built-in Datasets
+
+```python
+from kd.dataset import load_pde, list_available_datasets
+
+print(list_available_datasets())
+# ['chafee-infante', 'burgers', 'kdv', 'fisher', ...]
+
+dataset = load_pde("burgers")   # returns a PDEDataset
+```
+
+You can also construct a `PDEDataset` from your own NumPy arrays:
+
+```python
+from kd.dataset import PDEDataset
+
+dataset = PDEDataset(
+    equation_name="my_pde",
+    fields_data={"u": u_array},
+    coords_1d={"x": x, "t": t},
+    axis_order=["x", "t"],
+    target_field="u",
+    lhs_axis="t",
 )
 ```
 
-Each helper returns a `VizResult` containing saved paths, warnings, and the
-normalized contract data (`ResidualPlotData`, `OptimizationHistoryData`,
-`FieldComparisonData`). After fitting a model, a few such helpers are usually
-enough to produce PNG figures for equations, fields and residuals under the
-configured `save_dir` (for example `artifacts/...`). For runnable usage, see
-`examples/README.md` and the helper functions in `kd/viz/api.py`.
-
-## Package layout
-
-The core library is provided by the :mod:`kd` package:
+## Package Layout
 
 ```
 kd/
-├── base.py      # shared estimator base class and helpers
-├── dataset/     # PDEDataset, registry, PDE loaders (load_pde, etc.)
-├── model/       # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR and related backends
-├── viz/         # kd.viz façade, adapters, legacy visualisers
-└── utils/       # general utilities (logging, FD helpers, solver, etc.)
+├── base.py        # Shared estimator base class
+├── dataset/       # PDEDataset, registry, loaders
+├── model/         # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR
+├── viz/           # Unified visualisation facade
+└── utils/         # Logging, FD helpers, solver utilities
 ```
-
-Runnable scripts live under `examples/`, and automated tests under `tests/`.
-
 
 ## Acknowledgements
 
-KD draws inspiration from open-source projects including DISCOVER, Deep
-Symbolic Optimization, SymPy, DeepXDE, and PySR. We are especially grateful to
-the PySR project for providing a powerful and flexible symbolic regression
-engine that KD_PySR builds upon.
+KD draws on ideas and code from several open-source projects:
 
-https://github.com/menggedu/DISCOVER  
-https://github.com/dso-org/deep-symbolic-optimization  
-https://github.com/sympy/sympy  
-https://github.com/lululxvi/deepxde  
-https://github.com/MilesCranmer/PySR  
+- [DISCOVER](https://github.com/menggedu/DISCOVER)
+- [Deep Symbolic Optimization](https://github.com/dso-org/deep-symbolic-optimization)
+- [SymPy](https://github.com/sympy/sympy)
+- [DeepXDE](https://github.com/lululxvi/deepxde)
+- [PySR](https://github.com/MilesCranmer/PySR)

@@ -1,22 +1,33 @@
 [project]
 name = "kd"
 version = "1.0.0"
-description = "Knowledge discover and plotting framework"
+description = "Knowledge Discovery Framework for PDE Equations"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "MIT"
 authors = [
   { name = "S.A.I.L." }
 ]
 
 dependencies = [
+    "numpy>=1.21",
+    "torch>=1.10",
+    "scipy>=1.7",
+    "matplotlib>=3.4",
+    "scikit-learn>=1.0",
+    "sympy>=1.9",
+    "commentjson",
+    "tqdm",
+    "pandas",
+    "numba>=0.56",
+    "dill",
+    "pyDOE",
+    "tensorboard",
 ]
 
 [project.optional-dependencies]
-# PySR 为可选依赖：只有在需要 KD_PySR 时才安装。
-pysr = [
-  "pysr"
-]
+pysr = ["pysr"]
+viz = ["seaborn", "graphviz", "Pillow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
