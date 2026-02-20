@@ -10,7 +10,7 @@ authors = [
 ]
 
 dependencies = [
-    "numpy>=1.21",
+    "numpy>=1.22",
     "torch>=1.10",
     "scipy>=1.7",
     "matplotlib>=3.4",
