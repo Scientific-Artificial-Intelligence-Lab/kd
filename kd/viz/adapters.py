@@ -34,10 +34,17 @@ def register_default_adapters() -> None:
     else:
         register_adapter(KD_SGA, SGAVizAdapter())
 
-    # PySR 是可选依赖：只有在 kd.model.kd_pysr 能成功导入时才注册 adapter
+    # PySR adapter is registered lazily to avoid importing juliacall at
+    # package load time (torch + juliacall SIGABRT crash).
+    # See: https://github.com/pytorch/pytorch/issues/78829
+    from .registry import register_lazy_adapter
+    register_lazy_adapter("KD_PySR", _resolve_pysr)
+
+
+def _resolve_pysr():
+    """Lazily resolve KD_PySR class and its adapter."""
     try:
         from kd.model.kd_pysr import KD_PySR  # type: ignore
     except Exception:  # pragma: no cover
-        KD_PySR = None  # type: ignore
-    else:
-        register_adapter(KD_PySR, PySRVizAdapter())
+        return None, None
+    return KD_PySR, PySRVizAdapter()

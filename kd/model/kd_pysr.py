@@ -18,6 +18,11 @@ import numpy as np
 from ..base import BaseEstimator
 
 try:  # 惰性导入，避免在未安装 pysr 时影响整个 KD
+    # juliacall crashes (SIGABRT) if torch is already loaded.
+    # Setting this env var before import lets Julia coexist with torch.
+    # See: https://github.com/pytorch/pytorch/issues/78829
+    import os as _os
+    _os.environ.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")
     from pysr import PySRRegressor  # type: ignore
 except Exception:  # pragma: no cover - 在未安装 pysr 的环境下走这里
     PySRRegressor = None  # type: ignore
