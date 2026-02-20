@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Visualization &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=a66d8bb5" />
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Documentation" href="api.html" />
+    <link rel="prev" title="PDE Backends" href="pde_backends.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Visualization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#basic-usage">Basic usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adapter-coverage">Adapter coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="pde_backends.html" title="previous chapter">PDE Backends</a></li>
+      <li>Next: <a href="api.html" title="next chapter">API Documentation</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="visualization">
+<h1>Visualization<a class="headerlink" href="#visualization" title="Link to this heading">¶</a></h1>
+<p>KD ships with a unified visualization façade in <a class="reference internal" href="api.html#module-kd.viz.api" title="kd.viz.api"><code class="xref py py-mod docutils literal notranslate"><span class="pre">kd.viz.api</span></code></a> that
+provides a small set of high-level plotting helpers.</p>
+<section id="basic-usage">
+<h2>Basic usage<a class="headerlink" href="#basic-usage" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">configure</span><span class="p">(</span><span class="n">save_dir</span><span class="o">=</span><span class="s2">&quot;artifacts/viz&quot;</span><span class="p">)</span>
+<span class="n">plot_training_curve</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+<span class="n">plot_residuals</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">actual</span><span class="o">=</span><span class="n">y_true</span><span class="p">,</span> <span class="n">predicted</span><span class="o">=</span><span class="n">y_pred</span><span class="p">,</span> <span class="n">coordinates</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Each helper returns a <code class="xref py py-class docutils literal notranslate"><span class="pre">kd.viz.core.VizResult</span></code> containing:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">paths</span></code> – saved figure paths (if any),</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">warnings</span></code> – diagnostics about missing data or unsupported intents,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata</span></code> – a normalised data contract such as
+<code class="xref py py-class docutils literal notranslate"><span class="pre">kd.viz._contracts.ResidualPlotData</span></code> or
+<code class="xref py py-class docutils literal notranslate"><span class="pre">kd.viz._contracts.FieldComparisonData</span></code>.</p></li>
+</ul>
+</section>
+<section id="adapter-coverage">
+<h2>Adapter coverage<a class="headerlink" href="#adapter-coverage" title="Link to this heading">¶</a></h2>
+<p>The current adapters (see <a class="reference internal" href="api.html#module-kd.viz.adapters" title="kd.viz.adapters"><code class="xref py py-mod docutils literal notranslate"><span class="pre">kd.viz.adapters</span></code></a>) provide intent coverage for:</p>
+<ul class="simple">
+<li><p>SGA – equation rendering, residuals, field comparison, parity for the
+supported PDE benchmarks and custom <code class="docutils literal notranslate"><span class="pre">u(x,</span> <span class="pre">t)</span></code> fields.</p></li>
+<li><p>DLGA – training/validation curves, search evolution, optimisation history,
+equation, residuals, field comparison, time slices and parity.</p></li>
+<li><p>DSCV / DSCV SPR – reward evolution, density plots, expression trees,
+equation, residuals, field comparison, parity, and PINN-specific residual
+and field diagnostics where available.</p></li>
+</ul>
+<p>For more internal design notes, see <code class="docutils literal notranslate"><span class="pre">notes/viz/viz_helpers.md</span></code> in the
+repository.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+      |
+      <a href="_sources/viz.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

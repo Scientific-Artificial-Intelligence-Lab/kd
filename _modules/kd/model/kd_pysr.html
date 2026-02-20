@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.model.kd_pysr &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.model.kd_pysr</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;PySR integration: generic symbolic regression backend for KD.</span>
+
+<span class="sd">This module provides a lightweight, optional wrapper around PySR:</span>
+
+<span class="sd">* It does not assume any PDE structure and only exposes a generic</span>
+<span class="sd">  ``fit(X, y)`` style symbolic regressor.</span>
+<span class="sd">* If ``pysr`` is not installed, all other KD features remain fully usable.</span>
+<span class="sd">* When ``pysr`` is available, :class:`KD_PySR` can be used to fit models and</span>
+<span class="sd">  export equations and LaTeX strings.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseEstimator</span>
+
+<span class="k">try</span><span class="p">:</span>  <span class="c1"># 惰性导入，避免在未安装 pysr 时影响整个 KD</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pysr</span><span class="w"> </span><span class="kn">import</span> <span class="n">PySRRegressor</span>  <span class="c1"># type: ignore</span>
+<span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pragma: no cover - 在未安装 pysr 的环境下走这里</span>
+    <span class="n">PySRRegressor</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># type: ignore</span>
+
+
+<div class="viewcode-block" id="KD_PySR">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_pysr.KD_PySR">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">KD_PySR</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Minimal KD wrapper around PySR for generic symbolic regression.</span>
+
+<span class="sd">    Key design points:</span>
+
+<span class="sd">    * Exposes a scikit-learn–style interface (``fit`` / ``predict``).</span>
+<span class="sd">    * Provides ``best_equation_`` and :meth:`equation_latex` for alignment</span>
+<span class="sd">      with other KD backends.</span>
+<span class="sd">    * Does not introduce PDE-specific interfaces such as ``fit_dataset`` in</span>
+<span class="sd">      KD 1.x, focusing on generic regression instead.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="KD_PySR.__init__">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_pysr.KD_PySR.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">niterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">binary_operators</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">unary_operators</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">extra_model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a KD_PySR estimator.</span>
+
+<span class="sd">        Parameters are forwarded almost directly to</span>
+<span class="sd">        :class:`pysr.PySRRegressor`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            niterations: Number of PySR optimisation iterations (``niterations``).</span>
+<span class="sd">            binary_operators: List of binary operators passed to</span>
+<span class="sd">                ``binary_operators``.</span>
+<span class="sd">            unary_operators: List of unary operators passed to</span>
+<span class="sd">                ``unary_operators``.</span>
+<span class="sd">            extra_model_kwargs: Additional keyword arguments forwarded to the</span>
+<span class="sd">                underlying :class:`pysr.PySRRegressor`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Do not call BaseEstimator.__init__ to avoid accessing attributes</span>
+        <span class="c1"># before they are initialised.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">niterations</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">niterations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">binary_operators</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">binary_operators</span><span class="p">)</span> <span class="k">if</span> <span class="n">binary_operators</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">unary_operators</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">unary_operators</span><span class="p">)</span> <span class="k">if</span> <span class="n">unary_operators</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">extra_model_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">extra_model_kwargs</span><span class="p">)</span> <span class="k">if</span> <span class="n">extra_model_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+
+        <span class="c1"># 训练后填充的属性</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_equation_</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sympy_expr_</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Cache training data for downstream visualization in the current process.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_train_</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y_train_</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Internal helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_backend_available</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure that PySR backend is available.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">PySRRegressor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;KD_PySR requires the &#39;pysr&#39; package and its dependencies &quot;</span>
+                <span class="s2">&quot;(including a working Julia environment). &quot;</span>
+                <span class="s2">&quot;No pysr installation was detected in this environment. &quot;</span>
+                <span class="s2">&quot;Please install it via `pip install kd[pysr]` or &quot;</span>
+                <span class="s2">&quot;`pip install pysr`.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_backend</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct the underlying PySRRegressor instance.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_backend_available</span><span class="p">()</span>
+
+        <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;niterations&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">niterations</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">binary_operators</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;binary_operators&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">binary_operators</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">unary_operators</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;unary_operators&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unary_operators</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_model_kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">PySRRegressor</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>  <span class="c1"># type: ignore[call-arg]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_equation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract the best equation and SymPy expression from the PySR model.&quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">best_equation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">sympy_expr</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># 优先使用 PySR 的 get_best() 与 sympy() 接口（0.13+）</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">get_best</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;get_best&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">get_best</span><span class="p">):</span>
+                <span class="n">best</span> <span class="o">=</span> <span class="n">get_best</span><span class="p">()</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># pandas.Series 或 dict 都支持这种访问方式</span>
+                    <span class="n">best_equation</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">best</span><span class="p">[</span><span class="s2">&quot;equation&quot;</span><span class="p">])</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="c1"># 兜底：直接字符串化整行</span>
+                    <span class="n">best_equation</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">best</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">best_equation</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sympy_fn</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;sympy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">sympy_fn</span><span class="p">):</span>
+                <span class="n">sympy_expr</span> <span class="o">=</span> <span class="n">sympy_fn</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">sympy_expr</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># 再兜底：直接用模型的 __str__</span>
+        <span class="k">if</span> <span class="n">best_equation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">best_equation</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">best_equation</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_equation_</span> <span class="o">=</span> <span class="n">best_equation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sympy_expr_</span> <span class="o">=</span> <span class="n">sympy_expr</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># 公共 API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="KD_PySR.fit">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_pysr.KD_PySR.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit a symbolic regression model on the given ``(X, y)`` pairs.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X: Feature matrix of shape ``(n_samples, n_features)``.</span>
+<span class="sd">            y: Target array of shape ``(n_samples,)`` or ``(n_samples, 1)``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            KD_PySR: The fitted estimator instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">X_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">y_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">X_arr</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;KD_PySR.fit 期望 X 为二维数组，但收到 X.shape=</span><span class="si">{</span><span class="n">X_arr</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">X_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">y_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;KD_PySR.fit 收到不匹配的样本数：X.shape[0]=</span><span class="si">{</span><span class="n">X_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">, y.shape[0]=</span><span class="si">{</span><span class="n">y_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_train_</span> <span class="o">=</span> <span class="n">X_arr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y_train_</span> <span class="o">=</span> <span class="n">y_arr</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_backend</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_arr</span><span class="p">,</span> <span class="n">y_arr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_equation_info</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="KD_PySR.predict">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_pysr.KD_PySR.predict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Predict with the fitted PySR model.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;KD_PySR.predict was called before the model was fitted. &quot;</span>
+                <span class="s2">&quot;Call fit(X, y) first.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">X_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_arr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="KD_PySR.equation_latex">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_pysr.KD_PySR.equation_latex">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">equation_latex</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lhs</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;y&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the best learned equation in LaTeX form.</span>
+
+<span class="sd">        The method tries, in order:</span>
+
+<span class="sd">        * PySR&#39;s own ``latex()`` method (if available),</span>
+<span class="sd">        * conversion from the cached SymPy expression,</span>
+<span class="sd">        * a plain string representation of ``best_equation_`` or the model.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            The returned string does *not* include surrounding ``$`` markers;</span>
+<span class="sd">            rendering layers (such as :mod:`kd.viz`) are responsible for</span>
+<span class="sd">            wrapping it appropriately.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;KD_PySR.equation_latex was called before the model was fitted. &quot;</span>
+                <span class="s2">&quot;Call fit(X, y) first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># 1. 尝试使用 PySR 自带的 latex()（如果有的话）</span>
+        <span class="n">latex_str</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">latex_fn</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="s2">&quot;latex&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">latex_fn</span><span class="p">):</span>
+                <span class="n">candidate</span> <span class="o">=</span> <span class="n">latex_fn</span><span class="p">()</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">candidate</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                    <span class="n">latex_str</span> <span class="o">=</span> <span class="n">candidate</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">latex_str</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># 2. 使用 SymPy 表达式兜底</span>
+        <span class="k">if</span> <span class="n">latex_str</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sympy_expr_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+                <span class="n">rhs</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">latex</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sympy_expr_</span><span class="p">)</span>
+                <span class="n">latex_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">lhs</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">rhs</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">latex_str</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># 3. 最后退化为纯字符串形式</span>
+        <span class="k">if</span> <span class="n">latex_str</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">best_equation_</span><span class="p">:</span>
+                <span class="n">latex_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_equation_</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">latex_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">latex_str</span></div>
+</div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;KD_PySR&quot;</span><span class="p">]</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

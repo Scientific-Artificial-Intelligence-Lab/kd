@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>PDE Backends &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=a66d8bb5" />
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Visualization" href="viz.html" />
+    <link rel="prev" title="Getting Started" href="getting_started.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">PDE Backends</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#sga">SGA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dlga">DLGA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dscv-regular-and-spr">DSCV (regular and SPR)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pysr-optional">PySR (optional)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="getting_started.html" title="previous chapter">Getting Started</a></li>
+      <li>Next: <a href="viz.html" title="next chapter">Visualization</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="pde-backends">
+<h1>PDE Backends<a class="headerlink" href="#pde-backends" title="Link to this heading">¶</a></h1>
+<p>KD provides several PDE-focused symbolic discovery backends that share a
+unified data entry point via <a class="reference internal" href="api.html#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a>.</p>
+<section id="sga">
+<h2>SGA<a class="headerlink" href="#sga" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">KD_SGA</span></code> implements sparse-regression–based PDE discovery on a hand-crafted
+library of candidate terms. It is designed for local PDEs of the form
+<code class="docutils literal notranslate"><span class="pre">u_t</span> <span class="pre">=</span> <span class="pre">N(u,</span> <span class="pre">u_x,</span> <span class="pre">...)</span></code>.</p>
+<p>Typical usage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde</span><span class="p">(</span><span class="s2">&quot;burgers&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_SGA</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="dlga">
+<h2>DLGA<a class="headerlink" href="#dlga" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">KD_DLGA</span></code> is a deep-learning–aided genetic algorithm for PDE discovery. It
+supports the same <code class="docutils literal notranslate"><span class="pre">PDEDataset</span> <span class="pre">+</span> <span class="pre">fit_dataset</span></code> interface and can also be used
+with expert-level <code class="docutils literal notranslate"><span class="pre">fit(X,</span> <span class="pre">y)</span></code> workflows on compatible data.</p>
+</section>
+<section id="dscv-regular-and-spr">
+<h2>DSCV (regular and SPR)<a class="headerlink" href="#dscv-regular-and-spr" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">KD_DSCV</span></code> and the sparse/PINN variant inside <code class="docutils literal notranslate"><span class="pre">kd.model.kd_dscv</span></code> expose
+wrappers around the DISCOVER framework. In KD 1.0, these backends are intended
+for local PDE benchmarks and simple PINN-style experiments, and are driven via
+<code class="docutils literal notranslate"><span class="pre">import_dataset</span></code> / <code class="docutils literal notranslate"><span class="pre">fit_dataset</span></code>.</p>
+</section>
+<section id="pysr-optional">
+<h2>PySR (optional)<a class="headerlink" href="#pysr-optional" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">KD_PySR</span></code> is a thin wrapper around the PySR project. It is intended as a
+generic symbolic regression backend for tasks of the form <code class="docutils literal notranslate"><span class="pre">fit(X,</span> <span class="pre">y)</span></code> and is
+enabled only when the optional <code class="docutils literal notranslate"><span class="pre">pysr</span></code> extra is installed.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+      |
+      <a href="_sources/pde_backends.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
