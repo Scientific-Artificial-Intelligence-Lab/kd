@@ -50,7 +50,7 @@ def quantile_select(actions, obs, priors,programs, r, epsilon):
     l_full= l_full[valid_full]
     
 
-    quantile = np.quantile(r, 1 - epsilon, interpolation="higher")
+    quantile = np.quantile(r, 1 - epsilon, method="higher")
 
     keep        = r >= quantile
     l           = l[keep]
