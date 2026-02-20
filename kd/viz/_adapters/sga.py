@@ -654,17 +654,23 @@ class SGAVizAdapter:
         }
         return VizResult(intent='residual', paths=[output_path], metadata=metadata, warnings=warnings)
 
+    @staticmethod
+    def _safe_bins(data: np.ndarray, bins: int) -> int:
+        """Clamp bins to number of unique values to avoid histogram errors."""
+        n_unique = len(np.unique(data))
+        return max(1, min(bins, n_unique))
+
     def _residual_plot_2d(self, residual_meta, residual_origin, bins, ctx):
         """1D spatial (2D array): histogram + imshow heatmap."""
         fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
 
-        axes[0, 0].hist(residual_meta.reshape(-1), bins=bins, color='#1f77b4', alpha=0.7, edgecolor='black')
+        axes[0, 0].hist(residual_meta.reshape(-1), bins=self._safe_bins(residual_meta, bins), color='#1f77b4', alpha=0.7, edgecolor='black')
         axes[0, 0].set_title('Metadata Residual Distribution')
         axes[0, 0].set_xlabel('Residual (u_t - RHS)')
         axes[0, 0].set_ylabel('Frequency')
         axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
 
-        axes[0, 1].hist(residual_origin.reshape(-1), bins=bins, color='#ff7f0e', alpha=0.7, edgecolor='black')
+        axes[0, 1].hist(residual_origin.reshape(-1), bins=self._safe_bins(residual_origin, bins), color='#ff7f0e', alpha=0.7, edgecolor='black')
         axes[0, 1].set_title('Original Residual Distribution')
         axes[0, 1].set_xlabel('Residual (u_t - RHS)')
         axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
@@ -690,13 +696,13 @@ class SGAVizAdapter:
 
         fig, axes = plt.subplots(2, 2, figsize=ctx.options.get('figsize', (12, 8)))
 
-        axes[0, 0].hist(residual_meta.reshape(-1), bins=bins, color='#1f77b4', alpha=0.7, edgecolor='black')
+        axes[0, 0].hist(residual_meta.reshape(-1), bins=self._safe_bins(residual_meta, bins), color='#1f77b4', alpha=0.7, edgecolor='black')
         axes[0, 0].set_title('Metadata Residual Distribution')
         axes[0, 0].set_xlabel('Residual (u_t - RHS)')
         axes[0, 0].set_ylabel('Frequency')
         axes[0, 0].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)
 
-        axes[0, 1].hist(residual_origin.reshape(-1), bins=bins, color='#ff7f0e', alpha=0.7, edgecolor='black')
+        axes[0, 1].hist(residual_origin.reshape(-1), bins=self._safe_bins(residual_origin, bins), color='#ff7f0e', alpha=0.7, edgecolor='black')
         axes[0, 1].set_title('Original Residual Distribution')
         axes[0, 1].set_xlabel('Residual (u_t - RHS)')
         axes[0, 1].axvline(0.0, color='black', linewidth=1, linestyle='--', alpha=0.6)

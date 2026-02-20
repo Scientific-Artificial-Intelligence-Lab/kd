@@ -83,8 +83,8 @@ class DummySGAContext:
         self.t = time_grid
         self.x_origin = space_grid
         self.t_origin = time_grid
-        self.ut = self.u * 0.5
-        self.ut_origin = self.u_origin * 0.5
+        self.ut = self.u * 0.5 + np.random.default_rng(42).normal(0, 0.01, self.u.shape)
+        self.ut_origin = self.u_origin * 0.5 + np.random.default_rng(43).normal(0, 0.01, self.u.shape)
         self.right_side_full = self.ut - 0.02
         self.right_side_full_origin = self.ut_origin - 0.01
         self.default_terms = self.u.reshape(-1, 1)
