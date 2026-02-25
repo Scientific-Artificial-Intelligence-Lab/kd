@@ -77,6 +77,27 @@ PDE_REGISTRY = {
         },
         'status': 'active',
     },
+    'burgers-reflib': {
+        'file': 'burgers_reflib.mat',
+        'keys': {
+            'x_key': 'x',
+            't_key': 't',
+            'u_key': 'usol',
+        },
+        'sym_true': 'add,mul,u1,diff,u1,x1,diff2,u1,x1',
+        'domain': None,
+        'aliases': {
+            'legacy': 'BurgersReflib',
+            'sga_problem': 'burgers',
+        },
+        'models': {
+            'sga': True,
+            'dscv': True,
+            'dscv_spr': True,
+            'dlga': True,
+        },
+        'status': 'active',
+    },
     'kdv': {
         'file': 'KdV_equation.mat',
         'keys': {

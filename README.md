@@ -45,9 +45,9 @@ from kd.dataset import load_pde
 from kd.model import KD_SGA
 
 dataset = load_pde("burgers")
-model = KD_SGA(sga_run=30, num=20, depth=4, width=5)
+model = KD_SGA(sga_run=20, num=20, depth=4, width=5)
 model.fit_dataset(dataset)
-print(model.equation_latex())  # u_t = -1.00 u u_x + 0.10 u_xx
+print(model.equation_latex())  # u_t = -1.001 u_x u + 0.100 u_xx
 ```
 
 ### Visualise results
@@ -80,10 +80,11 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 
 <table>
 <tr>
-<td align="center" colspan="2"><img src="docs/images/equation_dlga.png" width="480"><br><em>KdV equation discovered by KD_DLGA</em></td>
+<td align="center"><img src="docs/images/equation_sga.png" width="420"><br><em>Burgers equation — KD_SGA</em></td>
+<td align="center"><img src="docs/images/equation_dscv.png" width="420"><br><em>Burgers equation — KD_DSCV</em></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/images/field_comparison_dscv.png" width="420"><br><em>Burgers — DSCV field comparison</em></td>
+<td align="center"><img src="docs/images/equation_dlga.png" width="420"><br><em>KdV equation — KD_DLGA</em></td>
 <td align="center"><img src="docs/images/expression_tree_dscv.png" width="280"><br><em>Discovered expression tree</em></td>
 </tr>
 </table>
