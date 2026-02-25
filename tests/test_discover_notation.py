@@ -487,3 +487,141 @@ class TestSubscriptPrinterNonSymbolFunc:
         result = self._render(expr)
         assert "xx" in result
         assert "3" in result
+
+
+# ===========================================================================
+# 6. First-order compound derivative expansion
+# ===========================================================================
+
+class TestExpandFirstOrderDerivatives:
+    """Tests for expanding first-order compound derivatives via doit().
+
+    e.g. Derivative(u1**2, x1) → 2*u1*Derivative(u1, x1)
+    The numeric factor should be absorbed into the coefficient.
+    """
+
+    # --- Core expansion helper ---
+
+    @pytest.mark.unit
+    def test_expand_pow2_first_order(self):
+        """Derivative(u1**2, x1) expands to (2, u1*Derivative(u1, x1))."""
+        from kd.viz.discover_eq2latex import _expand_first_order_compound_derivatives
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1**2, x1)
+        factor, expanded = _expand_first_order_compound_derivatives(expr)
+        # factor should be 2 (from chain rule)
+        assert float(factor) == pytest.approx(2.0)
+        # expanded should not contain Pow — it's u1*Derivative(u1, x1)
+        assert isinstance(expanded, sympy.Mul) or "Derivative" in str(expanded)
+        assert "u1" in str(expanded)
+
+    @pytest.mark.unit
+    def test_expand_pow3_first_order(self):
+        """Derivative(u1**3, x1) expands to (3, u1**2 * Derivative(u1, x1))."""
+        from kd.viz.discover_eq2latex import _expand_first_order_compound_derivatives
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1**3, x1)
+        factor, expanded = _expand_first_order_compound_derivatives(expr)
+        assert float(factor) == pytest.approx(3.0)
+
+    @pytest.mark.unit
+    def test_no_expand_simple_derivative(self):
+        """Derivative(u1, x1) should not be expanded (already simple)."""
+        from kd.viz.discover_eq2latex import _expand_first_order_compound_derivatives
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1, x1)
+        factor, expanded = _expand_first_order_compound_derivatives(expr)
+        assert float(factor) == pytest.approx(1.0)
+        # Expression unchanged
+        assert expanded == expr
+
+    @pytest.mark.unit
+    def test_no_expand_second_order_compound(self):
+        """Derivative(u1**2, x1, x1) should NOT be expanded (second order)."""
+        from kd.viz.discover_eq2latex import _expand_first_order_compound_derivatives
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1**2, x1, x1)
+        factor, expanded = _expand_first_order_compound_derivatives(expr)
+        assert float(factor) == pytest.approx(1.0)
+        # Expression unchanged — still has Pow inside Derivative
+        assert expanded == expr
+
+    @pytest.mark.unit
+    def test_no_expand_non_derivative(self):
+        """Non-derivative expression (u1**2) should pass through unchanged."""
+        from kd.viz.discover_eq2latex import _expand_first_order_compound_derivatives
+        u1 = Symbol("u1")
+        expr = u1**2
+        factor, expanded = _expand_first_order_compound_derivatives(expr)
+        assert float(factor) == pytest.approx(1.0)
+        assert expanded == expr
+
+    # --- Integration: term-level with expand ---
+
+    @pytest.mark.unit
+    def test_term_expand_diff_n2_u1(self):
+        """diff(n2(u1), x1) with expand → LaTeX contains 'u' and 'u_{x}'."""
+        from kd.viz.discover_eq2latex import _discover_term_node_to_latex_expanded
+        node = _diff(_n2(_make_leaf("u1")), _make_leaf("x1"))
+        factor, latex = _discover_term_node_to_latex_expanded(node)
+        assert float(factor) == pytest.approx(2.0)
+        assert "u_{x}" in latex
+        assert "u" in latex
+        # Should NOT have parenthesized form
+        assert "(u^{2})" not in latex
+
+    @pytest.mark.unit
+    def test_term_expand_simple_diff(self):
+        """diff(u1, x1) with expand → factor=1, latex='u_{x}'."""
+        from kd.viz.discover_eq2latex import _discover_term_node_to_latex_expanded
+        node = _diff(_make_leaf("u1"), _make_leaf("x1"))
+        factor, latex = _discover_term_node_to_latex_expanded(node)
+        assert float(factor) == pytest.approx(1.0)
+        assert latex == "u_{x}"
+
+    @pytest.mark.unit
+    def test_term_expand_diff2_n2_keeps_parens(self):
+        """diff2(n2(u1), x1) with expand → factor=1, keeps (u^{2})_{xx}."""
+        from kd.viz.discover_eq2latex import _discover_term_node_to_latex_expanded
+        node = _diff2(_n2(_make_leaf("u1")), _make_leaf("x1"))
+        factor, latex = _discover_term_node_to_latex_expanded(node)
+        assert float(factor) == pytest.approx(1.0)
+        assert "xx" in latex
+
+    # --- Integration: program-level with expand_derivatives ---
+
+    @pytest.mark.unit
+    def test_program_expand_absorbs_factor(self):
+        """discover_program_to_latex with expand_derivatives absorbs factor.
+
+        Program: -0.5 * diff(n2(u1), x1) should become ~ -1.0 * u u_x.
+        _format_full_latex_term omits coefficient when |coeff| ≈ 1.
+        """
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[-0.5],
+            sympy_strings=["Derivative(Pow(u1, 2), x1)"],
+        )
+        result = fn(program, notation="subscript", expand_derivatives=True)
+        # Factor 2 absorbed: -0.5 * 2 = -1.0, displayed as "- u u_{x}"
+        assert "u_{x}" in result
+        assert "u" in result
+        # Should NOT contain parenthesized derivative
+        assert "(u^{2})_{x}" not in result
+
+    @pytest.mark.unit
+    def test_program_expand_false_keeps_parens(self):
+        """expand_derivatives=False preserves current behavior."""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[-0.5],
+            sympy_strings=["Derivative(Pow(u1, 2), x1)"],
+        )
+        result = fn(program, notation="subscript", expand_derivatives=False)
+        # Should keep the parenthesized form
+        assert "(u^{2})" in result
+        assert "0.5" in result

@@ -62,6 +62,108 @@ class _SubscriptLatexPrinter(LatexPrinter):
         return _SYMBOL_DISPLAY.get(name, super()._print_Symbol(expr))
 
 
+# ---------------------------------------------------------------------------
+# First-order compound derivative expansion
+# ---------------------------------------------------------------------------
+
+# Symbols that represent dependent variables (functions of x1, x2, x3)
+_FUNC_SYMBOL_NAMES = frozenset({'u1'})
+_VAR_SYMBOL_NAMES = frozenset({'x1', 'x2', 'x3'})
+
+
+def _is_first_order_compound_derivative(expr: sympy.Basic) -> bool:
+    """Check if *expr* is a first-order Derivative of a compound expression."""
+    if not isinstance(expr, sympy.Derivative):
+        return False
+    total_order = sum(c for _, c in expr.variable_count)
+    if total_order != 1:
+        return False
+    func = expr.args[0]
+    from sympy.core.function import AppliedUndef
+    return not isinstance(func, (sympy.Symbol, AppliedUndef))
+
+
+def _expand_first_order_compound_derivatives(
+    expr: sympy.Basic,
+) -> tuple:
+    """Expand first-order derivatives of compound expressions.
+
+    Uses SymPy ``doit()`` after temporarily promoting Symbols to Functions
+    so that the chain rule is applied.
+
+    Returns ``(numeric_factor, expanded_expr)``.
+    Only first-order compound derivatives are expanded; everything else
+    is returned unchanged with factor 1.
+    """
+    if not _is_first_order_compound_derivative(expr):
+        return sympy.Integer(1), expr
+
+    # Symbol → Function substitution
+    sym_to_fn: dict = {}
+    var_syms = [sympy.Symbol(v) for v in sorted(_VAR_SYMBOL_NAMES)]
+    for name in _FUNC_SYMBOL_NAMES:
+        sym = sympy.Symbol(name)
+        fn = sympy.Function(name)(*var_syms)
+        sym_to_fn[sym] = fn
+
+    expr_fn = expr
+    for sym, fn in sym_to_fn.items():
+        expr_fn = expr_fn.subs(sym, fn)
+
+    expanded = expr_fn.doit()
+
+    # Function → Symbol substitution (reverse)
+    for sym, fn in sym_to_fn.items():
+        # Replace derivatives first (higher order → lower order)
+        for vs in var_syms:
+            for order in range(4, 0, -1):
+                expanded = expanded.subs(
+                    sympy.Derivative(fn, (vs, order)),
+                    sympy.Derivative(sym, *([vs] * order)),
+                )
+        expanded = expanded.subs(fn, sym)
+
+    # Extract numeric factor: 2*u1*Derivative(u1, x1) → (2, u1*Derivative(...))
+    coeff, rest = expanded.as_coeff_Mul()
+    return coeff, rest
+
+
+# ---------------------------------------------------------------------------
+# Node → LaTeX (with optional expansion)
+# ---------------------------------------------------------------------------
+
+def _discover_term_node_to_latex_expanded(
+    term_node_obj,
+    local_sympy_symbols=None,
+    *,
+    notation: str = "subscript",
+) -> tuple:
+    """Like ``_discover_term_node_to_latex`` but also expands first-order
+    compound derivatives, returning ``(numeric_factor, latex_string)``.
+    """
+    if local_sympy_symbols is None:
+        if notation == "leibniz":
+            local_sympy_symbols = _LEIBNIZ_SYMBOLS_FOR_SYMPY
+        else:
+            local_sympy_symbols = DEEPRL_SYMBOLS_FOR_SYMPY
+
+    sympy_expr_str = term_node_obj.to_sympy_string()
+    parsed = parse_expr(
+        sympy_expr_str,
+        local_dict=local_sympy_symbols,
+        transformations='all',
+    )
+
+    factor, expanded = _expand_first_order_compound_derivatives(parsed)
+
+    if notation == "subscript":
+        latex_output = _SubscriptLatexPrinter().doprint(expanded)
+    else:
+        latex_output = sympy.latex(expanded)
+
+    return factor, latex_output
+
+
 # Node -> LaTeX
 def _discover_term_node_to_latex(term_node_obj, local_sympy_symbols=None, *, notation="subscript"):
     if local_sympy_symbols is None:
@@ -110,7 +212,8 @@ def discover_program_to_latex(program_object, # lhs_name_str,
                             custom_lhs_latex_map=None,
                             custom_deeprl_symbols=None,
                             lhs_axis: Optional[str] = None,
-                            notation: str = "subscript"):
+                            notation: str = "subscript",
+                            expand_derivatives: bool = True):
     """
     Convert a Program object to a full LaTeX equation string.
 
@@ -176,13 +279,21 @@ def discover_program_to_latex(program_object, # lhs_name_str,
         # program.w 可能是一个普通列表或1D NumPy数组
         coeff_val = float(coeff_val_from_w)
         term_node = term_nodes[i]
-        
+
         # Get base term LaTeX for this node.
-        base_term_latex = _discover_term_node_to_latex(
-            term_node,
-            local_sympy_symbols=current_sympy_symbols,
-            notation=notation,
-        )
+        if expand_derivatives:
+            factor, base_term_latex = _discover_term_node_to_latex_expanded(
+                term_node,
+                local_sympy_symbols=current_sympy_symbols,
+                notation=notation,
+            )
+            coeff_val *= float(factor)
+        else:
+            base_term_latex = _discover_term_node_to_latex(
+                term_node,
+                local_sympy_symbols=current_sympy_symbols,
+                notation=notation,
+            )
 
         if DEBUG_RENDERER_MODE and "\\text{Error" in base_term_latex:
             logger.warning(
