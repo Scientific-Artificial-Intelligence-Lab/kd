@@ -42,8 +42,12 @@ class _SubscriptLatexPrinter(LatexPrinter):
         func = expr.args[0]
         if isinstance(func, sympy.Symbol):
             func_name = _SYMBOL_DISPLAY.get(func.name, func.name)
-        else:
+        elif hasattr(func, 'func') and hasattr(func.func, 'name'):
+            # Applied function like u1(x1, x2): func.func has .name
             func_name = _SYMBOL_DISPLAY.get(func.func.name, func.func.name)
+        else:
+            # Compound expression (Pow, Mul, Add, etc.): render via printer
+            func_name = "(" + self._print(func) + ")"
 
         subscript_parts = []
         for var, count in expr.variable_count:

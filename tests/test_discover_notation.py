@@ -235,3 +235,255 @@ class TestDiscoverProgramToLatex:
         )
         result = fn(program, notation="subscript")
         assert result.startswith("$u_t")
+
+
+# ===========================================================================
+# Helper: build real Node trees from stridge.py
+# ===========================================================================
+
+def _make_token(name: str, arity: int):
+    """Create a minimal Token-like object for Node construction."""
+    return SimpleNamespace(name=name, arity=arity)
+
+
+def _make_leaf(name: str):
+    """Create a leaf Node (arity=0) e.g. u1, x1."""
+    from kd.model.discover.stridge import Node
+    return Node(_make_token(name, 0))
+
+
+def _make_node(op_name: str, arity: int, children: list):
+    """Create an internal Node with given children."""
+    from kd.model.discover.stridge import Node
+    node = Node(_make_token(op_name, arity))
+    node.children = children
+    return node
+
+
+# Convenience builders for common expression patterns
+def _n2(child):
+    """n2(child) -> Pow(child, 2)"""
+    return _make_node("n2", 1, [child])
+
+
+def _n3(child):
+    """n3(child) -> Pow(child, 3)"""
+    return _make_node("n3", 1, [child])
+
+
+def _diff(func_child, var_child):
+    """diff(func, var) -> Derivative(func, var)"""
+    return _make_node("diff", 2, [func_child, var_child])
+
+
+def _diff2(func_child, var_child):
+    """diff2(func, var) -> Derivative(func, var, var)"""
+    return _make_node("diff2", 2, [func_child, var_child])
+
+
+def _mul(left, right):
+    """mul(left, right) -> Mul(left, right)"""
+    return _make_node("mul", 2, [left, right])
+
+
+def _add(left, right):
+    """add(left, right) -> Add(left, right)"""
+    return _make_node("add", 2, [left, right])
+
+
+# ===========================================================================
+# 4. Non-Symbol derivative rendering (BUG: _print_Derivative crashes)
+# ===========================================================================
+
+class TestNonSymbolDerivative:
+    """Tests for derivatives of non-Symbol expressions (the main bug).
+
+    When func in Derivative(func, x) is not a Symbol (e.g., Pow(u1, 2)),
+    _SubscriptLatexPrinter._print_Derivative crashes because func.func
+    is a SymPy class (e.g., <class Pow>) without a meaningful .name.
+    """
+
+    # --- Core crash cases (must fix) ---
+
+    @pytest.mark.unit
+    def test_diff_n2_u1_subscript(self):
+        """diff(n2(u1), x1) should produce valid LaTeX without 'Error'.
+
+        This is the primary crash case: Derivative(Pow(u1, 2), x1).
+        Expected output like '{u^{2}}_{x}' or similar.
+        """
+        fn = _import_term_to_latex()
+        node = _diff(_n2(_make_leaf("u1")), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        # Must contain subscript x for the derivative variable
+        assert "_{" in result and "x" in result
+
+    @pytest.mark.unit
+    def test_diff_mul_u1_u1_subscript(self):
+        """diff(mul(u1, u1), x1) should produce valid LaTeX without 'Error'.
+
+        Derivative(Mul(u1, u1), x1) -> something like '{u \\cdot u}_{x}'.
+        """
+        fn = _import_term_to_latex()
+        node = _diff(
+            _mul(_make_leaf("u1"), _make_leaf("u1")),
+            _make_leaf("x1"),
+        )
+        result = fn(node, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        assert "_{" in result
+
+    @pytest.mark.unit
+    def test_diff2_n3_u1_subscript(self):
+        """diff2(n3(u1), x1) should produce valid LaTeX without 'Error'.
+
+        Derivative(Pow(u1, 3), x1, x1) -> second-order derivative.
+        """
+        fn = _import_term_to_latex()
+        node = _diff2(_n3(_make_leaf("u1")), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        # Second-order: should have xx in subscript
+        assert "xx" in result
+
+    # --- Leibniz mode (same expressions) ---
+
+    @pytest.mark.unit
+    def test_diff_n2_u1_leibniz(self):
+        """diff(n2(u1), x1) in leibniz mode should also not crash."""
+        fn = _import_term_to_latex()
+        node = _diff(_n2(_make_leaf("u1")), _make_leaf("x1"))
+        result = fn(node, notation="leibniz")
+        assert "Error" not in result, f"Got error output: {result}"
+
+    @pytest.mark.unit
+    def test_diff_mul_u1_u1_leibniz(self):
+        """diff(mul(u1, u1), x1) in leibniz mode should not crash."""
+        fn = _import_term_to_latex()
+        node = _diff(
+            _mul(_make_leaf("u1"), _make_leaf("u1")),
+            _make_leaf("x1"),
+        )
+        result = fn(node, notation="leibniz")
+        assert "Error" not in result, f"Got error output: {result}"
+
+    # --- Non-regression: simple derivatives still work ---
+
+    @pytest.mark.unit
+    def test_simple_diff_u1_x1_still_works(self):
+        """diff(u1, x1) -> u_{x} must not regress."""
+        fn = _import_term_to_latex()
+        node = _diff(_make_leaf("u1"), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == "u_{x}"
+
+    @pytest.mark.unit
+    def test_simple_diff2_u1_x1_still_works(self):
+        """diff2(u1, x1) -> u_{xx} must not regress."""
+        fn = _import_term_to_latex()
+        node = _diff2(_make_leaf("u1"), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == "u_{xx}"
+
+    # --- Additional edge cases ---
+
+    @pytest.mark.unit
+    def test_nested_diff_diff_u1_x1_x1(self):
+        """diff(diff(u1, x1), x1) -> nested derivative.
+
+        This creates Derivative(Derivative(u1, x1), x1), which SymPy may
+        simplify to Derivative(u1, x1, x1). Either way should produce
+        valid output.
+        """
+        fn = _import_term_to_latex()
+        inner = _diff(_make_leaf("u1"), _make_leaf("x1"))
+        outer = _diff(inner, _make_leaf("x1"))
+        result = fn(outer, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        assert "x" in result
+
+    @pytest.mark.unit
+    def test_diff_n2_u1_x2(self):
+        """diff(n2(u1), x2) -> derivative wrt y.
+
+        Derivative(Pow(u1, 2), x2) should produce subscript with y.
+        """
+        fn = _import_term_to_latex()
+        node = _diff(_n2(_make_leaf("u1")), _make_leaf("x2"))
+        result = fn(node, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        assert "y" in result
+
+    @pytest.mark.unit
+    def test_diff_add_n2_u1_u1(self):
+        """diff(add(n2(u1), u1), x1) -> complex expression derivative.
+
+        Derivative(Add(Pow(u1, 2), u1), x1).
+        """
+        fn = _import_term_to_latex()
+        node = _diff(
+            _add(_n2(_make_leaf("u1")), _make_leaf("u1")),
+            _make_leaf("x1"),
+        )
+        result = fn(node, notation="subscript")
+        assert "Error" not in result, f"Got error output: {result}"
+        assert "x" in result
+
+
+# ===========================================================================
+# 5. _SubscriptLatexPrinter direct tests for non-Symbol func
+# ===========================================================================
+
+class TestSubscriptPrinterNonSymbolFunc:
+    """Direct unit tests on _SubscriptLatexPrinter for non-Symbol derivatives.
+
+    These test the printer directly with SymPy expressions (bypassing Node),
+    to isolate the bug in _print_Derivative.
+    """
+
+    def _render(self, expr) -> str:
+        cls = _import_subscript_printer()
+        return cls().doprint(expr)
+
+    @pytest.mark.unit
+    def test_derivative_of_pow(self):
+        """Derivative(Pow(u1, 2), x1) should not crash.
+
+        This is the exact SymPy expression that triggers the bug.
+        """
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1**2, x1)
+        result = self._render(expr)
+        # Should produce something like '{u^{2}}_{x}' or '(u^{2})_{x}'
+        assert "x" in result
+        assert "2" in result  # the exponent should be visible
+
+    @pytest.mark.unit
+    def test_derivative_of_mul(self):
+        """Derivative(u1 * u1, x1) should not crash."""
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1 * u1, x1)
+        result = self._render(expr)
+        assert "x" in result
+
+    @pytest.mark.unit
+    def test_derivative_of_add(self):
+        """Derivative(u1 + u1**2, x1) should not crash."""
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1 + u1**2, x1)
+        result = self._render(expr)
+        assert "x" in result
+
+    @pytest.mark.unit
+    def test_second_derivative_of_pow(self):
+        """Derivative(Pow(u1, 3), x1, x1) should not crash."""
+        u1 = Symbol("u1")
+        x1 = Symbol("x1")
+        expr = Derivative(u1**3, x1, x1)
+        result = self._render(expr)
+        assert "xx" in result
+        assert "3" in result
