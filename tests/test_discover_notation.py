@@ -625,3 +625,284 @@ class TestExpandFirstOrderDerivatives:
         # Should keep the parenthesized form
         assert "(u^{2})" in result
         assert "0.5" in result
+
+
+# ===========================================================================
+# 7. Multi-dataset expression pattern rendering (Phase 1)
+# ===========================================================================
+
+def _diff3(func_child, var_child):
+    """diff3(func, var) -> Derivative(func, var, var, var)"""
+    return _make_node("diff3", 2, [func_child, var_child])
+
+
+def _div(left, right):
+    """div(left, right) -> Mul(left, Pow(right, -1))"""
+    return _make_node("div", 2, [left, right])
+
+
+class TestMultiDatasetRendering:
+    """Unit tests for expression patterns from all DSCV datasets.
+
+    Each test constructs a mock Node tree matching a real HOF expression
+    and verifies the LaTeX output.
+    """
+
+    # --- KdV ---
+
+    @pytest.mark.unit
+    def test_kdv_diff3_u_xxx(self):
+        """KdV: diff3(u1,x1) -> u_{xxx}"""
+        fn = _import_term_to_latex()
+        node = _diff3(_make_leaf("u1"), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == "u_{xxx}"
+
+    @pytest.mark.unit
+    def test_kdv_mul_u_diff_u_x(self):
+        """KdV: mul(u1,diff(u1,x1)) -> u u_{x} (same as Burgers)"""
+        fn = _import_term_to_latex()
+        node = _mul(_make_leaf("u1"), _diff(_make_leaf("u1"), _make_leaf("x1")))
+        result = fn(node, notation="subscript")
+        assert result == "u u_{x}"
+
+    # --- Chafee-Infante ---
+
+    @pytest.mark.unit
+    def test_chafee_n3_u(self):
+        """Chafee-Infante: n3(u1) -> u^{3}"""
+        fn = _import_term_to_latex()
+        node = _n3(_make_leaf("u1"))
+        result = fn(node, notation="subscript")
+        assert result == "u^{3}"
+
+    # --- PDE_compound ---
+
+    @pytest.mark.unit
+    def test_compound_diff2_n2_u(self):
+        r"""PDE_compound: diff2(n2(u1),x1) -> (u^{2})_{xx} (2nd-order, no expand)"""
+        fn = _import_term_to_latex()
+        node = _diff2(_n2(_make_leaf("u1")), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == "(u^{2})_{xx}"
+
+    @pytest.mark.unit
+    def test_compound_diff2_mul_u_u(self):
+        r"""PDE_compound: diff2(mul(u1,u1),x1) -> (u^{2})_{xx} (equivalent mul form)"""
+        fn = _import_term_to_latex()
+        node = _diff2(_mul(_make_leaf("u1"), _make_leaf("u1")), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == "(u^{2})_{xx}"
+
+    # --- PDE_divide ---
+
+    @pytest.mark.unit
+    def test_divide_div_diff_u_x(self):
+        r"""PDE_divide: div(diff(u1,x1),x1) -> \frac{u_{x}}{x}"""
+        fn = _import_term_to_latex()
+        node = _div(_diff(_make_leaf("u1"), _make_leaf("x1")), _make_leaf("x1"))
+        result = fn(node, notation="subscript")
+        assert result == r"\frac{u_{x}}{x}"
+
+    # --- Fisher ---
+
+    @pytest.mark.unit
+    def test_fisher_n2_diff_u_x(self):
+        r"""Fisher: n2(diff(u1,x1)) -> \left(u_{x}\right)^{2} (or u_{x}^{2})"""
+        fn = _import_term_to_latex()
+        node = _n2(_diff(_make_leaf("u1"), _make_leaf("x1")))
+        result = fn(node, notation="subscript")
+        assert "Error" not in result
+        # Must contain u_x and exponent 2
+        assert "u_{x}" in result
+        assert "2" in result
+
+    @pytest.mark.unit
+    def test_fisher_mul_u_diff2_u(self):
+        """Fisher: mul(u1,diff2(u1,x1)) -> u u_{xx}"""
+        fn = _import_term_to_latex()
+        node = _mul(_make_leaf("u1"), _diff2(_make_leaf("u1"), _make_leaf("x1")))
+        result = fn(node, notation="subscript")
+        assert result == "u u_{xx}"
+
+
+# ===========================================================================
+# 8. Multi-dataset Program-level rendering (Phase 2)
+# ===========================================================================
+
+class TestMultiDatasetProgramRendering:
+    """Integration tests for complete Program-level rendering of each dataset."""
+
+    # --- KdV ---
+
+    @pytest.mark.integration
+    def test_kdv_best(self):
+        r"""KdV best: u_t = -1.0006 u u_{x} - 0.0025 u_{xxx}"""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[-1.0006, -0.0025],
+            sympy_strings=[
+                "Mul(u1, Derivative(u1, x1))",
+                "Derivative(u1, x1, x1, x1)",
+            ],
+        )
+        result = fn(program, notation="subscript")
+        assert "u u_{x}" in result
+        assert "u_{xxx}" in result
+        assert "1.0006" in result
+        assert "0.0025" in result
+        assert result.startswith("$u_t =")
+
+    # --- Chafee-Infante ---
+
+    @pytest.mark.integration
+    def test_chafee_best(self):
+        r"""Chafee-Infante best: u_t = -1.0008 u + 1.0002 u_{xx} + 1.0004 u^{3}"""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[-1.0008, 1.0002, 1.0004],
+            sympy_strings=["u1", "Derivative(u1, x1, x1)", "Pow(u1, 3)"],
+        )
+        result = fn(program, notation="subscript")
+        assert "1.0008" in result
+        assert "u_{xx}" in result
+        assert "u^{3}" in result
+        assert result.startswith("$u_t =")
+
+    # --- PDE_compound ---
+
+    @pytest.mark.integration
+    def test_compound_best_expand_true(self):
+        r"""PDE_compound best: expand=True still shows (u^{2})_{xx} (2nd-order)"""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[0.5002],
+            sympy_strings=["Derivative(Pow(u1, 2), x1, x1)"],
+        )
+        result = fn(program, notation="subscript", expand_derivatives=True)
+        assert "(u^{2})_{xx}" in result
+        assert "0.5002" in result
+
+    @pytest.mark.integration
+    def test_compound_best_expand_false(self):
+        r"""PDE_compound best: expand=False also shows (u^{2})_{xx}"""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[0.5002],
+            sympy_strings=["Derivative(Pow(u1, 2), x1, x1)"],
+        )
+        result = fn(program, notation="subscript", expand_derivatives=False)
+        assert "(u^{2})_{xx}" in result
+        assert "0.5002" in result
+
+    # --- PDE_divide ---
+
+    @pytest.mark.integration
+    def test_divide_best(self):
+        r"""PDE_divide best: contains \frac{u_{x}}{x} and u_{xx}"""
+        fn = _import_program_to_latex()
+        program = _make_mock_program(
+            weights=[-0.9974, 0.2496],
+            sympy_strings=[
+                "Mul(Derivative(u1, x1), Pow(x1, -1))",
+                "Derivative(u1, x1, x1)",
+            ],
+        )
+        result = fn(program, notation="subscript")
+        assert r"\frac{u_{x}}{x}" in result
+        assert "u_{xx}" in result
+        assert result.startswith("$u_t =")
+
+
+# ===========================================================================
+# 9. ref_lib HOF CSV batch rendering (Phase 3)
+# ===========================================================================
+
+# Token arity lookup for reconstructing Node trees from traversal strings.
+_ARITY_MAP = {
+    # Binary operators
+    "add": 2, "mul": 2, "sub": 2, "div": 2,
+    "diff": 2, "diff2": 2, "diff3": 2, "diff4": 2,
+    "Diff": 2, "Diff2": 2, "Diff_3": 2, "Diff2_3": 2,
+    # Unary operators
+    "n2": 1, "n3": 1, "n4": 1, "n5": 1,
+    "sin": 1, "cos": 1, "exp": 1, "log": 1, "sqrt": 1, "abs": 1,
+    "sigmoid": 1, "expneg": 1, "logabs": 1,
+    "lap": 1, "lap_3": 1,
+}
+
+
+def _build_node_from_traversal(tokens: list):
+    """Recursively build a Node tree from a pre-order list of token name strings.
+
+    Consumes tokens from the front of *tokens* (in-place).
+    """
+    name = tokens.pop(0)
+    arity = _ARITY_MAP.get(name, 0)  # default 0 = leaf
+    node = _make_node(name, arity, []) if arity > 0 else _make_leaf(name)
+    for _ in range(arity):
+        node.children.append(_build_node_from_traversal(tokens))
+    return node
+
+
+def _collect_hof_success_entries():
+    """Collect (dataset, expression, traversal) tuples from all ref_lib HOF CSVs.
+
+    Only rows with success=True are included. Returns one CSV per dataset
+    (the first found).
+    """
+    import csv
+    import glob
+    import os
+
+    pattern = os.path.join(
+        "/Users/hao/PhD/project/kd",
+        "ref_lib/DISCOVER/dso/log/MODE1/**/dso_*_0_hof.csv",
+    )
+    csv_files = glob.glob(pattern, recursive=True)
+
+    # Deduplicate: one CSV per dataset name
+    seen: dict = {}
+    for fp in csv_files:
+        key = os.path.basename(fp).replace("dso_", "").replace("_0_hof.csv", "")
+        if key not in seen:
+            seen[key] = fp
+
+    entries = []
+    for dataset, filepath in sorted(seen.items()):
+        with open(filepath) as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                if row.get("success") != "True":
+                    continue
+                entries.append((dataset, row["expression"], row["traversal"]))
+    return entries
+
+
+_HOF_ENTRIES = _collect_hof_success_entries()
+
+
+class TestRefLibHOFRendering:
+    """Batch rendering test: every success=True HOF expression must render
+    without errors or exceptions.
+    """
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize(
+        "dataset,expression,traversal",
+        _HOF_ENTRIES,
+        ids=[f"{ds}:{expr[:50]}" for ds, expr, _ in _HOF_ENTRIES],
+    )
+    def test_hof_renders_without_error(self, dataset, expression, traversal):
+        """Each HOF success entry must render to valid LaTeX."""
+        fn = _import_term_to_latex()
+
+        # The HOF expression format is like "-1.0006 * mul(u1,diff(u1,x1)) + ..."
+        # We parse individual terms from the traversal, building the whole tree.
+        tokens = traversal.split(",")
+        root_node = _build_node_from_traversal(tokens)
+
+        result = fn(root_node, notation="subscript")
+        assert "Error" not in result, (
+            f"[{dataset}] Rendering failed for '{expression}': {result}"
+        )
