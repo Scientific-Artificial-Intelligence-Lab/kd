@@ -1,8 +1,22 @@
 Knowledge Discovery (KD)
 ========================
 
-Knowledge Discovery (KD) is a Python toolkit for symbolic modelling and
-equation discovery, with a strong focus on PDEs but not limited to them.
+**Symbolic PDE Discovery from Data**
+
+KD is a modular Python toolkit for symbolic equation discovery, with a strong
+focus on partial differential equations (PDEs). It ships four complementary
+discovery engines, a unified dataset interface, and built-in
+publication-quality visualisation.
+
+.. code-block:: python
+
+   from kd.dataset import load_pde
+   from kd.model import KD_SGA
+
+   dataset = load_pde("burgers")
+   model = KD_SGA(sga_run=20, num=20, depth=4, width=5)
+   model.fit_dataset(dataset)
+   print(model.equation_latex())  # u_t = -1.001 u_x u + 0.100 u_xx
 
 .. toctree::
    :maxdepth: 2

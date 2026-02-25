@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 # -- Project information -----------------------------------------------------
 
 project = 'KD'
-copyright = '2025, Scientific-Artificial-Intelligence-Lab'
+copyright = '2025-2026, Scientific-Artificial-Intelligence-Lab'
 author = 'Scientific-Artificial-Intelligence-Lab'
 
 # The full version, including alpha/beta/rc tags
