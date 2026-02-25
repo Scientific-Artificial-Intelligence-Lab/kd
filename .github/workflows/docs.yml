@@ -37,11 +37,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install sphinx
-        pip install sphinx-intl
-        pip install alabaster
-        pip install sympy numpy matplotlib torch
-        pip install -r requirements.txt
+        pip install sphinx sphinx-intl alabaster
+        pip install -e .
         
     - name: Build documentation
       run: |
