@@ -1,6 +1,6 @@
 <div align="center">
 
-# KD
+# Knowledge Discovery (KD)
 
 **Symbolic PDE Discovery from Data**
 
