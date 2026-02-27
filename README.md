@@ -66,15 +66,15 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 <p><em>Exact vs predicted solution — KdV equation via KD_DLGA.</em></p>
 </div>
 
-## Models at a Glance
+## Supported Methods
 
-| Model | Method | Strengths | Sparse&nbsp;Data | N-D |
-|-------|--------|-----------|:-:|:-:|
-| **KD_SGA** | Sparse genetic algorithm | Fast, interpretable, built-in LaTeX output | &check; | &check; |
-| **KD_DLGA** | Deep-learning genetic algorithm | Rich optimisation diagnostics, neural surrogate | &check; | &check; |
-| **KD_DSCV** | DISCOVER (RL + STRidge) | Flexible operator search, expression trees | &check; | &check; |
-| **KD_DSCV_SPR** | DISCOVER + PINN | Handles very sparse / noisy observations | &check;&check; | &check; |
-| **KD_PySR** | PySR wrapper (optional) | General symbolic regression `fit(X, y)` | &check; | &mdash; |
+| Class | Description |
+|-------|-------------|
+| **KD_SGA** | PDE discovery via sparse genetic algorithm |
+| **KD_DLGA** | PDE discovery via deep-learning genetic algorithm |
+| **KD_DSCV** | PDE discovery via reinforcement learning and sparse regression |
+| **KD_DSCV_SPR** | DSCV variant with PINN for sparse / noisy data |
+| **KD_PySR** | General symbolic regression via PySR (optional) |
 
 ## Example Gallery
 
