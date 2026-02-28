@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>PDE Backends &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=a66d8bb5" />
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Visualization" href="viz.html" />
+    <link rel="prev" title="Getting Started" href="getting_started.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">PDE Backends</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#kd-sga-symbolic-genetic-algorithm">KD_SGA — Symbolic Genetic Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kd-dlga-deep-learning-genetic-algorithm">KD_DLGA — Deep-Learning Genetic Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kd-dscv-discover-rl-stridge">KD_DSCV — DISCOVER (RL + STRidge)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kd-dscv-spr-discover-pinn">KD_DSCV_SPR — DISCOVER + PINN</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kd-pysr-pysr-wrapper-optional">KD_PySR — PySR Wrapper (optional)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="getting_started.html" title="previous chapter">Getting Started</a></li>
+      <li>Next: <a href="viz.html" title="next chapter">Visualization</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="pde-backends">
+<h1>PDE Backends<a class="headerlink" href="#pde-backends" title="Link to this heading">¶</a></h1>
+<p>KD provides several PDE-focused symbolic discovery backends. All share a
+unified data entry point via <a class="reference internal" href="api.html#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> and the
+<code class="docutils literal notranslate"><span class="pre">fit_dataset()</span></code> interface.</p>
+<section id="kd-sga-symbolic-genetic-algorithm">
+<h2>KD_SGA — Symbolic Genetic Algorithm<a class="headerlink" href="#kd-sga-symbolic-genetic-algorithm" title="Link to this heading">¶</a></h2>
+<p>Evolves expression trees and uses STRidge (Sequential Thresholded Ridge
+Regression) to fit sparse coefficients. Fast, interpretable, with built-in
+LaTeX output.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">kd.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_pde</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">KD_SGA</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde</span><span class="p">(</span><span class="s2">&quot;burgers&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_SGA</span><span class="p">(</span>
+    <span class="n">sga_run</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>      <span class="c1"># generations</span>
+    <span class="n">num</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>           <span class="c1"># population size</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>          <span class="c1"># max tree depth</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>          <span class="c1"># max tree width (terms)</span>
+    <span class="n">p_var</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>        <span class="c1"># variation probability</span>
+    <span class="n">p_mute</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>       <span class="c1"># mutation probability</span>
+    <span class="n">p_cro</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>        <span class="c1"># crossover probability</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">equation_latex</span><span class="p">())</span>   <span class="c1"># LaTeX string</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_pde_</span><span class="p">)</span>          <span class="c1"># raw PDE string</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_score_</span><span class="p">)</span>        <span class="c1"># AIC score</span>
+</pre></div>
+</div>
+</section>
+<section id="kd-dlga-deep-learning-genetic-algorithm">
+<h2>KD_DLGA — Deep-Learning Genetic Algorithm<a class="headerlink" href="#kd-dlga-deep-learning-genetic-algorithm" title="Link to this heading">¶</a></h2>
+<p>Trains a neural surrogate to compute derivatives, then applies genetic
+algorithm search over candidate PDE terms. Supports rich optimisation
+diagnostics.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">kd.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_pde</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">KD_DLGA</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde</span><span class="p">(</span><span class="s2">&quot;kdv&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_DLGA</span><span class="p">(</span>
+    <span class="n">operators</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;u_x&quot;</span><span class="p">,</span> <span class="s2">&quot;u_xx&quot;</span><span class="p">,</span> <span class="s2">&quot;u_xxx&quot;</span><span class="p">],</span>
+    <span class="n">epi</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+    <span class="n">input_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="kd-dscv-discover-rl-stridge">
+<h2>KD_DSCV — DISCOVER (RL + STRidge)<a class="headerlink" href="#kd-dscv-discover-rl-stridge" title="Link to this heading">¶</a></h2>
+<p>Uses a reinforcement-learning controller to search over expression trees,
+combined with STRidge for coefficient fitting. Supports flexible operator
+sets.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">kd.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_pde</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">KD_DSCV</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde</span><span class="p">(</span><span class="s2">&quot;burgers&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_DSCV</span><span class="p">(</span>
+    <span class="n">binary_operators</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;add&quot;</span><span class="p">,</span> <span class="s2">&quot;mul&quot;</span><span class="p">,</span> <span class="s2">&quot;div&quot;</span><span class="p">,</span> <span class="s2">&quot;diff&quot;</span><span class="p">,</span> <span class="s2">&quot;diff2&quot;</span><span class="p">,</span> <span class="s2">&quot;diff3&quot;</span><span class="p">],</span>
+    <span class="n">unary_operators</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;n2&quot;</span><span class="p">,</span> <span class="s2">&quot;n3&quot;</span><span class="p">],</span>
+    <span class="n">n_samples_per_batch</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">n_iterations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">n_epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="kd-dscv-spr-discover-pinn">
+<h2>KD_DSCV_SPR — DISCOVER + PINN<a class="headerlink" href="#kd-dscv-spr-discover-pinn" title="Link to this heading">¶</a></h2>
+<p>Extends KD_DSCV with a Physics-Informed Neural Network (PINN) for handling
+very sparse or noisy observations.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">kd.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_pde</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">KD_DSCV_SPR</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde</span><span class="p">(</span><span class="s2">&quot;burgers&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_DSCV_SPR</span><span class="p">(</span>
+    <span class="n">binary_operators</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;add&quot;</span><span class="p">,</span> <span class="s2">&quot;mul&quot;</span><span class="p">,</span> <span class="s2">&quot;diff&quot;</span><span class="p">,</span> <span class="s2">&quot;diff2&quot;</span><span class="p">],</span>
+    <span class="n">unary_operators</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;n2&quot;</span><span class="p">],</span>
+    <span class="n">n_iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">n_epochs</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">sample_ratio</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="kd-pysr-pysr-wrapper-optional">
+<h2>KD_PySR — PySR Wrapper (optional)<a class="headerlink" href="#kd-pysr-pysr-wrapper-optional" title="Link to this heading">¶</a></h2>
+<p>A thin wrapper around the <a class="reference external" href="https://github.com/MilesCranmer/PySR">PySR</a>
+project for general symbolic regression of the form <code class="docutils literal notranslate"><span class="pre">fit(X,</span> <span class="pre">y)</span></code>. Requires
+the optional <code class="docutils literal notranslate"><span class="pre">pysr</span></code> extra.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">kd.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">KD_PySR</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">KD_PySR</span><span class="p">(</span><span class="n">niterations</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">equation_latex</span><span class="p">())</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">KD_PySR</span></code> uses the generic <code class="docutils literal notranslate"><span class="pre">fit(X,</span> <span class="pre">y)</span></code> interface, not <code class="docutils literal notranslate"><span class="pre">fit_dataset</span></code>.</p>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+      |
+      <a href="_sources/pde_backends.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.model.kd_sga &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.model.kd_sga</h1><div class="highlight"><pre>
+<span></span><span class="c1"># kd/model/kd_sga.py</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseEstimator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sga.sgapde.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolverConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sga.sgapde.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProblemContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sga.sgapde.solver</span><span class="w"> </span><span class="kn">import</span> <span class="n">SGAPDE_Solver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sga.sgapde.equation</span><span class="w"> </span><span class="kn">import</span> <span class="n">sga_equation_to_latex</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sga.sgapde</span><span class="w"> </span><span class="kn">import</span> <span class="n">visualizer</span> <span class="k">as</span> <span class="n">sga_visualizer</span>
+
+
+<div class="viewcode-block" id="KD_SGA">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">KD_SGA</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;KD wrapper around the SGA-PDE solver.</span>
+
+<span class="sd">    This class exposes a scikit-learn–style interface around the upstream</span>
+<span class="sd">    ``sgapde`` implementation for discovering PDEs of the form</span>
+<span class="sd">    ``u_t = N(u, u_x, ...)``.</span>
+
+<span class="sd">    Supports N-D datasets via optional parameters. Default behavior infers</span>
+<span class="sd">    ``target_field`` and ``lhs_axis`` from the dataset when not specified.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="KD_SGA.__init__">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sga_run</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">num</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="n">p_var</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">p_mute</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span>
+        <span class="n">p_cro</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">use_autograd</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">,</span>
+        <span class="n">use_metadata</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">delete_edges</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="c1"># N-D 参数（可选，推断为主）</span>
+        <span class="n">target_field</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">lhs_axis</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primary_spatial_axis</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise a KD_SGA solver.</span>
+
+<span class="sd">        All parameters correspond directly to fields in</span>
+<span class="sd">        :class:`sgapde.config.SolverConfig`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            target_field: Field name for the PDE target (e.g., &quot;u&quot;, &quot;rho&quot;).</span>
+<span class="sd">                If None, inferred from dataset or defaults to &quot;u&quot;.</span>
+<span class="sd">            lhs_axis: Axis for the LHS derivative (e.g., &quot;t&quot;).</span>
+<span class="sd">                If None, inferred from dataset or defaults to &quot;t&quot;.</span>
+<span class="sd">            primary_spatial_axis: Override for the primary spatial axis used</span>
+<span class="sd">                in legacy ux/uxx naming when no &quot;x&quot; axis exists.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># BaseEstimator.__init__ will help manage parameters,</span>
+        <span class="c1"># but we keep explicit attributes for clarity.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sga_run</span> <span class="o">=</span> <span class="n">sga_run</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num</span> <span class="o">=</span> <span class="n">num</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">=</span> <span class="n">depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="n">width</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_var</span> <span class="o">=</span> <span class="n">p_var</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_mute</span> <span class="o">=</span> <span class="n">p_mute</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_cro</span> <span class="o">=</span> <span class="n">p_cro</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_autograd</span> <span class="o">=</span> <span class="n">use_autograd</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_epoch</span> <span class="o">=</span> <span class="n">max_epoch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_metadata</span> <span class="o">=</span> <span class="n">use_metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">delete_edges</span> <span class="o">=</span> <span class="n">delete_edges</span>
+        <span class="c1"># N-D 参数</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_field</span> <span class="o">=</span> <span class="n">target_field</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lhs_axis</span> <span class="o">=</span> <span class="n">lhs_axis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">primary_spatial_axis</span> <span class="o">=</span> <span class="n">primary_spatial_axis</span></div>
+
+        
+    <span class="c1"># 旧版 fit 方法，保留以兼容现有代码</span>
+<div class="viewcode-block" id="KD_SGA.fit">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">problem_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deprecated legacy entry point, kept for backwards compatibility.</span>
+
+<span class="sd">        Use :meth:`fit_dataset` together with :func:`kd.dataset.load_pde`</span>
+<span class="sd">        instead of ``fit(problem_name)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;KD_SGA.fit(problem_name) 已废弃，请改用 KD_SGA.fit_dataset(PDEDataset)。&quot;</span>
+            <span class="s2">&quot; 如需兼容旧脚本，请先通过 kd.dataset.load_pde(problem_name) 获取数据集。&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="KD_SGA.equation_latex">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.equation_latex">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">equation_latex</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">include_coefficients</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">notation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;subscript&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the discovered equation formatted as LaTeX.&quot;&quot;&quot;</span>
+
+        <span class="n">details</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;best_equation_details_&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">details</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Equation details are not available. Call fit_dataset() first.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sga_equation_to_latex</span><span class="p">(</span><span class="n">details</span><span class="p">,</span> <span class="n">include_coefficients</span><span class="o">=</span><span class="n">include_coefficients</span><span class="p">,</span> <span class="n">notation</span><span class="o">=</span><span class="n">notation</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="KD_SGA.equation_structure_latex">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.equation_structure_latex">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">equation_structure_latex</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the equation structure without coefficients.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">equation_latex</span><span class="p">(</span><span class="n">include_coefficients</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="KD_SGA.fit_dataset">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.fit_dataset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_dataset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">problem_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context_cls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">solver_cls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run SGA directly on a :class:`kd.dataset.PDEDataset` instance.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset: Dataset returned by :func:`kd.dataset.load_pde`.</span>
+<span class="sd">            problem_name: Optional override for the problem name used inside</span>
+<span class="sd">                :class:`SolverConfig`.</span>
+<span class="sd">            context_cls: Optional custom :class:`ProblemContext` subclass,</span>
+<span class="sd">                typically used for testing.</span>
+<span class="sd">            solver_cls: Optional custom :class:`SGAPDE_Solver` subclass,</span>
+<span class="sd">                typically used for testing.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            KD_SGA: The fitted estimator instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">kd.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">PDEDataset</span>  <span class="c1"># 避免模块级循环依赖</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.sga.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">SGADataAdapter</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">PDEDataset</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;dataset 必须是 PDEDataset 实例&quot;</span><span class="p">)</span>
+
+        <span class="n">adapter</span> <span class="o">=</span> <span class="n">SGADataAdapter</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="n">solver_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">to_solver_kwargs</span><span class="p">()</span>
+
+        <span class="n">inferred_name</span> <span class="o">=</span> <span class="n">solver_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;problem_name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">aliases</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;aliases&#39;</span><span class="p">,</span> <span class="p">{})</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;aliases&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="n">sga_problem</span> <span class="o">=</span> <span class="n">aliases</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sga_problem&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">legacy_problem</span> <span class="o">=</span> <span class="n">aliases</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;legacy&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">problem_label</span> <span class="o">=</span> <span class="n">problem_name</span> <span class="ow">or</span> <span class="n">sga_problem</span> <span class="ow">or</span> <span class="n">legacy_problem</span> <span class="ow">or</span> <span class="n">inferred_name</span> <span class="ow">or</span> <span class="s2">&quot;custom_dataset&quot;</span>
+
+        <span class="n">actual_context_cls</span> <span class="o">=</span> <span class="n">context_cls</span> <span class="ow">or</span> <span class="n">ProblemContext</span>
+        <span class="n">actual_solver_cls</span> <span class="o">=</span> <span class="n">solver_cls</span> <span class="ow">or</span> <span class="n">SGAPDE_Solver</span>
+
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;--- Starting SGA PDE Discovery for problem: </span><span class="si">{</span><span class="n">problem_label</span><span class="si">}</span><span class="s2"> (dataset mode) ---&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># 推断优先级：用户显式设置 &gt; adapter 推断 &gt; 默认值</span>
+        <span class="n">final_target_field</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">target_field</span>
+            <span class="ow">or</span> <span class="n">solver_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;target_field&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="s2">&quot;u&quot;</span>
+        <span class="p">)</span>
+        <span class="n">final_lhs_axis</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lhs_axis</span>
+            <span class="ow">or</span> <span class="n">solver_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;lhs_axis&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="s2">&quot;t&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">config</span> <span class="o">=</span> <span class="n">SolverConfig</span><span class="p">(</span>
+            <span class="n">problem_name</span><span class="o">=</span><span class="n">problem_label</span><span class="p">,</span>
+            <span class="n">sga_run</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sga_run</span><span class="p">,</span>
+            <span class="n">num</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">,</span>
+            <span class="n">width</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span>
+            <span class="n">p_var</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">p_var</span><span class="p">,</span>
+            <span class="n">p_mute</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">p_mute</span><span class="p">,</span>
+            <span class="n">p_cro</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">p_cro</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">use_autograd</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_autograd</span><span class="p">,</span>
+            <span class="n">max_epoch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_epoch</span><span class="p">,</span>
+            <span class="n">use_metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_metadata</span><span class="p">,</span>
+            <span class="n">delete_edges</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">delete_edges</span><span class="p">,</span>
+            <span class="n">target_field</span><span class="o">=</span><span class="n">final_target_field</span><span class="p">,</span>
+            <span class="n">lhs_axis</span><span class="o">=</span><span class="n">final_lhs_axis</span><span class="p">,</span>
+            <span class="n">primary_spatial_axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">primary_spatial_axis</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">solver_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="n">actual_context_cls</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="n">actual_solver_cls</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">best_pde</span><span class="p">,</span> <span class="n">best_score</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_pde_</span> <span class="o">=</span> <span class="n">best_pde</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_score_</span> <span class="o">=</span> <span class="n">best_score</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context_</span> <span class="o">=</span> <span class="n">context</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_equation_details_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="s1">&#39;best_equation_details_&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">--- SGA PDE Discovery Finished ---&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best PDE Found: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">best_pde_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AIC Score: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">best_score_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="KD_SGA.plot_results">
+<a class="viewcode-back" href="../../../api.html#kd.model.kd_sga.KD_SGA.plot_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke the legacy ``sgapde`` visualiser for built-in benchmarks.</span>
+
+<span class="sd">        This is kept for backwards compatibility and only works for the three</span>
+<span class="sd">        supported benchmarks (Chafee–Infante, Burgers, KdV). For new and</span>
+<span class="sd">        custom datasets, prefer the unified :mod:`kd.viz` façade.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;context_&#39;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;You must call fit_dataset() before plotting results.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># legacy 可视化仅支持三种内置 benchmark，custom 数据会缺少解析模板</span>
+        <span class="n">supported</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;chafee-infante&quot;</span><span class="p">,</span> <span class="s2">&quot;burgers&quot;</span><span class="p">,</span> <span class="s2">&quot;kdv&quot;</span><span class="p">}</span>
+        <span class="n">problem</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;config_&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">normalized_name</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">problem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">normalized_name</span> <span class="o">=</span> <span class="n">SolverConfig</span><span class="o">.</span><span class="n">_normalize_problem_name</span><span class="p">(</span><span class="n">problem</span><span class="o">.</span><span class="n">problem_name</span><span class="p">)</span>
+        <span class="n">has_ground_truth</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">problem</span><span class="p">,</span> <span class="s2">&quot;has_ground_truth&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">normalized_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">supported</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">has_ground_truth</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">&quot;INFO: legacy SGA visualizer 仅针对内置基准（chafee-infante/burgers/kdv），&quot;</span>
+                <span class="s2">&quot;已跳过 plot_figures。可使用 kd.viz 的 SGA 适配器进行可视化。&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;INFO: Generating legacy visualization plots...&quot;</span><span class="p">)</span>
+        <span class="n">sga_visualizer</span><span class="o">.</span><span class="n">plot_figures</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context_</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

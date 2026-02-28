@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.base &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.base</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Base class for all estimators in KD.</span>
+
+<span class="sd">This class provides basic functionality for all estimators in the KD framework,</span>
+<span class="sd">including parameter management and string representation. It is inspired by</span>
+<span class="sd">scikit-learn&#39;s BaseEstimator.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<div class="viewcode-block" id="BaseEstimator">
+<a class="viewcode-back" href="../../api.html#kd.base.BaseEstimator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseEstimator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all estimators in KD.</span>
+<span class="sd">    </span>
+<span class="sd">    This class should not be used directly. Instead, use derived classes.</span>
+<span class="sd">    All estimators should inherit from this class.</span>
+<span class="sd">    </span>
+<span class="sd">    This is an abstract base class that provides common functionality for </span>
+<span class="sd">    parameter management and string representation. It does not have any</span>
+<span class="sd">    attributes of its own.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="BaseEstimator.__init__">
+<a class="viewcode-back" href="../../api.html#kd.base.BaseEstimator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize self.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            **params: Arbitrary keyword arguments that will be set as parameters</span>
+<span class="sd">                of the estimator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span></div>
+
+        
+<div class="viewcode-block" id="BaseEstimator.get_params">
+<a class="viewcode-back" href="../../api.html#kd.base.BaseEstimator.get_params">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get parameters for this estimator.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            deep (bool, optional): If True, will return the parameters for this</span>
+<span class="sd">                estimator and contained subobjects that are estimators. Defaults to True.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: Parameter names mapped to their values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_param_names</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">deep</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;get_params&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+                <span class="n">deep_items</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">key</span> <span class="o">+</span> <span class="s2">&quot;__&quot;</span> <span class="o">+</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">deep_items</span><span class="p">)</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="BaseEstimator.set_params">
+<a class="viewcode-back" href="../../api.html#kd.base.BaseEstimator.set_params">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the parameters of this estimator.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            **params: Estimator parameters.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self: Estimator instance.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If trying to set an invalid parameter.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">params</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="n">valid_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="n">nested_params</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">delim</span><span class="p">,</span> <span class="n">sub_key</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;__&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_params</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid parameter </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="n">delim</span><span class="p">:</span>
+                <span class="n">nested_params</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">sub_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                <span class="n">valid_params</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">sub_params</span> <span class="ow">in</span> <span class="n">nested_params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">valid_params</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">sub_params</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_param_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get parameter names for the estimator.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            list: List of parameter names in the format ``[p1, p2, p3...]``.</span>
+<span class="sd">            </span>
+<span class="sd">        Note:</span>
+<span class="sd">            Parameters are fetched directly from the class ``__init__`` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">init</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">,</span> <span class="s2">&quot;deprecated_original&quot;</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">init</span> <span class="ow">is</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__init__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        
+        <span class="n">init_signature</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">init</span><span class="p">)</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">init_signature</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> 
+                      <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;self&quot;</span> <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="o">!=</span> <span class="n">p</span><span class="o">.</span><span class="n">VAR_KEYWORD</span><span class="p">]</span>
+        
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="n">p</span><span class="o">.</span><span class="n">VAR_POSITIONAL</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2"> should not use *args in constructor; parameters must be specified.&quot;</span>
+                <span class="p">)</span>
+        
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a string representation of the estimator.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            str: String representation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>API Documentation &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=a66d8bb5" />
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Visualization" href="viz.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viz.html">Visualization</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#core-modules">Core Modules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#models">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#visualization">Visualization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kd.utils">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="viz.html" title="previous chapter">Visualization</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="api-documentation">
+<h1>API Documentation<a class="headerlink" href="#api-documentation" title="Link to this heading">¶</a></h1>
+<section id="core-modules">
+<h2>Core Modules<a class="headerlink" href="#core-modules" title="Link to this heading">¶</a></h2>
+<section id="module-kd.base">
+<span id="base"></span><h3>Base<a class="headerlink" href="#module-kd.base" title="Link to this heading">¶</a></h3>
+<p>Base class for all estimators in KD.</p>
+<p>This class provides basic functionality for all estimators in the KD framework,
+including parameter management and string representation. It is inspired by
+scikit-learn’s BaseEstimator.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.base.</span></span><span class="sig-name descname"><span class="pre">BaseEstimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for all estimators in KD.</p>
+<p>This class should not be used directly. Instead, use derived classes.
+All estimators should inherit from this class.</p>
+<p>This is an abstract base class that provides common functionality for
+parameter management and string representation. It does not have any
+attributes of its own.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize self.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**params</strong> – Arbitrary keyword arguments that will be set as parameters
+of the estimator.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator.get_params">
+<span class="sig-name descname"><span class="pre">get_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator.get_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator.get_params" title="Link to this definition">¶</a></dt>
+<dd><p>Get parameters for this estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>deep</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, will return the parameters for this
+estimator and contained subobjects that are estimators. Defaults to True.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Parameter names mapped to their values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.base.BaseEstimator.set_params">
+<span class="sig-name descname"><span class="pre">set_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/base.html#BaseEstimator.set_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.base.BaseEstimator.set_params" title="Link to this definition">¶</a></dt>
+<dd><p>Set the parameters of this estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**params</strong> – Estimator parameters.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Estimator instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>self</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If trying to set an invalid parameter.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-kd.dataset">
+<span id="datasets"></span><h3>Datasets<a class="headerlink" href="#module-kd.dataset" title="Link to this heading">¶</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">PDEDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">equation_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pde_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domain</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">usol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">descr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DatasetInfo</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fields_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_1d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'u'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lhs_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'t'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_fields</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></p>
+<p>A class representing a Partial Differential Equation (PDE) dataset, providing data access
+and analysis functionality.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">equation_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pde_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domain</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">usol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">descr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DatasetInfo</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fields_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_1d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'u'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lhs_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'t'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_fields</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initializes the PDE dataset, supporting three input methods:
+1. Providing data through the <cite>pde_data</cite> dictionary (legacy 2D).
+2. Directly passing <cite>x</cite>, <cite>t</cite>, and <cite>usol</cite> arrays (legacy 2D).
+3. Using <cite>fields_data</cite> + <cite>coords_1d</cite> for N-D structured grids.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>equation_name</strong> – Name of the PDE.</p></li>
+<li><p><strong>pde_data</strong> – Optional dictionary containing ‘x’, ‘t’, and ‘usol’ data.</p></li>
+<li><p><strong>domain</strong> – Dictionary defining the domain {variable: (min_value, max_value)}.</p></li>
+<li><p><strong>epi</strong> – Additional parameter.</p></li>
+<li><p><strong>x</strong> – Optional, spatial coordinate array (legacy 2D).</p></li>
+<li><p><strong>t</strong> – Optional, temporal coordinate array (legacy 2D).</p></li>
+<li><p><strong>usol</strong> – Optional, solution array u(x, t) (legacy 2D).</p></li>
+<li><p><strong>descr</strong> – Metadata containing information about the PDE.</p></li>
+<li><p><strong>fields_data</strong> – Dict mapping field names to N-D arrays (N-D mode).</p></li>
+<li><p><strong>coords_1d</strong> – Dict mapping axis names to 1D coordinate arrays (N-D mode).</p></li>
+<li><p><strong>axis_order</strong> – List of axis names defining array dimension order (N-D mode).</p></li>
+<li><p><strong>target_field</strong> – Name of the target field in fields_data (default: “u”).</p></li>
+<li><p><strong>lhs_axis</strong> – Axis for LHS derivative (default: “t”).</p></li>
+<li><p><strong>param_fields</strong> – Dict mapping parameter names to arrays with the same shape
+as the target field. Parameters appear in discovered equations but are not
+differentiated. For constant parameters use <code class="docutils literal notranslate"><span class="pre">np.full_like(u,</span> <span class="pre">value)</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_datapoint">
+<span class="sig-name descname"><span class="pre">get_datapoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_datapoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_datapoint" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves the (x, t) coordinates and the corresponding solution value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x_id</strong> – Index in the spatial dimension.</p></li>
+<li><p><strong>t_id</strong> – Index in the temporal dimension.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple (x, t, usol) representing the coordinates and solution.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_data" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the dataset information as a dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'random'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.sample" title="Link to this definition">¶</a></dt>
+<dd><p>Samples a subset of the data points using different sampling methods.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_samples</strong> – Number of samples to draw. If &lt; 1, treated as a ratio.</p></li>
+<li><p><strong>method</strong> – Sampling method to use (‘random’, ‘uniform’, ‘spline’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple (sampled_points, sampled_usol), where:
+- sampled_points is an array of shape (n, 2) with (x, t) pairs
+- sampled_usol is an array of shape (n,) with corresponding solution values</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.mesh">
+<span class="sig-name descname"><span class="pre">mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indexing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ij'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.mesh"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.mesh" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a 2D coordinate grid where each row is a combination of (x, t).
+Equivalent to np.meshgrid(x, t) but flattened into a 2D array.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A 2D array of shape (len(x) * len(t), 2) where each row is (x, t).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.mesh_bounds">
+<span class="sig-name descname"><span class="pre">mesh_bounds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indexing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ij'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.mesh_bounds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.mesh_bounds" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_boundaries">
+<span class="sig-name descname"><span class="pre">get_boundaries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_boundaries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_boundaries" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the minimum and maximum values for coordinates.</p>
+<p>In legacy 2D mode, returns {‘x’: (min, max), ‘t’: (min, max)}.
+In N-D mode, returns boundaries for all coords_1d axes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_domain">
+<span class="sig-name descname"><span class="pre">get_domain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_domain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_domain" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves the domain definition.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_derivative">
+<span class="sig-name descname"><span class="pre">get_derivative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'x'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_derivative"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_derivative" title="Link to this definition">¶</a></dt>
+<dd><p>Computes the derivative of <cite>usol</cite> along the spatial or temporal axis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>axis</strong> – Direction of differentiation (‘x’ or ‘t’).</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The computed derivative array.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_range">
+<span class="sig-name descname"><span class="pre">get_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_range"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_range" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves subsets of x, t, and the corresponding solution within the specified range.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x_range</strong> – Tuple representing the range of x values (min_x, max_x).</p></li>
+<li><p><strong>t_range</strong> – Tuple representing the range of t values (min_t, max_t).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary containing subsets of x, t, and usol.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.get_size">
+<span class="sig-name descname"><span class="pre">get_size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.get_size"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.get_size" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the dimensions of the solution array (x dimension, t dimension).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.dataset.PDEDataset.plot_solution">
+<span class="sig-name descname"><span class="pre">plot_solution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#PDEDataset.plot_solution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.PDEDataset.plot_solution" title="Link to this definition">¶</a></dt>
+<dd><p>Generates a heatmap visualization of the solution <cite>usol</cite> over (x, t) dimensions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.load_pde">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">load_pde</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset._base.PDEDataset"><span class="pre">PDEDataset</span></a></span></span><a class="reference internal" href="_modules/kd/dataset.html#load_pde"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.load_pde" title="Link to this definition">¶</a></dt>
+<dd><p>Unified entry point for loading PDE benchmark datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> – Dataset name (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;kdv&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;burgers&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;chafee-infante&quot;</span></code>).</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments forwarded to
+<a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The loaded dataset instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset">PDEDataset</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.load_burgers_equation">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">load_burgers_equation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/dataset/_base.html#load_burgers_equation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.load_burgers_equation" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.load_mat_file">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">load_mat_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/kd/dataset/_base.html#load_mat_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.load_mat_file" title="Link to this definition">¶</a></dt>
+<dd><p>Parses a .mat file (MATLAB format) and returns its content as a Python dictionary.
+Supports both older .mat files (MATLAB 5) and newer ones (MATLAB 7.3 or HDF5 format).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>file_path</strong> (<em>str</em>) – The path to the .mat file to be loaded.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary where keys are variable names and values are corresponding data arrays.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str, Any]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the file format is not supported or if there’s an error in reading the file.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.load_kdv_equation">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">load_kdv_equation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/dataset/_base.html#load_kdv_equation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.load_kdv_equation" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.load_pde_dataset">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">load_pde_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">equation_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PDE</span> <span class="pre">Dataset'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'x'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'t'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'usol'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domain</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'kd.dataset.data'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/dataset/_base.html#load_pde_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.load_pde_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Convenience loader for PDE data stored in a MATLAB <code class="docutils literal notranslate"><span class="pre">.mat</span></code> file.</p>
+<p>This helper constructs the full file path, reads the <code class="docutils literal notranslate"><span class="pre">.mat</span></code> file into a
+dictionary, extracts the coordinate and solution arrays using the provided
+keys, normalises shapes, and wraps everything into a <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filename</strong> – Name of the <code class="docutils literal notranslate"><span class="pre">.mat</span></code> file to load (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;my_data.mat&quot;</span></code>).</p></li>
+<li><p><strong>equation_name</strong> – Human-readable name for this dataset.</p></li>
+<li><p><strong>x_key</strong> – Key for the spatial coordinate in the <code class="docutils literal notranslate"><span class="pre">.mat</span></code> dictionary,
+default is <code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code>.</p></li>
+<li><p><strong>t_key</strong> – Key for the temporal coordinate, default is <code class="docutils literal notranslate"><span class="pre">&quot;t&quot;</span></code>.</p></li>
+<li><p><strong>u_key</strong> – Key for the solution field, default is <code class="docutils literal notranslate"><span class="pre">&quot;usol&quot;</span></code>.</p></li>
+<li><p><strong>domain</strong> – Optional analysis domain, e.g. <code class="docutils literal notranslate"><span class="pre">{'x':</span> <span class="pre">(min_x,</span> <span class="pre">max_x),</span> <span class="pre">'t':</span> <span class="pre">(min_t,</span> <span class="pre">max_t)}</span></code>.</p></li>
+<li><p><strong>epi</strong> – Recommended sparsity penalty for this dataset, default <code class="docutils literal notranslate"><span class="pre">1e-3</span></code>.</p></li>
+<li><p><strong>data_dir_module</strong> – Module path where data files are stored, default
+<code class="docutils literal notranslate"><span class="pre">&quot;kd.dataset.data&quot;</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A fully initialised dataset object that can be used by all
+KD models.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset">PDEDataset</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.list_available_datasets">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">list_available_datasets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="reference internal" href="_modules/kd/dataset/_registry.html#list_available_datasets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.list_available_datasets" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.dataset.get_dataset_sym_true">
+<span class="sig-prename descclassname"><span class="pre">kd.dataset.</span></span><span class="sig-name descname"><span class="pre">get_dataset_sym_true</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/kd/dataset/_registry.html#get_dataset_sym_true"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.dataset.get_dataset_sym_true" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+<section id="models">
+<h2>Models<a class="headerlink" href="#models" title="Link to this heading">¶</a></h2>
+<section id="module-kd.model.kd_sga">
+<span id="high-level-wrappers"></span><h3>High-level wrappers<a class="headerlink" href="#module-kd.model.kd_sga" title="Link to this heading">¶</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.kd_sga.</span></span><span class="sig-name descname"><span class="pre">KD_SGA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sga_run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_mute</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_cro</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_autograd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_edges</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lhs_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">primary_spatial_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.base.BaseEstimator" title="kd.base.BaseEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a></p>
+<p>KD wrapper around the SGA-PDE solver.</p>
+<p>This class exposes a scikit-learn–style interface around the upstream
+<code class="docutils literal notranslate"><span class="pre">sgapde</span></code> implementation for discovering PDEs of the form
+<code class="docutils literal notranslate"><span class="pre">u_t</span> <span class="pre">=</span> <span class="pre">N(u,</span> <span class="pre">u_x,</span> <span class="pre">...)</span></code>.</p>
+<p>Supports N-D datasets via optional parameters. Default behavior infers
+<code class="docutils literal notranslate"><span class="pre">target_field</span></code> and <code class="docutils literal notranslate"><span class="pre">lhs_axis</span></code> from the dataset when not specified.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sga_run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_mute</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_cro</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_autograd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_edges</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lhs_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">primary_spatial_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialise a KD_SGA solver.</p>
+<p>All parameters correspond directly to fields in
+<code class="xref py py-class docutils literal notranslate"><span class="pre">sgapde.config.SolverConfig</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_field</strong> – Field name for the PDE target (e.g., “u”, “rho”).
+If None, inferred from dataset or defaults to “u”.</p></li>
+<li><p><strong>lhs_axis</strong> – Axis for the LHS derivative (e.g., “t”).
+If None, inferred from dataset or defaults to “t”.</p></li>
+<li><p><strong>primary_spatial_axis</strong> – Override for the primary spatial axis used
+in legacy ux/uxx naming when no “x” axis exists.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">problem_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Deprecated legacy entry point, kept for backwards compatibility.</p>
+<p>Use <a class="reference internal" href="#kd.model.kd_sga.KD_SGA.fit_dataset" title="kd.model.kd_sga.KD_SGA.fit_dataset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_dataset()</span></code></a> together with <a class="reference internal" href="#kd.dataset.load_pde" title="kd.dataset.load_pde"><code class="xref py py-func docutils literal notranslate"><span class="pre">kd.dataset.load_pde()</span></code></a>
+instead of <code class="docutils literal notranslate"><span class="pre">fit(problem_name)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.equation_latex">
+<span class="sig-name descname"><span class="pre">equation_latex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">notation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'subscript'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.equation_latex"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.equation_latex" title="Link to this definition">¶</a></dt>
+<dd><p>Return the discovered equation formatted as LaTeX.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.equation_structure_latex">
+<span class="sig-name descname"><span class="pre">equation_structure_latex</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.equation_structure_latex"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.equation_structure_latex" title="Link to this definition">¶</a></dt>
+<dd><p>Return the equation structure without coefficients.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.fit_dataset">
+<span class="sig-name descname"><span class="pre">fit_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">problem_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context_cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver_cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.fit_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.fit_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Run SGA directly on a <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> – Dataset returned by <a class="reference internal" href="#kd.dataset.load_pde" title="kd.dataset.load_pde"><code class="xref py py-func docutils literal notranslate"><span class="pre">kd.dataset.load_pde()</span></code></a>.</p></li>
+<li><p><strong>problem_name</strong> – Optional override for the problem name used inside
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SolverConfig</span></code>.</p></li>
+<li><p><strong>context_cls</strong> – Optional custom <code class="xref py py-class docutils literal notranslate"><span class="pre">ProblemContext</span></code> subclass,
+typically used for testing.</p></li>
+<li><p><strong>solver_cls</strong> – Optional custom <code class="xref py py-class docutils literal notranslate"><span class="pre">SGAPDE_Solver</span></code> subclass,
+typically used for testing.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The fitted estimator instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#kd.model.kd_sga.KD_SGA" title="kd.model.kd_sga.KD_SGA">KD_SGA</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_sga.KD_SGA.plot_results">
+<span class="sig-name descname"><span class="pre">plot_results</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_sga.html#KD_SGA.plot_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_sga.KD_SGA.plot_results" title="Link to this definition">¶</a></dt>
+<dd><p>Invoke the legacy <code class="docutils literal notranslate"><span class="pre">sgapde</span></code> visualiser for built-in benchmarks.</p>
+<p>This is kept for backwards compatibility and only works for the three
+supported benchmarks (Chafee–Infante, Burgers, KdV). For new and
+custom datasets, prefer the unified <code class="xref py py-mod docutils literal notranslate"><span class="pre">kd.viz</span></code> façade.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-kd.model.kd_dlga">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.kd_dlga.</span></span><span class="sig-name descname"><span class="pre">KD_DLGA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operators</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">DLGA</span></code></p>
+<p>User-friendly KD wrapper around the DLGA model.</p>
+<p>This class exposes a scikit-learn–style interface and integrates
+with KD’s dataset and visualisation utilities.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operators</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize DLGA model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>epi</strong> (<em>float</em>) – Penalty coefficient for equation length.</p></li>
+<li><p><strong>input_dim</strong> (<em>int</em>) – Input dimension for neural network.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.generate_meta_data">
+<span class="sig-name descname"><span class="pre">generate_meta_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.generate_meta_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.generate_meta_data" title="Link to this definition">¶</a></dt>
+<dd><p>Build the feature library (Theta) and metadata from the trained network.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.random_module">
+<span class="sig-name descname"><span class="pre">random_module</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.random_module"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.random_module" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a random gene module.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Random gene module.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.mutation">
+<span class="sig-name descname"><span class="pre">mutation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.mutation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.mutation" title="Link to this definition">¶</a></dt>
+<dd><p>Perform mutation operation in genetic algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>New population after mutation.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.random_genome">
+<span class="sig-name descname"><span class="pre">random_genome</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.random_genome"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.random_genome" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a random genome (collection of gene modules).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Random genome.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.convert_chrom_to_eq">
+<span class="sig-name descname"><span class="pre">convert_chrom_to_eq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chrom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.convert_chrom_to_eq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.convert_chrom_to_eq" title="Link to this definition">¶</a></dt>
+<dd><p>Convert chromosome to equation string.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.evolution">
+<span class="sig-name descname"><span class="pre">evolution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.evolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.evolution" title="Link to this definition">¶</a></dt>
+<dd><p>Run genetic algorithm evolution following old strategy.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.select">
+<span class="sig-name descname"><span class="pre">select</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.select"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.select" title="Link to this definition">¶</a></dt>
+<dd><p>Perform selection operation in genetic algorithm.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit DLGA on raw <code class="docutils literal notranslate"><span class="pre">(X,</span> <span class="pre">y)</span></code> samples.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh_data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Predict the solution field on a given mesh.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dlga.KD_DLGA.fit_dataset">
+<span class="sig-name descname"><span class="pre">fit_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'random'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Xy_from</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'sample'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dlga.html#KD_DLGA.fit_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dlga.KD_DLGA.fit_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Train DLGA using the unified <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> interface.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> – A <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> instance, typically
+returned by <a class="reference internal" href="#kd.dataset.load_pde" title="kd.dataset.load_pde"><code class="xref py py-func docutils literal notranslate"><span class="pre">kd.dataset.load_pde()</span></code></a>.</p></li>
+<li><p><strong>sample</strong> – Sampling strategy. If an <code class="docutils literal notranslate"><span class="pre">int</span></code>, draws a fixed number of
+samples; if a <code class="docutils literal notranslate"><span class="pre">float</span></code> in <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">1]</span></code>, draws a fraction of all
+points; if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses all points on the full mesh.</p></li>
+<li><p><strong>sample_method</strong> – Sampling method forwarded to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">PDEDataset.sample()</span></code>, default is <code class="docutils literal notranslate"><span class="pre">&quot;random&quot;</span></code>.</p></li>
+<li><p><strong>Xy_from</strong> – Source of training pairs. <code class="docutils literal notranslate"><span class="pre">&quot;sample&quot;</span></code> uses sampled
+points according to <code class="docutils literal notranslate"><span class="pre">sample</span></code> / <code class="docutils literal notranslate"><span class="pre">sample_method</span></code>;
+<code class="docutils literal notranslate"><span class="pre">&quot;mesh&quot;</span></code> ignores <code class="docutils literal notranslate"><span class="pre">sample</span></code> and uses the full mesh.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The fitted estimator instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#kd.model.kd_dlga.KD_DLGA" title="kd.model.kd_dlga.KD_DLGA">KD_DLGA</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<p id="module-kd.model.kd_dscv">Deep Reinforcement Learning for PDE Discovery.</p>
+<p>This module implements a deep reinforcement learning approach for discovering
+governing equations of PDEs. It supports both regular grid data and sparse
+sampling, and can be combined with Physics-Informed Neural Networks (PINN).</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.BaseRL">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.kd_dscv.</span></span><span class="sig-name descname"><span class="pre">BaseRL</span></span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#BaseRL"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.BaseRL" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.base.BaseEstimator" title="kd.base.BaseEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEstimator</span></code></a></p>
+<p>Abstract base class for reinforcement learning based models.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.BaseRL.__init__">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#BaseRL.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.BaseRL.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize self.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**params</strong> – Arbitrary keyword arguments that will be set as parameters
+of the estimator.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.BaseRL.fit">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#BaseRL.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.BaseRL.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.BaseRL.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#BaseRL.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.BaseRL.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.kd_dscv.</span></span><span class="sig-name descname"><span class="pre">KD_DSCV</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_per_batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'./log/'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">core_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.model.kd_dscv.BaseRL" title="kd.model.kd_dscv.BaseRL"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseRL</span></code></a></p>
+<p>Deep Reinforcement Learning model for PDE discovery.</p>
+<p>This class implements a deep RL approach to discover governing equations
+of PDEs. It uses a controller to generate candidate equations and a
+searcher to evaluate them.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.n_iterations">
+<span class="sig-name descname"><span class="pre">n_iterations</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.n_iterations" title="Link to this definition">¶</a></dt>
+<dd><p>Number of training iterations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.n_samples_per_batch">
+<span class="sig-name descname"><span class="pre">n_samples_per_batch</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.n_samples_per_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Number of samples per batch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.operator">
+<span class="sig-name descname"><span class="pre">operator</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.operator" title="Link to this definition">¶</a></dt>
+<dd><p>List of allowed operators.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.out_path">
+<span class="sig-name descname"><span class="pre">out_path</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.out_path" title="Link to this definition">¶</a></dt>
+<dd><p>Path for output files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.dataset">
+<span class="sig-name descname"><span class="pre">dataset</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Dataset object.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.seed" title="Link to this definition">¶</a></dt>
+<dd><p>Random seed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.core_num">
+<span class="sig-name descname"><span class="pre">core_num</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.core_num" title="Link to this definition">¶</a></dt>
+<dd><p>Number of CPU cores to use.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.config">
+<span class="sig-name descname"><span class="pre">config</span></span><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_per_batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unary_operators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'./log/'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">core_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize KD_DSCV model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_iterations</strong> (<em>int</em>) – Number of training iterations.</p></li>
+<li><p><strong>n_samples_per_batch</strong> (<em>int</em>) – Number of samples per batch.</p></li>
+<li><p><strong>binary_operators</strong> (<em>list</em>) – List of binary operators.</p></li>
+<li><p><strong>unary_operators</strong> (<em>list</em>) – List of unary operators.</p></li>
+<li><p><strong>out_path</strong> (<em>str</em>) – Path for output files.</p></li>
+<li><p><strong>core_num</strong> (<em>int</em>) – Number of CPU cores to use.</p></li>
+<li><p><strong>config_out</strong> – Optional output configuration.</p></li>
+<li><p><strong>seed</strong> (<em>int</em>) – Random seed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.setup" title="Link to this definition">¶</a></dt>
+<dd><p>Setup model components.</p>
+<dl class="simple">
+<dt>Initializes:</dt><dd><ul class="simple">
+<li><p>Program cache</p></li>
+<li><p>Task</p></li>
+<li><p>Prior</p></li>
+<li><p>State manager</p></li>
+<li><p>Controller</p></li>
+<li><p>GP aggregator</p></li>
+<li><p>Searcher</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.info">
+<span class="sig-name descname"><span class="pre">info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.info" title="Link to this definition">¶</a></dt>
+<dd><p>Print model information.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.import_inner_data">
+<span class="sig-name descname"><span class="pre">import_inner_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'regular'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.import_inner_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.import_inner_data" title="Link to this definition">¶</a></dt>
+<dd><p>Import data from predefined datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> (<em>str</em>) – Name of dataset.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data (‘regular’ or ‘sparse’).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.import_dataset">
+<span class="sig-name descname"><span class="pre">import_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sym_true</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_input_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.import_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.import_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Import data through a <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code></a> instance.</p>
+<p>This keeps the legacy <a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV.import_inner_data" title="kd.model.kd_dscv.KD_DSCV.import_inner_data"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_inner_data()</span></code></a> path untouched while
+allowing external callers to provide data via the unified
+<a class="reference internal" href="#kd.dataset.load_pde" title="kd.dataset.load_pde"><code class="xref py py-func docutils literal notranslate"><span class="pre">kd.dataset.load_pde()</span></code></a> / <code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code> pipeline.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> – A <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> instance.</p></li>
+<li><p><strong>sym_true</strong> – Optional override for the ground-truth symbolic equation.</p></li>
+<li><p><strong>n_input_dim</strong> – Optional override for the number of spatial input
+dimensions.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The estimator instance (for chaining).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV" title="kd.model.kd_dscv.KD_DSCV">KD_DSCV</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_outter_data">
+<span class="sig-name descname"><span class="pre">make_outter_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_outter_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_outter_data" title="Link to this definition">¶</a></dt>
+<dd><p>Create data handler for external data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>AssertionError</strong> – If data type is not ‘regular’.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Deprecated external <code class="docutils literal notranslate"><span class="pre">(X,</span> <span class="pre">y)</span></code> entry point (disabled in KD 1.0).</p>
+<p>Use <a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV.import_dataset" title="kd.model.kd_dscv.KD_DSCV.import_dataset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_dataset()</span></code></a>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_from_dataset()</span></code> or
+<a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV.fit_dataset" title="kd.model.kd_dscv.KD_DSCV.fit_dataset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_dataset()</span></code></a> together with <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a>
+instead of calling <a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV.fit" title="kd.model.kd_dscv.KD_DSCV.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> with raw arrays.</p>
+<p>Users who need full control over <code class="docutils literal notranslate"><span class="pre">X</span></code>/<code class="docutils literal notranslate"><span class="pre">y</span></code>/<code class="docutils literal notranslate"><span class="pre">domains</span></code> should refer
+to the native DISCOVER <code class="docutils literal notranslate"><span class="pre">PDETask</span></code> examples.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.fit_dataset">
+<span class="sig-name descname"><span class="pre">fit_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sym_true</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_input_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.fit_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.fit_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Train DSCV (local PDE mode) directly from a <code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code>.</p>
+<p>This is a convenience wrapper aligned with <code class="xref py py-class docutils literal notranslate"><span class="pre">KD_SGA</span></code> and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">KD_DLGA</span></code>, using the unified dataset-based entry point.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.train_one_step">
+<span class="sig-name descname"><span class="pre">train_one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.train_one_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.train_one_step" title="Link to this definition">¶</a></dt>
+<dd><p>Train model for one step.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>epoch</strong> (<em>int</em>) – Current epoch.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.train">
+<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.train" title="Link to this definition">¶</a></dt>
+<dd><p>Train model for multiple epochs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.set_config">
+<span class="sig-name descname"><span class="pre">set_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.set_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.set_config" title="Link to this definition">¶</a></dt>
+<dd><p>Set model configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – Configuration dictionary or path.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_prior">
+<span class="sig-name descname"><span class="pre">make_prior</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_prior"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_prior" title="Link to this definition">¶</a></dt>
+<dd><p>Create prior for equation generation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Prior object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Prior</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_state_manager">
+<span class="sig-name descname"><span class="pre">make_state_manager</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_state_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_state_manager" title="Link to this definition">¶</a></dt>
+<dd><p>Create state manager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State manager object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>StateManager</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_controller">
+<span class="sig-name descname"><span class="pre">make_controller</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_controller"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_controller" title="Link to this definition">¶</a></dt>
+<dd><p>Create controller.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Controller object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Controller</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_gp_aggregator">
+<span class="sig-name descname"><span class="pre">make_gp_aggregator</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_gp_aggregator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_gp_aggregator" title="Link to this definition">¶</a></dt>
+<dd><p>Create GP aggregator if enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>GP aggregator object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>GPAggregator or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.make_searcher">
+<span class="sig-name descname"><span class="pre">make_searcher</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.make_searcher"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.make_searcher" title="Link to this definition">¶</a></dt>
+<dd><p>Create searcher.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Searcher object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Searcher</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.set_task">
+<span class="sig-name descname"><span class="pre">set_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.set_task"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.set_task" title="Link to this definition">¶</a></dt>
+<dd><p>Set task configuration and optimizer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.set_seeds">
+<span class="sig-name descname"><span class="pre">set_seeds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_seed</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.set_seeds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.set_seeds" title="Link to this definition">¶</a></dt>
+<dd><p>Set random seeds for reproducibility.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>new_seed</strong> (<em>int</em>) – Random seed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.print_pq">
+<span class="sig-name descname"><span class="pre">print_pq</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.print_pq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.print_pq" title="Link to this definition">¶</a></dt>
+<dd><p>Print priority queue.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.plot">
+<span class="sig-name descname"><span class="pre">plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig_type</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.plot" title="Link to this definition">¶</a></dt>
+<dd><p>Plot training results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fig_type</strong> (<em>str</em>) – Type of figure to plot.</p></li>
+<li><p><strong>**kwargs</strong> – Additional plotting arguments.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Matplotlib figure.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions (not implemented).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.model.kd_dscv.</span></span><span class="sig-name descname"><span class="pre">KD_DSCV_SPR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kd.model.kd_dscv.KD_DSCV" title="kd.model.kd_dscv.KD_DSCV"><code class="xref py py-class docutils literal notranslate"><span class="pre">KD_DSCV</span></code></a></p>
+<p>KD_DSCV model with Physics-Informed Neural Networks.</p>
+<p>This class extends KD_DSCV with PINN capabilities for better
+equation discovery in sparse data settings.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize KD_DSCV_Pinn model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*args</strong> – Positional arguments for KD_DSCV.</p></li>
+<li><p><strong>config_out</strong> – Optional output configuration.</p></li>
+<li><p><strong>**kwargs</strong> – Keyword arguments for KD_DSCV.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.set_config">
+<span class="sig-name descname"><span class="pre">set_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.set_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.set_config" title="Link to this definition">¶</a></dt>
+<dd><p>Set model configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – Configuration dictionary or path.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.import_dataset">
+<span class="sig-name descname"><span class="pre">import_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colloc_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spline_sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cut_quantile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.import_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.import_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Import sparse/PINN data via <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> – A <a class="reference internal" href="#kd.dataset.PDEDataset" title="kd.dataset.PDEDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">kd.dataset.PDEDataset</span></code></a> instance.</p></li>
+<li><p><strong>sample</strong> – Absolute number of training samples (takes precedence
+over <code class="docutils literal notranslate"><span class="pre">sample_ratio</span></code> when provided).</p></li>
+<li><p><strong>sample_ratio</strong> – Fraction of available points to sample in <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">1]</span></code>,
+default <code class="docutils literal notranslate"><span class="pre">0.1</span></code>.</p></li>
+<li><p><strong>colloc_num</strong> – Number of collocation points for PINN training; if
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, the default configured value is used.</p></li>
+<li><p><strong>random_state</strong> – Random seed for reproducible sampling.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.make_pinn_model">
+<span class="sig-name descname"><span class="pre">make_pinn_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.make_pinn_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.make_pinn_model" title="Link to this definition">¶</a></dt>
+<dd><p>Create PINN model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>PINN model object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>PINN_model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.setup" title="Link to this definition">¶</a></dt>
+<dd><p>Setup model components including PINN.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.reset_up">
+<span class="sig-name descname"><span class="pre">reset_up</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clear_cache</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset_controller</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.reset_up"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.reset_up" title="Link to this definition">¶</a></dt>
+<dd><p>Reset model components.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>clear_cache</strong> (<em>bool</em>) – Whether to clear program cache.</p></li>
+<li><p><strong>reset_controller</strong> (<em>bool</em>) – Whether to reset controller.</p></li>
+<li><p><strong>new_seed</strong> (<em>int</em>) – New random seed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.pretrain">
+<span class="sig-name descname"><span class="pre">pretrain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.pretrain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.pretrain" title="Link to this definition">¶</a></dt>
+<dd><p>Pretrain PINN model with observations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.callIterPINN">
+<span class="sig-name descname"><span class="pre">callIterPINN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.callIterPINN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.callIterPINN" title="Link to this definition">¶</a></dt>
+<dd><p>Run iterative PINN and PDE discovery.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.pinn_train">
+<span class="sig-name descname"><span class="pre">pinn_train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">best_p</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.pinn_train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.pinn_train" title="Link to this definition">¶</a></dt>
+<dd><p>Train PINN with discovered equation constraint.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>best_p</strong> – Best program found.</p></li>
+<li><p><strong>count</strong> (<em>int</em>) – Iteration count.</p></li>
+<li><p><strong>coef</strong> (<em>float</em>) – Coefficient for PDE constraint.</p></li>
+<li><p><strong>local_sample</strong> (<em>bool</em>) – Whether to use local sampling.</p></li>
+<li><p><strong>last</strong> (<em>bool</em>) – Whether this is the last iteration.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.train">
+<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.train"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.train" title="Link to this definition">¶</a></dt>
+<dd><p>Train model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.make_outter_data">
+<span class="sig-name descname"><span class="pre">make_outter_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.make_outter_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.make_outter_data" title="Link to this definition">¶</a></dt>
+<dd><p>Create data handler for external data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">domains</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Sparse'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit model to data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input features.</p></li>
+<li><p><strong>y</strong> – Target values.</p></li>
+<li><p><strong>domains</strong> – Domain boundaries.</p></li>
+<li><p><strong>n_epochs</strong> (<em>int</em>) – Number of epochs.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Whether to print progress.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – Type of data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training results.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Make predictions (not implemented).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.model.kd_dscv.KD_DSCV_SPR.fit_dataset">
+<span class="sig-name descname"><span class="pre">fit_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colloc_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spline_sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cut_quantile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/model/kd_dscv.html#KD_DSCV_SPR.fit_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.model.kd_dscv.KD_DSCV_SPR.fit_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Convenience wrapper for Sparse+PINN training from <code class="xref py py-class docutils literal notranslate"><span class="pre">PDEDataset</span></code>.</p>
+<p>This mirrors the style of the local PDE <code class="docutils literal notranslate"><span class="pre">fit_dataset</span></code> entry point
+while targeting the sparse/PINN DISCOVER task.</p>
+</dd></dl>
+
+</dd></dl>
+
+<section id="kd-pysr-optional">
+<h4>KD_PySR (optional)<a class="headerlink" href="#kd-pysr-optional" title="Link to this heading">¶</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">KD_PySR</span></code> wraps <a class="reference external" href="https://github.com/MilesCranmer/PySR">PySR</a> for generic
+symbolic regression via <code class="docutils literal notranslate"><span class="pre">fit(X,</span> <span class="pre">y)</span></code>. Requires the <code class="docutils literal notranslate"><span class="pre">pysr</span></code> extra.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>API docs for <code class="docutils literal notranslate"><span class="pre">kd.model.kd_pysr</span></code> are excluded from the autodoc build
+because PySR’s Julia runtime conflicts with Sphinx on some platforms.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="visualization">
+<h2>Visualization<a class="headerlink" href="#visualization" title="Link to this heading">¶</a></h2>
+<section id="module-kd.viz.api">
+<span id="unified-facade"></span><h3>Unified facade<a class="headerlink" href="#module-kd.viz.api" title="Link to this heading">¶</a></h3>
+<p>High-level helper functions for KD visualization intents.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_training_curve">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_training_curve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_training_curve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_training_curve" title="Link to this definition">¶</a></dt>
+<dd><p>Plot the training loss curve for a model, if available.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_validation_curve">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_validation_curve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_validation_curve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_validation_curve" title="Link to this definition">¶</a></dt>
+<dd><p>Plot the validation loss curve for a model, if available.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_search_evolution">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_search_evolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_search_evolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_search_evolution" title="Link to this definition">¶</a></dt>
+<dd><p>Visualise the symbolic search or evolution history for a model.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_optimization">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_optimization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_optimization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_optimization" title="Link to this definition">¶</a></dt>
+<dd><p>Visualise optimisation history (e.g. objective vs. iteration).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_residuals">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_residuals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actual</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_residuals"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_residuals" title="Link to this definition">¶</a></dt>
+<dd><p>Plot residuals between <code class="docutils literal notranslate"><span class="pre">actual</span></code> and <code class="docutils literal notranslate"><span class="pre">predicted</span></code> values.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_field_comparison">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_field_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicted_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">residual_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_field_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_field_comparison" title="Link to this definition">¶</a></dt>
+<dd><p>Compare true and predicted 2D fields, optionally with residuals.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_time_slices">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_time_slices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicted_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slice_times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_time_slices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_time_slices" title="Link to this definition">¶</a></dt>
+<dd><p>Plot time slices of a 2D field at selected times.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_derivative_relationships">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_derivative_relationships</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n_terms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_derivative_relationships"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_derivative_relationships" title="Link to this definition">¶</a></dt>
+<dd><p>Plot relationships between derivative terms for PDE models.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.plot_parity">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">plot_parity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#plot_parity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.plot_parity" title="Link to this definition">¶</a></dt>
+<dd><p>Generate a parity plot comparing predictions and targets.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.api.render_equation">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.api.</span></span><span class="sig-name descname"><span class="pre">render_equation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">VizResult</span></span></span><a class="reference internal" href="_modules/kd/viz/api.html#render_equation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.api.render_equation" title="Link to this definition">¶</a></dt>
+<dd><p>Render the discovered equation as a LaTeX image.</p>
+</dd></dl>
+
+</section>
+<section id="module-kd.viz.equation_renderer">
+<span id="equation-rendering"></span><h3>Equation rendering<a class="headerlink" href="#module-kd.viz.equation_renderer" title="Link to this heading">¶</a></h3>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.viz.equation_renderer.render_latex_to_image">
+<span class="sig-prename descclassname"><span class="pre">kd.viz.equation_renderer.</span></span><span class="sig-name descname"><span class="pre">render_latex_to_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latex_str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">font_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_color</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'white'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_figsize_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_figsize_height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/viz/equation_renderer.html#render_latex_to_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.viz.equation_renderer.render_latex_to_image" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+<section id="module-kd.utils">
+<span id="utils"></span><h2>Utils<a class="headerlink" href="#module-kd.utils" title="Link to this heading">¶</a></h2>
+<p>Utility functions and classes.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kd.utils.FiniteDiff">
+<span class="sig-prename descclassname"><span class="pre">kd.utils.</span></span><span class="sig-name descname"><span class="pre">FiniteDiff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">u</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/utils/utils_fd.html#FiniteDiff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.utils.FiniteDiff" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate finite difference approximation of derivatives.</p>
+<p>This function computes numerical derivatives using central difference formulas
+for interior points and one-sided differences for boundary points.</p>
+<dl class="simple">
+<dt>Supported orders:</dt><dd><p>1: First derivative (central difference)
+2: Second derivative
+3: Third derivative
+4: Fourth derivative</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>u</strong> (<em>ndarray</em>) – Input array</p></li>
+<li><p><strong>dx</strong> (<em>float</em>) – Grid spacing</p></li>
+<li><p><strong>order</strong> (<em>int</em>) – Order of derivative (default: 1)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Finite difference approximation</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>For order=1: Uses central difference for interior points and
+one-sided 2nd order formulas for boundaries</p></li>
+<li><p>For order=2: Uses central difference for interior points and
+one-sided 3rd order formulas for boundaries</p></li>
+<li><p>For orders 3 and 4: Sets boundary points to zero</p></li>
+</ul>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">u</span> <span class="o">=</span> <span class="n">x</span><span class="o">**</span><span class="mi">2</span>  <span class="c1"># Function to differentiate</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dx</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dudx</span> <span class="o">=</span> <span class="n">FiniteDiff</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">dx</span><span class="p">)</span>  <span class="c1"># Should approximate 2*x</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kd.utils.Attrdict">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kd.utils.</span></span><span class="sig-name descname"><span class="pre">Attrdict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/utils/attrdict.html#Attrdict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.utils.Attrdict" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
+<p>A dictionary subclass that allows attribute-style access to dictionary keys.
+Reference: <a class="reference external" href="https://stackoverflow.com/a/14620633">https://stackoverflow.com/a/14620633</a></p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">AttrDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># Create an AttrDict object</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">a</span><span class="p">)</span>  <span class="c1"># Access dictionary key &#39;a&#39; as an attribute</span>
+<span class="go">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">c</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Add a new key-value pair</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;c&#39;</span><span class="p">])</span>  <span class="c1"># Access dictionary key &#39;c&#39; using dictionary syntax</span>
+<span class="go">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">del</span> <span class="n">data</span><span class="o">.</span><span class="n">a</span>  <span class="c1"># Delete a key-value pair</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">a</span><span class="p">)</span>  <span class="c1"># Raises AttributeError for non-existent key</span>
+<span class="go">AttributeError: &#39;AttrDict&#39; object has no attribute &#39;a&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>  <span class="c1"># Use dictionary methods like keys()</span>
+<span class="go">dict_keys([&#39;b&#39;, &#39;c&#39;])</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="kd.utils.Attrdict.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kd/utils/attrdict.html#Attrdict.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kd.utils.Attrdict.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize the dictionary and bind its internal dictionary to the instance.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+      |
+      <a href="_sources/api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.viz._adapters.dscv &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.viz._adapters.dscv</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;DSCV model adapter skeleton for the unified visualization façade.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">dscv_viz</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._contracts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FieldComparisonData</span><span class="p">,</span>
+    <span class="n">ParityPlotData</span><span class="p">,</span>
+    <span class="n">RewardEvolutionData</span><span class="p">,</span>
+    <span class="n">ResidualPlotData</span><span class="p">,</span>
+    <span class="n">slice_3d_to_2d</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..core</span><span class="w"> </span><span class="kn">import</span> <span class="n">VizResult</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..discover_eq2latex</span><span class="w"> </span><span class="kn">import</span> <span class="n">discover_program_to_latex</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..equation_renderer</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_latex_to_image</span>
+
+
+<div class="viewcode-block" id="DSCVVizAdapter">
+<a class="viewcode-back" href="../../../../api.html#kd.viz.adapters.DSCVVizAdapter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DSCVVizAdapter</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Placeholder DSCV adapter exposing planned capabilities.</span>
+
+<span class="sd">    Each intent currently returns a structured warning so that downstream</span>
+<span class="sd">    callers can detect support without triggering legacy visualizers. Actual</span>
+<span class="sd">    rendering logic will be implemented incrementally.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">capabilities</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;search_evolution&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;density&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;tree&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;equation&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;residual&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;parity&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;spr_residual&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+<div class="viewcode-block" id="DSCVVizAdapter.render">
+<a class="viewcode-back" href="../../../../api.html#kd.viz.adapters.DSCVVizAdapter.render">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>  <span class="c1"># type: ignore[override]</span>
+        <span class="n">handler</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;search_evolution&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search_evolution</span><span class="p">,</span>
+            <span class="s1">&#39;density&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span><span class="p">,</span>
+            <span class="s1">&#39;tree&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tree</span><span class="p">,</span>
+            <span class="s1">&#39;equation&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_equation</span><span class="p">,</span>
+            <span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual</span><span class="p">,</span>
+            <span class="s1">&#39;field_comparison&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field_comparison</span><span class="p">,</span>
+            <span class="s1">&#39;parity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parity</span><span class="p">,</span>
+            <span class="s1">&#39;spr_residual&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spr_residual</span><span class="p">,</span>
+            <span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spr_field_comparison</span><span class="p">,</span>
+        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">kind</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">handler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span>
+                    <span class="s2">&quot;DSCV adapter stub: intent &#39;</span><span class="si">%s</span><span class="s2">&#39; not implemented yet.&quot;</span> <span class="o">%</span> <span class="n">request</span><span class="o">.</span><span class="n">kind</span>
+                <span class="p">],</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;capabilities&#39;</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">capabilities</span><span class="p">)},</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">handler</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Implemented intents</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_search_evolution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_reward_evolution</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;search_evolution&#39;</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No reward history available for search evolution plot.&#39;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">)))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">steps</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">best_reward</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Best Reward&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">max_reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">steps</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">max_reward</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#F47E62&#39;</span><span class="p">,</span>
+                <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-.&#39;</span><span class="p">,</span>
+                <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Maximum Reward&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">mean_reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">steps</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">mean_reward</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#4F8FBA&#39;</span><span class="p">,</span>
+                <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+                <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Average Reward&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Iteration Count&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Reward Value&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;Reward Evolution&#39;</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;reward_evolution.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+            <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;search_evolution&#39;</span><span class="p">,</span>
+            <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;reward_evolution&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_density</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># noqa: WPS433</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;density&#39;</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;seaborn is required for reward density plots.&#39;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">history</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;searcher&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s1">&#39;r_history&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;density&#39;</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No reward history available for density plot.&#39;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">epoches</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;epoches&#39;</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">history</span> <span class="k">if</span> <span class="n">epoches</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">history</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">epoches</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;density&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No data available for requested epochs.&#39;</span><span class="p">])</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">5</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">rewards</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="n">sns</span><span class="o">.</span><span class="n">kdeplot</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rewards</span><span class="p">),</span>
+                <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Epoch </span><span class="si">{</span><span class="n">epoches</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">epoches</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">idx</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Reward&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Density&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;Reward Density Evolution&#39;</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;reward_density.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;epoches&#39;</span><span class="p">:</span> <span class="n">epoches</span> <span class="k">if</span> <span class="n">epoches</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">))),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;density&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">graphviz</span>  <span class="c1"># noqa: F401</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;graphviz is required for expression tree rendering.&#39;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">program</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">program</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No best program available for tree rendering.&#39;</span><span class="p">])</span>
+
+        <span class="n">searcher</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;searcher&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">plotter</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;plotter&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plotter</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">plotter</span><span class="p">,</span> <span class="s1">&#39;tree_plot&#39;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Tree plotter is unavailable on the model searcher.&#39;</span><span class="p">])</span>
+
+        <span class="n">graph</span> <span class="o">=</span> <span class="n">plotter</span><span class="o">.</span><span class="n">tree_plot</span><span class="p">(</span><span class="n">program</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">graph</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Tree plotter did not return a graph object.&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">png_bytes</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - runtime dependency issues</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+                <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to render expression tree: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;expression_tree.png&#39;</span><span class="p">)</span>
+        <span class="n">path</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">png_bytes</span><span class="p">)</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;expression&#39;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">program</span><span class="p">,</span> <span class="s1">&#39;str_expression&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;tree&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_equation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="n">program</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">program</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;equation&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No best program available for equation rendering.&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">notation</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;notation&#39;</span><span class="p">,</span> <span class="s1">&#39;subscript&#39;</span><span class="p">)</span>
+            <span class="n">latex</span> <span class="o">=</span> <span class="n">discover_program_to_latex</span><span class="p">(</span><span class="n">program</span><span class="p">,</span> <span class="n">notation</span><span class="o">=</span><span class="n">notation</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - dependent on program internals</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;equation&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to convert program to LaTeX: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;equation.png&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">render_latex_to_image</span><span class="p">(</span>
+                <span class="n">latex</span><span class="p">,</span>
+                <span class="n">output_path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
+                <span class="n">font_size</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;font_size&#39;</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span>
+                <span class="n">show</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - runtime dependency issues</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;equation&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to render LaTeX equation: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;equation&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;latex&#39;</span><span class="p">:</span> <span class="n">latex</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_residual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="n">program</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">program</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No best program available for residual analysis.&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fields</span> <span class="o">=</span> <span class="n">dscv_viz</span><span class="o">.</span><span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">program</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - heavy upstream dependency</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Unable to compute PDE fields: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">residuals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;residual&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;ut_grid&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">predicted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;y_hat_grid&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;coords&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+            <span class="n">residual_data</span> <span class="o">=</span> <span class="n">ResidualPlotData</span><span class="o">.</span><span class="n">from_actual_predicted</span><span class="p">(</span>
+                <span class="n">actual</span><span class="p">,</span> <span class="n">predicted</span><span class="p">,</span>
+                <span class="n">input_coordinates</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to build residual data: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">warnings</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="s2">&quot;3D spatial visualization is experimental; showing 2D slice.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">n_spatial_dims</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n_spatial_dims</span><span class="si">}</span><span class="s2">D spatial visualization uses &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;degraded slice mode.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;1D residual plot requires coordinate data but coords is None.&#39;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_plot_1d</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_plot_nd</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="n">residuals</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;residual_analysis.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">summary</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;mean&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">residuals</span><span class="p">)),</span>
+            <span class="s1">&#39;std&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">residuals</span><span class="p">)),</span>
+            <span class="s1">&#39;max_abs&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">residuals</span><span class="p">))),</span>
+            <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">residuals</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+            <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="n">residual_data</span><span class="p">,</span> <span class="s1">&#39;summary&#39;</span><span class="p">:</span> <span class="n">summary</span><span class="p">},</span>
+            <span class="n">warnings</span><span class="o">=</span><span class="n">warnings</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_residual_plot_1d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">residuals</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">)))</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">sc</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+            <span class="n">coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">c</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+            <span class="n">cmap</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cmap&#39;</span><span class="p">,</span> <span class="s1">&#39;coolwarm&#39;</span><span class="p">),</span> <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Residual ($u_t$ - RHS)&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time (index)&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Spatiotemporal Residual Distribution&#39;</span><span class="p">)</span>
+
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;bins&#39;</span><span class="p">,</span> <span class="mi">40</span><span class="p">)),</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Residual Value&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Probability Density&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Residual Distribution&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">fig</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_residual_plot_nd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">residuals</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;2D+ spatial: heatmap of residuals at a selected time step + histogram.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">ut_grid</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s1">&#39;ut_grid&#39;</span><span class="p">]</span>
+        <span class="n">y_hat_grid</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s1">&#39;y_hat_grid&#39;</span><span class="p">]</span>
+        <span class="n">spatial_coords</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s1">&#39;spatial_coords_list&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">spatial_coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;_residual_plot_nd requires &gt;= 2 spatial coords, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">spatial_coords</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">t_axis</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s1">&#39;t_axis&#39;</span><span class="p">]</span>
+
+        <span class="n">residual_grid</span> <span class="o">=</span> <span class="n">ut_grid</span> <span class="o">-</span> <span class="n">y_hat_grid</span>
+        <span class="c1"># Pick middle time step</span>
+        <span class="n">t_idx</span> <span class="o">=</span> <span class="n">residual_grid</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="n">residual_slice</span> <span class="o">=</span> <span class="n">residual_grid</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span>
+
+        <span class="c1"># For 3D+ spatial, slice along last spatial axis to get 2D</span>
+        <span class="n">plot_coords</span> <span class="o">=</span> <span class="n">spatial_coords</span>
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_spatial_dims</span> <span class="o">-</span> <span class="mi">2</span><span class="p">):</span>
+                <span class="n">slice_axis</span> <span class="o">=</span> <span class="n">residual_slice</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># last spatial axis</span>
+                <span class="n">slice_idx</span> <span class="o">=</span> <span class="n">residual_slice</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">slice_axis</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+                <span class="n">residual_slice</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">residual_slice</span><span class="p">,</span> <span class="n">slice_idx</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">slice_axis</span><span class="p">)</span>
+                <span class="n">plot_coords</span> <span class="o">=</span> <span class="n">plot_coords</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">)))</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">y_coords</span> <span class="o">=</span> <span class="n">plot_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">x_coords</span> <span class="o">=</span> <span class="n">plot_coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">vabs</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">residual_slice</span><span class="p">)))</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span>
+            <span class="n">x_coords</span><span class="p">,</span> <span class="n">y_coords</span><span class="p">,</span> <span class="n">residual_slice</span><span class="p">,</span>
+            <span class="n">cmap</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cmap&#39;</span><span class="p">,</span> <span class="s1">&#39;coolwarm&#39;</span><span class="p">),</span>
+            <span class="n">vmin</span><span class="o">=-</span><span class="n">vabs</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vabs</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Residual&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Residual (t=</span><span class="si">{</span><span class="n">t_axis</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;bins&#39;</span><span class="p">,</span> <span class="mi">40</span><span class="p">)),</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Residual Value&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Probability Density&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Residual Distribution&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">fig</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_field_comparison</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="n">program</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">program</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No best program available for field comparison.&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fields</span> <span class="o">=</span> <span class="n">dscv_viz</span><span class="o">.</span><span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">program</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Unable to compute PDE fields: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">t_axis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;t_axis&#39;</span><span class="p">])</span>
+            <span class="n">true_field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;ut_grid&#39;</span><span class="p">])</span>
+            <span class="n">pred_field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;y_hat_grid&#39;</span><span class="p">])</span>
+
+            <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">x_axis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;x_axis&#39;</span><span class="p">])</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">FieldComparisonData</span><span class="p">(</span>
+                    <span class="n">x_coords</span><span class="o">=</span><span class="n">x_axis</span><span class="p">,</span> <span class="n">t_coords</span><span class="o">=</span><span class="n">t_axis</span><span class="p">,</span>
+                    <span class="n">true_field</span><span class="o">=</span><span class="n">true_field</span><span class="p">,</span> <span class="n">predicted_field</span><span class="o">=</span><span class="n">pred_field</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">spatial_coords</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="s1">&#39;spatial_coords_list&#39;</span><span class="p">]</span>
+                <span class="c1"># DSCV N-D returns (nt, *spatial) — transpose to (*spatial, t) for contract</span>
+                <span class="n">n_dims</span> <span class="o">=</span> <span class="n">true_field</span><span class="o">.</span><span class="n">ndim</span>
+                <span class="n">perm</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">))</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">FieldComparisonData</span><span class="p">(</span>
+                    <span class="n">spatial_coords</span><span class="o">=</span><span class="n">spatial_coords</span><span class="p">,</span> <span class="n">t_coords</span><span class="o">=</span><span class="n">t_axis</span><span class="p">,</span>
+                    <span class="n">true_field</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">true_field</span><span class="p">,</span> <span class="n">perm</span><span class="p">),</span>
+                    <span class="n">predicted_field</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">pred_field</span><span class="p">,</span> <span class="n">perm</span><span class="p">),</span>
+                <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to build field comparison data: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field_comparison_1d</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+
+        <span class="c1"># --- 2D spatial: show selected time steps as 2D heatmaps ---</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field_comparison_nd</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_field_comparison_1d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">FieldComparisonData</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">6</span><span class="p">)),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;Predicted vs True Field&#39;</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="o">.</span><span class="n">min</span><span class="p">()]))</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="o">.</span><span class="n">max</span><span class="p">()]))</span>
+
+        <span class="n">im0</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im0</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;True Field ($u_t$)&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+
+        <span class="n">im1</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Predicted Field (RHS)&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;field_comparison.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">})</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_slice_3d_to_2d</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">FieldComparisonData</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldComparisonData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slice 3D+ spatial data along one axis to produce a 2D spatial view.&quot;&quot;&quot;</span>
+        <span class="n">sa</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;slice_axis&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">si</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;slice_index&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">si</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">si</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">si</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">slice_3d_to_2d</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">slice_axis</span><span class="o">=</span><span class="n">sa</span><span class="p">,</span> <span class="n">slice_index</span><span class="o">=</span><span class="n">si</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_field_comparison_nd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">FieldComparisonData</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;2D+ spatial field comparison: show 2D heatmaps at selected time steps.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">warnings</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">n_spatial_dims</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="s2">&quot;3D spatial visualization is experimental; showing 2D slice.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">data</span><span class="o">.</span><span class="n">n_spatial_dims</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">n_spatial_dims</span><span class="si">}</span><span class="s2">D spatial visualization uses &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;degraded slice mode.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">n_spatial_dims</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">plot_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slice_3d_to_2d</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+
+        <span class="n">nt</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">t_coords</span><span class="o">.</span><span class="n">size</span>
+        <span class="c1"># Pick up to 3 time steps: first, middle, last</span>
+        <span class="k">if</span> <span class="n">nt</span> <span class="o">&lt;=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">t_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">nt</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">t_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">nt</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">nt</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">n_cols</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">t_indices</span><span class="p">)</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_cols</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">5</span> <span class="o">*</span> <span class="n">n_cols</span><span class="p">,</span> <span class="mi">8</span><span class="p">)))</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;Predicted vs True Field (2D spatial)&#39;</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_cols</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">([</span><span class="n">plot_data</span><span class="o">.</span><span class="n">true_field</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">predicted_field</span><span class="o">.</span><span class="n">min</span><span class="p">()]))</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">([</span><span class="n">plot_data</span><span class="o">.</span><span class="n">true_field</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">predicted_field</span><span class="o">.</span><span class="n">max</span><span class="p">()]))</span>
+        <span class="n">cmap</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cmap&#39;</span><span class="p">,</span> <span class="s1">&#39;viridis&#39;</span><span class="p">)</span>
+
+        <span class="n">y_coords</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">spatial_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">x_coords</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">spatial_coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">t_idx</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">t_indices</span><span class="p">):</span>
+            <span class="n">true_slice</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">true_field</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">]</span>
+            <span class="n">pred_slice</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">predicted_field</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">]</span>
+
+            <span class="n">im0</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span>
+                <span class="n">x_coords</span><span class="p">,</span> <span class="n">y_coords</span><span class="p">,</span> <span class="n">true_slice</span><span class="p">,</span>
+                <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;True (t=</span><span class="si">{</span><span class="n">plot_data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">col_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+
+            <span class="n">im1</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span>
+                <span class="n">x_coords</span><span class="p">,</span> <span class="n">y_coords</span><span class="p">,</span> <span class="n">pred_slice</span><span class="p">,</span>
+                <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Predicted (t=</span><span class="si">{</span><span class="n">plot_data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">col_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+        <span class="n">cbar_ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="mf">0.90</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.82</span><span class="p">])</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im0</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cbar_ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;field_comparison.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+            <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">},</span> <span class="n">warnings</span><span class="o">=</span><span class="n">warnings</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="n">program</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">program</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;parity&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;No best program available for parity plot.&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fields</span> <span class="o">=</span> <span class="n">dscv_viz</span><span class="o">.</span><span class="n">_calculate_pde_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">program</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;parity&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Unable to compute PDE fields: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;ut_grid&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">predicted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="s1">&#39;y_hat_grid&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">ParityPlotData</span><span class="o">.</span><span class="n">from_actual_predicted</span><span class="p">(</span><span class="n">actual</span><span class="p">,</span> <span class="n">predicted</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lhs_label&#39;</span><span class="p">:</span> <span class="s1">&#39;u_t&#39;</span><span class="p">})</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;parity&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to build parity data: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">)))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">predicted_values</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">actual_values</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.35</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Prediction vs Actual&#39;</span><span class="p">)</span>
+        <span class="n">min_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">actual_values</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_values</span><span class="o">.</span><span class="n">min</span><span class="p">()]))</span>
+        <span class="n">max_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">actual_values</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_values</span><span class="o">.</span><span class="n">max</span><span class="p">()]))</span>
+        <span class="n">ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;y = x&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Predicted RHS Values&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;True LHS Values (u_t)&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;Parity Plot&#39;</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">,</span> <span class="s1">&#39;box&#39;</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;parity_plot.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;parity&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;parity&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spr_residual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pinn_fields</span> <span class="o">=</span> <span class="n">dscv_viz</span><span class="o">.</span><span class="n">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Unable to compute PINN fields: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_true&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">predicted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;coords&#39;</span><span class="p">])</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">ResidualPlotData</span><span class="o">.</span><span class="n">from_actual_predicted</span><span class="p">(</span><span class="n">actual</span><span class="p">,</span> <span class="n">predicted</span><span class="p">,</span> <span class="n">input_coordinates</span><span class="o">=</span><span class="n">coords</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_residual&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to build SPR residual data: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">)))</span>
+        <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">sc</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">actual</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="n">min_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">actual</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted</span><span class="p">])))</span>
+        <span class="n">max_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">actual</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted</span><span class="p">])))</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">],</span> <span class="p">[</span><span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">],</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Actual&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Predicted&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;SPR Parity Plot&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;sample&#39;</span><span class="p">)</span>
+
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">residuals</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;bins&#39;</span><span class="p">,</span> <span class="mi">40</span><span class="p">)),</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Residual&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Frequency&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;SPR Residual Distribution&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;spr_residual_analysis.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">pinn_fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span>
+            <span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_residual&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span> <span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">:</span> <span class="n">n_spatial_dims</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spr_field_comparison</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pinn_fields</span> <span class="o">=</span> <span class="n">dscv_viz</span><span class="o">.</span><span class="n">_calculate_pinn_fields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_program</span><span class="p">(</span><span class="n">model</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Unable to compute PINN fields: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">pinn_fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;coords_t&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">true_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_true&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">pred_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Failed to read PINN field data: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">griddata</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - optional dependency</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;scipy is required for SPR field comparison: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spr_field_comparison_nd</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">griddata</span><span class="p">)</span>
+
+        <span class="c1"># Legacy 1D path</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;coords_x&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">min</span><span class="p">():</span><span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">():</span><span class="mi">100</span><span class="n">j</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">():</span><span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">():</span><span class="mi">100</span><span class="n">j</span><span class="p">]</span>
+        <span class="n">grid_true</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">true_vals</span><span class="p">,</span> <span class="p">(</span><span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cubic&#39;</span><span class="p">)</span>
+        <span class="n">grid_pred</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">pred_vals</span><span class="p">,</span> <span class="p">(</span><span class="n">grid_x</span><span class="p">,</span> <span class="n">grid_t</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cubic&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">grid_true</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">grid_pred</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Failed to interpolate SPR field data.&#39;</span><span class="p">])</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">FieldComparisonData</span><span class="p">(</span>
+            <span class="n">x_coords</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">grid_true</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="n">t_coords</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">grid_true</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="n">true_field</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">grid_true</span><span class="p">),</span>
+            <span class="n">predicted_field</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">grid_pred</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">6</span><span class="p">)),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;SPR Predicted vs True Field&#39;</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="p">]))</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">([</span><span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="p">]))</span>
+
+        <span class="n">im0</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">true_field</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im0</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;True Field (SPR)&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Space&#39;</span><span class="p">)</span>
+
+        <span class="n">im1</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">t_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">predicted_field</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Predicted Field (SPR)&#39;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;spr_field_comparison.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spr_field_comparison_nd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pinn_fields</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">griddata</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;N-D spatial SPR field comparison: time-bin + spatial griddata interpolation.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">n_spatial_dims</span> <span class="o">=</span> <span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;n_spatial_dims&#39;</span><span class="p">]</span>
+        <span class="n">spatial_coords_list</span> <span class="o">=</span> <span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;spatial_coords_list&#39;</span><span class="p">]</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;coords_t&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">true_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_true&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pred_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pinn_fields</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Time binning: pick a few time bins</span>
+        <span class="n">n_t_bins</span> <span class="o">=</span> <span class="mi">5</span>
+        <span class="n">t_edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">n_t_bins</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">t_centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">t_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">t_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="c1"># Build spatial grid</span>
+        <span class="n">grid_n</span> <span class="o">=</span> <span class="mi">50</span>
+        <span class="n">grid_axes</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">sc</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">sc</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">grid_n</span><span class="p">)</span> <span class="k">for</span> <span class="n">sc</span> <span class="ow">in</span> <span class="n">spatial_coords_list</span><span class="p">]</span>
+
+        <span class="c1"># Use only first 2 spatial dims for interpolation and display</span>
+        <span class="n">s0</span> <span class="o">=</span> <span class="n">spatial_coords_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">s1</span> <span class="o">=</span> <span class="n">spatial_coords_list</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">grid_s0</span><span class="p">,</span> <span class="n">grid_s1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">grid_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">grid_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Average across time bins and interpolate</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span> <span class="k">if</span> <span class="n">n_spatial_dims</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="s1">&#39;cubic&#39;</span>
+        <span class="n">true_grids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">pred_grids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_t_bins</span><span class="p">):</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span> <span class="o">&gt;=</span> <span class="n">t_edges</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span> <span class="o">&lt;</span> <span class="n">t_edges</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">n_t_bins</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t_edges</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+                <span class="n">true_grids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">grid_s0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">))</span>
+                <span class="n">pred_grids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">grid_s0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">))</span>
+                <span class="k">continue</span>
+            <span class="n">gt</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">s0</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">s1</span><span class="p">[</span><span class="n">mask</span><span class="p">]),</span> <span class="n">true_vals</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="p">(</span><span class="n">grid_s0</span><span class="p">,</span> <span class="n">grid_s1</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">)</span>
+            <span class="n">gp</span> <span class="o">=</span> <span class="n">griddata</span><span class="p">((</span><span class="n">s0</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">s1</span><span class="p">[</span><span class="n">mask</span><span class="p">]),</span> <span class="n">pred_vals</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="p">(</span><span class="n">grid_s0</span><span class="p">,</span> <span class="n">grid_s1</span><span class="p">),</span> <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">)</span>
+            <span class="n">true_grids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">gt</span><span class="p">))</span>
+            <span class="n">pred_grids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">gp</span><span class="p">))</span>
+
+        <span class="c1"># Stack: shape (grid_n, grid_n, n_t_bins)</span>
+        <span class="n">true_field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">true_grids</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pred_field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">pred_grids</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">FieldComparisonData</span><span class="p">(</span>
+            <span class="n">spatial_coords</span><span class="o">=</span><span class="p">[</span><span class="n">grid_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">grid_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+            <span class="n">t_coords</span><span class="o">=</span><span class="n">t_centers</span><span class="p">,</span>
+            <span class="n">true_field</span><span class="o">=</span><span class="n">true_field</span><span class="p">,</span>
+            <span class="n">predicted_field</span><span class="o">=</span><span class="n">pred_field</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Plot 2D heatmaps at selected time bins</span>
+        <span class="k">if</span> <span class="n">n_t_bins</span> <span class="o">&lt;=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">t_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_t_bins</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">t_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_t_bins</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_t_bins</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">n_cols</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">t_indices</span><span class="p">)</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_cols</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;figsize&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">5</span> <span class="o">*</span> <span class="n">n_cols</span><span class="p">,</span> <span class="mi">8</span><span class="p">)))</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;SPR Field Comparison (N-D spatial)&#39;</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_cols</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">vmin</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">([</span><span class="n">true_field</span><span class="p">,</span> <span class="n">pred_field</span><span class="p">]))</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">([</span><span class="n">true_field</span><span class="p">,</span> <span class="n">pred_field</span><span class="p">]))</span>
+        <span class="n">cmap</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cmap&#39;</span><span class="p">,</span> <span class="s1">&#39;viridis&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">col_idx</span><span class="p">,</span> <span class="n">t_idx</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">t_indices</span><span class="p">):</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span>
+                <span class="n">grid_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">grid_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">true_field</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">],</span>
+                <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;True (t~</span><span class="si">{</span><span class="n">t_centers</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">col_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+
+            <span class="n">im</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span>
+                <span class="n">grid_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">grid_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pred_field</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t_idx</span><span class="p">],</span>
+                <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Predicted (t~</span><span class="si">{</span><span class="n">t_centers</span><span class="p">[</span><span class="n">t_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">col_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span>
+        <span class="n">cbar_ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="mf">0.90</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.82</span><span class="p">])</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cbar_ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Value&#39;</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s1">&#39;spr_field_comparison.png&#39;</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dpi&#39;</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">VizResult</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="s1">&#39;spr_field_comparison&#39;</span><span class="p">,</span> <span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">})</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+        <span class="n">base</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;output_dir&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">base</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">base_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">/</span> <span class="s1">&#39;dscv&#39;</span>
+            <span class="n">base_path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">base_path</span><span class="p">,</span> <span class="n">base_path</span> <span class="o">/</span> <span class="n">filename</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">save_path</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;dscv/</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">path</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_reward_evolution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RewardEvolutionData</span><span class="p">]:</span>
+        <span class="n">searcher</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;searcher&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">searcher</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;r_train&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">rewards</span> <span class="o">=</span> <span class="n">searcher</span><span class="o">.</span><span class="n">r_train</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rewards</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">max_vals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">mean_vals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">best_vals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">cumulative_best</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">rewards</span><span class="p">:</span>
+            <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="n">max_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">arr</span><span class="p">))</span>
+            <span class="n">mean_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">arr</span><span class="p">))</span>
+            <span class="n">cumulative_best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">cumulative_best</span><span class="p">,</span> <span class="n">max_val</span><span class="p">)</span>
+            <span class="n">max_vals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">max_val</span><span class="p">)</span>
+            <span class="n">mean_vals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mean_val</span><span class="p">)</span>
+            <span class="n">best_vals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cumulative_best</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">RewardEvolutionData</span><span class="p">(</span>
+            <span class="n">steps</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+            <span class="n">best_reward</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">best_vals</span><span class="p">),</span>
+            <span class="n">max_reward</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">max_vals</span><span class="p">),</span>
+            <span class="n">mean_reward</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mean_vals</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_best_program</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="n">best</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;best_p&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">best</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">best</span> <span class="o">=</span> <span class="n">best</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">best</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">best</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">searcher</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;searcher&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">searcher</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">best</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">searcher</span><span class="p">,</span> <span class="s1">&#39;best_p&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">best</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="n">best</span> <span class="o">=</span> <span class="n">best</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">best</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">best</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

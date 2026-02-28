@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.dataset._base &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  <li><a href="../dataset.html">kd.dataset</a><ul>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.dataset._base</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Base IO code for all datasets</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.io</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">resources</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._info</span><span class="w"> </span><span class="kn">import</span> <span class="n">DatasetInfo</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">interp2d</span>
+
+
+<span class="n">DATA_MODULE</span> <span class="o">=</span> <span class="s2">&quot;kd.dataset.data&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_convert_data_dataframe</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">feature_names</span><span class="p">,</span> <span class="n">target_names</span><span class="p">,</span> <span class="n">sparse_data</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">):</span>
+    <span class="c1"># If the data is not sparse, create a regular DataFrame for features.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">sparse_data</span><span class="p">:</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">feature_names</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># If the data is sparse, create a sparse DataFrame for features.</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">sparse</span><span class="o">.</span><span class="n">from_spmatrix</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">feature_names</span><span class="p">)</span>
+
+    <span class="c1"># Create a DataFrame for the target variable with appropriate column names.</span>
+    <span class="n">target_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">target_names</span><span class="p">)</span>
+    
+    <span class="c1"># Concatenate the data and target DataFrames along columns (axis=1) to create a combined DataFrame.</span>
+    <span class="n">combined_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">data_df</span><span class="p">,</span> <span class="n">target_df</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    
+    <span class="c1"># Separate the feature columns (X) and the target columns (y) from the combined DataFrame.</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">combined_df</span><span class="p">[</span><span class="n">feature_names</span><span class="p">]</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">combined_df</span><span class="p">[</span><span class="n">target_names</span><span class="p">]</span>
+    
+    <span class="c1"># If there is only one target variable (i.e., y has only one column), simplify y to a 1D Series.</span>
+    <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+    
+    <span class="c1"># Return the combined DataFrame, features (X), and target (y).</span>
+    <span class="k">return</span> <span class="n">combined_df</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load_csv_data</span><span class="p">(</span><span class="n">data_file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">,</span> <span class="n">has_header</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Reads a CSV file and returns the data as a NumPy array, automatically determining whether there is a header.</span>
+
+<span class="sd">    Depending on the value of `has_header`, the function either skips the first row (if it is a header) </span>
+<span class="sd">    or includes it as data.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data_file_path (str): The path to the CSV file.</span>
+<span class="sd">        encoding (str): The file encoding, default is &#39;utf-8&#39;.</span>
+<span class="sd">        has_header (bool): Whether the CSV file contains a header row, default is True.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        np.ndarray: A NumPy array containing the data. If `has_header` is True, the first row will be excluded.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; data = load_csv_data(&#39;example.csv&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; print(data)</span>
+<span class="sd">        [[25. 85.]</span>
+<span class="sd">         [22. 90.]</span>
+<span class="sd">         [23. 88.]]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create a Path object for the file path</span>
+    <span class="n">data_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data_file_path</span><span class="p">)</span>
+
+    <span class="c1"># Open the CSV file and read the data</span>
+    <span class="k">with</span> <span class="n">data_path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        
+        <span class="c1"># Read all rows from the CSV</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">has_header</span><span class="p">:</span>
+            <span class="c1"># If the file has a header, remove the first row</span>
+            <span class="n">header</span> <span class="o">=</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Store header if needed (can be returned or processed)</span>
+            <span class="n">data_rows</span> <span class="o">=</span> <span class="n">rows</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># If no header, use all rows as data</span>
+            <span class="n">data_rows</span> <span class="o">=</span> <span class="n">rows</span>
+        
+        <span class="c1"># Convert the data into a NumPy array</span>
+        <span class="n">data_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>  <span class="c1"># Assuming the data is numeric; handle further conversions if needed</span>
+        
+    <span class="k">return</span> <span class="n">data_array</span>
+
+
+<div class="viewcode-block" id="load_mat_file">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.load_mat_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_mat_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Parses a .mat file (MATLAB format) and returns its content as a Python dictionary.</span>
+<span class="sd">    Supports both older .mat files (MATLAB 5) and newer ones (MATLAB 7.3 or HDF5 format).</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        file_path (str): The path to the .mat file to be loaded.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict[str, Any]: A dictionary where keys are variable names and values are corresponding data arrays.</span>
+<span class="sd">    </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the file format is not supported or if there&#39;s an error in reading the file.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+    <span class="c1"># Attempt to load the file as a standard .mat (MATLAB 5) file using scipy.io</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Try loading with scipy (for MATLAB version 5 and below)</span>
+        <span class="n">mat_data</span> <span class="o">=</span> <span class="n">sio</span><span class="o">.</span><span class="n">loadmat</span><span class="p">(</span><span class="n">data_path</span><span class="p">)</span>
+        <span class="c1"># Remove MATLAB-specific metadata (keys like __header__, __version__, __globals__)</span>
+        <span class="n">mat_data_clean</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">mat_data</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">)}</span>
+        <span class="k">return</span> <span class="n">mat_data_clean</span>
+    <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
+        <span class="c1"># This error will occur if scipy cannot handle the file (e.g., MATLAB version &gt; 7.3)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The .mat file is of an unsupported format (likely version 7.3 or higher).&quot;</span><span class="p">)</span></div>
+
+
+  
+<span class="k">def</span><span class="w"> </span><span class="nf">load_numpy_data</span><span class="p">(</span><span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads NumPy data from a `.npy` or `.npz` file and returns it as a NumPy array or a dictionary (for `.npz` files).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        file_path (str): The path to the `.npy` or `.npz` file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        np.ndarray or dict: If the file is a `.npy` file, a NumPy array is returned. </span>
+<span class="sd">                             If the file is a `.npz` file, a dictionary of arrays is returned.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; data = load_numpy_data(&#39;data.npy&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; print(data)</span>
+<span class="sd">        [1. 2. 3. 4.]</span>
+<span class="sd">        </span>
+<span class="sd">        &gt;&gt;&gt; data = load_numpy_data(&#39;data.npz&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; print(data[&#39;arr_0&#39;])</span>
+<span class="sd">        [1. 2. 3. 4.]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">file_path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.npy&#39;</span><span class="p">):</span>
+        <span class="c1"># Load a single NumPy array from a .npy file</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">file_path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.npz&#39;</span><span class="p">):</span>
+        <span class="c1"># Load a NumPy compressed archive (.npz) and return as a dictionary of arrays</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported file format: </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseDataLoader</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Abstract base class defining the interface for data loaders.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PDEDataLoader</span><span class="p">(</span><span class="n">BaseDataLoader</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the data loader.</span>
+
+<span class="sd">        :param data_dir: Directory where data files are stored.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data_dir</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equation_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads PDE-related data from different file formats (CSV, MAT, NPY, NPZ).</span>
+
+<span class="sd">        :param equation_name: The equation name (file name prefix) if file path is not provided.</span>
+<span class="sd">        :param file: The full file path to load.</span>
+<span class="sd">        :return: The loaded data as a NumPy array or a dictionary.</span>
+<span class="sd">        :raises FileNotFoundError: If no matching data file is found.</span>
+<span class="sd">        :raises ValueError: If the file format is unsupported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">file_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Specified file does not exist: </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">equation_name</span><span class="p">:</span>
+            <span class="n">file_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_file</span><span class="p">(</span><span class="n">equation_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">file_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No data file found for equation: </span><span class="si">{</span><span class="n">equation_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either &#39;equation_name&#39; or &#39;file&#39; must be provided.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Load the file based on its extension</span>
+        <span class="k">if</span> <span class="n">file_path</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.csv&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">load_csv_data</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">file_path</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.mat&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">load_mat_file</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">file_path</span><span class="o">.</span><span class="n">suffix</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;.npy&quot;</span><span class="p">,</span> <span class="s2">&quot;.npz&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">load_numpy_data</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">file_path</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported file format: </span><span class="si">{</span><span class="n">file_path</span><span class="o">.</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_find_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equation_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Searches for a file that matches the given equation name in the data directory.</span>
+
+<span class="sd">        :param equation_name: The equation name (file name prefix).</span>
+<span class="sd">        :return: The path to the matching file, or None if no file is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">ext</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;.csv&quot;</span><span class="p">,</span> <span class="s2">&quot;.mat&quot;</span><span class="p">,</span> <span class="s2">&quot;.npy&quot;</span><span class="p">,</span> <span class="s2">&quot;.npz&quot;</span><span class="p">]:</span>
+            <span class="n">file_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">equation_name</span><span class="si">}{</span><span class="n">ext</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="n">file_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">file_path</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MetaBase</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Metaclass to enforce that subclasses implement required methods </span>
+<span class="sd">    and contain necessary attributes, ensuring a consistent interface.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">required_methods</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;get_data&#39;</span><span class="p">}</span>
+    <span class="n">required_attributes</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="s1">&#39;usol&#39;</span><span class="p">)</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">dct</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overrides class creation to enforce method and attribute requirements.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+                
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">required_attributes</span><span class="p">,</span> <span class="p">(</span><span class="nb">set</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.required_attributes must be a set, list, or tuple.&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Ensure required methods are implemented</span>
+        <span class="k">for</span> <span class="n">method</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">required_methods</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">dct</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1"> must implement the method: </span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Ensure required attributes exist</span>
+        <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">required_attributes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">attr</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">dct</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">attr</span> <span class="ow">in</span> <span class="n">base</span><span class="o">.</span><span class="vm">__dict__</span> <span class="k">for</span> <span class="n">base</span> <span class="ow">in</span> <span class="n">bases</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1"> must contain the attribute: &quot;</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">dct</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MetaData</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">MetaBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class to store metadata of a Partial Differential Equation (PDE) dataset.&quot;&quot;&quot;</span>
+    
+    <span class="n">x</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">usol</span> <span class="o">=</span> <span class="kc">None</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the metadata for a PDE dataset.</span>
+
+<span class="sd">        :param info: Description of the equation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">info</span> <span class="o">=</span> <span class="n">info</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Allow dictionary-like access to attributes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Attribute &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; not found in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve all PDE dataset information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+
+<div class="viewcode-block" id="PDEDataset">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PDEDataset</span><span class="p">(</span><span class="n">MetaData</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; </span>
+<span class="sd">    A class representing a Partial Differential Equation (PDE) dataset, providing data access </span>
+<span class="sd">    and analysis functionality.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="PDEDataset.__init__">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">equation_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">pde_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">domain</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">epi</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">x</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">usol</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">descr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DatasetInfo</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="c1"># N-D parameters</span>
+        <span class="n">fields_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coords_1d</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">axis_order</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">target_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span>
+        <span class="n">lhs_axis</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;t&quot;</span><span class="p">,</span>
+        <span class="n">param_fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the PDE dataset, supporting three input methods:</span>
+<span class="sd">        1. Providing data through the `pde_data` dictionary (legacy 2D).</span>
+<span class="sd">        2. Directly passing `x`, `t`, and `usol` arrays (legacy 2D).</span>
+<span class="sd">        3. Using `fields_data` + `coords_1d` for N-D structured grids.</span>
+
+<span class="sd">        :param equation_name: Name of the PDE.</span>
+<span class="sd">        :param pde_data: Optional dictionary containing &#39;x&#39;, &#39;t&#39;, and &#39;usol&#39; data.</span>
+<span class="sd">        :param domain: Dictionary defining the domain {variable: (min_value, max_value)}.</span>
+<span class="sd">        :param epi: Additional parameter.</span>
+<span class="sd">        :param x: Optional, spatial coordinate array (legacy 2D).</span>
+<span class="sd">        :param t: Optional, temporal coordinate array (legacy 2D).</span>
+<span class="sd">        :param usol: Optional, solution array u(x, t) (legacy 2D).</span>
+<span class="sd">        :param descr: Metadata containing information about the PDE.</span>
+<span class="sd">        :param fields_data: Dict mapping field names to N-D arrays (N-D mode).</span>
+<span class="sd">        :param coords_1d: Dict mapping axis names to 1D coordinate arrays (N-D mode).</span>
+<span class="sd">        :param axis_order: List of axis names defining array dimension order (N-D mode).</span>
+<span class="sd">        :param target_field: Name of the target field in fields_data (default: &quot;u&quot;).</span>
+<span class="sd">        :param lhs_axis: Axis for LHS derivative (default: &quot;t&quot;).</span>
+<span class="sd">        :param param_fields: Dict mapping parameter names to arrays with the same shape</span>
+<span class="sd">            as the target field. Parameters appear in discovered equations but are not</span>
+<span class="sd">            differentiated. For constant parameters use ``np.full_like(u, value)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">equation_name</span><span class="p">)</span>
+
+        <span class="c1"># Determine construction mode</span>
+        <span class="n">has_nd_data</span> <span class="o">=</span> <span class="n">fields_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">coords_1d</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">has_legacy_data</span> <span class="o">=</span> <span class="n">pde_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">usol</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">has_nd_data</span><span class="p">:</span>
+            <span class="c1"># N-D mode</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_nd_mode</span><span class="p">(</span>
+                <span class="n">fields_data</span><span class="o">=</span><span class="n">fields_data</span><span class="p">,</span>
+                <span class="n">coords_1d</span><span class="o">=</span><span class="n">coords_1d</span><span class="p">,</span>
+                <span class="n">axis_order</span><span class="o">=</span><span class="n">axis_order</span><span class="p">,</span>
+                <span class="n">target_field</span><span class="o">=</span><span class="n">target_field</span><span class="p">,</span>
+                <span class="n">lhs_axis</span><span class="o">=</span><span class="n">lhs_axis</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">has_legacy_data</span><span class="p">:</span>
+            <span class="c1"># Legacy 2D mode</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_legacy_mode</span><span class="p">(</span><span class="n">pde_data</span><span class="o">=</span><span class="n">pde_data</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">usol</span><span class="o">=</span><span class="n">usol</span><span class="p">)</span>
+            <span class="c1"># N-D attributes not set in legacy mode</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fields_data</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coords_1d</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">axis_order</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">target_field</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lhs_axis</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Either `pde_data`, `x/t/usol`, or `fields_data/coords_1d` must be provided.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Store parameter fields (non-differentiated variables).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">param_fields</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">param_fields</span><span class="p">:</span>
+            <span class="n">target_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="o">.</span><span class="n">shape</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">param_fields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target_shape</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;param_fields[&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;] shape </span><span class="si">{</span><span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not match &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;target field shape </span><span class="si">{</span><span class="n">target_shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">arr</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;param_fields[&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;] contains NaN or Inf values.&quot;</span>
+                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">param_fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">arr</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equation_name</span> <span class="o">=</span> <span class="n">equation_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">domain</span> <span class="o">=</span> <span class="n">domain</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epi</span> <span class="o">=</span> <span class="n">epi</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_legacy_mode</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pde_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">x</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">usol</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize in legacy 2D mode.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">pde_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;t&quot;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">usol</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usol&quot;</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">usol</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">usol</span><span class="p">))</span>
+
+        <span class="c1"># Validate shape</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;usol dimensions </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> do not match x </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span><span class="si">}</span><span class="s2"> and t </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_nd_mode</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">fields_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+        <span class="n">coords_1d</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+        <span class="n">axis_order</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+        <span class="n">target_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">lhs_axis</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize in N-D mode with validation.&quot;&quot;&quot;</span>
+        <span class="c1"># Validate required parameters</span>
+        <span class="k">if</span> <span class="n">fields_data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">coords_1d</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;N-D mode requires both fields_data and coords_1d.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">axis_order</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;axis_order is required for N-D mode.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Convert to numpy arrays</span>
+        <span class="n">fields_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fields_data</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">coords_1d</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">coords_1d</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">axis_order</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">axis_order</span><span class="p">)</span>
+
+        <span class="c1"># Validate fields_data is not empty</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields_data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;fields_data cannot be empty.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate axis_order is not empty</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis_order</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;axis_order cannot be empty.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate axis_order has no duplicates</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis_order</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">axis_order</span><span class="p">)):</span>
+            <span class="n">duplicates</span> <span class="o">=</span> <span class="p">[</span><span class="n">a</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">axis_order</span> <span class="k">if</span> <span class="n">axis_order</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;axis_order contains duplicate axes: </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">duplicates</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate axis_order matches coords_1d keys</span>
+        <span class="n">axis_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_order</span><span class="p">)</span>
+        <span class="n">coords_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">coords_1d</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">axis_set</span> <span class="o">!=</span> <span class="n">coords_set</span><span class="p">:</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="n">coords_set</span> <span class="o">-</span> <span class="n">axis_set</span>
+            <span class="n">extra</span> <span class="o">=</span> <span class="n">axis_set</span> <span class="o">-</span> <span class="n">coords_set</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;axis_order and coords_1d keys must match.&quot;</span>
+            <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; Missing in axis_order: </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; Extra in axis_order (not in coords_1d): </span><span class="si">{</span><span class="n">extra</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="c1"># Validate target_field exists</span>
+        <span class="k">if</span> <span class="n">target_field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fields_data</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;target_field &#39;</span><span class="si">{</span><span class="n">target_field</span><span class="si">}</span><span class="s2">&#39; not found in fields_data. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available fields: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">fields_data</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Validate lhs_axis exists (must be in axis_order, which equals coords_1d keys)</span>
+        <span class="k">if</span> <span class="n">lhs_axis</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_order</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;lhs_axis &#39;</span><span class="si">{</span><span class="n">lhs_axis</span><span class="si">}</span><span class="s2">&#39; must be in axis_order </span><span class="si">{</span><span class="n">axis_order</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Compute expected shape from axis_order</span>
+        <span class="n">expected_shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords_1d</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">axis_order</span><span class="p">)</span>
+
+        <span class="c1"># Validate all fields have consistent shape</span>
+        <span class="n">field_shapes</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">fields_data</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">unique_shapes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">field_shapes</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_shapes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;All fields must have the same shape. Got inconsistent shapes: </span><span class="si">{</span><span class="n">field_shapes</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Validate shape matches coords</span>
+        <span class="n">actual_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">unique_shapes</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">unique_shapes</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="k">if</span> <span class="n">actual_shape</span> <span class="o">!=</span> <span class="n">expected_shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Field shape </span><span class="si">{</span><span class="n">actual_shape</span><span class="si">}</span><span class="s2"> does not match expected shape </span><span class="si">{</span><span class="n">expected_shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;from coords_1d and axis_order.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Store N-D attributes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields_data</span> <span class="o">=</span> <span class="n">fields_data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coords_1d</span> <span class="o">=</span> <span class="n">coords_1d</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axis_order</span> <span class="o">=</span> <span class="n">axis_order</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_field</span> <span class="o">=</span> <span class="n">target_field</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lhs_axis</span> <span class="o">=</span> <span class="n">lhs_axis</span>
+
+        <span class="c1"># Set compatibility layer attributes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">coords_1d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span> <span class="o">=</span> <span class="n">coords_1d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;t&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usol</span> <span class="o">=</span> <span class="n">fields_data</span><span class="p">[</span><span class="n">target_field</span><span class="p">]</span>
+
+<div class="viewcode-block" id="PDEDataset.get_datapoint">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_datapoint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_datapoint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">t_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves the (x, t) coordinates and the corresponding solution value.</span>
+
+<span class="sd">        :param x_id: Index in the spatial dimension.</span>
+<span class="sd">        :param t_id: Index in the temporal dimension.</span>
+<span class="sd">        :return: A tuple (x, t, usol) representing the coordinates and solution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">x_id</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">t_id</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s2">&quot;Index out of range.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">x_id</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">[</span><span class="n">t_id</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">[</span><span class="n">x_id</span><span class="p">,</span> <span class="n">t_id</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.get_data">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_data">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the dataset information as a dictionary.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">,</span> <span class="s1">&#39;usol&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">}</span></div>
+
+        
+<div class="viewcode-block" id="PDEDataset.sample">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;random&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Samples a subset of the data points using different sampling methods.</span>
+
+<span class="sd">        :param n_samples: Number of samples to draw. If &lt; 1, treated as a ratio.</span>
+<span class="sd">        :param method: Sampling method to use (&#39;random&#39;, &#39;uniform&#39;, &#39;spline&#39;).</span>
+<span class="sd">        :return: A tuple (sampled_points, sampled_usol), where:</span>
+<span class="sd">                - sampled_points is an array of shape (n, 2) with (x, t) pairs</span>
+<span class="sd">                - sampled_usol is an array of shape (n,) with corresponding solution values</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">total_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">)</span>
+        
+        <span class="c1"># Convert ratio to absolute count if n_samples is a float &lt; 1</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">n_samples</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">total_points</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&gt;</span> <span class="n">total_points</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> samples, but only </span><span class="si">{</span><span class="n">total_points</span><span class="si">}</span><span class="s2"> points available.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;random&#39;</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">total_points</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">x_samples</span><span class="p">,</span> <span class="n">t_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">sampled_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">x_samples</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">[</span><span class="n">t_samples</span><span class="p">]))</span>
+            <span class="n">sampled_usol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">[</span><span class="n">x_samples</span><span class="p">,</span> <span class="n">t_samples</span><span class="p">]</span>
+
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;uniform&#39;</span><span class="p">:</span>
+            <span class="n">grid_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">))</span>
+            <span class="n">x_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">t_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">x_samples</span><span class="p">,</span> <span class="n">t_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x_indices</span><span class="p">,</span> <span class="n">t_indices</span><span class="p">)</span>
+            <span class="n">sampled_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">x_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">[</span><span class="n">t_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">()]</span>
+            <span class="p">))</span>
+            <span class="n">sampled_usol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">[</span><span class="n">x_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">t_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">()]</span>
+
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;spline&#39;</span><span class="p">:</span>
+            <span class="n">grid_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">))</span>
+            <span class="n">x_new</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">grid_size</span><span class="p">)</span>
+            <span class="n">t_new</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">grid_size</span><span class="p">)</span>
+            <span class="n">spline</span> <span class="o">=</span> <span class="n">interp2d</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s1">&#39;cubic&#39;</span><span class="p">)</span>
+            <span class="n">usol_new</span> <span class="o">=</span> <span class="n">spline</span><span class="p">(</span><span class="n">t_new</span><span class="p">,</span> <span class="n">x_new</span><span class="p">)</span>
+            <span class="n">x_samples</span><span class="p">,</span> <span class="n">t_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x_new</span><span class="p">,</span> <span class="n">t_new</span><span class="p">)</span>
+            <span class="n">sampled_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">x_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">t_samples</span><span class="o">.</span><span class="n">flatten</span><span class="p">()))</span>
+            <span class="n">sampled_usol</span> <span class="o">=</span> <span class="n">usol_new</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported sampling method: </span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">sampled_points</span><span class="p">,</span> <span class="n">sampled_usol</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="PDEDataset.mesh">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.mesh">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mesh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a 2D coordinate grid where each row is a combination of (x, t).</span>
+<span class="sd">        Equivalent to np.meshgrid(x, t) but flattened into a 2D array.</span>
+
+<span class="sd">        :return: A 2D array of shape (len(x) * len(t), 2) where each row is (x, t).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="n">indexing</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">X</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">T</span><span class="o">.</span><span class="n">ravel</span><span class="p">()])</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.mesh_bounds">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.mesh_bounds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mesh_bounds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="n">indexing</span><span class="p">)</span>
+        <span class="n">mesh_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">X</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">T</span><span class="o">.</span><span class="n">ravel</span><span class="p">()])</span>
+        <span class="k">return</span> <span class="n">mesh_data</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">mesh_data</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="PDEDataset.get_boundaries">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_boundaries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_boundaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the minimum and maximum values for coordinates.</span>
+
+<span class="sd">        In legacy 2D mode, returns {&#39;x&#39;: (min, max), &#39;t&#39;: (min, max)}.</span>
+<span class="sd">        In N-D mode, returns boundaries for all coords_1d axes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coords_1d</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># N-D mode: return boundaries for all axes</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">axis</span><span class="p">:</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span> <span class="nb">float</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">max</span><span class="p">()))</span>
+                <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">coords</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">coords_1d</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+        <span class="c1"># Legacy 2D mode</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span> <span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">())}</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.get_domain">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_domain">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_domain</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Retrieves the domain definition. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">domain</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.get_derivative">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_derivative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_derivative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;x&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Computes the derivative of `usol` along the spatial or temporal axis.</span>
+
+<span class="sd">        :param axis: Direction of differentiation (&#39;x&#39; or &#39;t&#39;).</span>
+<span class="sd">        :return: The computed derivative array.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">axis</span> <span class="o">==</span> <span class="s1">&#39;x&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">axis</span> <span class="o">==</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid axis name, must be &#39;x&#39; or &#39;t&#39;.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.get_range">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_range">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_range</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">t_range</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves subsets of x, t, and the corresponding solution within the specified range.</span>
+
+<span class="sd">        :param x_range: Tuple representing the range of x values (min_x, max_x).</span>
+<span class="sd">        :param t_range: Tuple representing the range of t values (min_t, max_t).</span>
+<span class="sd">        :return: A dictionary containing subsets of x, t, and usol.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">x_start</span><span class="p">,</span> <span class="n">x_end</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="p">[</span><span class="n">x_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">t_start</span><span class="p">,</span> <span class="n">t_end</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">,</span> <span class="p">[</span><span class="n">t_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">t_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">x_start</span><span class="p">:</span><span class="n">x_end</span><span class="p">],</span> 
+                <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="p">[</span><span class="n">t_start</span><span class="p">:</span><span class="n">t_end</span><span class="p">],</span> 
+                <span class="s1">&#39;usol&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">[</span><span class="n">x_start</span><span class="p">:</span><span class="n">x_end</span><span class="p">,</span> <span class="n">t_start</span><span class="p">:</span><span class="n">t_end</span><span class="p">]}</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.get_size">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.get_size">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Returns the dimensions of the solution array (x dimension, t dimension). &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="o">.</span><span class="n">shape</span></div>
+
+
+<div class="viewcode-block" id="PDEDataset.plot_solution">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.PDEDataset.plot_solution">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_solution</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generates a heatmap visualization of the solution `usol` over (x, t) dimensions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usol</span><span class="p">,</span> <span class="n">aspect</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span>
+                   <span class="n">extent</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">()])</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s1">&#39;Solution u(x, t)&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time (t)&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Space (x)&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Solution of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">equation_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Returns a string representation of the dataset. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PDEDataset(equation=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">equation_name</span><span class="si">}</span><span class="s2">&#39;, size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">get_size</span><span class="p">()</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;boundaries=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">get_boundaries</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span></div>
+
+        
+        
+<div class="viewcode-block" id="load_burgers_equation">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.load_burgers_equation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_burgers_equation</span><span class="p">():</span>    
+    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+        <span class="s2">&quot;load_burgers_equation() is deprecated; please use load_pde(&#39;burgers&#39;) instead.&quot;</span><span class="p">,</span>
+        <span class="ne">DeprecationWarning</span><span class="p">,</span>
+        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">descr</span> <span class="o">=</span> <span class="n">DatasetInfo</span><span class="p">(</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        Dataset for high-viscosity Burgers equation </span>
+<span class="s2">        ut=-uux+0.1uxx</span>
+<span class="s2">        x∈[-8.0,8.0), t∈[0,10]</span>
+<span class="s2">        nx=256, nt=201, u.shape=(256,201)</span>
+<span class="s2">        Resource:DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+    <span class="p">)</span>
+
+    <span class="n">file_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="n">DATA_MODULE</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;burgers2.mat&quot;</span>
+    <span class="n">pde_data</span> <span class="o">=</span> <span class="n">load_mat_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">PDEDataset</span><span class="p">(</span>
+        <span class="n">equation_name</span> <span class="o">=</span> <span class="s1">&#39;burgers equation&#39;</span><span class="p">,</span>
+        <span class="n">descr</span> <span class="o">=</span> <span class="n">descr</span><span class="p">,</span>
+        <span class="n">pde_data</span> <span class="o">=</span> <span class="n">pde_data</span><span class="p">,</span>
+        <span class="n">domain</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mf">7.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">),</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">9</span><span class="p">)},</span>
+        <span class="n">epi</span> <span class="o">=</span> <span class="mf">1e-3</span>
+    <span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="load_kdv_equation">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.load_kdv_equation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_kdv_equation</span><span class="p">():</span>
+    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+        <span class="s2">&quot;load_kdv_equation() is deprecated; please use load_pde(&#39;kdv&#39;) instead.&quot;</span><span class="p">,</span>
+        <span class="ne">DeprecationWarning</span><span class="p">,</span>
+        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">descr</span> <span class="o">=</span> <span class="n">DatasetInfo</span><span class="p">(</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        Dataset for Korteweg-De Vries (KdV) equation with sin initial condition, actually a standardized form of Kdv_equation dataset</span>
+<span class="s2">        ut=-uux-uxxx</span>
+<span class="s2">        x∈[-20,20), t∈[0,40]</span>
+<span class="s2">        nx=256, nt=201, u.shape=(256,201)</span>
+<span class="s2">        Resource: PDE-READ: Human-readable Partial Differential Equation Discovery using Deep Learning, pp20</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+    <span class="p">)</span>
+
+    <span class="n">file_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="n">DATA_MODULE</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;KdV_equation.mat&quot;</span>
+    <span class="n">pde_data</span> <span class="o">=</span> <span class="n">load_mat_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">PDEDataset</span><span class="p">(</span>
+        <span class="n">equation_name</span> <span class="o">=</span> <span class="s1">&#39;kdv equation&#39;</span><span class="p">,</span>
+        <span class="n">descr</span> <span class="o">=</span> <span class="n">descr</span><span class="p">,</span>
+        <span class="n">pde_data</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">pde_data</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">],</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">pde_data</span><span class="p">[</span><span class="s1">&#39;tt&#39;</span><span class="p">],</span>
+        <span class="n">usol</span> <span class="o">=</span> <span class="n">pde_data</span><span class="p">[</span><span class="s1">&#39;uu&#39;</span><span class="p">],</span>
+        <span class="n">domain</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">35</span><span class="p">)},</span>
+        <span class="n">epi</span> <span class="o">=</span> <span class="mf">1e-3</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="load_pde_dataset">
+<a class="viewcode-back" href="../../../api.html#kd.dataset.load_pde_dataset">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_pde_dataset</span><span class="p">(</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">equation_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;PDE Dataset&#39;</span><span class="p">,</span>
+    <span class="n">x_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span>
+    <span class="n">t_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;t&#39;</span><span class="p">,</span>
+    <span class="n">u_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;usol&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">epi</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+    <span class="n">data_dir_module</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;kd.dataset.data&quot;</span>
+    <span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convenience loader for PDE data stored in a MATLAB ``.mat`` file.</span>
+
+<span class="sd">    This helper constructs the full file path, reads the ``.mat`` file into a</span>
+<span class="sd">    dictionary, extracts the coordinate and solution arrays using the provided</span>
+<span class="sd">    keys, normalises shapes, and wraps everything into a :class:`PDEDataset`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        filename: Name of the ``.mat`` file to load (e.g. ``\&quot;my_data.mat\&quot;``).</span>
+<span class="sd">        equation_name: Human-readable name for this dataset.</span>
+<span class="sd">        x_key: Key for the spatial coordinate in the ``.mat`` dictionary,</span>
+<span class="sd">            default is ``\&quot;x\&quot;``.</span>
+<span class="sd">        t_key: Key for the temporal coordinate, default is ``\&quot;t\&quot;``.</span>
+<span class="sd">        u_key: Key for the solution field, default is ``\&quot;usol\&quot;``.</span>
+<span class="sd">        domain: Optional analysis domain, e.g. ``{&#39;x&#39;: (min_x, max_x), &#39;t&#39;: (min_t, max_t)}``.</span>
+<span class="sd">        epi: Recommended sparsity penalty for this dataset, default ``1e-3``.</span>
+<span class="sd">        data_dir_module: Module path where data files are stored, default</span>
+<span class="sd">            ``\&quot;kd.dataset.data\&quot;``.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        PDEDataset: A fully initialised dataset object that can be used by all</span>
+<span class="sd">        KD models.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># 1. 自动构建文件的完整路径</span>
+        <span class="n">file_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="n">data_dir_module</span><span class="p">)</span> <span class="o">/</span> <span class="n">filename</span>
+        
+        <span class="c1"># 2. 使用底层的加载器读取 .mat 文件</span>
+        <span class="n">pde_data</span> <span class="o">=</span> <span class="n">load_mat_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+
+        <span class="c1"># 3. 使用用户指定的键名，从加载的字典中提取数据</span>
+        <span class="n">x_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="p">[</span><span class="n">x_key</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">t_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="p">[</span><span class="n">t_key</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">u_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">pde_data</span><span class="p">[</span><span class="n">u_key</span><span class="p">])</span>
+
+        <span class="c1"># 确保 u_data 的形状与 (len(x), len(t)) 对齐</span>
+        <span class="k">if</span> <span class="n">u_data</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t_data</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_data</span><span class="p">)):</span>
+            <span class="n">u_data</span> <span class="o">=</span> <span class="n">u_data</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="c1"># 4. 将所有信息送入 PDEDataset 进行标准化封装</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">PDEDataset</span><span class="p">(</span>
+            <span class="n">equation_name</span><span class="o">=</span><span class="n">equation_name</span><span class="p">,</span>
+            <span class="n">pde_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+            <span class="n">x</span><span class="o">=</span><span class="n">x_data</span><span class="p">,</span>
+            <span class="n">t</span><span class="o">=</span><span class="n">t_data</span><span class="p">,</span>
+            <span class="n">usol</span><span class="o">=</span><span class="n">u_data</span><span class="p">,</span>
+            <span class="n">domain</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span> 
+            <span class="n">epi</span><span class="o">=</span><span class="n">epi</span>
+        <span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;成功加载数据集: </span><span class="si">{</span><span class="n">equation_name</span><span class="si">}</span><span class="s2">，文件: </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataset</span>
+
+    <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;错误: 在默认数据目录中未找到文件 </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;错误: 文件 </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> 中缺少必需的键: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">。请检查您传入的 x_key, t_key, u_key 参数是否正确。&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;错误: 加载或处理文件时发生未知错误: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>

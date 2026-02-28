@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.viz.api &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.viz.api</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;High-level helper functions for KD visualization intents.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">VizRequest</span><span class="p">,</span> <span class="n">VizResult</span><span class="p">,</span> <span class="n">render</span>
+
+
+<div class="viewcode-block" id="plot_training_curve">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_training_curve">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_training_curve</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot the training loss curve for a model, if available.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;training_curve&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_validation_curve">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_validation_curve">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_validation_curve</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot the validation loss curve for a model, if available.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;validation_curve&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_search_evolution">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_search_evolution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_search_evolution</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Visualise the symbolic search or evolution history for a model.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;search_evolution&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_optimization">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_optimization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_optimization</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Visualise optimisation history (e.g. objective vs. iteration).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;optimization&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_time_slices">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_time_slices">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_time_slices</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">x_coords</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">t_coords</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">true_field</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">predicted_field</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">slice_times</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">spatial_coords</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot time slices of a 2D field at selected times.&quot;&quot;&quot;</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spatial_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;spatial_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spatial_coords</span>
+    <span class="k">if</span> <span class="n">x_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;x_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_coords</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;t_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t_coords</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;true_field&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">true_field</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;predicted_field&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predicted_field</span>
+    <span class="k">if</span> <span class="n">slice_times</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;slice_times&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">slice_times</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;time_slices&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="render_equation">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.render_equation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">render_equation</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render the discovered equation as a LaTeX image.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;equation&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_residuals">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_residuals">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_residuals</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">actual</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">predicted</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">coordinates</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot residuals between ``actual`` and ``predicted`` values.&quot;&quot;&quot;</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;actual&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">actual</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;predicted&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predicted</span>
+    <span class="k">if</span> <span class="n">coordinates</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;coordinates&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coordinates</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;residual&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_field_comparison">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_field_comparison">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_field_comparison</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">x_coords</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">t_coords</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">true_field</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">predicted_field</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">residual_field</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">spatial_coords</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare true and predicted 2D fields, optionally with residuals.&quot;&quot;&quot;</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spatial_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;spatial_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spatial_coords</span>
+    <span class="k">if</span> <span class="n">x_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;x_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_coords</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;t_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t_coords</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;true_field&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">true_field</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;predicted_field&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predicted_field</span>
+    <span class="k">if</span> <span class="n">residual_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;residual_field&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">residual_field</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;field_comparison&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_derivative_relationships">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_derivative_relationships">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_derivative_relationships</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">top_n_terms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot relationships between derivative terms for PDE models.&quot;&quot;&quot;</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;top_n_terms&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">top_n_terms</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;derivative_relationships&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="plot_parity">
+<a class="viewcode-back" href="../../../api.html#kd.viz.api.plot_parity">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_parity</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate a parity plot comparing predictions and targets.&quot;&quot;&quot;</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">title</span>
+    <span class="k">return</span> <span class="n">_dispatch</span><span class="p">(</span><span class="s1">&#39;parity&#39;</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">show_info</span><span class="o">=</span><span class="n">show_info</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dispatch</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show_info</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">VizResult</span><span class="p">:</span>
+    <span class="n">request</span> <span class="o">=</span> <span class="n">VizRequest</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">kind</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">show_info</span><span class="p">:</span>
+        <span class="n">_emit_info</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_emit_info</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">VizResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">warnings</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[kd.viz.</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">] warning: </span><span class="si">{</span><span class="s1">&#39;; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">warnings</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">paths</span><span class="p">:</span>
+        <span class="n">joined</span> <span class="o">=</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">paths</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[kd.viz.</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">] saved: </span><span class="si">{</span><span class="n">joined</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">result</span><span class="o">.</span><span class="n">figure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[kd.viz.</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">] figure ready&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[kd.viz.</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">] produced no output&quot;</span><span class="p">)</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;plot_training_curve&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_validation_curve&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_search_evolution&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_optimization&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_residuals&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_field_comparison&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_time_slices&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_derivative_relationships&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;plot_parity&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;render_equation&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
