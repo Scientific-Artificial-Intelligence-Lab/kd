@@ -10,7 +10,7 @@ import numpy as np
 
 from .pde import evaluate_mse
 
-_DEFAULT_TOL = 1e-6
+_DEFAULT_TOL = 1e-5
 
 
 @dataclass
@@ -284,13 +284,15 @@ def _combine_node(name: str, children: Sequence[str], *, notation: str = "subscr
         var = _render_derivative_variable(children)
         operand = children[0]
         if notation == "subscript":
-            return f"{operand}_{{{var}}}"
+            merged = _merge_subscript(operand, var)
+            return merged if merged is not None else f"{operand}_{{{var}}}"
         return f"\\frac{{\\partial {operand}}}{{\\partial {var}}}"
     if name == 'd^2':
         var = _render_derivative_variable(children)
         operand = children[0]
         if notation == "subscript":
-            return f"{operand}_{{{var}{var}}}"
+            merged = _merge_subscript(operand, var + var)
+            return merged if merged is not None else f"{operand}_{{{var}{var}}}"
         return f"\\frac{{\\partial^{{2}} {operand}}}{{\\partial {var}^{{2}}}}"
     if not children:
         return name
@@ -301,6 +303,36 @@ def _render_derivative_variable(children: Sequence[str]) -> str:
     if len(children) < 2:
         return 'x'
     return children[1]
+
+
+def _merge_subscript(operand: str, new_sub: str) -> str | None:
+    """Merge new subscript into existing one: u_{x} + 'x' -> u_{xx}.
+
+    Only merges when operand strictly ends with ``_{...}`` (no trailing
+    superscript like ``^{2}`` or other braces).  Returns *None* when
+    merging is unsafe so the caller falls through to the normal path.
+    """
+    idx = operand.rfind('_{')
+    if idx < 0:
+        return None
+    # Ensure the closing brace of the subscript is the very last character.
+    # Walk from idx+2, counting brace depth, to find the matching '}'.
+    depth = 0
+    close = -1
+    for i in range(idx + 1, len(operand)):
+        if operand[i] == '{':
+            depth += 1
+        elif operand[i] == '}':
+            depth -= 1
+            if depth == 0:
+                close = i
+                break
+    if close != len(operand) - 1:
+        # Subscript brace closes before end (e.g. u_{x}^{2}) — unsafe to merge.
+        return None
+    existing_sub = operand[idx + 2:close]
+    base = operand[:idx]
+    return f"{base}_{{{existing_sub}{new_sub}}}"
 
 
 def _ensure_group(expr: str) -> str:

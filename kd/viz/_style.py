@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import matplotlib
 
@@ -33,7 +33,7 @@ _CONFIG = VizConfig()
 def configure(
     *,
     style: Optional[Dict[str, Any]] = None,
-    save_dir: Optional[Path] = None,
+    save_dir: Union[str, Path, None] = None,
     backend: Optional[str] = None,
 ) -> VizConfig:
     if style is not None:

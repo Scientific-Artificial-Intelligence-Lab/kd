@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 from kd.model.sga.sgapde.equation import (
     _combine_node,
+    _merge_subscript,
     _render_tree,
     sga_equation_to_latex,
     SGAEquationDetails,
@@ -44,6 +45,28 @@ def _make_tree_d2_u_x():
     leaf_u = _make_mock_node('u')
     leaf_x = _make_mock_node('x')
     tree_obj = SimpleNamespace(tree=[[root], [leaf_u, leaf_x]])
+    return tree_obj
+
+
+def _make_tree_d_d_u_x_x():
+    """Build a nested tree: d(d(u, x), x) -- nested first-order derivatives."""
+    root = _make_mock_node('d', child_num=2, child_st=0)
+    inner_d = _make_mock_node('d', child_num=2, child_st=0)
+    leaf_x_outer = _make_mock_node('x')
+    leaf_u = _make_mock_node('u')
+    leaf_x_inner = _make_mock_node('x')
+    tree_obj = SimpleNamespace(tree=[[root], [inner_d, leaf_x_outer], [leaf_u, leaf_x_inner]])
+    return tree_obj
+
+
+def _make_tree_d2_d_u_x_y():
+    """Build a nested tree: d^2(d(u, x), y) -- mixed partial derivative."""
+    root = _make_mock_node('d^2', child_num=2, child_st=0)
+    inner_d = _make_mock_node('d', child_num=2, child_st=0)
+    leaf_y = _make_mock_node('y')
+    leaf_u = _make_mock_node('u')
+    leaf_x = _make_mock_node('x')
+    tree_obj = SimpleNamespace(tree=[[root], [inner_d, leaf_y], [leaf_u, leaf_x]])
     return tree_obj
 
 
@@ -127,6 +150,83 @@ class TestCombineNode:
 
 
 # ===========================================================================
+# 1b. _merge_subscript unit tests
+# ===========================================================================
+
+class TestMergeSubscript:
+    """Unit tests for _merge_subscript helper."""
+
+    def test_merge_single_to_single(self):
+        """u_{x} + 'x' -> u_{xx}"""
+        assert _merge_subscript('u_{x}', 'x') == 'u_{xx}'
+
+    def test_merge_single_to_double(self):
+        """u_{xx} + 'x' -> u_{xxx}"""
+        assert _merge_subscript('u_{xx}', 'x') == 'u_{xxx}'
+
+    def test_merge_different_vars(self):
+        """u_{x} + 'yy' -> u_{xyy}"""
+        assert _merge_subscript('u_{x}', 'yy') == 'u_{xyy}'
+
+    def test_no_subscript_returns_none(self):
+        """Plain 'u' has no subscript to merge into."""
+        assert _merge_subscript('u', 'x') is None
+
+    def test_no_brace_returns_none(self):
+        """Expression without closing brace returns None."""
+        assert _merge_subscript('abc', 'x') is None
+
+
+class TestCombineNodeNestedDerivatives:
+    """Unit tests for _combine_node with nested derivative subscripts."""
+
+    def test_d_on_subscripted_operand(self):
+        """d(u_{x}, x) should merge to u_{xx}, not u_{x}_{x}"""
+        result = _combine_node('d', ['u_{x}', 'x'], notation='subscript')
+        assert result == 'u_{xx}'
+        assert '_{' not in result.replace('u_{xx}', '')  # no double subscript
+
+    def test_d2_on_subscripted_operand(self):
+        """d^2(u_{x}, y) should merge to u_{xyy}"""
+        result = _combine_node('d^2', ['u_{x}', 'y'], notation='subscript')
+        assert result == 'u_{xyy}'
+
+    def test_d_on_plain_operand_unchanged(self):
+        """d(u, x) still produces u_{x} as before."""
+        result = _combine_node('d', ['u', 'x'], notation='subscript')
+        assert result == 'u_{x}'
+
+    def test_leibniz_not_affected(self):
+        r"""Leibniz notation should NOT merge subscripts."""
+        result = _combine_node('d', ['u_{x}', 'x'], notation='leibniz')
+        assert r'\frac{\partial u_{x}}{\partial x}' == result
+
+    def test_d_on_squared_operand(self):
+        """d(u^{2}, x) -- operand ends with } but is NOT a subscript."""
+        result = _combine_node('d', ['u^{2}', 'x'], notation='subscript')
+        assert '_{' not in result or result.count('_{') == 1
+        # Should NOT corrupt the ^{2}: must produce u^{2}_{x} or similar valid form
+        assert '^{2}' in result
+
+    def test_d_on_subscripted_and_squared_operand(self):
+        """d(u_{x}^{2}, x) -- must not corrupt the superscript."""
+        result = _combine_node('d', ['u_{x}^{2}', 'x'], notation='subscript')
+        # Must not produce broken LaTeX like u_{x}^{2x}
+        assert '}^{2' not in result.replace('u_{x}^{2}', '') or 'u_{xx}^{2}' in result
+
+    def test_d_on_frac_operand(self):
+        r"""d(\frac{u}{x}, y) -- frac ends with } but is not a subscript."""
+        result = _combine_node('d', [r'\frac{u}{x}', 'y'], notation='subscript')
+        assert r'\frac{u}{x}' in result  # frac preserved
+        assert '_{y}' in result  # subscript appended
+
+    def test_d_on_parenthesized_operand(self):
+        """d((u + x), y) -- parenthesized operand, no merge."""
+        result = _combine_node('d', ['(u + x)', 'y'], notation='subscript')
+        assert result == '(u + x)_{y}'
+
+
+# ===========================================================================
 # 2. _render_tree integration tests
 # ===========================================================================
 
@@ -163,6 +263,34 @@ class TestRenderTree:
         tree = _make_tree_d_u_x()
         result = _render_tree(tree)
         assert result == 'u_{x}'
+
+    def test_nested_d_d_u_x_x_subscript(self):
+        """d(d(u, x), x) tree should produce u_{xx}, not u_{x}_{x}."""
+        tree = _make_tree_d_d_u_x_x()
+        result = _render_tree(tree, notation='subscript')
+        assert result == 'u_{xx}'
+
+    def test_nested_d2_d_u_x_y_subscript(self):
+        """d^2(d(u, x), y) tree should produce u_{xyy}."""
+        tree = _make_tree_d2_d_u_x_y()
+        result = _render_tree(tree, notation='subscript')
+        assert result == 'u_{xyy}'
+
+    def test_triple_nested_d_subscript(self):
+        """d(d(d(u, x), y), z) tree should produce u_{xyz}."""
+        # Build 4-level tree: d -> d -> d -> u, with axis leaves x, y, z
+        root = _make_mock_node('d', child_num=2, child_st=0)
+        mid = _make_mock_node('d', child_num=2, child_st=0)
+        leaf_z = _make_mock_node('z')
+        inner = _make_mock_node('d', child_num=2, child_st=0)
+        leaf_y = _make_mock_node('y')
+        leaf_u = _make_mock_node('u')
+        leaf_x = _make_mock_node('x')
+        tree_obj = SimpleNamespace(tree=[
+            [root], [mid, leaf_z], [inner, leaf_y], [leaf_u, leaf_x],
+        ])
+        result = _render_tree(tree_obj, notation='subscript')
+        assert result == 'u_{xyz}'
 
 
 # ===========================================================================

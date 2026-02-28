@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 from . import registry
 from ._contracts import (
@@ -57,7 +57,7 @@ class VizContext:
 def configure(
     *,
     style: Optional[Dict[str, Any]] = None,
-    save_dir: Optional[Path] = None,
+    save_dir: Union[str, Path, None] = None,
     backend: Optional[str] = None,
 ) -> VizConfig:
     return configure_style(style=style, save_dir=save_dir, backend=backend)

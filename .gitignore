@@ -236,6 +236,10 @@ ref_*/
 outputs/
 tests/verify_examples/
 
+# Generated output directories from model runs
+dscv/
+sga/
+
 # Session progress (local only)
 PROGRESS.md
 LEARNINGS.md

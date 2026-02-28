@@ -1,17 +1,10 @@
-"""Smoke tests for N-D example scripts.
+"""Smoke tests for N-D example workflows.
 
-These tests verify that the 6 N-D example scripts run without error.
+These tests verify that the N-D data workflows (now consolidated into
+sga_example.py, dscv_example.py, dscv_spr_example.py) run without error.
 Rather than running scripts as subprocesses, we replicate the core
 workflow (dataset creation -> model import -> short train) directly,
 similar to how test_examples_smoke.py works for registered datasets.
-
-Covers:
-- kd_sga_nd_example.py
-- kd_dscv_nd_example.py
-- kd_dscvspr_nd_example.py
-- kd_sga_nd_viz_api_example.py     (new)
-- kd_dscv_nd_viz_api_example.py    (new)
-- kd_dscvspr_nd_viz_api_example.py (new)
 """
 
 from __future__ import annotations

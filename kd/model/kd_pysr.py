@@ -17,15 +17,11 @@ import numpy as np
 
 from ..base import BaseEstimator
 
-try:  # 惰性导入，避免在未安装 pysr 时影响整个 KD
-    # juliacall crashes (SIGABRT) if torch is already loaded.
-    # Setting this env var before import lets Julia coexist with torch.
-    # See: https://github.com/pytorch/pytorch/issues/78829
-    import os as _os
-    _os.environ.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")
-    from pysr import PySRRegressor  # type: ignore
-except Exception:  # pragma: no cover - 在未安装 pysr 的环境下走这里
-    PySRRegressor = None  # type: ignore
+# juliacall crashes (SIGABRT) if torch is already loaded at module level.
+# PySR import is deferred to _ensure_backend_available() to avoid triggering
+# Julia init when this module is loaded as a side-effect of `import kd.model`.
+# See: https://github.com/pytorch/pytorch/issues/78829
+_PySRRegressor = None  # Populated lazily by _ensure_backend_available().
 
 
 class KD_PySR(BaseEstimator):
@@ -82,15 +78,31 @@ class KD_PySR(BaseEstimator):
     # Internal helpers
     # ------------------------------------------------------------------
     def _ensure_backend_available(self) -> None:
-        """Ensure that PySR backend is available."""
-        if PySRRegressor is None:
+        """Ensure that PySR backend is available.
+
+        The actual ``import pysr`` is deferred to this method (rather than
+        module level) because juliacall crashes with SIGABRT when torch has
+        already been loaded.  By the time this method runs the caller has
+        explicitly chosen to use PySR so the Julia init is intentional.
+        """
+        global _PySRRegressor
+        if _PySRRegressor is not None:
+            return
+
+        import os as _os
+        _os.environ.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")
+
+        try:
+            from pysr import PySRRegressor  # type: ignore
+            _PySRRegressor = PySRRegressor
+        except Exception as exc:
             raise RuntimeError(
                 "KD_PySR requires the 'pysr' package and its dependencies "
                 "(including a working Julia environment). "
                 "No pysr installation was detected in this environment. "
                 "Please install it via `pip install kd[pysr]` or "
-                "`pip install pysr`."
-            )
+                f"`pip install pysr`.  Original error: {exc}"
+            ) from exc
 
     def _build_backend(self) -> Any:
         """Construct the underlying PySRRegressor instance."""
@@ -103,7 +115,7 @@ class KD_PySR(BaseEstimator):
             kwargs["unary_operators"] = self.unary_operators
         kwargs.update(self.extra_model_kwargs)
 
-        return PySRRegressor(**kwargs)  # type: ignore[call-arg]
+        return _PySRRegressor(**kwargs)  # type: ignore[call-arg]
 
     def _update_equation_info(self) -> None:
         """Extract the best equation and SymPy expression from the PySR model."""

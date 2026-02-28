@@ -134,6 +134,13 @@ class DSCVVizAdapter:
             )
 
         epoches = ctx.options.get('epoches')
+        max_curves = max(1, ctx.options.get('max_curves', 10))
+        if epoches is None and len(history) > max_curves:
+            # Auto-sample epochs to avoid legend overflow.
+            step = max(1, len(history) // max_curves)
+            epoches = list(range(0, len(history), step))
+            if (len(history) - 1) not in epoches:
+                epoches.append(len(history) - 1)
         data = history if epoches is None else [history[i] for i in epoches if i < len(history)]
         if not data:
             return VizResult(intent='density', warnings=['No data available for requested epochs.'])

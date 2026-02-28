@@ -89,7 +89,7 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 </tr>
 </table>
 
-See [`examples/`](examples/) for 14+ runnable scripts covering every model and
+See [`examples/`](examples/) for runnable scripts covering every model and
 visualisation mode.
 
 ## Built-in Datasets
