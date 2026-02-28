@@ -70,7 +70,7 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 
 | Class | Description |
 |-------|-------------|
-| **KD_SGA** | PDE discovery via sparse genetic algorithm |
+| **KD_SGA** | PDE discovery via symbolic genetic algorithm |
 | **KD_DLGA** | PDE discovery via deep-learning genetic algorithm |
 | **KD_DSCV** | PDE discovery via reinforcement learning and sparse regression |
 | **KD_DSCV_SPR** | DSCV variant with PINN for sparse / noisy data |

@@ -5,8 +5,8 @@ KD provides several PDE-focused symbolic discovery backends. All share a
 unified data entry point via :class:`kd.dataset.PDEDataset` and the
 ``fit_dataset()`` interface.
 
-KD_SGA — Sparse Genetic Algorithm
-----------------------------------
+KD_SGA — Symbolic Genetic Algorithm
+------------------------------------
 
 Evolves expression trees and uses STRidge (Sequential Thresholded Ridge
 Regression) to fit sparse coefficients. Fast, interpretable, with built-in
