@@ -41,7 +41,7 @@ class KD_SGA(BaseEstimator):
         lhs_axis: Optional[str] = None,
         primary_spatial_axis: Optional[str] = None,
     ):
-        """Initialise a KD_SGA solver.
+        """Initialize a KD_SGA solver.
 
         All parameters correspond directly to fields in
         :class:`sgapde.config.SolverConfig`.
@@ -197,7 +197,7 @@ class KD_SGA(BaseEstimator):
         return self
 
     def plot_results(self):
-        """Invoke the legacy ``sgapde`` visualiser for built-in benchmarks.
+        """Invoke the legacy ``sgapde`` visualizer for built-in benchmarks.
 
         This is kept for backwards compatibility and only works for the three
         supported benchmarks (Chafee–Infante, Burgers, KdV). For new and

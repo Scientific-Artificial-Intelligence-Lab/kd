@@ -713,7 +713,7 @@ def load_pde_dataset(
 
     This helper constructs the full file path, reads the ``.mat`` file into a
     dictionary, extracts the coordinate and solution arrays using the provided
-    keys, normalises shapes, and wraps everything into a :class:`PDEDataset`.
+    keys, normalizes shapes, and wraps everything into a :class:`PDEDataset`.
 
     Args:
         filename: Name of the ``.mat`` file to load (e.g. ``\"my_data.mat\"``).
@@ -728,7 +728,7 @@ def load_pde_dataset(
             ``\"kd.dataset.data\"``.
 
     Returns:
-        PDEDataset: A fully initialised dataset object that can be used by all
+        PDEDataset: A fully initialized dataset object that can be used by all
         KD models.
     """
     try:

@@ -1,4 +1,4 @@
-"""PySR visualisation adapter: equation / parity / residual."""
+"""PySR visualization adapter: equation / parity / residual."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ..equation_renderer import render_latex_to_image
 
 
 class PySRVizAdapter:
-    """Minimal visualisation adapter for PySR.
+    """Minimal visualization adapter for PySR.
 
     Supported intents:
 

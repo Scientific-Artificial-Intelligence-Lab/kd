@@ -11,9 +11,9 @@ Discover the governing partial differential equations hidden in your data — au
 ---
 
 KD is a modular toolkit for symbolic equation discovery, with a strong focus on
-partial differential equations (PDEs). It ships four complementary discovery
+partial differential equations (PDEs). It ships several complementary discovery
 engines, a unified dataset interface, and built-in publication-quality
-visualisation.
+visualization.
 
 ## Highlights
 
@@ -21,7 +21,7 @@ visualisation.
   reinforcement learning, and physics-informed neural networks
 - **Unified `PDEDataset`** — load built-in benchmarks in one line or bring your
   own gridded data
-- **Built-in visualisation** — discovered equations, field comparisons, residual
+- **Built-in visualization** — discovered equations, field comparisons, residual
   diagnostics, expression trees, and more
 - **N-D support** — works with 1-D, 2-D, and 3-D spatial data out of the box
 
@@ -38,7 +38,7 @@ pip install -e .
 pip install 'kd[pysr]'
 ```
 
-### Discover a PDE in 3 lines
+### Discover a PDE in a few lines
 
 ```python
 from kd.dataset import load_pde
@@ -50,7 +50,7 @@ model.fit_dataset(dataset)
 print(model.equation_latex())  # u_t = -1.001 u_x u + 0.100 u_xx
 ```
 
-### Visualise results
+### Visualize results
 
 ```python
 from kd.viz import configure, render_equation, plot_field_comparison
@@ -90,7 +90,7 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 </table>
 
 See [`examples/`](examples/) for runnable scripts covering every model and
-visualisation mode.
+visualization mode.
 
 ## Built-in Datasets
 
@@ -125,7 +125,7 @@ kd/
 ├── base.py        # Shared estimator base class
 ├── dataset/       # PDEDataset, registry, loaders
 ├── model/         # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR
-├── viz/           # Unified visualisation facade
+├── viz/           # Unified visualization facade
 └── utils/         # Logging, FD helpers, solver utilities
 ```
 

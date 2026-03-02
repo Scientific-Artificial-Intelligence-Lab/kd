@@ -12,7 +12,7 @@ class KD_DLGA(DLGA):
     """User-friendly KD wrapper around the DLGA model.
 
     This class exposes a scikit-learn–style interface and integrates
-    with KD's dataset and visualisation utilities.
+    with KD's dataset and visualization utilities.
     """
 
     def __init__(self, operators: list[str], epi: float, input_dim: int, verbose: bool = True, **kwargs):

@@ -18,12 +18,12 @@ def plot_validation_curve(model: Any, *, show_info: bool = True, **options: Any)
 
 
 def plot_search_evolution(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
-    """Visualise the symbolic search or evolution history for a model."""
+    """Visualize the symbolic search or evolution history for a model."""
     return _dispatch('search_evolution', model, show_info=show_info, options=options)
 
 
 def plot_optimization(model: Any, *, show_info: bool = True, **options: Any) -> VizResult:
-    """Visualise optimisation history (e.g. objective vs. iteration)."""
+    """Visualize optimization history (e.g. objective vs. iteration)."""
     return _dispatch('optimization', model, show_info=show_info, options=options)
 
 

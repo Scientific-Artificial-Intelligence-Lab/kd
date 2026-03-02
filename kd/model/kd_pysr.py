@@ -50,7 +50,7 @@ class KD_PySR(BaseEstimator):
         :class:`pysr.PySRRegressor`.
 
         Args:
-            niterations: Number of PySR optimisation iterations (``niterations``).
+            niterations: Number of PySR optimization iterations (``niterations``).
             binary_operators: List of binary operators passed to
                 ``binary_operators``.
             unary_operators: List of unary operators passed to
@@ -59,7 +59,7 @@ class KD_PySR(BaseEstimator):
                 underlying :class:`pysr.PySRRegressor`.
         """
         # Do not call BaseEstimator.__init__ to avoid accessing attributes
-        # before they are initialised.
+        # before they are initialized.
         self.niterations = int(niterations)
         self.binary_operators = list(binary_operators) if binary_operators is not None else None
         self.unary_operators = list(unary_operators) if unary_operators is not None else None
