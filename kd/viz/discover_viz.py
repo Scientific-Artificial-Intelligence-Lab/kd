@@ -69,7 +69,7 @@ def plot_evolution(model, figsize=(10, 6), output_dir: str = None):
     Plot reward changes during training.
 
     Parameters:
-        model: Trained KD_DSCV model.
+        model: Trained KD_Discover model.
         figsize (tuple, optional): Figure size.
         output_dir (str, optional): Directory to save the figure.
     """
@@ -463,7 +463,7 @@ def plot_actual_vs_predicted(model, best_program, output_dir: str = None):
     Plots an "Actual vs. Predicted" scatter plot with a 45-degree reference line.
 
     Args:
-        model: The trained KD_DSCV model instance.
+        model: The trained KD_Discover model instance.
         best_program: The final Program object discovered by the model.
         output_dir: Directory to save the figure.
     """
@@ -505,11 +505,11 @@ def plot_actual_vs_predicted(model, best_program, output_dir: str = None):
 
 
 
-# --- 专为 KD_DSCV_Pinn 模型设计的可视化函数 ---
+# --- 专为 KD_Discover_SPR 模型设计的可视化函数 ---
 
 # def _calculate_pinn_fields(model, best_program):
 #     """
-#     一个专为 KD_DSCV_Pinn 模型设计的私有核心计算函数。
+#     一个专为 KD_Discover_SPR 模型设计的私有核心计算函数。
 #     """
 #     # 1. 获取数据源
 #     task = Program.task
@@ -554,7 +554,7 @@ def plot_actual_vs_predicted(model, best_program, output_dir: str = None):
 
 def _calculate_pinn_fields(model, best_program):
     """
-    一个专为 KD_DSCV_Pinn 模型设计的、统一的私有核心计算函数。
+    一个专为 KD_Discover_SPR 模型设计的、统一的私有核心计算函数。
     支持 1D 和 N-D spatial。
     """
     # 1. 触发奖励计算以填充缓存
@@ -613,11 +613,11 @@ def _calculate_pinn_fields(model, best_program):
 
 def plot_spr_residual_analysis(model, best_program, output_dir: str = None):
     """
-    计算并可视化 KD_DSCV_Pinn 模型的物理残差。
+    计算并可视化 KD_Discover_SPR 模型的物理残差。
     这个版本专门处理由 PINN 生成的稀疏/散点元数据。
 
     Args:
-        model: 训练完成的 KD_DSCV_Pinn 模型实例。
+        model: 训练完成的 KD_Discover_SPR 模型实例。
         best_program: 模型发现的最佳 Program 对象。
         output_dir: Directory to save the figure.
     """
@@ -663,7 +663,7 @@ def plot_spr_residual_analysis(model, best_program, output_dir: str = None):
 
 def plot_spr_actual_vs_predicted(model, best_program, output_dir: str = None):
     """
-    为 KD_DSCV_Pinn 模型绘制"真值 vs. 预测值"的45度线图
+    为 KD_Discover_SPR 模型绘制"真值 vs. 预测值"的45度线图
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -702,7 +702,7 @@ def plot_spr_actual_vs_predicted(model, best_program, output_dir: str = None):
 
 def plot_spr_field_comparison(model, best_program, output_dir: str = None):
     """
-    为 KD_DSCV_Pinn 模型计算并可视化"预测场"与"真实场"的对比图。
+    为 KD_Discover_SPR 模型计算并可视化"预测场"与"真实场"的对比图。
     注意：此函数使用三角剖分来可视化稀疏散点数据
     """
     import logging

@@ -18,7 +18,7 @@ _MIN_SPATIAL_POINTS = 4
 
 
 @dataclass
-class DSCVRegularAdapter:
+class DiscoverRegularAdapter:
     """Convert a :class:`~kd.dataset.PDEDataset` into DISCOVER regular-data format.
 
     Supports both legacy 1D datasets (``x/t/usol``) and N-D structured grids
@@ -35,7 +35,7 @@ class DSCVRegularAdapter:
         from kd.dataset import PDEDataset  # local import to avoid circular deps
 
         if not isinstance(self.dataset, PDEDataset):
-            raise TypeError("DSCVRegularAdapter expects a PDEDataset instance")
+            raise TypeError("DiscoverRegularAdapter expects a PDEDataset instance")
 
         self._data = self._prepare()
 
@@ -80,7 +80,7 @@ class DSCVRegularAdapter:
 
         if t.size < 3:
             raise ValueError(
-                "PDEDataset requires at least 3 temporal samples for DSCV adapter "
+                "PDEDataset requires at least 3 temporal samples for Discover adapter "
                 "(FiniteDiff accesses u[2] and u[n-3])"
             )
 
@@ -100,7 +100,7 @@ class DSCVRegularAdapter:
 
         if self.n_input_dim is not None and self.n_input_dim != 1:
             raise ValueError(
-                f"Legacy DSCV data is 1D spatial; n_input_dim must be 1, "
+                f"Legacy Discover data is 1D spatial; n_input_dim must be 1, "
                 f"got {self.n_input_dim}"
             )
 
@@ -166,7 +166,7 @@ class DSCVRegularAdapter:
 
         if n_spatial < _MIN_SPATIAL_DIM or n_spatial > _MAX_SPATIAL_DIM:
             raise ValueError(
-                f"DSCV N-D mode supports {_MIN_SPATIAL_DIM}-{_MAX_SPATIAL_DIM} "
+                f"Discover N-D mode supports {_MIN_SPATIAL_DIM}-{_MAX_SPATIAL_DIM} "
                 f"spatial dimensions, got {n_spatial}. "
                 "For 1D data, use the legacy path (x/t/usol attributes)."
             )
@@ -200,7 +200,7 @@ class DSCVRegularAdapter:
         if t_coord.size < 3:
             raise ValueError(
                 f"PDEDataset requires at least 3 samples along "
-                f"lhs_axis '{lhs_axis}' for DSCV adapter "
+                f"lhs_axis '{lhs_axis}' for Discover adapter "
                 "(FiniteDiff accesses u[2] and u[n-3])"
             )
 
@@ -290,7 +290,7 @@ class DSCVRegularAdapter:
 
 
 @dataclass
-class DSCVSparseAdapter:
+class DiscoverSparseAdapter:
     """Convert :class:`~kd.dataset.PDEDataset` samples into DISCOVER sparse-data format."""
 
     dataset: "PDEDataset"
@@ -308,7 +308,7 @@ class DSCVSparseAdapter:
         from kd.dataset import PDEDataset  # local import to avoid circular deps
 
         if not isinstance(self.dataset, PDEDataset):
-            raise TypeError("DSCVSparseAdapter expects a PDEDataset instance")
+            raise TypeError("DiscoverSparseAdapter expects a PDEDataset instance")
 
         self._data = self._prepare()
 
@@ -631,4 +631,4 @@ class DSCVSparseAdapter:
         return self._data
 
 
-__all__ = ["DSCVRegularAdapter", "DSCVSparseAdapter"]
+__all__ = ["DiscoverRegularAdapter", "DiscoverSparseAdapter"]

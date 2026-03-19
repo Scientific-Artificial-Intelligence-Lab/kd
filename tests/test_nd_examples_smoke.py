@@ -1,7 +1,7 @@
 """Smoke tests for N-D example workflows.
 
 These tests verify that the N-D data workflows (now consolidated into
-sga_example.py, dscv_example.py, dscv_spr_example.py) run without error.
+sga_example.py, discover_example.py, discover_spr_example.py) run without error.
 Rather than running scripts as subprocesses, we replicate the core
 workflow (dataset creation -> model import -> short train) directly,
 similar to how test_examples_smoke.py works for registered datasets.
@@ -94,23 +94,23 @@ class TestKDSGANDSmoke:
 
 
 # ===========================================================================
-# 2. KD_DSCV N-D (kd_dscv_nd_example.py)
+# 2. KD_Discover N-D (kd_discover_nd_example.py)
 # ===========================================================================
 
 
-class TestKDDSCVNDSmoke:
-    """Smoke test for kd_dscv_nd_example.py workflow."""
+class TestKDDiscoverNDSmoke:
+    """Smoke test for kd_discover_nd_example.py workflow."""
 
     @pytest.mark.smoke
-    def test_dscv_nd_3d_dataset_train(self, monkeypatch):
-        """KD_DSCV import + train with 3D N-D PDEDataset should complete."""
-        torch = pytest.importorskip("torch", reason="KD_DSCV depends on torch")
+    def test_discover_nd_3d_dataset_train(self, monkeypatch):
+        """KD_Discover import + train with 3D N-D PDEDataset should complete."""
+        torch = pytest.importorskip("torch", reason="KD_Discover depends on torch")
 
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
         dataset = _make_3d_dataset("2d_decay")
 
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "Diff"],
             unary_operators=["n2"],
             n_samples_per_batch=500,
@@ -118,7 +118,7 @@ class TestKDDSCVNDSmoke:
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         model.import_dataset(dataset)
@@ -130,33 +130,33 @@ class TestKDDSCVNDSmoke:
 
 
 # ===========================================================================
-# 3. KD_DSCV_SPR N-D (kd_dscvspr_nd_example.py)
+# 3. KD_Discover_SPR N-D (kd_discover_spr_nd_example.py)
 # ===========================================================================
 
 
-class TestKDDSCVSPRNDSmoke:
-    """Smoke test for kd_dscvspr_nd_example.py workflow."""
+class TestKDDiscoverSPRNDSmoke:
+    """Smoke test for kd_discover_spr_nd_example.py workflow."""
 
     @pytest.mark.slow
-    def test_dscvspr_nd_3d_dataset_import(self, monkeypatch):
-        """KD_DSCV_SPR.import_dataset with 3D N-D PDEDataset should not crash.
+    def test_discover_spr_nd_3d_dataset_import(self, monkeypatch):
+        """KD_Discover_SPR.import_dataset with 3D N-D PDEDataset should not crash.
 
         This is the key test for the PINN load_inner_data bug fix.
         """
-        torch = pytest.importorskip("torch", reason="KD_DSCV_SPR requires torch")
+        torch = pytest.importorskip("torch", reason="KD_Discover_SPR requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
         dataset = _make_3d_dataset("2d_decay")
 
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         model.import_dataset(
@@ -173,22 +173,22 @@ class TestKDDSCVSPRNDSmoke:
         assert data["X_u_train"].shape[0] > 0
 
     @pytest.mark.slow
-    def test_dscvspr_nd_3d_dataset_train(self, monkeypatch):
-        """KD_DSCV_SPR import + train with 3D N-D data should complete."""
-        torch = pytest.importorskip("torch", reason="KD_DSCV_SPR requires torch")
+    def test_discover_spr_nd_3d_dataset_train(self, monkeypatch):
+        """KD_Discover_SPR import + train with 3D N-D data should complete."""
+        torch = pytest.importorskip("torch", reason="KD_Discover_SPR requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
         dataset = _make_3d_dataset("2d_decay")
 
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         model.import_dataset(
@@ -254,22 +254,22 @@ class TestKDSGANDVizAPISmoke:
 
 
 # ===========================================================================
-# 5. KD_DSCV N-D Viz API (kd_dscv_nd_viz_api_example.py - new)
+# 5. KD_Discover N-D Viz API (kd_discover_nd_viz_api_example.py - new)
 # ===========================================================================
 
 
-class TestKDDSCVNDVizAPISmoke:
-    """Smoke test for kd_dscv_nd_viz_api_example.py workflow."""
+class TestKDDiscoverNDVizAPISmoke:
+    """Smoke test for kd_discover_nd_viz_api_example.py workflow."""
 
     @pytest.mark.smoke
-    def test_dscv_nd_viz_api_render_equation(self, monkeypatch):
-        """KD_DSCV N-D -> render_equation via unified viz API."""
-        torch = pytest.importorskip("torch", reason="KD_DSCV depends on torch")
+    def test_discover_nd_viz_api_render_equation(self, monkeypatch):
+        """KD_Discover N-D -> render_equation via unified viz API."""
+        torch = pytest.importorskip("torch", reason="KD_Discover depends on torch")
 
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
         dataset = _make_3d_dataset("2d_decay")
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "Diff"],
             unary_operators=["n2"],
             n_samples_per_batch=500,
@@ -277,7 +277,7 @@ class TestKDDSCVNDVizAPISmoke:
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover, "make_gp_aggregator", lambda self: None, raising=False
         )
         model.import_dataset(dataset)
         model.train(n_epochs=5, verbose=False)
@@ -286,14 +286,14 @@ class TestKDDSCVNDVizAPISmoke:
         render_equation(model)
 
     @pytest.mark.smoke
-    def test_dscv_nd_viz_api_plot_parity(self, monkeypatch):
-        """KD_DSCV N-D -> plot_parity via unified viz API."""
-        torch = pytest.importorskip("torch", reason="KD_DSCV depends on torch")
+    def test_discover_nd_viz_api_plot_parity(self, monkeypatch):
+        """KD_Discover N-D -> plot_parity via unified viz API."""
+        torch = pytest.importorskip("torch", reason="KD_Discover depends on torch")
 
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
         dataset = _make_3d_dataset("2d_decay")
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "Diff"],
             unary_operators=["n2"],
             n_samples_per_batch=500,
@@ -301,39 +301,39 @@ class TestKDDSCVNDVizAPISmoke:
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover, "make_gp_aggregator", lambda self: None, raising=False
         )
         model.import_dataset(dataset)
         model.train(n_epochs=5, verbose=False)
 
         from kd.viz import plot_parity
-        plot_parity(model, title="DSCV N-D Parity Smoke")
+        plot_parity(model, title="Discover N-D Parity Smoke")
 
 
 # ===========================================================================
-# 6. KD_DSCV_SPR N-D Viz API (kd_dscvspr_nd_viz_api_example.py - new)
+# 6. KD_Discover_SPR N-D Viz API (kd_discover_spr_nd_viz_api_example.py - new)
 # ===========================================================================
 
 
-class TestKDDSCVSPRNDVizAPISmoke:
-    """Smoke test for kd_dscvspr_nd_viz_api_example.py workflow."""
+class TestKDDiscoverSPRNDVizAPISmoke:
+    """Smoke test for kd_discover_spr_nd_viz_api_example.py workflow."""
 
     @pytest.mark.slow
-    def test_dscvspr_nd_viz_api_render_equation(self, monkeypatch):
-        """KD_DSCV_SPR N-D -> render_equation via unified viz API."""
-        torch = pytest.importorskip("torch", reason="KD_DSCV_SPR requires torch")
+    def test_discover_spr_nd_viz_api_render_equation(self, monkeypatch):
+        """KD_Discover_SPR N-D -> render_equation via unified viz API."""
+        torch = pytest.importorskip("torch", reason="KD_Discover_SPR requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
         dataset = _make_3d_dataset("2d_decay")
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
         model.import_dataset(
             dataset,

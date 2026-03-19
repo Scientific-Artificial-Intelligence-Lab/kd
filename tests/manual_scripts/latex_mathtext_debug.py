@@ -1,5 +1,5 @@
 """
-Small experiment to debug DSCV LaTeX rendering issues.
+Small experiment to debug Discover LaTeX rendering issues.
 
 Usage (from repo root, in kd-env):
 
@@ -45,7 +45,7 @@ def main() -> None:
         print(f"\n=== Case: {name} ===")
         print("latex_str:", latex_str)
 
-        # 1) Via shared renderer (same path as DSCV viz)
+        # 1) Via shared renderer (same path as Discover viz)
         out_renderer = OUTPUT_ROOT / f"{name}_renderer.png"
         print("  [renderer] saving to", out_renderer)
         render_latex_to_image(

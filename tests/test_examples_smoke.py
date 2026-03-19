@@ -14,7 +14,7 @@ from kd.dataset import load_pde
 from kd.dataset._registry import PDE_REGISTRY
 from kd.model.kd_dlga import KD_DLGA
 from kd.model.kd_sga import KD_SGA
-from kd.model.kd_dscv import KD_DSCV, KD_DSCV_SPR
+from kd.model.kd_discover import KD_Discover, KD_Discover_SPR
 
 STATUS_ACTIVE = 'active'
 
@@ -31,8 +31,8 @@ def collect_datasets(model_key: str) -> list[tuple[str, dict]]:
 
 DLGA_DATASETS = collect_datasets('dlga')
 SGA_DATASETS = collect_datasets('sga')
-DSCV_DATASETS = collect_datasets('dscv')
-DSCV_SPR_DATASETS = collect_datasets('dscv_spr')
+DISCOVER_DATASETS = collect_datasets('discover')
+DISCOVER_SPR_DATASETS = collect_datasets('discover_spr')
 
 
 @pytest.mark.parametrize('dataset_name, info', DLGA_DATASETS)
@@ -78,19 +78,19 @@ def test_kd_sga_dataset_smoke(dataset_name: str, info: dict):
     assert getattr(model, 'dataset_', None) is dataset
 
 
-@pytest.mark.parametrize('dataset_name, info', DSCV_DATASETS)
-def test_kd_dscv_smoke(dataset_name: str, info: dict, monkeypatch: pytest.MonkeyPatch):
-    torch = pytest.importorskip('torch', reason='KD_DSCV depends on torch')
+@pytest.mark.parametrize('dataset_name, info', DISCOVER_DATASETS)
+def test_kd_discover_smoke(dataset_name: str, info: dict, monkeypatch: pytest.MonkeyPatch):
+    torch = pytest.importorskip('torch', reason='KD_Discover depends on torch')
     dataset = load_pde(dataset_name)
 
-    model = KD_DSCV(
+    model = KD_Discover(
         binary_operators=['add', 'mul', 'diff'],
         unary_operators=['n2'],
         n_iterations=5,
         n_samples_per_batch=500,
         seed=0,
     )
-    monkeypatch.setattr(KD_DSCV, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover, 'make_gp_aggregator', lambda self: None, raising=False)
 
     model.import_dataset(dataset)
     result = model.train(n_epochs=5, verbose=False)
@@ -101,19 +101,19 @@ def test_kd_dscv_smoke(dataset_name: str, info: dict, monkeypatch: pytest.Monkey
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize('dataset_name, info', DSCV_SPR_DATASETS)
-def test_kd_dscv_spr_smoke(dataset_name: str, info: dict, monkeypatch: pytest.MonkeyPatch):
-    torch = pytest.importorskip('torch', reason='KD_DSCV_SPR requires torch')
+@pytest.mark.parametrize('dataset_name, info', DISCOVER_SPR_DATASETS)
+def test_kd_discover_spr_smoke(dataset_name: str, info: dict, monkeypatch: pytest.MonkeyPatch):
+    torch = pytest.importorskip('torch', reason='KD_Discover_SPR requires torch')
     pytest.importorskip('tensorflow', reason='Mode2 pipeline depends on TensorFlow')
 
     dataset = load_pde(dataset_name)
 
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         n_iterations=1,
         n_samples_per_batch=5,
         seed=0,
     )
-    monkeypatch.setattr(KD_DSCV_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
 
     model.import_dataset(
         dataset,

@@ -13,8 +13,8 @@ python examples/sga_example.py
 |------|--------|-------------|
 | `sga_example.py` | KD_SGA | SGA discovery: built-in data, N-D, custom data |
 | `dlga_example.py` | KD_DLGA | DLGA discovery with full visualization |
-| `dscv_example.py` | KD_DSCV | DISCOVER algorithm (regular/FD mode) |
-| `dscv_spr_example.py` | KD_DSCV_SPR | DISCOVER + PINN (sparse data) |
+| `discover_example.py` | KD_Discover | DISCOVER algorithm (regular/FD mode) |
+| `discover_spr_example.py` | KD_Discover_SPR | DISCOVER + PINN (sparse data) |
 | `pysr_example.py` | KD_PySR | PySR symbolic regression (requires pysr) |
 
 ## File Structure

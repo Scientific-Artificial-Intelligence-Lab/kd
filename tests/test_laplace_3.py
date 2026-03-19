@@ -350,9 +350,9 @@ class TestDiffTokensByDim:
         This test verifies the token is added to enable auto function_set
         selection for 3D datasets.
         """
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
-        tokens_3d = KD_DSCV._DIFF_TOKENS_BY_DIM[3]
+        tokens_3d = KD_Discover._DIFF_TOKENS_BY_DIM[3]
         assert 'lap_3' in tokens_3d, (
             f"'lap_3' not found in _DIFF_TOKENS_BY_DIM[3]. "
             f"Current tokens: {tokens_3d}"
@@ -360,9 +360,9 @@ class TestDiffTokensByDim:
 
     def test_diff_tokens_by_dim_2d_still_has_lap(self):
         """Regression: dim=2 must still include 'lap'."""
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
-        tokens_2d = KD_DSCV._DIFF_TOKENS_BY_DIM[2]
+        tokens_2d = KD_Discover._DIFF_TOKENS_BY_DIM[2]
         assert 'lap' in tokens_2d, (
             f"'lap' not found in _DIFF_TOKENS_BY_DIM[2]. "
             f"Current tokens: {tokens_2d}"
@@ -370,11 +370,11 @@ class TestDiffTokensByDim:
 
     def test_all_diff_tokens_includes_lap_3(self):
         """_ALL_DIFF_TOKENS must include 'lap_3' for proper stripping."""
-        from kd.model.kd_dscv import KD_DSCV
+        from kd.model.kd_discover import KD_Discover
 
-        assert 'lap_3' in KD_DSCV._ALL_DIFF_TOKENS, (
+        assert 'lap_3' in KD_Discover._ALL_DIFF_TOKENS, (
             f"'lap_3' not found in _ALL_DIFF_TOKENS. "
-            f"Current tokens: {KD_DSCV._ALL_DIFF_TOKENS}"
+            f"Current tokens: {KD_Discover._ALL_DIFF_TOKENS}"
         )
 
 

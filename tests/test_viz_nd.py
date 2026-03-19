@@ -5,11 +5,11 @@ from typing import Optional
 import numpy as np
 import pytest
 
-import kd.viz.dscv_viz as dscv_viz_module
+import kd.viz.discover_viz as discover_viz_module
 from kd.viz._contracts import FieldComparisonData, TimeSliceComparisonData
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
-from kd.viz.adapters import DSCVVizAdapter, SGAVizAdapter
+from kd.viz.adapters import DiscoverVizAdapter, SGAVizAdapter
 from kd.viz.discover_eq2latex import discover_program_to_latex
 from kd.model.sga.sgapde.equation import SGAEquationDetails, SGAEquationTerm
 
@@ -188,9 +188,9 @@ class TestLatexND:
         assert "u_{y}" in result
 
 
-# ===== DSCV computation tests =====
+# ===== Discover computation tests =====
 
-class TestDSCVComputation:
+class TestDiscoverComputation:
     def test_finite_difference_nd(self):
         """_finite_difference_nd computes derivative along specified axis."""
         x = np.linspace(0, 2 * np.pi, 100)
@@ -202,12 +202,12 @@ class TestDSCVComputation:
         dy = y[1] - y[0]
 
         # df/dx = cos(X) * cos(Y)
-        df_dx = dscv_viz_module._finite_difference_nd(f, dx, order=1, axis=0)
+        df_dx = discover_viz_module._finite_difference_nd(f, dx, order=1, axis=0)
         expected = np.cos(X) * np.cos(Y)
         np.testing.assert_allclose(df_dx[5:-5, 5:-5], expected[5:-5, 5:-5], atol=0.01)
 
         # df/dy = -sin(X) * sin(Y)
-        df_dy = dscv_viz_module._finite_difference_nd(f, dy, order=1, axis=1)
+        df_dy = discover_viz_module._finite_difference_nd(f, dy, order=1, axis=1)
         expected_y = -np.sin(X) * np.sin(Y)
         np.testing.assert_allclose(df_dy[5:-5, 5:-5], expected_y[5:-5, 5:-5], atol=0.01)
 
@@ -233,7 +233,7 @@ class TestDSCVComputation:
         X1, X2 = np.meshgrid(x1, x2, indexing='ij')
         u_snapshot = X1 * X2  # shape (20, 25)
 
-        result = dscv_viz_module._evaluate_term_recursively(
+        result = discover_viz_module._evaluate_term_recursively(
             diff_node, u_snapshot, x1,
             spatial_coords_list=[x1, x2],
             spatial_dxs=[x1[1] - x1[0], x2[1] - x2[0]],
@@ -262,7 +262,7 @@ class TestDSCVComputation:
         X1, X2 = np.meshgrid(x1, x2, indexing='ij')
         u_snapshot = X1**2 + X2**2
 
-        result = dscv_viz_module._evaluate_term_recursively(
+        result = discover_viz_module._evaluate_term_recursively(
             lap_node, u_snapshot, x1,
             spatial_coords_list=[x1, x2],
             spatial_dxs=[x1[1] - x1[0], x2[1] - x2[0]],
@@ -310,7 +310,7 @@ class TestDSCVComputation:
                 def get_data():
                     return data_dict
 
-        result = dscv_viz_module._calculate_pde_fields(FakeModel(), FakeProgram())
+        result = discover_viz_module._calculate_pde_fields(FakeModel(), FakeProgram())
         assert result['n_spatial_dims'] == 2
         assert result['y_hat_grid'].shape == u_data.shape
         assert len(result['spatial_coords_list']) == 2
@@ -418,20 +418,20 @@ class TestSGAAdapterND:
         assert result.metadata['residual_data'].actual.size == model.context_.ut_origin.size
 
 
-# ===== DSCV Adapter N-D tests =====
+# ===== Discover Adapter N-D tests =====
 
-class TestDSCVAdapterND:
+class TestDiscoverAdapterND:
     def test_field_comparison_nd(self, tmp_path, monkeypatch):
-        """DSCV field comparison works with 2D spatial data."""
-        adapter = DSCVVizAdapter()
+        """Discover field comparison works with 2D spatial data."""
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         nx, ny, nt = 5, 6, 4
         x1 = np.linspace(0, 1, nx)
@@ -448,7 +448,7 @@ class TestDSCVAdapterND:
                 'spatial_coords_list': [x1, x2],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
         request = viz_core.VizRequest(
             kind='field_comparison',
@@ -457,19 +457,19 @@ class TestDSCVAdapterND:
         )
         result = viz_core.render(request)
         assert result.paths
-        assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
+        assert (tmp_path / 'discover' / 'field_comparison.png').exists()
 
     def test_residual_nd(self, tmp_path, monkeypatch):
-        """DSCV residual works with 2D spatial data."""
-        adapter = DSCVVizAdapter()
+        """Discover residual works with 2D spatial data."""
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         nx, ny, nt = 5, 6, 4
         x1 = np.linspace(0, 1, nx)
@@ -489,7 +489,7 @@ class TestDSCVAdapterND:
                 'spatial_coords_list': [x1, x2],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
         request = viz_core.VizRequest(
             kind='residual',
@@ -498,19 +498,19 @@ class TestDSCVAdapterND:
         )
         result = viz_core.render(request)
         assert result.paths
-        assert (tmp_path / 'dscv' / 'residual_analysis.png').exists()
+        assert (tmp_path / 'discover' / 'residual_analysis.png').exists()
 
     def test_parity_nd(self, tmp_path, monkeypatch):
-        """DSCV parity works with N-D data (reshape(-1) handles it)."""
-        adapter = DSCVVizAdapter()
+        """Discover parity works with N-D data (reshape(-1) handles it)."""
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         def fake_fields(_model, _program):
             ut = np.arange(120).reshape(5, 6, 4).astype(float)
@@ -520,7 +520,7 @@ class TestDSCVAdapterND:
                 'n_spatial_dims': 2,
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
         request = viz_core.VizRequest(
             kind='parity',
@@ -529,7 +529,7 @@ class TestDSCVAdapterND:
         )
         result = viz_core.render(request)
         assert result.paths
-        assert (tmp_path / 'dscv' / 'parity_plot.png').exists()
+        assert (tmp_path / 'discover' / 'parity_plot.png').exists()
 
 
 # ===== Error path tests (Codex review L6) =====
@@ -546,13 +546,13 @@ class TestErrorPaths:
 
         node = Node(FakeToken('y', 0))
         with pytest.raises(ValueError, match="无法从 'y' 推断空间轴索引"):
-            dscv_viz_module._infer_axis(node, {'x1': 0, 'x2': 1, 'x3': 2})
+            discover_viz_module._infer_axis(node, {'x1': 0, 'x2': 1, 'x3': 2})
 
     def test_finite_difference_nd_order_5_raises(self):
         """_finite_difference_nd raises ValueError for order > 4."""
         arr = np.ones((10, 10))
         with pytest.raises(ValueError, match="只支持1-4阶导数"):
-            dscv_viz_module._finite_difference_nd(arr, 0.1, order=5, axis=0)
+            discover_viz_module._finite_difference_nd(arr, 0.1, order=5, axis=0)
 
     def test_field_comparison_data_3d_spatial(self):
         """3D spatial coords (x, y, z) contract works."""
@@ -744,22 +744,22 @@ class TestPhase2SGA3DSpatialSlice:
         assert path.exists()
 
 
-# ===== Phase 2 Test: DSCV 3D Spatial Slice =====
+# ===== Phase 2 Test: Discover 3D Spatial Slice =====
 
-class TestPhase2DSCV3DSpatialSlice:
-    """Phase 2: DSCV field_comparison and residual should handle 3D spatial via slicing."""
+class TestPhase2Discover3DSpatialSlice:
+    """Phase 2: Discover field_comparison and residual should handle 3D spatial via slicing."""
 
-    def test_dscv_field_comparison_3d_spatial(self, tmp_path, monkeypatch):
-        """DSCV field comparison should work with 3D spatial data (slice to 2D)."""
-        adapter = DSCVVizAdapter()
+    def test_discover_field_comparison_3d_spatial(self, tmp_path, monkeypatch):
+        """Discover field comparison should work with 3D spatial data (slice to 2D)."""
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         nx, ny, nz, nt = 3, 4, 5, 6
         x1 = np.linspace(0, 1, nx)
@@ -779,7 +779,7 @@ class TestPhase2DSCV3DSpatialSlice:
                 'spatial_coords_list': [x1, x2, x3],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
         request = viz_core.VizRequest(
             kind='field_comparison',
@@ -793,20 +793,20 @@ class TestPhase2DSCV3DSpatialSlice:
             f"Expected 3D experimental warning, got: {result.warnings}"
         )
         assert result.paths
-        assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
+        assert (tmp_path / 'discover' / 'field_comparison.png').exists()
 
-    def test_dscv_residual_3d_spatial_has_heatmap(self, tmp_path, monkeypatch):
-        """DSCV residual for 3D spatial should produce a 2D slice heatmap, not just histogram."""
+    def test_discover_residual_3d_spatial_has_heatmap(self, tmp_path, monkeypatch):
+        """Discover residual for 3D spatial should produce a 2D slice heatmap, not just histogram."""
         import matplotlib.pyplot as plt
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         nx, ny, nz, nt = 3, 4, 5, 6
         x1 = np.linspace(0, 1, nx)
@@ -837,7 +837,7 @@ class TestPhase2DSCV3DSpatialSlice:
                 'spatial_coords_list': [x1, x2, x3],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
         request = viz_core.VizRequest(
             kind='residual',
@@ -847,7 +847,7 @@ class TestPhase2DSCV3DSpatialSlice:
         result = viz_core.render(request)
 
         assert result.paths
-        path = tmp_path / 'dscv' / 'residual_analysis.png'
+        path = tmp_path / 'discover' / 'residual_analysis.png'
         assert path.exists()
 
         # Phase 2 requirement: the residual plot must contain a 2D heatmap subplot
@@ -944,7 +944,7 @@ class TestPhase2SPRPinnND:
             u = [torch.rand(n_points, 1)]
 
         # Monkeypatch Program.task
-        monkeypatch.setattr('kd.viz.dscv_viz.Program', type('MockProgram', (), {'task': FakeTask()}))
+        monkeypatch.setattr('kd.viz.discover_viz.Program', type('MockProgram', (), {'task': FakeTask()}))
 
         class FakeBestProgram:
             y_hat_rhs = np.random.randn(n_points, 1)
@@ -954,7 +954,7 @@ class TestPhase2SPRPinnND:
             def r_ridge(self):
                 return 0.5  # trigger cache fill
 
-        result = dscv_viz_module._calculate_pinn_fields(None, FakeBestProgram())
+        result = discover_viz_module._calculate_pinn_fields(None, FakeBestProgram())
 
         # Phase 2: should return N-D metadata
         assert 'n_spatial_dims' in result, "Expected 'n_spatial_dims' in result"
@@ -966,15 +966,15 @@ class TestPhase2SPRPinnND:
 
     def test_spr_field_comparison_nd(self, tmp_path, monkeypatch):
         """SPR field comparison should use time-slice + spatial griddata for 2D spatial."""
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         n_points = 100
         x1 = np.random.rand(n_points)
@@ -995,7 +995,7 @@ class TestPhase2SPRPinnND:
                 'spatial_coords_list': [x1, x2],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
 
         request = viz_core.VizRequest(
             kind='spr_field_comparison',
@@ -1007,7 +1007,7 @@ class TestPhase2SPRPinnND:
         # Phase 2: should produce a field comparison plot for 2D spatial
         assert not result.warnings, f"Expected no warnings, got: {result.warnings}"
         assert result.paths
-        assert (tmp_path / 'dscv' / 'spr_field_comparison.png').exists()
+        assert (tmp_path / 'discover' / 'spr_field_comparison.png').exists()
 
         # Phase 2: metadata should contain FieldComparisonData with 2D spatial
         fc_data = result.metadata.get('field_comparison')
@@ -1019,15 +1019,15 @@ class TestPhase2SPRPinnND:
 
     def test_spr_residual_nd_metadata(self, tmp_path, monkeypatch):
         """SPR residual should store n_spatial_dims in metadata for N-D spatial."""
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
-        class StubDSCV:
+        class StubDiscover:
             def __init__(self):
                 self.best_p = type('P', (), {'traversal': []})()
                 self.searcher = type('S', (), {'r_train': [], 'best_p': self.best_p})()
 
-        viz_registry.register_adapter(StubDSCV, adapter)
-        model = StubDSCV()
+        viz_registry.register_adapter(StubDiscover, adapter)
+        model = StubDiscover()
 
         n_points = 80
         x1 = np.random.rand(n_points)
@@ -1049,7 +1049,7 @@ class TestPhase2SPRPinnND:
                 'spatial_coords_list': [x1, x2],
             }
 
-        monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+        monkeypatch.setattr(discover_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
 
         request = viz_core.VizRequest(
             kind='spr_residual',

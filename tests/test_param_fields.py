@@ -3,9 +3,9 @@
 Covers:
 - PDEDataset param_fields validation
 - SGA adapter + config + context param_fields handling
-- DSCV Token param_var + Library param_tokens + create_tokens
-- DSCV execute.py param_var branch (no dim_flag)
-- DSCV adapter param data passing
+- Discover Token param_var + Library param_tokens + create_tokens
+- Discover execute.py param_var branch (no dim_flag)
+- Discover adapter param data passing
 - LaTeX rendering of param symbols
 """
 
@@ -221,11 +221,11 @@ class TestSGAParamFields:
 
 
 # ===========================================================================
-# Phase 2: DSCV Token + Library
+# Phase 2: Discover Token + Library
 # ===========================================================================
 
-class TestDSCVTokenParamVar:
-    """DSCV Token param_var attribute and Library param_tokens."""
+class TestDiscoverTokenParamVar:
+    """Discover Token param_var attribute and Library param_tokens."""
 
     def test_token_param_var(self):
         from kd.model.discover.library import Token
@@ -381,15 +381,15 @@ class TestExecuteParamVar:
 
 
 # ===========================================================================
-# Phase 2: DSCV adapter param data
+# Phase 2: Discover adapter param data
 # ===========================================================================
 
-class TestDSCVAdapterParamFields:
-    """DSCV adapter param_fields extraction."""
+class TestDiscoverAdapterParamFields:
+    """Discover adapter param_fields extraction."""
 
     def test_regular_adapter_legacy_param_fields(self, simple_grid):
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVRegularAdapter
+        from kd.model.discover.adapter import DiscoverRegularAdapter
 
         x, t, u, nu = simple_grid
         ds = PDEDataset(
@@ -397,7 +397,7 @@ class TestDSCVAdapterParamFields:
             x=x, t=t, usol=u,
             param_fields={"nu": nu},
         )
-        adapter = DSCVRegularAdapter(ds)
+        adapter = DiscoverRegularAdapter(ds)
         data = adapter.get_data()
         assert "param_data" in data
         assert data["n_param_var"] == 1
@@ -406,7 +406,7 @@ class TestDSCVAdapterParamFields:
 
     def test_regular_adapter_nd_param_fields(self, nd_grid):
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVRegularAdapter
+        from kd.model.discover.adapter import DiscoverRegularAdapter
 
         t, x, y, u, nu = nd_grid
         ds = PDEDataset(
@@ -417,7 +417,7 @@ class TestDSCVAdapterParamFields:
             lhs_axis="t",
             param_fields={"nu": nu},
         )
-        adapter = DSCVRegularAdapter(ds)
+        adapter = DiscoverRegularAdapter(ds)
         data = adapter.get_data()
         assert "param_data" in data
         assert data["n_param_var"] == 1
@@ -427,11 +427,11 @@ class TestDSCVAdapterParamFields:
 
     def test_regular_adapter_no_param_fields(self, simple_grid):
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVRegularAdapter
+        from kd.model.discover.adapter import DiscoverRegularAdapter
 
         x, t, u, _nu = simple_grid
         ds = PDEDataset(equation_name="test", x=x, t=t, usol=u)
-        adapter = DSCVRegularAdapter(ds)
+        adapter = DiscoverRegularAdapter(ds)
         data = adapter.get_data()
         assert "param_data" not in data
 
@@ -452,14 +452,14 @@ class TestParamFieldsLatex:
         # Non-Greek names pass through
         assert _render_leaf("a") == "a"
 
-    def test_dscv_symbol_display(self):
+    def test_discover_symbol_display(self):
         from kd.viz.discover_eq2latex import _SYMBOL_DISPLAY
 
         assert "p1" in _SYMBOL_DISPLAY
         assert _SYMBOL_DISPLAY["p1"] == "p_{1}"
         assert _SYMBOL_DISPLAY["p2"] == "p_{2}"
 
-    def test_dscv_symbols_for_sympy(self):
+    def test_discover_symbols_for_sympy(self):
         from kd.viz.discover_eq2latex import DEEPRL_SYMBOLS_FOR_SYMPY
 
         assert "p1" in DEEPRL_SYMBOLS_FOR_SYMPY
@@ -468,17 +468,17 @@ class TestParamFieldsLatex:
 
 
 # ===========================================================================
-# Phase 4: Sparse mode — DSCVSparseAdapter param_fields
+# Phase 4: Sparse mode — DiscoverSparseAdapter param_fields
 # ===========================================================================
 
-class TestDSCVSparseAdapterParamFields:
-    """DSCVSparseAdapter should pass param_fields through to the data dict."""
+class TestDiscoverSparseAdapterParamFields:
+    """DiscoverSparseAdapter should pass param_fields through to the data dict."""
 
     def test_sparse_adapter_legacy_param_fields(self, simple_grid):
         """Legacy 1D dataset with param_fields: data dict has param_data."""
-        # RED: will fail until DSCVSparseAdapter._prepare_legacy adds param extraction
+        # RED: will fail until DiscoverSparseAdapter._prepare_legacy adds param extraction
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVSparseAdapter
+        from kd.model.discover.adapter import DiscoverSparseAdapter
 
         x, t, u, nu = simple_grid
         ds = PDEDataset(
@@ -486,7 +486,7 @@ class TestDSCVSparseAdapterParamFields:
             x=x, t=t, usol=u,
             param_fields={"nu": nu},
         )
-        adapter = DSCVSparseAdapter(ds, sample=10, random_state=42)
+        adapter = DiscoverSparseAdapter(ds, sample=10, random_state=42)
         data = adapter.get_data()
 
         assert "param_data" in data, "Sparse adapter must include param_data"
@@ -498,9 +498,9 @@ class TestDSCVSparseAdapterParamFields:
 
     def test_sparse_adapter_nd_param_fields(self, nd_grid):
         """N-D dataset with param_fields: param_data uses Sparse's time-last perm."""
-        # RED: will fail until DSCVSparseAdapter._prepare_nd adds param extraction
+        # RED: will fail until DiscoverSparseAdapter._prepare_nd adds param extraction
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVSparseAdapter
+        from kd.model.discover.adapter import DiscoverSparseAdapter
 
         t, x, y, u, nu = nd_grid
         ds = PDEDataset(
@@ -511,7 +511,7 @@ class TestDSCVSparseAdapterParamFields:
             lhs_axis="t",
             param_fields={"nu": nu},
         )
-        adapter = DSCVSparseAdapter(ds, sample=10, random_state=42)
+        adapter = DiscoverSparseAdapter(ds, sample=10, random_state=42)
         data = adapter.get_data()
 
         assert "param_data" in data, "Sparse N-D adapter must include param_data"
@@ -528,11 +528,11 @@ class TestDSCVSparseAdapterParamFields:
     def test_sparse_adapter_no_param_fields(self, simple_grid):
         """Dataset without param_fields: data dict should NOT have param_data."""
         from kd.dataset import PDEDataset
-        from kd.model.discover.adapter import DSCVSparseAdapter
+        from kd.model.discover.adapter import DiscoverSparseAdapter
 
         x, t, u, _nu = simple_grid
         ds = PDEDataset(equation_name="test", x=x, t=t, usol=u)
-        adapter = DSCVSparseAdapter(ds, sample=10, random_state=42)
+        adapter = DiscoverSparseAdapter(ds, sample=10, random_state=42)
         data = adapter.get_data()
 
         assert "param_data" not in data

@@ -23,7 +23,7 @@ __all__ = _submodules + [
     "load_kdv_equation", 
     "DLGA",
     "KD_DLGA",
-    "KD_DSCV",
-    "KD_DSCV_Pinn",
+    "KD_Discover",
+    "KD_Discover_SPR",
     "viz"
 ]

@@ -10,7 +10,7 @@ Usage:
 # IMPORTANT: PySR uses Julia via juliacall, which crashes (SIGABRT) if
 # torch or tensorflow signal handlers are installed first.  We must
 # initialize juliacall BEFORE importing kd (which pulls in torch/tf
-# via kd.model.__init__ → kd_dscv).
+# via kd.model.__init__ → kd_discover).
 # See: pytorch/pytorch#78829
 import os
 os.environ.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")

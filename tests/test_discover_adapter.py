@@ -8,15 +8,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from kd.model.discover.task.pde.utils_fd import FiniteDiff, Diff_3, Diff2_3, Laplace_3
 from kd.dataset import get_dataset_sym_true, load_pde, PDEDataset
-from kd.model.discover.adapter import DSCVRegularAdapter, DSCVSparseAdapter
-from kd.model.kd_dscv import KD_DSCV, KD_DSCV_SPR
+from kd.model.discover.adapter import DiscoverRegularAdapter, DiscoverSparseAdapter
+from kd.model.kd_discover import KD_Discover, KD_Discover_SPR
 from kd.model.discover.searcher import Searcher
 
 
-def test_dscv_regular_adapter_generates_expected_fields():
+def test_discover_regular_adapter_generates_expected_fields():
     dataset = load_pde('chafee-infante')
 
-    adapter = DSCVRegularAdapter(dataset)
+    adapter = DiscoverRegularAdapter(dataset)
     data = adapter.get_data()
 
     assert set(data.keys()) >= {'u', 'ut', 'X', 'n_input_dim'}
@@ -37,16 +37,16 @@ def test_dscv_regular_adapter_generates_expected_fields():
     np.testing.assert_allclose(data['ut'], expected_ut)
 
 
-def test_kd_dscv_import_dataset(monkeypatch):
+def test_kd_discover_import_dataset(monkeypatch):
     dataset = load_pde('chafee-infante')
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
     calls = {}
 
     def fake_setup(self):
         calls['called'] = True
 
-    monkeypatch.setattr(KD_DSCV, 'setup', fake_setup)
+    monkeypatch.setattr(KD_Discover, 'setup', fake_setup)
 
     result = model.import_dataset(dataset)
 
@@ -58,11 +58,11 @@ def test_kd_dscv_import_dataset(monkeypatch):
     assert model.dataset_ is dataset
 
 
-def test_dscv_sparse_adapter_shapes():
+def test_discover_sparse_adapter_shapes():
     dataset = load_pde('burgers')
 
     colloc_num = 512
-    adapter = DSCVSparseAdapter(
+    adapter = DiscoverSparseAdapter(
         dataset,
         sample=200,
         colloc_num=colloc_num,
@@ -81,10 +81,10 @@ def test_dscv_sparse_adapter_shapes():
     assert len(data['lb']) == data['ub'].shape[0] == 2
 
 
-def test_dscv_sparse_adapter_includes_full_field_metadata():
+def test_discover_sparse_adapter_includes_full_field_metadata():
     dataset = load_pde('burgers')
 
-    adapter = DSCVSparseAdapter(dataset, sample_ratio=0.05, colloc_num=128, random_state=0)
+    adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.05, colloc_num=128, random_state=0)
     data = adapter.get_data()
 
     assert set(data.keys()) >= {'X_star', 'u_star', 'shape'}
@@ -100,10 +100,10 @@ def test_dscv_sparse_adapter_includes_full_field_metadata():
     np.testing.assert_allclose(data['u_star'], expected_u_star)
 
 
-def test_dscv_sparse_adapter_respects_noise_and_sampling():
+def test_discover_sparse_adapter_respects_noise_and_sampling():
     dataset = load_pde('burgers')
 
-    baseline_adapter = DSCVSparseAdapter(
+    baseline_adapter = DiscoverSparseAdapter(
         dataset,
         sample_ratio=0.1,
         colloc_num=64,
@@ -111,7 +111,7 @@ def test_dscv_sparse_adapter_respects_noise_and_sampling():
     )
     baseline = baseline_adapter.get_data()
 
-    adapter = DSCVSparseAdapter(
+    adapter = DiscoverSparseAdapter(
         dataset,
         sample_ratio=0.1,
         colloc_num=64,
@@ -134,7 +134,7 @@ def test_dscv_sparse_adapter_respects_noise_and_sampling():
     assert not np.allclose(noisy_flat[:original.shape[0]], original[:noisy_flat.shape[0]], atol=1e-3)
 
 
-def test_dscv_sparse_adapter_handles_non_uniform_time():
+def test_discover_sparse_adapter_handles_non_uniform_time():
     x = np.linspace(-1.0, 1.0, 6)
     t = np.array([0.0, 0.05, 0.17, 0.31, 0.5])
     X, T = np.meshgrid(x, t, indexing='ij')
@@ -150,7 +150,7 @@ def test_dscv_sparse_adapter_handles_non_uniform_time():
         usol=u,
     )
 
-    adapter = DSCVSparseAdapter(dataset, sample_ratio=0.2, random_state=0)
+    adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.2, random_state=0)
     data = adapter.get_data()
 
     assert data['X_u_train'].shape[1] == 2
@@ -160,21 +160,21 @@ def test_dscv_sparse_adapter_handles_non_uniform_time():
     np.testing.assert_allclose(ub, mesh.max(axis=0))
 
 
-def test_dscv_sparse_adapter_cut_quantile():
+def test_discover_sparse_adapter_cut_quantile():
     dataset = load_pde('burgers')
 
     original_lb, original_ub = dataset.mesh_bounds()
-    adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, cut_quantile=0.1, random_state=0)
+    adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.1, cut_quantile=0.1, random_state=0)
     data = adapter.get_data()
 
     assert data['lb'][0] > original_lb[0]
     assert data['ub'][0] < original_ub[0]
 
 
-def test_dscv_sparse_adapter_spline_sampling():
+def test_discover_sparse_adapter_spline_sampling():
     dataset = load_pde('burgers')
 
-    adapter = DSCVSparseAdapter(dataset, sample_ratio=0.2, spline_sample=True, random_state=0)
+    adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.2, spline_sample=True, random_state=0)
     data = adapter.get_data()
 
     measured = data['measured_points']
@@ -183,16 +183,16 @@ def test_dscv_sparse_adapter_spline_sampling():
     assert unique_x.shape[0] == expected
     counts = [np.sum(measured[:, 0] == ux) for ux in unique_x]
     assert all(count == len(dataset.t) for count in counts)
-def test_kd_dscv_spr_import_dataset(monkeypatch):
+def test_kd_discover_spr_import_dataset(monkeypatch):
     dataset = load_pde('burgers')
-    model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
     calls = {}
 
     def fake_setup(self):
         calls['called'] = True
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', fake_setup)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', fake_setup)
 
     result = model.import_dataset(dataset, sample=50, colloc_num=128, random_state=1)
 
@@ -204,13 +204,13 @@ def test_kd_dscv_spr_import_dataset(monkeypatch):
     assert model.out_path.endswith(f"discover_{dataset.legacy_name}_{model.seed}.csv")
 
 
-def test_kd_dscv_spr_import_dataset_propagates_options(monkeypatch):
+def test_kd_discover_spr_import_dataset_propagates_options(monkeypatch):
     dataset = load_pde('burgers')
-    model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', lambda self: None)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', lambda self: None)
 
-    baseline = DSCVSparseAdapter(
+    baseline = DiscoverSparseAdapter(
         dataset,
         sample_ratio=0.1,
         colloc_num=128,
@@ -245,12 +245,12 @@ def test_kd_dscv_spr_import_dataset_propagates_options(monkeypatch):
     assert sparse_data['sampling_strategy'] == 'spline'
 
 
-def test_kd_dscv_train_smoke(monkeypatch):
+def test_kd_discover_train_smoke(monkeypatch):
     dataset = load_pde('chafee-infante')
 
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
-    monkeypatch.setattr(KD_DSCV, 'make_gp_aggregator', lambda self: None)
+    monkeypatch.setattr(KD_Discover, 'make_gp_aggregator', lambda self: None)
 
     def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
@@ -267,12 +267,12 @@ def test_kd_dscv_train_smoke(monkeypatch):
     assert result['expression'] == 'u_t = 0'
 
 
-def test_kd_dscv_fit_from_dataset(monkeypatch):
+def test_kd_discover_fit_from_dataset(monkeypatch):
     dataset = load_pde('chafee-infante')
 
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
-    monkeypatch.setattr(KD_DSCV, 'make_gp_aggregator', lambda self: None)
+    monkeypatch.setattr(KD_Discover, 'make_gp_aggregator', lambda self: None)
 
     def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
@@ -285,12 +285,12 @@ def test_kd_dscv_fit_from_dataset(monkeypatch):
     assert model.dataset_ is dataset
 
 
-def test_kd_dscv_spr_train_smoke(monkeypatch):
+def test_kd_discover_spr_train_smoke(monkeypatch):
     dataset = load_pde('burgers')
 
-    model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
 
     def fake_setup(self):
         # 保持 config_task 存在，避免 train 内访问失败
@@ -299,8 +299,8 @@ def test_kd_dscv_spr_train_smoke(monkeypatch):
     def fake_call_iter(self, n_epochs, verbose):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', fake_setup, raising=False)
-    monkeypatch.setattr(KD_DSCV_SPR, 'callIterPINN', fake_call_iter, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', fake_setup, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'callIterPINN', fake_call_iter, raising=False)
 
     model.import_dataset(dataset, sample=50, colloc_num=128, random_state=1)
     result = model.train(n_epochs=1, verbose=False)
@@ -309,10 +309,10 @@ def test_kd_dscv_spr_train_smoke(monkeypatch):
 
 
 
-def test_kd_dscv_spr_train_integration(monkeypatch):
-    """End-to-end smoke test for KD_DSCV_SPR with real dataset."""
+def test_kd_discover_spr_train_integration(monkeypatch):
+    """End-to-end smoke test for KD_Discover_SPR with real dataset."""
     dataset = load_pde('burgers')
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         n_iterations=1,
         n_samples_per_batch=10,
         binary_operators=["add_t", "diff_t"],
@@ -320,29 +320,29 @@ def test_kd_dscv_spr_train_integration(monkeypatch):
     )
 
     # Simplify heavy components while keeping PINN path intact
-    monkeypatch.setattr(KD_DSCV_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
 
     def mock_setup(self):
         # ensure metadata structures exist
         self.config_task.setdefault('eq_num', 1)
-        KD_DSCV.setup(self)
+        KD_Discover.setup(self)
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', mock_setup, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', mock_setup, raising=False)
 
     def mock_call_iter(self, n_epochs, verbose):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'callIterPINN', mock_call_iter, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'callIterPINN', mock_call_iter, raising=False)
 
     model.import_dataset(dataset, sample=50, colloc_num=64, random_state=0)
     result = model.train(n_epochs=1, verbose=False)
     assert result['expression'] == 'u_t = 0'
 
 
-def test_kd_dscv_gp_aggregator_is_disabled_in_kd(monkeypatch):
+def test_kd_discover_gp_aggregator_is_disabled_in_kd(monkeypatch):
     """run_gp_agg=True 时在 KD 中应被忽略，仅发出 warning 并返回 None。"""
 
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
     model.config_gp_agg['run_gp_agg'] = True
 
     with pytest.warns(RuntimeWarning):
@@ -393,12 +393,12 @@ def _make_nd_3d_dataset():
     )
 
 
-class TestDSCVAdapterND2D:
+class TestDiscoverAdapterND2D:
     """Tests for 2D spatial (x, y, t) adapter path."""
 
     def test_shapes_and_fields(self):
         dataset = _make_nd_2d_dataset()
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         assert set(data.keys()) >= {"u", "ut", "X", "n_input_dim"}
@@ -417,7 +417,7 @@ class TestDSCVAdapterND2D:
     def test_ut_numerical_accuracy(self):
         """Verify ut matches analytic derivative for u = sin(x)*cos(y)*exp(-t)."""
         dataset = _make_nd_2d_dataset()
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         # Analytic: du/dt = -sin(x)*cos(y)*exp(-t)
@@ -434,12 +434,12 @@ class TestDSCVAdapterND2D:
         np.testing.assert_allclose(data["ut"], ut_analytic, atol=0.05)
 
 
-class TestDSCVAdapterND3D:
+class TestDiscoverAdapterND3D:
     """Tests for 3D spatial (x, y, z, t) adapter path."""
 
     def test_shapes_and_fields(self):
         dataset = _make_nd_3d_dataset()
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         assert set(data.keys()) >= {"u", "ut", "X", "n_input_dim"}
@@ -456,12 +456,12 @@ class TestDSCVAdapterND3D:
         assert data["n_input_dim"] == 3
 
 
-class TestDSCVAdapterLegacyUnchanged:
+class TestDiscoverAdapterLegacyUnchanged:
     """Confirm legacy 1D path is not affected by N-D changes."""
 
     def test_legacy_adapter_identical_output(self):
         dataset = load_pde("chafee-infante")
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         # Same assertions as the original test
@@ -472,7 +472,7 @@ class TestDSCVAdapterLegacyUnchanged:
         assert data["n_input_dim"] == 1
 
 
-class TestDSCVAdapterNDPermutation:
+class TestDiscoverAdapterNDPermutation:
     """Verify correct axis permutation for non-standard axis_order."""
 
     def test_txy_order(self):
@@ -494,7 +494,7 @@ class TestDSCVAdapterNDPermutation:
             lhs_axis="t",
         )
 
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         # Output should be (nt, nx, ny) — time first, same as input in this case
@@ -521,7 +521,7 @@ class TestDSCVAdapterNDPermutation:
             lhs_axis="t",
         )
 
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         # Should be permuted to (nt, ny, nx) — time first, then spatial in order
@@ -543,18 +543,18 @@ class TestAutoFunctionSet:
     def test_auto_function_set_2d(self, monkeypatch):
         """2D data should auto-select Diff/Diff2/lap (not 1D diff tokens)."""
         dataset = _make_nd_2d_dataset()
-        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -578,18 +578,18 @@ class TestAutoFunctionSet:
     def test_auto_function_set_3d(self, monkeypatch):
         """3D data should auto-select Diff_3/Diff2_3."""
         dataset = _make_nd_3d_dataset()
-        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -606,7 +606,7 @@ class TestAutoFunctionSet:
     def test_user_operator_overrides(self, monkeypatch):
         """User-specified operator should not be overridden by auto-selection."""
         dataset = _make_nd_2d_dataset()
-        model = KD_DSCV(
+        model = KD_Discover(
             n_iterations=1,
             n_samples_per_batch=10,
             binary_operators=["add"],
@@ -615,14 +615,14 @@ class TestAutoFunctionSet:
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -637,18 +637,18 @@ class TestAutoFunctionSet:
     def test_1d_function_set_unchanged(self, monkeypatch):
         """1D data should keep the default function_set from config."""
         dataset = load_pde("chafee-infante")
-        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -664,21 +664,21 @@ class TestAutoFunctionSet:
         assert "diff3" in fs
 
     def test_reimport_resets_function_set(self, monkeypatch):
-        """Reusing a KD_DSCV instance across 2D then 1D datasets must reset tokens."""
+        """Reusing a KD_Discover instance across 2D then 1D datasets must reset tokens."""
         ds_2d = _make_nd_2d_dataset()
         ds_1d = load_pde("chafee-infante")
-        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -705,7 +705,7 @@ class TestAutoFunctionSet:
 # ==========================================================================
 
 
-class TestDSCVAdapterEdgeCases:
+class TestDiscoverAdapterEdgeCases:
     """Edge cases identified by Codex reviews."""
 
     def test_1d_via_nd_path_rejected(self):
@@ -726,7 +726,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="2-3 spatial dimensions"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_nd_minimum_time_points(self):
         """N-D adapter requires >= 3 time samples for FiniteDiff."""
@@ -747,7 +747,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="at least 3 samples"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_legacy_minimum_time_points(self):
         """Legacy adapter requires >= 3 time samples for FiniteDiff."""
@@ -767,7 +767,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="at least 3 temporal samples"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_nd_non_uniform_dt_rejected(self):
         """Non-uniform time grid should be rejected in N-D mode."""
@@ -788,7 +788,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="evenly spaced"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_lhs_axis_missing_rejected(self):
         """Missing lhs_axis in axis_order should raise ValueError at dataset creation."""
@@ -828,7 +828,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="2-3 spatial dimensions"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_legacy_nan_input_rejected(self):
         """Legacy path should reject u containing NaN."""
@@ -849,7 +849,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="NaN or Inf"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_nd_nan_input_rejected(self):
         """N-D path should reject u containing NaN."""
@@ -871,7 +871,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="NaN or Inf"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_legacy_zero_delta_t_rejected(self):
         """Legacy path should reject degenerate time grid (delta_t == 0)."""
@@ -891,7 +891,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="delta_t is zero"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_nd_zero_delta_t_rejected(self):
         """N-D path should reject degenerate time grid (delta_t == 0)."""
@@ -912,7 +912,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="zero"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_xty_permutation(self):
         """axis_order=["x","t","y"] — t in the middle — should still work."""
@@ -933,7 +933,7 @@ class TestDSCVAdapterEdgeCases:
             lhs_axis="t",
         )
 
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         # Should be permuted to (nt, nx, ny)
@@ -963,7 +963,7 @@ class TestDSCVAdapterEdgeCases:
         )
 
         with pytest.raises(ValueError, match="at least 4"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_partial_nd_data_rejected(self):
         """Having fields_data but no coords_1d should raise ValueError."""
@@ -979,7 +979,7 @@ class TestDSCVAdapterEdgeCases:
         dataset.coords_1d = None
 
         with pytest.raises(ValueError, match="both fields_data and coords_1d"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
     def test_partial_nd_coords_only_rejected(self):
         """Having coords_1d but no fields_data should raise ValueError."""
@@ -988,7 +988,7 @@ class TestDSCVAdapterEdgeCases:
         dataset.coords_1d = {"x": np.linspace(0, 1, 10), "y": np.linspace(0, 1, 8)}
 
         with pytest.raises(ValueError, match="both fields_data and coords_1d"):
-            DSCVRegularAdapter(dataset)
+            DiscoverRegularAdapter(dataset)
 
 
 # ==========================================================================
@@ -1192,20 +1192,20 @@ class TestPhase1b3DEquivalence:
     # ------------------------------------------------------------------
 
     def test_3d_e2e_import_dataset(self, monkeypatch):
-        """3D dataset flows through KD_DSCV.import_dataset without error."""
+        """3D dataset flows through KD_Discover.import_dataset without error."""
         dataset = _make_nd_3d_dataset()
-        model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover, "make_gp_aggregator", lambda self: None)
 
         def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
             return {"program": None, "expression": "u_t = 0", "r": 0.0}
@@ -1215,7 +1215,7 @@ class TestPhase1b3DEquivalence:
         model.import_dataset(dataset)
 
         # Verify adapter type
-        assert isinstance(model.data_class, DSCVRegularAdapter)
+        assert isinstance(model.data_class, DiscoverRegularAdapter)
 
         # Verify 3D function_set tokens
         fs = captured["function_set"]
@@ -1233,7 +1233,7 @@ class TestPhase1b3DEquivalence:
     def test_3d_e2e_data_shapes(self):
         """Verify data shapes after 3D adapter processing."""
         dataset = _make_nd_3d_dataset()
-        adapter = DSCVRegularAdapter(dataset)
+        adapter = DiscoverRegularAdapter(dataset)
         data = adapter.get_data()
 
         nx, ny, nz, nt = 6, 7, 5, 10
@@ -1294,10 +1294,10 @@ def _make_sparse_nd_3d_dataset():
     )
 
 
-class TestDSCVSparseND:
+class TestDiscoverSparseND:
     """Phase 2: Sparse adapter N-D support tests.
 
-    These tests define the expected behavior for DSCVSparseAdapter handling
+    These tests define the expected behavior for DiscoverSparseAdapter handling
     2D/3D spatial data via fields_data/coords_1d.  They are RED-phase tests
     that should FAIL until the implementation is complete.
     """
@@ -1309,7 +1309,7 @@ class TestDSCVSparseND:
     def test_sparse_nd_2d_prepare(self):
         """2D PDEDataset(fields_data, coords_1d) should be accepted by Sparse adapter."""
         dataset = _make_sparse_nd_2d_dataset()
-        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
         data = adapter.get_data()
 
         # Must contain the standard sparse output keys
@@ -1324,7 +1324,7 @@ class TestDSCVSparseND:
     def test_sparse_nd_3d_prepare(self):
         """3D PDEDataset(fields_data, coords_1d) should be accepted by Sparse adapter."""
         dataset = _make_sparse_nd_3d_dataset()
-        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
         data = adapter.get_data()
 
         assert set(data.keys()) >= {
@@ -1337,7 +1337,7 @@ class TestDSCVSparseND:
         """X_u_train columns must equal n_spatial + 1 (spatial coords + time)."""
         # 2D spatial: x, y, t -> 3 columns
         ds_2d = _make_sparse_nd_2d_dataset()
-        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        adapter_2d = DiscoverSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
         data_2d = adapter_2d.get_data()
         assert data_2d["X_u_train"].shape[1] == 3, (
             f"2D spatial should give 3 columns, got {data_2d['X_u_train'].shape[1]}"
@@ -1345,7 +1345,7 @@ class TestDSCVSparseND:
 
         # 3D spatial: x, y, z, t -> 4 columns
         ds_3d = _make_sparse_nd_3d_dataset()
-        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        adapter_3d = DiscoverSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
         data_3d = adapter_3d.get_data()
         assert data_3d["X_u_train"].shape[1] == 4, (
             f"3D spatial should give 4 columns, got {data_3d['X_u_train'].shape[1]}"
@@ -1354,14 +1354,14 @@ class TestDSCVSparseND:
     def test_sparse_nd_n_input_dim(self):
         """get_data() should return n_input_dim matching the spatial dimension count."""
         ds_2d = _make_sparse_nd_2d_dataset()
-        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        adapter_2d = DiscoverSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
         data_2d = adapter_2d.get_data()
         assert data_2d.get("n_input_dim") == 2, (
             f"Expected n_input_dim=2, got {data_2d.get('n_input_dim')}"
         )
 
         ds_3d = _make_sparse_nd_3d_dataset()
-        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        adapter_3d = DiscoverSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
         data_3d = adapter_3d.get_data()
         assert data_3d.get("n_input_dim") == 3, (
             f"Expected n_input_dim=3, got {data_3d.get('n_input_dim')}"
@@ -1370,7 +1370,7 @@ class TestDSCVSparseND:
     def test_sparse_nd_lb_ub_shape(self):
         """lb and ub should have shape (n_spatial + 1,)."""
         ds_2d = _make_sparse_nd_2d_dataset()
-        adapter_2d = DSCVSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
+        adapter_2d = DiscoverSparseAdapter(ds_2d, sample_ratio=0.1, random_state=0)
         data_2d = adapter_2d.get_data()
         assert data_2d["lb"].shape == (3,), (
             f"2D lb shape should be (3,), got {data_2d['lb'].shape}"
@@ -1380,7 +1380,7 @@ class TestDSCVSparseND:
         )
 
         ds_3d = _make_sparse_nd_3d_dataset()
-        adapter_3d = DSCVSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
+        adapter_3d = DiscoverSparseAdapter(ds_3d, sample_ratio=0.1, random_state=0)
         data_3d = adapter_3d.get_data()
         assert data_3d["lb"].shape == (4,), (
             f"3D lb shape should be (4,), got {data_3d['lb'].shape}"
@@ -1409,7 +1409,7 @@ class TestDSCVSparseND:
         )
 
         with pytest.raises(ValueError, match="NaN or Inf"):
-            DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+            DiscoverSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
 
     def test_sparse_nd_inf_rejection(self):
         """Inf in the input field data should raise ValueError."""
@@ -1431,12 +1431,12 @@ class TestDSCVSparseND:
         )
 
         with pytest.raises(ValueError, match="NaN or Inf"):
-            DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+            DiscoverSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
 
     def test_sparse_legacy_1d_unchanged(self):
         """Legacy 1D path should remain unaffected by N-D additions."""
         dataset = load_pde("burgers")
-        adapter = DSCVSparseAdapter(
+        adapter = DiscoverSparseAdapter(
             dataset, sample=200, colloc_num=512, random_state=0
         )
         data = adapter.get_data()
@@ -1449,11 +1449,11 @@ class TestDSCVSparseND:
         assert data["u_train"].shape[0] == data["X_u_train"].shape[0]
 
     # ------------------------------------------------------------------
-    # Integration layer: KD_DSCV_SPR config injection
+    # Integration layer: KD_Discover_SPR config injection
     # ------------------------------------------------------------------
 
     def test_spr_import_nd_config_injection(self, monkeypatch):
-        """KD_DSCV_SPR.import_dataset() with N-D data should inject PINN config.
+        """KD_Discover_SPR.import_dataset() with N-D data should inject PINN config.
 
         After import_dataset:
         - config_pinn['input_dim'] == n_spatial + 1
@@ -1461,13 +1461,13 @@ class TestDSCVSparseND:
         - config_pinn['generation_type'] == 'multi_AD'
         """
         dataset = _make_sparse_nd_2d_dataset()
-        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
         # Bypass heavy setup to focus on config injection
         def fake_setup(self):
             self.config_task.setdefault("eq_num", 1)
 
-        monkeypatch.setattr(KD_DSCV_SPR, "setup", fake_setup)
+        monkeypatch.setattr(KD_Discover_SPR, "setup", fake_setup)
 
         model.import_dataset(dataset, sample_ratio=0.1, random_state=0)
 
@@ -1487,25 +1487,25 @@ class TestDSCVSparseND:
         2D-compatible tokens (torch versions of Diff, Diff2, lap).
         """
         dataset = _make_sparse_nd_2d_dataset()
-        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
         captured = {}
 
-        original_set_task = KD_DSCV.set_task
+        original_set_task = KD_Discover.set_task
 
         def capture_set_task(self):
             original_set_task(self)
             captured["function_set"] = list(self.config_task["function_set"])
 
-        monkeypatch.setattr(KD_DSCV_SPR, "set_task", capture_set_task)
-        monkeypatch.setattr(KD_DSCV_SPR, "make_gp_aggregator", lambda self: None)
+        monkeypatch.setattr(KD_Discover_SPR, "set_task", capture_set_task)
+        monkeypatch.setattr(KD_Discover_SPR, "make_gp_aggregator", lambda self: None)
 
         # Mock the PINN model creation to avoid heavy dependencies
         class FakePINN:
             def import_outter_data(self, data):
                 pass
 
-        monkeypatch.setattr(KD_DSCV_SPR, "make_pinn_model", lambda self: FakePINN())
+        monkeypatch.setattr(KD_Discover_SPR, "make_pinn_model", lambda self: FakePINN())
 
         model.import_dataset(dataset, sample_ratio=0.1, random_state=0)
 
@@ -1573,19 +1573,19 @@ class TestDSCVSparseND:
         """spline_sample=True should raise NotImplementedError for N-D data."""
         dataset = _make_sparse_nd_2d_dataset()
         with pytest.raises(NotImplementedError, match="spline_sample"):
-            DSCVSparseAdapter(dataset, sample_ratio=0.1, spline_sample=True)
+            DiscoverSparseAdapter(dataset, sample_ratio=0.1, spline_sample=True)
 
     def test_sparse_nd_cut_quantile_raises(self):
         """cut_quantile should raise NotImplementedError for N-D data."""
         dataset = _make_sparse_nd_2d_dataset()
         with pytest.raises(NotImplementedError, match="cut_quantile"):
-            DSCVSparseAdapter(dataset, sample_ratio=0.1, cut_quantile=0.9)
+            DiscoverSparseAdapter(dataset, sample_ratio=0.1, cut_quantile=0.9)
 
     def test_sparse_nd_data_ratio_raises(self):
         """data_ratio should raise NotImplementedError for N-D data."""
         dataset = _make_sparse_nd_2d_dataset()
         with pytest.raises(NotImplementedError, match="data_ratio"):
-            DSCVSparseAdapter(dataset, sample_ratio=0.1, data_ratio=0.5)
+            DiscoverSparseAdapter(dataset, sample_ratio=0.1, data_ratio=0.5)
 
     def test_sparse_nd_nonstandard_axis_order(self):
         """Non-standard axis_order (time not last) should still produce correct output."""
@@ -1606,7 +1606,7 @@ class TestDSCVSparseND:
             target_field="u",
             lhs_axis="t",
         )
-        adapter = DSCVSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
+        adapter = DiscoverSparseAdapter(dataset, sample_ratio=0.1, random_state=0)
         data = adapter.get_data()
 
         assert data["X_u_train"].shape[1] == 3  # x, y, t
@@ -1617,12 +1617,12 @@ class TestDSCVSparseND:
         """Reimporting 1D after N-D should reset PINN config to baseline."""
         ds_nd = _make_sparse_nd_2d_dataset()
         ds_1d = load_pde("burgers")
-        model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
+        model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
 
         def fake_setup(self):
             self.config_task.setdefault("eq_num", 1)
 
-        monkeypatch.setattr(KD_DSCV_SPR, "setup", fake_setup)
+        monkeypatch.setattr(KD_Discover_SPR, "setup", fake_setup)
 
         # First import: 2D spatial
         model.import_dataset(ds_nd, sample_ratio=0.1, random_state=0)

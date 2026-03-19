@@ -1,10 +1,10 @@
-"""DSCV multi-dataset benchmark: 7 datasets x 2 configurations.
+"""Discover multi-dataset benchmark: 7 datasets x 2 configurations.
 
-Runs KD_DSCV on all DSCV-supported datasets with quick and full configs,
+Runs KD_Discover on all Discover-supported datasets with quick and full configs,
 prints discovered equation, reward, and ground truth for each combination.
 
 Usage:
-    python tests/manual_scripts/dscv_multi_dataset_test.py
+    python tests/manual_scripts/discover_multi_dataset_test.py
 """
 
 import logging
@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from kd.dataset import load_pde
 from kd.dataset._registry import get_dataset_sym_true
-from kd.model.kd_dscv import KD_DSCV
+from kd.model.kd_discover import KD_Discover
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ SEED = 0
 
 
 def run_one(dataset_name: str, config_name: str, config: dict[str, int]) -> dict:
-    """Run DSCV on one dataset with the given configuration.
+    """Run Discover on one dataset with the given configuration.
 
     Returns a dict with dataset, config, reward, expression, sym_true, and
     elapsed time.  If training raises, captures the error message instead.
@@ -57,7 +57,7 @@ def run_one(dataset_name: str, config_name: str, config: dict[str, int]) -> dict
 
     try:
         dataset = load_pde(dataset_name)
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "diff"],
             unary_operators=["n2"],
             n_iterations=config["n_iterations"],
@@ -107,7 +107,7 @@ def run_one(dataset_name: str, config_name: str, config: dict[str, int]) -> dict
 def print_summary(results: list[dict]) -> None:
     """Print a summary table of all benchmark results."""
     print(f"\n\n{'=' * 100}")
-    print("  DSCV BENCHMARK SUMMARY")
+    print("  Discover BENCHMARK SUMMARY")
     print(f"{'=' * 100}")
     header = (
         f"{'Dataset':<20} {'Config':<8} {'Reward':>10} {'Time':>7}  "

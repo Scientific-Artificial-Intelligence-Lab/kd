@@ -1,6 +1,6 @@
-"""DSCV vs ref_lib DISCOVER: 5-dataset side-by-side benchmark.
+"""Discover vs ref_lib DISCOVER: 5-dataset side-by-side benchmark.
 
-Runs kd DSCV and ref_lib DISCOVER on the 5 shared datasets with aligned
+Runs kd Discover and ref_lib DISCOVER on the 5 shared datasets with aligned
 parameters, then prints a comparison table of reward, time, expression, and
 number of terms.
 
@@ -14,17 +14,17 @@ Environment: Use the ref-discover conda env (has both kd and TF 2.x):
 
 Usage:
     # Run BOTH sides (default):
-    python tests/manual_scripts/dscv_vs_reflib_benchmark.py
+    python tests/manual_scripts/discover_vs_reflib_benchmark.py
 
     # Run only one side:
-    python tests/manual_scripts/dscv_vs_reflib_benchmark.py --side kd
-    python tests/manual_scripts/dscv_vs_reflib_benchmark.py --side reflib
+    python tests/manual_scripts/discover_vs_reflib_benchmark.py --side kd
+    python tests/manual_scripts/discover_vs_reflib_benchmark.py --side reflib
 
     # Quick mode (fewer iterations for sanity check):
-    python tests/manual_scripts/dscv_vs_reflib_benchmark.py --quick
+    python tests/manual_scripts/discover_vs_reflib_benchmark.py --quick
 
     # Subset of datasets:
-    python tests/manual_scripts/dscv_vs_reflib_benchmark.py --datasets kdv burgers
+    python tests/manual_scripts/discover_vs_reflib_benchmark.py --datasets kdv burgers
 """
 
 import argparse
@@ -101,18 +101,18 @@ MODE1_KD_OVERRIDES = {
 # kd side
 # ---------------------------------------------------------------------------
 def run_kd(dataset_name: str, config: dict) -> dict:
-    """Run kd DSCV on one dataset.
+    """Run kd Discover on one dataset.
 
     Returns dict with keys: reward, expression, elapsed, n_terms, error.
     """
     from kd.dataset import load_pde
-    from kd.model.kd_dscv import KD_DSCV
+    from kd.model.kd_discover import KD_Discover
 
     n_epochs = config["n_samples"] // config["batch_size"]
     start = time.time()
     try:
         dataset = load_pde(dataset_name)
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "div", "diff", "diff2", "diff3"],
             unary_operators=["n2", "n3"],
             n_iterations=n_epochs,
@@ -236,7 +236,7 @@ def print_comparison(results: list[dict]) -> None:
     """Print side-by-side comparison table."""
     sep = "=" * 120
     print(f"\n{sep}")
-    print("  DSCV vs ref_lib DISCOVER — BENCHMARK COMPARISON")
+    print("  Discover vs ref_lib DISCOVER — BENCHMARK COMPARISON")
     print(sep)
 
     header = (
@@ -327,7 +327,7 @@ def print_comparison(results: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="DSCV vs ref_lib DISCOVER benchmark"
+        description="Discover vs ref_lib DISCOVER benchmark"
     )
     parser.add_argument(
         "--side",
@@ -375,7 +375,7 @@ def main() -> None:
         print(f"{'=' * 60}")
 
         if run_kd_side:
-            print(f"\n--- kd DSCV ---")
+            print(f"\n--- kd Discover ---")
             r = run_kd(kd_name, config)
             r["dataset"] = kd_name
             r["side"] = "kd"

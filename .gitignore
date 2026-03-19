@@ -228,7 +228,7 @@ tests/reports/
 artifacts/
 
 team*/
-test_dscv
+test_discover
 notes*/
 
 ref_*/
@@ -237,7 +237,7 @@ outputs/
 tests/verify_examples/
 
 # Generated output directories from model runs
-dscv/
+discover/
 sga/
 
 # Session progress (local only)

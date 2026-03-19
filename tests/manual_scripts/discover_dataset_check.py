@@ -1,12 +1,12 @@
-"""Manual DSCV matrix check over core PDE datasets.
+"""Manual Discover matrix check over core PDE datasets.
 
 Usage (from repo root, in kd-env):
 
-    python tests/manual_scripts/dscv_dataset_check.py
+    python tests/manual_scripts/discover_dataset_check.py
 
-会依次对若干 registry 中标记为适合 DSCV 的数据集运行 KD_DSCV.fit_dataset，
+会依次对若干 registry 中标记为适合 Discover 的数据集运行 KD_Discover.fit_dataset，
 并打印发现的表达式与 reward；同时通过 kd.viz 生成简单的 equation/residual/field_comparison
-图像，写入 artifacts/dscv_matrix/<dataset_name>/。
+图像，写入 artifacts/discover_matrix/<dataset_name>/。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ repo_root = current_dir.parent.parent
 sys.path.insert(0, str(repo_root))
 
 from kd.dataset import load_pde
-from kd.model import KD_DSCV
+from kd.model import KD_Discover
 from kd.viz import VizRequest, configure, render, render_equation
 
 
@@ -38,7 +38,7 @@ DATASETS = [
 
 
 def main() -> None:
-    output_root = Path("artifacts") / "dscv_matrix"
+    output_root = Path("artifacts") / "discover_matrix"
     configure(save_dir=output_root)
     np.random.seed(42)
 
@@ -50,7 +50,7 @@ def main() -> None:
             print(f"[load] failed: {exc}")
             continue
 
-        model = KD_DSCV(
+        model = KD_Discover(
             binary_operators=["add", "mul", "diff"],
             unary_operators=["n2"],
             n_iterations=5,

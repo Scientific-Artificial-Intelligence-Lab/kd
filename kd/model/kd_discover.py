@@ -51,7 +51,7 @@ class BaseRL(BaseEstimator, metaclass=ABCMeta):
         """Make predictions."""
         pass
     
-class KD_DSCV(BaseRL):
+class KD_Discover(BaseRL):
     """Deep Reinforcement Learning model for PDE discovery.
     
     This class implements a deep RL approach to discover governing equations
@@ -81,7 +81,7 @@ class KD_DSCV(BaseRL):
         config_out=None,
         seed=0,
         ):
-        """Initialize KD_DSCV model.
+        """Initialize KD_Discover model.
         
         Args:
             n_iterations (int): Number of training iterations.
@@ -165,16 +165,16 @@ class KD_DSCV(BaseRL):
                 dimensions.
 
         Returns:
-            KD_DSCV: The estimator instance (for chaining).
+            KD_Discover: The estimator instance (for chaining).
         """
 
         from kd.dataset import PDEDataset  # lazy import to avoid circular dependency
-        from .discover.adapter import DSCVRegularAdapter
+        from .discover.adapter import DiscoverRegularAdapter
 
         if not isinstance(dataset, PDEDataset):
             raise TypeError("dataset must be a PDEDataset instance")
 
-        adapter = DSCVRegularAdapter(dataset, sym_true=sym_true, n_input_dim=n_input_dim)
+        adapter = DiscoverRegularAdapter(dataset, sym_true=sym_true, n_input_dim=n_input_dim)
         self.data_class = adapter
         self.dataset_ = dataset
 
@@ -217,7 +217,7 @@ class KD_DSCV(BaseRL):
         to the native DISCOVER ``PDETask`` examples.
         """
         raise RuntimeError(
-            "KD_DSCV.fit(X, y, ...) is deprecated and no longer supported in KD 1.0. "
+            "KD_Discover.fit(X, y, ...) is deprecated and no longer supported in KD 1.0. "
             "Please use import_dataset / fit_from_dataset / fit_dataset together "
             "with a kd.dataset.PDEDataset instance."
         )
@@ -232,7 +232,7 @@ class KD_DSCV(BaseRL):
         n_input_dim=None,
         dataset_name=None,
     ):
-        """Train DSCV (local PDE mode) directly from a :class:`PDEDataset`.
+        """Train Discover (local PDE mode) directly from a :class:`PDEDataset`.
 
         This is a convenience wrapper aligned with :class:`KD_SGA` and
         :class:`KD_DLGA`, using the unified dataset-based entry point.
@@ -335,7 +335,7 @@ class KD_DSCV(BaseRL):
         run_gp_agg = bool(self.config_gp_agg.get("run_gp_agg", False))
         if run_gp_agg:
             warnings.warn(
-                "KD_DSCV: GP aggregator (run_gp_agg=True) 在 KD 1.x 中不受支持，将被忽略。",
+                "KD_Discover: GP aggregator (run_gp_agg=True) 在 KD 1.x 中不受支持，将被忽略。",
                 RuntimeWarning,
             )
         return None
@@ -357,13 +357,13 @@ class KD_DSCV(BaseRL):
         return searcher
 
     # Diff tokens for each spatial dimension (used for auto function_set).
-    # Numpy (FD) tokens — used by KD_DSCV (Regular mode).
+    # Numpy (FD) tokens — used by KD_Discover (Regular mode).
     _DIFF_TOKENS_BY_DIM = {
         1: ["diff", "diff2", "diff3"],
         2: ["Diff", "Diff2", "lap"],
         3: ["Diff_3", "Diff2_3", "lap_3"],
     }
-    # Torch (PINN) tokens — used by KD_DSCV_SPR (Sparse mode).
+    # Torch (PINN) tokens — used by KD_Discover_SPR (Sparse mode).
     # For N-D, lap_t provides the Laplacian via autograd (sum of d2u/dxi^2).
     # diff_t/diff2_t are 1D-oriented; lap_t covers the common N-D PDE pattern.
     _DIFF_TOKENS_TORCH_BY_DIM = {
@@ -403,7 +403,7 @@ class KD_DSCV(BaseRL):
         ``n_input_dim > 1``.  Preserves non-diff tokens (add, mul, etc.).
 
         Always resets from ``_base_function_set`` to avoid stale tokens
-        when the same ``KD_DSCV`` instance is reused across datasets.
+        when the same ``KD_Discover`` instance is reused across datasets.
 
         Handles both numpy (FD) tokens for Regular mode and torch tokens
         for PINN/Sparse mode, selecting the correct map based on whether
@@ -466,20 +466,20 @@ class KD_DSCV(BaseRL):
         """Make predictions (not implemented)."""
         pass
 
-class KD_DSCV_SPR(KD_DSCV):
-    """KD_DSCV model with Physics-Informed Neural Networks.
-    
-    This class extends KD_DSCV with PINN capabilities for better
+class KD_Discover_SPR(KD_Discover):
+    """KD_Discover model with Physics-Informed Neural Networks.
+
+    This class extends KD_Discover with PINN capabilities for better
     equation discovery in sparse data settings.
     """
 
     def __init__(self, *args, config_out=None, **kwargs):
-        """Initialize KD_DSCV_Pinn model.
-        
+        """Initialize KD_Discover_SPR model.
+
         Args:
-            *args: Positional arguments for KD_DSCV.
+            *args: Positional arguments for KD_Discover.
             config_out: Optional output configuration.
-            **kwargs: Keyword arguments for KD_DSCV.
+            **kwargs: Keyword arguments for KD_Discover.
         """
         super().__init__(*args, config_out=None, **kwargs)
         self.base_config_file = "./discover/config/config_pde_pinn.json"
@@ -528,12 +528,12 @@ class KD_DSCV_SPR(KD_DSCV):
         """
 
         from kd.dataset import PDEDataset
-        from .discover.adapter import DSCVSparseAdapter
+        from .discover.adapter import DiscoverSparseAdapter
 
         if not isinstance(dataset, PDEDataset):
             raise TypeError("dataset must be a PDEDataset instance")
 
-        adapter = DSCVSparseAdapter(
+        adapter = DiscoverSparseAdapter(
             dataset,
             sample=sample,
             sample_ratio=sample_ratio,

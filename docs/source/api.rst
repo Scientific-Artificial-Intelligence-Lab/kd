@@ -36,7 +36,7 @@ High-level wrappers
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: kd.model.kd_dscv
+.. automodule:: kd.model.kd_discover
    :members:
    :undoc-members:
    :show-inheritance:

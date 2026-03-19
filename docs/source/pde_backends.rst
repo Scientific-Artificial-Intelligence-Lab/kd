@@ -54,8 +54,8 @@ diagnostics.
    )
    model.fit_dataset(dataset)
 
-KD_DSCV — DISCOVER (RL + STRidge)
-----------------------------------
+KD_Discover — DISCOVER (RL + STRidge)
+--------------------------------------
 
 Uses a reinforcement-learning controller to search over expression trees,
 combined with STRidge for coefficient fitting. Supports flexible operator
@@ -64,10 +64,10 @@ sets.
 .. code-block:: python
 
    from kd.dataset import load_pde
-   from kd.model import KD_DSCV
+   from kd.model import KD_Discover
 
    dataset = load_pde("burgers")
-   model = KD_DSCV(
+   model = KD_Discover(
        binary_operators=["add", "mul", "div", "diff", "diff2", "diff3"],
        unary_operators=["n2", "n3"],
        n_samples_per_batch=500,
@@ -76,19 +76,19 @@ sets.
    )
    model.fit_dataset(dataset, n_epochs=100)
 
-KD_DSCV_SPR — DISCOVER + PINN
--------------------------------
+KD_Discover_SPR — DISCOVER + PINN
+-----------------------------------
 
-Extends KD_DSCV with a Physics-Informed Neural Network (PINN) for handling
+Extends KD_Discover with a Physics-Informed Neural Network (PINN) for handling
 very sparse or noisy observations.
 
 .. code-block:: python
 
    from kd.dataset import load_pde
-   from kd.model import KD_DSCV_SPR
+   from kd.model import KD_Discover_SPR
 
    dataset = load_pde("burgers")
-   model = KD_DSCV_SPR(
+   model = KD_Discover_SPR(
        binary_operators=["add", "mul", "diff", "diff2"],
        unary_operators=["n2"],
        n_iterations=50,

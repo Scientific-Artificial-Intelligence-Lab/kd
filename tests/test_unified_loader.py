@@ -5,7 +5,7 @@ import pytest
 from kd.dataset import load_pde
 from kd.model.kd_dlga import KD_DLGA
 from kd.model.kd_sga import KD_SGA
-from kd.model.kd_dscv import KD_DSCV, KD_DSCV_SPR
+from kd.model.kd_discover import KD_Discover, KD_Discover_SPR
 from kd.model.discover.searcher import Searcher
 
 
@@ -61,11 +61,11 @@ def test_unified_loader_sga(monkeypatch, dataset_name):
     assert model.dataset_ is dataset
 
 
-def test_unified_loader_dscv(monkeypatch):
+def test_unified_loader_discover(monkeypatch):
     dataset = load_pde('chafee-infante')
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
 
-    monkeypatch.setattr(KD_DSCV, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover, 'make_gp_aggregator', lambda self: None, raising=False)
 
     def fake_search(self, n_epochs=1, verbose=True, keep_history=True):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
@@ -82,26 +82,26 @@ def test_unified_loader_dscv(monkeypatch):
     assert model.dataset_ is dataset
 
 
-def test_unified_loader_dscv_spr(monkeypatch):
+def test_unified_loader_discover_spr(monkeypatch):
     dataset = load_pde('burgers')
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         n_iterations=1,
         n_samples_per_batch=10,
         binary_operators=["add_t", "diff_t"],
         unary_operators=['n2_t'],
     )
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
 
     def fake_setup(self):
         self.config_task.setdefault('eq_num', 1)
-        KD_DSCV.setup(self)
+        KD_Discover.setup(self)
 
     def fake_call_iter(self, n_epochs, verbose):
         return {'program': None, 'expression': 'u_t = 0', 'r': 0.0}
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', fake_setup, raising=False)
-    monkeypatch.setattr(KD_DSCV_SPR, 'callIterPINN', fake_call_iter, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', fake_setup, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'callIterPINN', fake_call_iter, raising=False)
 
     model.import_dataset(dataset, sample=50, colloc_num=64, random_state=0)
     result = model.train(n_epochs=1, verbose=False)
