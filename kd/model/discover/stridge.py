@@ -487,7 +487,10 @@ class STRidge(object):
             # result = result[2:-2,1:] #RRE
             if invalid:
                 return 0,[0],invalid,error_node,error_type,None
-            
+
+            if result is None:
+                return 0,[0],True,None,"execute_returned_none",None
+
             if torch.is_tensor(result):
             # 如果结果是 Tensor，安全地转换为 NumPy 数组后再添加
                 self.full_sized_terms.append(result.cpu().detach().numpy())

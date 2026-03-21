@@ -41,8 +41,7 @@ def python_execute(traversal, u, x):
                 except Exception as e:
                     print(e)
                     print(f"illegal token {token.name} utilization")
-                    import pdb;pdb.set_trace()
-                # import pdb;pdb.set_trace()
+                    return None
             if len(apply_stack) != 1:
                 apply_stack.pop()
                 apply_stack[-1].append(intermediate_result)
@@ -97,7 +96,7 @@ def python_execute_torch(traversal, u, x):
                     # print("nan or inf")
                     return None
             except:
-                import pdb;pdb.set_trace()
+                return None
                 
             if len(apply_stack) != 1:
                 apply_stack.pop()
