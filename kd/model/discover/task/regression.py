@@ -15,8 +15,8 @@ def make_regression_metric(name: str):
 
     def metric(y: np.ndarray, y_hat: np.ndarray) -> float:
         variance = max(float(np.var(y)), 1e-12)
-        rmse = float(np.sqrt(np.mean((y - y_hat) ** 2)))
-        return 1.0 / (1.0 + np.sqrt((rmse ** 2) / variance))
+        mse = float(np.mean((y - y_hat) ** 2))
+        return 1.0 / (1.0 + np.sqrt(mse / variance))
 
     return metric, 0.0, 1.0
 

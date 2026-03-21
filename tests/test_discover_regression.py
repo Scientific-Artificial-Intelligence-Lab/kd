@@ -135,3 +135,167 @@ def test_kd_discover_regression_fit_validates_input_shapes():
 
     with pytest.raises(ValueError, match="样本数"):
         model.fit(np.ones((3, 2)), np.array([1.0, 2.0]))
+
+
+# ---------------------------------------------------------------------------
+# Bug regression tests
+# ---------------------------------------------------------------------------
+
+from kd.model.discover.task.regression import make_regression_metric
+
+
+class TestPredictNoneCrash:
+    """Bug 1: predict() crashes with AttributeError when execute_direct
+    returns (None, None, [1.0]) for an invalid program.
+
+    Expected: RuntimeError with a clear message, not AttributeError.
+    """
+
+    def test_predict_raises_runtime_error_on_none_y_hat(self, monkeypatch):
+        """predict() should raise RuntimeError when program produces None."""
+        X = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y = np.array([5.0, 7.0])
+        _setup_regression_task(X, y, ["add", "mul", "const"])
+
+        program = from_str_tokens("add,x1,x2", skip_cache=True)
+        # Force execute_direct to return (None, None, [1.0])
+        monkeypatch.setattr(
+            program, "execute_direct", lambda x: (None, None, [1.0])
+        )
+
+        model = KD_Discover_Regression(n_iterations=1, n_samples_per_batch=10)
+        model.best_program_ = program
+
+        with pytest.raises(RuntimeError, match="(?i)predict|invalid|none"):
+            model.predict(X)
+
+
+class TestVariableNameReplacementOrdering:
+    """Bug 2: _render_named_expression replaces x1 before x10, corrupting
+    x10 into '<name_for_x1>0'.
+    """
+
+    def test_ten_variables_no_corruption(self):
+        """x10 should become the 10th name, not '<x1-name>0'."""
+        expr = "add,x1,x10"
+        names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        result = KD_Discover_Regression._render_named_expression(expr, names)
+        assert result == "add,a,j"
+
+    def test_twelve_variables_x11_x12(self):
+        """x11, x12 should not be corrupted by x1 replacement."""
+        expr = "add,x1,add,x11,x12"
+        names = [f"v{i}" for i in range(12)]
+        result = KD_Discover_Regression._render_named_expression(expr, names)
+        assert result == "add,v0,add,v10,v11"
+
+    def test_two_variables_no_false_positive(self):
+        """Sanity check: 2 variables should work fine (no ordering issue)."""
+        expr = "mul,x1,x2"
+        names = ["alpha", "beta"]
+        result = KD_Discover_Regression._render_named_expression(expr, names)
+        assert result == "mul,alpha,beta"
+
+
+class TestPredictLifecycle:
+    """Bug 3: predict() happy path and error path coverage."""
+
+    def test_predict_before_fit_raises_runtime_error(self):
+        """predict() without prior fit() should raise RuntimeError."""
+        model = KD_Discover_Regression(n_iterations=1, n_samples_per_batch=10)
+        X = np.ones((5, 2))
+        with pytest.raises(RuntimeError, match="before fit"):
+            model.predict(X)
+
+    def test_predict_happy_path_returns_correct_shape(self):
+        """predict() with a valid program returns a 1-D array of correct length."""
+        X = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        y = X[:, 0] + X[:, 1]  # y = x1 + x2
+        _setup_regression_task(X, y, ["add", "mul", "const"])
+
+        program = from_str_tokens("add,x1,x2", skip_cache=True)
+        _ = program.r_ridge  # trigger constant optimization / evaluation
+
+        model = KD_Discover_Regression(n_iterations=1, n_samples_per_batch=10)
+        model.best_program_ = program
+
+        y_pred = model.predict(X)
+        assert y_pred.ndim == 1
+        assert y_pred.shape[0] == X.shape[0]
+        np.testing.assert_allclose(y_pred, y, atol=1e-6)
+
+    def test_predict_rejects_1d_input(self):
+        """predict() should reject 1-D X with a clear ValueError."""
+        X = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y = np.array([3.0, 7.0])
+        _setup_regression_task(X, y, ["add"])
+
+        program = from_str_tokens("add,x1,x2", skip_cache=True)
+        model = KD_Discover_Regression(n_iterations=1, n_samples_per_batch=10)
+        model.best_program_ = program
+
+        with pytest.raises(ValueError, match="二维数组"):
+            model.predict(np.array([1.0, 2.0]))
+
+    def test_predict_rejects_feature_count_mismatch(self):
+        """predict() should reject X whose feature count differs from training."""
+        X = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y = np.array([3.0, 7.0])
+        _setup_regression_task(X, y, ["add"])
+
+        program = from_str_tokens("add,x1,x2", skip_cache=True)
+        model = KD_Discover_Regression(n_iterations=1, n_samples_per_batch=10)
+        model.best_program_ = program
+
+        with pytest.raises(ValueError, match="特征数"):
+            model.predict(np.array([[1.0], [2.0]]))
+
+        with pytest.raises(ValueError, match="特征数"):
+            model.predict(np.array([[1.0, 2.0, 3.0], [3.0, 4.0, 5.0]]))
+
+
+class TestMakeRegressionMetricRedundancy:
+    """Bug 4: sqrt(rmse**2) is numerically redundant -- it should equal rmse.
+
+    These tests verify the metric gives the correct mathematical result.
+    They serve as refactor-safety tests: they should pass both before and
+    after simplifying sqrt(rmse**2) to rmse.
+    """
+
+    def test_perfect_prediction_returns_one(self):
+        """Metric should be 1.0 when y_hat == y exactly."""
+        metric_fn, _, _ = make_regression_metric("inv_nrmse")
+        y = np.array([[1.0], [2.0], [3.0]])
+        y_hat = y.copy()
+        result = metric_fn(y, y_hat)
+        assert result == pytest.approx(1.0)
+
+    def test_known_value_by_hand(self):
+        """Verify metric against hand computation.
+
+        y = [0, 2], y_hat = [0, 0]
+        mse = (0 + 4) / 2 = 2, rmse = sqrt(2)
+        var(y) = 1.0
+        Expected: 1 / (1 + sqrt(rmse^2 / var)) = 1 / (1 + sqrt(2/1))
+                = 1 / (1 + sqrt(2))
+        """
+        metric_fn, _, _ = make_regression_metric("inv_nrmse")
+        y = np.array([[0.0], [2.0]])
+        y_hat = np.array([[0.0], [0.0]])
+        expected = 1.0 / (1.0 + np.sqrt(2.0))
+        result = metric_fn(y, y_hat)
+        assert result == pytest.approx(expected, rel=1e-10)
+
+    def test_metric_bounded_between_zero_and_one(self):
+        """inv_nrmse should always be in (0, 1]."""
+        metric_fn, _, _ = make_regression_metric("inv_nrmse")
+        rng = np.random.default_rng(42)
+        y = rng.standard_normal((50, 1))
+        y_hat = rng.standard_normal((50, 1)) * 10  # large error
+        result = metric_fn(y, y_hat)
+        assert 0.0 < result <= 1.0
+
+    def test_unsupported_metric_name_raises(self):
+        """Requesting an unknown metric should raise ValueError."""
+        with pytest.raises(ValueError, match="Unrecognized"):
+            make_regression_metric("mse")

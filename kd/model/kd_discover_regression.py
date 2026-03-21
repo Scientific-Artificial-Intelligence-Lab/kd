@@ -33,6 +33,7 @@ class KD_Discover_Regression(KD_Discover):
         self.set_config(config_out)
         self.best_program_ = None
         self.result_ = None
+        self.n_features_in_ = None
 
     def _validate_inputs(self, X, y, var_names: Sequence[str] | None):
         X_arr = np.asarray(X, dtype=float)
@@ -58,7 +59,7 @@ class KD_Discover_Regression(KD_Discover):
     @staticmethod
     def _render_named_expression(expression: str, var_names: Sequence[str]) -> str:
         rendered = expression
-        for index, name in enumerate(var_names, start=1):
+        for index, name in reversed(list(enumerate(var_names, start=1))):
             rendered = rendered.replace(f"x{index}", name)
         return rendered
 
@@ -86,6 +87,7 @@ class KD_Discover_Regression(KD_Discover):
         self.data_class = _RegressionArrayData(X_arr, y_arr, names)
         self.dataset = "custom_regression"
         self.dataset_ = None
+        self.n_features_in_ = X_arr.shape[1]
         self.setup()
 
         raw_result = self.train(n_epochs=self.n_iterations, verbose=verbose)
@@ -116,5 +118,15 @@ class KD_Discover_Regression(KD_Discover):
         X_arr = np.asarray(X, dtype=float)
         if X_arr.ndim != 2:
             raise ValueError(f"KD_Discover_Regression.predict 期望 X 为二维数组，但收到 X.shape={X_arr.shape}")
+        expected_n_features = self.n_features_in_
+        if expected_n_features is None:
+            expected_n_features = getattr(getattr(self.best_program_, "task", None), "n_input_var", None)
+        if expected_n_features is not None and X_arr.shape[1] != expected_n_features:
+            raise ValueError(
+                "KD_Discover_Regression.predict 收到不匹配的特征数："
+                f"X.shape[1]={X_arr.shape[1]}, expected={expected_n_features}"
+            )
         y_hat, _, _ = self.best_program_.execute_direct(X_arr)
+        if y_hat is None:
+            raise RuntimeError("predict failed: program evaluation returned None.")
         return y_hat.reshape(-1)
