@@ -243,3 +243,10 @@ sga/
 # Session progress (local only)
 PROGRESS.md
 LEARNINGS.md
+
+# Trash (soft-delete bin)
+trash/
+
+# Project management docs (local only)
+RESEARCH.md
+DESIGN.md
