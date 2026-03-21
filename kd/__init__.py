@@ -9,7 +9,6 @@ __version__ = '1.0.0'
 __pkg_name__ = 'KD'
 
 from .dataset import load_burgers_equation, load_mat_file
-from . import viz
 
 _submodules = [
     'dataset',
@@ -25,5 +24,16 @@ __all__ = _submodules + [
     "KD_DLGA",
     "KD_Discover",
     "KD_Discover_SPR",
+    "KD_Discover_Regression",
     "viz"
 ]
+
+
+def __getattr__(name: str):
+    if name == "viz":
+        from . import viz as _viz
+        return _viz
+    if name in {"DLGA", "KD_DLGA", "KD_Discover", "KD_Discover_SPR", "KD_Discover_Regression"}:
+        from . import model as _model
+        return getattr(_model, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

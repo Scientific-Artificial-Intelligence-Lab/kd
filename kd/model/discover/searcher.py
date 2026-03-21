@@ -317,10 +317,11 @@ class Searcher:
         print(f"self.best_p.str_expression: {self.best_p.str_expression}")
         print(f"self.best_p.traversal: {repr(self.best_p)}")
         print(f"program: {self.best_p}")
-        first_term_node = self.best_p.STRidge.terms[0]
-        print(f"type of first_term_node: {type(first_term_node)}")
-        print(f"first_term_node: {first_term_node}")
-        print(f"repr(first_term_node): {repr(first_term_node)}")
+        if getattr(self.best_p, "STRidge", None) is not None and self.best_p.STRidge.terms:
+            first_term_node = self.best_p.STRidge.terms[0]
+            print(f"type of first_term_node: {type(first_term_node)}")
+            print(f"first_term_node: {first_term_node}")
+            print(f"repr(first_term_node): {repr(first_term_node)}")
 
         print("="*50)
         return result 

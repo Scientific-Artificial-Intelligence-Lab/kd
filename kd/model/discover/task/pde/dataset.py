@@ -9,7 +9,7 @@ from pathlib import Path
 from importlib import resources
 from pyDOE import lhs
 import matplotlib.pyplot as plt
-from discover.task.pde.utils_noise import np2tensor, tensor2np, load_PI_data
+from .utils_noise import np2tensor, tensor2np, load_PI_data
 
 class Dataset():
     def __init__(self,

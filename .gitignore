@@ -239,6 +239,9 @@ tests/verify_examples/
 # Generated output directories from model runs
 discover/
 sga/
+!kd/model/discover/
+!kd/model/discover/config/
+!kd/model/discover/config/config_regression.json
 
 # Session progress (local only)
 PROGRESS.md

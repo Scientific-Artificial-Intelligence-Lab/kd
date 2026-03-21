@@ -3,14 +3,14 @@ import pandas as pd
 import scipy.io as scio
 import math
 
-from discover.task.pde.pde import PDETask, make_pde_metric
-from discover.library import Library
-from discover.functions import create_tokens,add_torch_tokens
-from discover.task.pde.data_load import *
-from discover.task.pde.utils_nn import load_noise_data,plot_field, plot_ut,torch_diff
-from discover.task.pde.utils_noise import *
-from discover.task.pde.utils_v1 import FiniteDiff, Diff, Diff2 ,Diff4
-from discover.task.pde.weak_form import WeakEvaluate
+from .pde import PDETask, make_pde_metric
+from ...library import Library
+from ...functions import create_tokens, add_torch_tokens
+from .data_load import *
+from .utils_nn import load_noise_data, plot_field, plot_ut, torch_diff
+from .utils_noise import *
+from .utils_v1 import FiniteDiff, Diff, Diff2, Diff4
+from .weak_form import WeakEvaluate
 
 
 class PDEPINNTask(PDETask):
