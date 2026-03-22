@@ -1,8 +1,8 @@
 """Model-specific visualization adapters."""
 
 from .dlga import DLGAVizAdapter
-from .dscv import DSCVVizAdapter
+from .discover import DiscoverVizAdapter
 from .sga import SGAVizAdapter
 from .pysr import PySRVizAdapter
 
-__all__ = ['DLGAVizAdapter', 'DSCVVizAdapter', 'SGAVizAdapter', 'PySRVizAdapter']
+__all__ = ['DLGAVizAdapter', 'DiscoverVizAdapter', 'SGAVizAdapter', 'PySRVizAdapter']

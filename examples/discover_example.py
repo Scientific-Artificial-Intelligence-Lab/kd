@@ -1,10 +1,10 @@
-"""KD_DSCV complete example: Regular/FD mode with 1D + N-D data.
+"""KD_Discover complete example: Regular/FD mode with 1D + N-D data.
 
 Demonstrates the DISCOVER algorithm for PDE discovery using finite-difference
 mode with the unified kd.viz visualization API.
 
 Usage:
-    python examples/dscv_example.py
+    python examples/discover_example.py
 """
 
 import os
@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="tensorflow.*")
 import numpy as np
 
 from kd.dataset import PDEDataset, load_pde
-from kd.model import KD_DSCV
+from kd.model import KD_Discover
 from kd.viz import VizRequest, configure, render
 
 
@@ -31,7 +31,7 @@ dataset = load_pde("burgers")
 #   'add', 'sub', 'mul', 'div', 'diff', 'diff2', 'diff3', 'diff4'
 # Supported unary operators / 支持的一元算子:
 #   'n2', 'n3', 'n4', 'n5', 'sin', 'cos', 'tan', 'sigmoid', 'logabs', 'expneg'
-model = KD_DSCV(
+model = KD_Discover(
     binary_operators=["add", "mul", "diff"],  # Binary ops (add required) / 二元算子
     unary_operators=["n2"],                   # Unary ops / 一元算子
     n_samples_per_batch=500,                  # Traversals per batch / 每批采样数
@@ -54,7 +54,7 @@ print(f"Best: {step_output['expression']}  (reward: {step_output['r']})")
 # 2. Visualization / 可视化
 # ============================================================
 
-configure(save_dir="artifacts/dscv_viz")
+configure(save_dir="artifacts/discover_viz")
 
 render(VizRequest("equation", model))
 # Legacy: render_latex_to_image(discover_program_to_latex(step_output["program"]))
@@ -90,7 +90,7 @@ nd_dataset = PDEDataset(
     lhs_axis="t",
 )
 
-nd_model = KD_DSCV(
+nd_model = KD_Discover(
     binary_operators=["add", "mul", "Diff", "Diff2"],  # Uppercase for N-D / N-D 用大写
     unary_operators=["n2"],
     n_samples_per_batch=500,
@@ -101,7 +101,7 @@ nd_model.import_dataset(nd_dataset)
 nd_result = nd_model.train(n_epochs=11)
 print(f"N-D best: {nd_result['expression']}  (reward: {nd_result['r']})")
 
-configure(save_dir="artifacts/dscv_nd_viz")
+configure(save_dir="artifacts/discover_nd_viz")
 render(VizRequest("equation", nd_model))
 render(VizRequest("search_evolution", nd_model))
 render(VizRequest("density", nd_model))

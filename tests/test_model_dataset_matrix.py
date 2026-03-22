@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip('scipy', reason='Unified loader requires scipy.io for .mat datasets')
 
 from kd.dataset import get_dataset_info, list_available_datasets, load_pde
-from kd.model.kd_dscv import KD_DSCV, KD_DSCV_SPR
+from kd.model.kd_discover import KD_Discover, KD_Discover_SPR
 from kd.model.kd_sga import KD_SGA
 
 
@@ -72,10 +72,10 @@ def test_kd_sga_accepts_supported_datasets(dataset_name: str):
 
 
 @pytest.mark.parametrize("dataset_name", ALL_DATASETS)
-def test_kd_dscv_regular_imports_supported(dataset_name: str, monkeypatch):
+def test_kd_discover_regular_imports_supported(dataset_name: str, monkeypatch):
     info = get_dataset_info(dataset_name)
-    if not info.get('models', {}).get('dscv'):
-        pytest.skip(f"dataset {dataset_name} is not supported by KD_DSCV")
+    if not info.get('models', {}).get('discover'):
+        pytest.skip(f"dataset {dataset_name} is not supported by KD_Discover")
 
     dataset = load_pde(dataset_name)
     if dataset.t.size > 1:
@@ -83,15 +83,15 @@ def test_kd_dscv_regular_imports_supported(dataset_name: str, monkeypatch):
         if dt.size and not np.allclose(dt, dt[0], atol=1e-8):
             pytest.skip("Regular adapter requires uniform time step")
 
-    model = KD_DSCV(n_iterations=1, n_samples_per_batch=10)
-    monkeypatch.setattr(KD_DSCV, 'make_gp_aggregator', lambda self: None, raising=False)
+    model = KD_Discover(n_iterations=1, n_samples_per_batch=10)
+    monkeypatch.setattr(KD_Discover, 'make_gp_aggregator', lambda self: None, raising=False)
 
     called = {}
 
     def fake_setup(self):
         called['setup'] = True
 
-    monkeypatch.setattr(KD_DSCV, 'setup', fake_setup, raising=False)
+    monkeypatch.setattr(KD_Discover, 'setup', fake_setup, raising=False)
 
     result = model.import_dataset(dataset)
     assert result is model
@@ -101,20 +101,20 @@ def test_kd_dscv_regular_imports_supported(dataset_name: str, monkeypatch):
 
 
 @pytest.mark.parametrize("dataset_name", ALL_DATASETS)
-def test_kd_dscv_spr_sparse_imports_supported(dataset_name: str, monkeypatch):
+def test_kd_discover_spr_sparse_imports_supported(dataset_name: str, monkeypatch):
     info = get_dataset_info(dataset_name)
-    if not info.get('models', {}).get('dscv_spr'):
-        pytest.skip(f"dataset {dataset_name} is not supported by KD_DSCV_SPR")
+    if not info.get('models', {}).get('discover_spr'):
+        pytest.skip(f"dataset {dataset_name} is not supported by KD_Discover_SPR")
 
     dataset = load_pde(dataset_name)
 
-    model = KD_DSCV_SPR(n_iterations=1, n_samples_per_batch=10)
-    monkeypatch.setattr(KD_DSCV_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
+    model = KD_Discover_SPR(n_iterations=1, n_samples_per_batch=10)
+    monkeypatch.setattr(KD_Discover_SPR, 'make_gp_aggregator', lambda self: None, raising=False)
 
     def fake_setup(self):
         self.config_task.setdefault('eq_num', 1)
 
-    monkeypatch.setattr(KD_DSCV_SPR, 'setup', fake_setup, raising=False)
+    monkeypatch.setattr(KD_Discover_SPR, 'setup', fake_setup, raising=False)
 
     total_points = dataset.usol.size
     sample = max(1, min(64, total_points))

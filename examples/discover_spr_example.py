@@ -1,10 +1,10 @@
-"""KD_DSCV_SPR complete example: Sparse/PINN mode with 1D + N-D data.
+"""KD_Discover_SPR complete example: Sparse/PINN mode with 1D + N-D data.
 
 Demonstrates the DISCOVER + PINN algorithm for PDE discovery from sparse
 observations with the unified kd.viz visualization API.
 
 Usage:
-    python examples/dscv_spr_example.py
+    python examples/discover_spr_example.py
 """
 
 import os
@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="tensorflow.*")
 import numpy as np
 
 from kd.dataset import PDEDataset, load_pde
-from kd.model import KD_DSCV_SPR
+from kd.model import KD_Discover_SPR
 from kd.viz import VizRequest, configure, render
 
 
@@ -29,7 +29,7 @@ dataset = load_pde("burgers")
 
 # SPR operators must be PyTorch-compatible (ending with '_t')
 # SPR 算子必须兼容 PyTorch（以 '_t' 结尾）
-model = KD_DSCV_SPR(
+model = KD_Discover_SPR(
     n_samples_per_batch=300,                                    # Traversals per batch / 每批采样数
     binary_operators=["add_t", "mul_t", "div_t", "diff_t", "diff2_t"],  # Binary ops / 二元算子
     unary_operators=["n2_t"],                                   # Unary ops / 一元算子
@@ -58,7 +58,7 @@ print(f"Best: {step_output['expression']}  (reward: {step_output['r']})")
 # 2. Visualization / 可视化
 # ============================================================
 
-configure(save_dir="artifacts/dscvspr_viz")
+configure(save_dir="artifacts/discoverspr_viz")
 
 render(VizRequest("equation", model))
 # Legacy: render_latex_to_image(discover_program_to_latex(step_output["program"]))
@@ -95,7 +95,7 @@ nd_dataset = PDEDataset(
     lhs_axis="t",
 )
 
-nd_model = KD_DSCV_SPR(
+nd_model = KD_Discover_SPR(
     n_samples_per_batch=300,
     binary_operators=["add_t", "mul_t", "div_t", "diff_t", "diff2_t"],
     unary_operators=["n2_t"],
@@ -113,7 +113,7 @@ except Exception as e:
     print(f"N-D SPR training failed (expected for custom datasets): {e}")
 
 if nd_output is not None:
-    configure(save_dir="artifacts/dscvspr_nd_viz")
+    configure(save_dir="artifacts/discoverspr_nd_viz")
     render(VizRequest("equation", nd_model))
     render(VizRequest("search_evolution", nd_model))
     render(VizRequest("density", nd_model))

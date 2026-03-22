@@ -4,12 +4,12 @@ import scipy.io as scio
 from scipy.stats import pearsonr
 
 
-from discover.task import HierarchicalTask
-from discover.library import Library
-from discover.functions import create_tokens
-from discover.task.pde.data_load import *
-from discover.task.pde.utils_nn import load_noise_data
-from discover.task.pde.utils_noise import *
+from ..task import HierarchicalTask
+from ...library import Library
+from ...functions import create_tokens
+from .data_load import *
+from .utils_nn import load_noise_data
+from .utils_noise import *
 
 
 class PDETask(HierarchicalTask):

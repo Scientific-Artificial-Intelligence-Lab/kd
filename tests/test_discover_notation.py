@@ -1,4 +1,4 @@
-"""TDD tests for DSCV LaTeX dual-mode notation rendering (RED phase).
+"""TDD tests for Discover LaTeX dual-mode notation rendering (RED phase).
 
 Tests cover:
 1. _SubscriptLatexPrinter unit tests (symbol + derivative rendering)
@@ -642,7 +642,7 @@ def _div(left, right):
 
 
 class TestMultiDatasetRendering:
-    """Unit tests for expression patterns from all DSCV datasets.
+    """Unit tests for expression patterns from all Discover datasets.
 
     Each test constructs a mock Node tree matching a real HOF expression
     and verifies the LaTeX output.

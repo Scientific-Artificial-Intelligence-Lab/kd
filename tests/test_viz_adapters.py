@@ -3,7 +3,7 @@ import pytest
 import sys
 import types
 
-import kd.viz.dscv_viz as dscv_viz_module
+import kd.viz.discover_viz as discover_viz_module
 
 from kd.viz import (
     FieldComparisonData,
@@ -17,7 +17,7 @@ from kd.viz import (
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
 from kd.model.sga.sgapde.equation import SGAEquationDetails, SGAEquationTerm
-from kd.viz.adapters import DLGAVizAdapter, DSCVVizAdapter, SGAVizAdapter
+from kd.viz.adapters import DLGAVizAdapter, DiscoverVizAdapter, SGAVizAdapter
 
 
 class StubDLGA:
@@ -57,7 +57,7 @@ class StubSearch:
         self.best_p = DummyProgram()
 
 
-class StubDSCV:
+class StubDiscover:
     def __init__(self):
         self.searcher = StubSearch([
             [0.5, 0.6, 0.55],
@@ -302,11 +302,11 @@ def test_parity_plot(tmp_path):
     assert data.actual_values.shape == data.predicted_values.shape
 
 
-def test_dscv_search_evolution(tmp_path):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_search_evolution(tmp_path):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     request = viz_core.VizRequest(
         kind='search_evolution',
@@ -318,18 +318,18 @@ def test_dscv_search_evolution(tmp_path):
     if result.warnings:
         assert "not implemented" in result.warnings[0]
     else:
-        path = tmp_path / 'dscv' / 'reward_evolution.png'
+        path = tmp_path / 'discover' / 'reward_evolution.png'
         assert path.exists()
         data = result.metadata['reward_evolution']
         assert isinstance(data, RewardEvolutionData)
         assert data.steps.size == len(model.searcher.r_train)
 
 
-def test_dscv_density(tmp_path):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_density(tmp_path):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     request = viz_core.VizRequest(
         kind='density',
@@ -341,7 +341,7 @@ def test_dscv_density(tmp_path):
     if result.warnings:
         assert 'seaborn is required' in result.warnings[0]
     else:
-        path = tmp_path / 'dscv' / 'reward_density.png'
+        path = tmp_path / 'discover' / 'reward_density.png'
         assert path.exists()
 
     # fallback to tree to confirm placeholder intent still returns warning
@@ -350,11 +350,11 @@ def test_dscv_density(tmp_path):
     assert tree_result.warnings
 
 
-def test_dscv_equation_warning(tmp_path):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_equation_warning(tmp_path):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     request = viz_core.VizRequest(
         kind='equation',
@@ -365,16 +365,16 @@ def test_dscv_equation_warning(tmp_path):
     if result.warnings:
         assert 'Failed to convert program' in result.warnings[0]
     else:
-        path = tmp_path / 'dscv' / 'equation.png'
+        path = tmp_path / 'discover' / 'equation.png'
         assert path.exists()
         assert 'latex' in result.metadata
 
 
-def test_dscv_residual_warning(tmp_path):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_residual_warning(tmp_path):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     request = viz_core.VizRequest(
         kind='residual',
@@ -385,11 +385,11 @@ def test_dscv_residual_warning(tmp_path):
     assert result.warnings
 
 
-def test_dscv_field_comparison(tmp_path, monkeypatch):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_field_comparison(tmp_path, monkeypatch):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
     model.best_p = DummyProgram()
 
     def fake_fields(_model, _program):
@@ -406,7 +406,7 @@ def test_dscv_field_comparison(tmp_path, monkeypatch):
             'coords': coords,
         }
 
-    monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+    monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
     request = viz_core.VizRequest(
         kind='field_comparison',
@@ -415,14 +415,14 @@ def test_dscv_field_comparison(tmp_path, monkeypatch):
     )
     result = viz_core.render(request)
     assert result.paths
-    assert (tmp_path / 'dscv' / 'field_comparison.png').exists()
+    assert (tmp_path / 'discover' / 'field_comparison.png').exists()
 
 
-def test_dscv_parity(tmp_path, monkeypatch):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_parity(tmp_path, monkeypatch):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
     model.best_p = DummyProgram()
 
     def fake_fields(_model, _program):
@@ -439,7 +439,7 @@ def test_dscv_parity(tmp_path, monkeypatch):
             'coords': coords,
         }
 
-    monkeypatch.setattr(dscv_viz_module, '_calculate_pde_fields', fake_fields)
+    monkeypatch.setattr(discover_viz_module, '_calculate_pde_fields', fake_fields)
 
     request = viz_core.VizRequest(
         kind='parity',
@@ -448,14 +448,14 @@ def test_dscv_parity(tmp_path, monkeypatch):
     )
     result = viz_core.render(request)
     assert result.paths
-    assert (tmp_path / 'dscv' / 'parity_plot.png').exists()
+    assert (tmp_path / 'discover' / 'parity_plot.png').exists()
 
 
-def test_dscv_spr_residual_warning(tmp_path, monkeypatch):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_spr_residual_warning(tmp_path, monkeypatch):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     def fake_pinn_fields(_model, _program):
         return {
@@ -464,7 +464,7 @@ def test_dscv_spr_residual_warning(tmp_path, monkeypatch):
             'y_pred': np.zeros(4),
         }
 
-    monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+    monkeypatch.setattr(discover_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
 
     request = viz_core.VizRequest(
         kind='spr_residual',
@@ -475,11 +475,11 @@ def test_dscv_spr_residual_warning(tmp_path, monkeypatch):
     assert result.paths or result.warnings
 
 
-def test_dscv_spr_field_comparison_warning(tmp_path, monkeypatch):
-    adapter = DSCVVizAdapter()
-    viz_registry.register_adapter(StubDSCV, adapter)
+def test_discover_spr_field_comparison_warning(tmp_path, monkeypatch):
+    adapter = DiscoverVizAdapter()
+    viz_registry.register_adapter(StubDiscover, adapter)
 
-    model = StubDSCV()
+    model = StubDiscover()
 
     def fake_pinn_fields(_model, _program):
         return {
@@ -489,7 +489,7 @@ def test_dscv_spr_field_comparison_warning(tmp_path, monkeypatch):
             'y_pred': np.arange(6).astype(float) * 0.9,
         }
 
-    monkeypatch.setattr(dscv_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
+    monkeypatch.setattr(discover_viz_module, '_calculate_pinn_fields', fake_pinn_fields)
 
     fake_interpolate = types.SimpleNamespace(
         griddata=lambda points, values, xi, method='cubic': np.zeros_like(xi[0])

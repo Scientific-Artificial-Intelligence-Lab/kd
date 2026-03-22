@@ -1,0 +1,125 @@
+{
+  "task": {
+    "task_type": "regression",
+    "dataset": "regression_dataset",
+    "function_set": ["add", "mul", "div", "const"],
+    "metric": "inv_nrmse",
+    "metric_params": [],
+    "threshold": 1e-8
+  },
+  "gp_agg": {
+    "run_gp_agg": false,
+    "gp": {},
+    "STRidge": {}
+  },
+  "parameterized": {
+    "on": false,
+    "validation_type": ""
+  },
+  "training": {
+    "n_epochs": null,
+    "n_samples": 20000,
+    "batch_size": 1000,
+    "epsilon": 0.02,
+    "baseline": "R_e",
+    "alpha": 0.5,
+    "b_jumpstart": false,
+    "n_cores_batch": 1,
+    "complexity": "length",
+    "default_terms": [],
+    "const_optimizer": "scipy",
+    "const_params": {},
+    "verbose": true,
+    "debug": 1,
+    "early_stopping": true,
+    "hof": 10,
+    "use_memory": false,
+    "memory_capacity": 1e3,
+    "warm_start": null,
+    "memory_threshold": null,
+    "save_all_epoch": false,
+    "save_summary": true,
+    "save_positional_entropy": false,
+    "save_pareto_front": true,
+    "save_cache": false,
+    "save_cache_r_min": 0.9,
+    "save_freq": 1,
+    "save_token_count": false,
+    "remove_same": false,
+    "stability_selection": false
+  },
+  "controller": {
+    "max_length": 15,
+    "cell": "lstm",
+    "num_layers": 1,
+    "num_units": 32,
+    "initializer": "zeros",
+    "learning_rate": 0.0025,
+    "optimizer": "adam",
+    "entropy_weight": 0.03,
+    "entropy_gamma": 0.7,
+    "pqt": true,
+    "pqt_k": 10,
+    "pqt_batch_size": 1,
+    "pqt_weight": 0,
+    "pqt_use_pg": false,
+    "summary": true,
+    "attention": false,
+    "atten_len": 20
+  },
+  "state_manager": {
+    "type": "hierarchical",
+    "observe_action": false,
+    "observe_parent": true,
+    "observe_sibling": true,
+    "observe_dangling": false,
+    "embedding": false,
+    "embedding_size": 8
+  },
+  "prior": {
+    "length": {
+      "min_": 3,
+      "max_": 15,
+      "on": true
+    },
+    "repeat": {
+      "tokens": "add",
+      "min_": null,
+      "max_": 5,
+      "on": true
+    },
+    "inverse": {
+      "on": true
+    },
+    "trig": {
+      "on": true
+    },
+    "const": {
+      "on": false
+    },
+    "no_inputs": {
+      "on": false
+    },
+    "uniform_arity": {
+      "on": false
+    },
+    "soft_length": {
+      "loc": 8,
+      "scale": 4,
+      "on": true
+    },
+    "diff_left": {
+      "on": false
+    },
+    "diff_right": {
+      "on": false
+    },
+    "diff_descedent": {
+      "on": false
+    }
+  },
+  "postprocess": {
+    "show_count": 5,
+    "save_plots": false
+  }
+}

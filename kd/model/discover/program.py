@@ -244,7 +244,10 @@ class Program(object):
         self.traversal = [Program.library[t] for t in tokens]
         self.default_terms = [[Program.library[t]] for term in Program.default_terms for t in term]
         # import pdb;pdb.set_trace()
-        self.set_stridge()
+        if getattr(Program.task, "task_type", None) == "regression":
+            self.STRidge = None
+        else:
+            self.set_stridge()
         
         self.const_pos = [i for i, t in enumerate(self.traversal) if isinstance(t, PlaceholderConstant)]
         self.len_traversal = len(self.traversal)
@@ -280,12 +283,15 @@ class Program(object):
                     danglings = danglings[danglings != dangling - 1] 
     
     def set_stridge(self):
-        self.STRidge = STRidge(self.traversal.copy(),self.default_terms,
-                            noise_level=Program.task.noise_level, 
-                            max_depth=Program.task.max_depth,
-                            cut_ratio=Program.task.cut_ratio,
-                            spatial_error=Program.task.spatial_error,
-                            const =Program.task.add_const)    
+        self.STRidge = STRidge(
+            self.traversal.copy(),
+            self.default_terms,
+            noise_level=getattr(Program.task, "noise_level", 0),
+            max_depth=getattr(Program.task, "max_depth", 4),
+            cut_ratio=getattr(Program.task, "cut_ratio", 0.03),
+            spatial_error=getattr(Program.task, "spatial_error", False),
+            const=getattr(Program.task, "add_const", False),
+        )
                     
     def __getstate__(self):
         
@@ -386,6 +392,35 @@ class Program(object):
     def execute_test(self, u, x, ut):
         results = self.STRidge.calculate_RHS_terms(u,x, Program.execute_function)
         return results
+
+    @staticmethod
+    def _normalize_x_inputs(x):
+        if isinstance(x, np.ndarray):
+            if x.ndim == 1:
+                return [x.reshape(-1, 1)]
+            if x.ndim == 2:
+                return [x[:, i : i + 1] for i in range(x.shape[1])]
+        return x
+
+    def execute_direct(self, x):
+        x_inputs = self._normalize_x_inputs(x)
+        y_hat, self.invalid, self.error_node, self.error_type = Program.execute_function(
+            self.traversal,
+            [],
+            x_inputs,
+        )
+        if y_hat is None:
+            return None, None, [1.0]
+
+        y_hat = np.asarray(y_hat, dtype=float)
+        if y_hat.ndim == 0:
+            y_hat = np.full_like(x_inputs[0], float(y_hat), dtype=float)
+        elif y_hat.ndim == 1:
+            if y_hat.size == 1:
+                y_hat = np.full_like(x_inputs[0], float(y_hat[0]), dtype=float)
+            else:
+                y_hat = y_hat.reshape(-1, 1)
+        return y_hat, None, [1.0]
     
     def execute_stability_test(self):     
         return self.task.stability_test(self)
@@ -488,7 +523,11 @@ class Program(object):
     def get_constants(self):
         """Returns the values of a Program's constants."""
 
-        return [t.value for t in self.traversal if isinstance(t, PlaceholderConstant)]
+        return [
+            float(np.asarray(t.value).reshape(-1)[0])
+            for t in self.traversal
+            if isinstance(t, PlaceholderConstant)
+        ]
 
     def set_constants(self, consts):
         """Sets the program's constants to the given values"""
@@ -562,8 +601,6 @@ class Program(object):
     def set_execute(cls, protected,use_torch):
         """Sets which execute method to use"""
 
-        from discover.execute import python_execute, python_execute_torch
-        execute_function        = python_execute
         Program.have_cython     = False
         Program.use_torch = use_torch
         
@@ -650,6 +687,8 @@ class Program(object):
 
     @property   
     def str_expression(self):
+        if getattr(self, "STRidge", None) is None or not hasattr(self, "w"):
+            return repr(self)
         out = ""
         # else:
         # if 'w_test' in self.evaluate:
@@ -668,11 +707,15 @@ class Program(object):
     
     @property
     def funcion_expression(self):
+        if getattr(self, "STRidge", None) is None:
+            return ""
         out = " |".join([repr(function ) for function  in self.STRidge.terms])
         return  out
     
     @property
     def coefficents(self):
+        if not hasattr(self, "w"):
+            return ""
         out = "|".join([str(round(w,4)) for w  in self.w])
         return  out
 

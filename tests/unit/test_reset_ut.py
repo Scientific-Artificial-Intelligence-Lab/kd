@@ -69,21 +69,21 @@ def _make_3d_dataset(equation_name: str = "2d_decay"):
 
 
 def _make_nd_spr_model_pretrained(monkeypatch):
-    """Create, import, and pretrain a KD_DSCV_SPR model with 3D N-D data.
+    """Create, import, and pretrain a KD_Discover_SPR model with 3D N-D data.
 
     Returns (model, task) tuple after pretrain (before train).
     """
     from kd.model.discover.program import Program
-    from kd.model.kd_dscv import KD_DSCV_SPR
+    from kd.model.kd_discover import KD_Discover_SPR
 
     dataset = _make_3d_dataset("2d_decay")
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         n_iterations=1,
         n_samples_per_batch=_N_SAMPLES_PER_BATCH,
         seed=0,
     )
     monkeypatch.setattr(
-        KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+        KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
     )
     model.import_dataset(
         dataset,
@@ -98,21 +98,21 @@ def _make_nd_spr_model_pretrained(monkeypatch):
 
 
 def _train_nd_spr_model(monkeypatch) -> Tuple:
-    """Helper: create, import, and train a KD_DSCV_SPR model with 3D N-D data.
+    """Helper: create, import, and train a KD_Discover_SPR model with 3D N-D data.
 
     Returns (model, result) tuple.
     """
-    from kd.model.kd_dscv import KD_DSCV_SPR
+    from kd.model.kd_discover import KD_Discover_SPR
 
     dataset = _make_3d_dataset("2d_decay")
 
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         n_iterations=1,
         n_samples_per_batch=_N_SAMPLES_PER_BATCH,
         seed=0,
     )
     monkeypatch.setattr(
-        KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+        KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
     )
 
     model.import_dataset(
@@ -202,7 +202,7 @@ class TestResetUtPopulatesUtFromCache:
 
 
 class TestNDSPRTrainingSetsTaskUt:
-    """After KD_DSCV_SPR.train() with N-D data, Program.task.ut must exist.
+    """After KD_Discover_SPR.train() with N-D data, Program.task.ut must exist.
 
     This is the core regression test. Before the fix, AD_generate_mD only
     sets ut_cache and never calls reset_ut, so task.ut is never set.
@@ -278,7 +278,7 @@ class TestCalculatePinnFieldsND:
         pytest.importorskip("torch", reason="requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.viz.dscv_viz import _calculate_pinn_fields
+        from kd.viz.discover_viz import _calculate_pinn_fields
 
         model, result = _train_nd_spr_model(monkeypatch)
 
@@ -333,7 +333,7 @@ class TestNDSPRVizProducesArtifacts:
         matplotlib = pytest.importorskip("matplotlib", reason="viz requires matplotlib")
         matplotlib.use("Agg")  # non-interactive backend for testing
 
-        from kd.viz.dscv_viz import plot_spr_residual_analysis
+        from kd.viz.discover_viz import plot_spr_residual_analysis
 
         model, result = _train_nd_spr_model(monkeypatch)
         assert "program" in result, (
@@ -366,7 +366,7 @@ class TestNDSPRVizProducesArtifacts:
         matplotlib = pytest.importorskip("matplotlib", reason="viz requires matplotlib")
         matplotlib.use("Agg")
 
-        from kd.viz.dscv_viz import plot_spr_actual_vs_predicted
+        from kd.viz.discover_viz import plot_spr_actual_vs_predicted
 
         model, result = _train_nd_spr_model(monkeypatch)
         assert "program" in result
@@ -393,7 +393,7 @@ class TestNDSPRVizProducesArtifacts:
         matplotlib = pytest.importorskip("matplotlib", reason="viz requires matplotlib")
         matplotlib.use("Agg")
 
-        from kd.viz.dscv_viz import plot_spr_field_comparison
+        from kd.viz.discover_viz import plot_spr_field_comparison
 
         model, result = _train_nd_spr_model(monkeypatch)
         assert "program" in result

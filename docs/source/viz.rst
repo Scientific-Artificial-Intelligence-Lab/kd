@@ -43,7 +43,7 @@ Available plot functions
    * - ``plot_residuals``
      - Residual analysis
    * - ``plot_training_curve``
-     - Training loss curve (DLGA, DSCV)
+     - Training loss curve (DLGA, Discover)
    * - ``plot_search_evolution``
      - Search/evolution history (DLGA)
    * - ``plot_time_slices``
@@ -59,6 +59,6 @@ The current adapters (see :mod:`kd.viz.adapters`) provide intent coverage for:
 * **SGA** -- equation rendering, field comparison, parity
 * **DLGA** -- training/validation curves, search evolution, optimisation
   history, equation, residuals, field comparison, time slices, parity
-* **DSCV / DSCV SPR** -- reward evolution, density plots, expression trees,
+* **Discover / Discover SPR** -- reward evolution, density plots, expression trees,
   equation, residuals, field comparison, parity, and PINN-specific
   diagnostics where available

@@ -1,4 +1,4 @@
-"""Tests for DSCV density plot auto-sampling to prevent legend overflow.
+"""Tests for Discover density plot auto-sampling to prevent legend overflow.
 
 When the number of epochs in r_history exceeds max_curves (default 10),
 the _density() method should auto-sample epochs to keep the legend
@@ -15,7 +15,7 @@ import pytest
 
 from kd.viz._style import VizConfig
 from kd.viz.core import VizContext, VizResult
-from kd.viz.adapters import DSCVVizAdapter
+from kd.viz.adapters import DiscoverVizAdapter
 
 
 # -- Constants ---------------------------------------------------------------
@@ -44,7 +44,7 @@ class _StubSearcher:
 
 
 class _StubModel:
-    """Minimal DSCV model stub."""
+    """Minimal Discover model stub."""
 
     def __init__(self, history: List[List[float]]) -> None:
         self.searcher = _StubSearcher(history)
@@ -74,7 +74,7 @@ def _use_agg_backend():
 # -- Tests -------------------------------------------------------------------
 
 class TestDensityAutoSampling:
-    """Tests for the auto-sampling logic in DSCVVizAdapter._density()."""
+    """Tests for the auto-sampling logic in DiscoverVizAdapter._density()."""
 
     @pytest.mark.unit
     def test_auto_sampling_triggers_when_many_epochs(self, tmp_path: Path) -> None:
@@ -82,7 +82,7 @@ class TestDensityAutoSampling:
         draw approximately max_curves (10) curves, not all 200."""
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -101,7 +101,7 @@ class TestDensityAutoSampling:
         """Auto-sampling must always include the last epoch index."""
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -116,7 +116,7 @@ class TestDensityAutoSampling:
         """Auto-sampling should include the first epoch (index 0)."""
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -131,7 +131,7 @@ class TestDensityAutoSampling:
         custom_max = 5
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path, options={'max_curves': custom_max})
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -148,7 +148,7 @@ class TestDensityAutoSampling:
         explicit = [2, 5, 10]
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path, options={'epoches': explicit})
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -162,7 +162,7 @@ class TestDensityAutoSampling:
         """With 5 epochs (< default max_curves=10), all should be drawn."""
         model = _StubModel(_make_history(SMALL_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -180,7 +180,7 @@ class TestDensityAutoSampling:
 
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -200,7 +200,7 @@ class TestDensityAutoSampling:
         """Sampled epoch indices should be in ascending order."""
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -215,7 +215,7 @@ class TestDensityAutoSampling:
         should be approximately evenly spaced."""
         model = _StubModel(_make_history(LARGE_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -242,7 +242,7 @@ class TestDensityEdgeCases:
         """Empty r_history should return a warning, not crash."""
         model = _StubModel([])
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -254,7 +254,7 @@ class TestDensityEdgeCases:
         """History with exactly 1 epoch should work without error."""
         model = _StubModel(_make_history(1))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -267,7 +267,7 @@ class TestDensityEdgeCases:
         """With exactly max_curves (10) epochs, no auto-sampling should trigger."""
         model = _StubModel(_make_history(DEFAULT_MAX_CURVES))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -282,7 +282,7 @@ class TestDensityEdgeCases:
         n_epochs = DEFAULT_MAX_CURVES + 1  # 11
         model = _StubModel(_make_history(n_epochs))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -298,7 +298,7 @@ class TestDensityEdgeCases:
         """Model without searcher should return a warning."""
         model = type('NoSearcher', (), {})()
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -310,7 +310,7 @@ class TestDensityEdgeCases:
         """Searcher without r_history should return a warning."""
         model = type('NoHistory', (), {'searcher': type('S', (), {})()})()
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -325,7 +325,7 @@ class TestDensityEdgeCases:
         model = _StubModel(history)
         # Request epochs 0, 2, 999 -- 999 is out of range
         ctx = _make_ctx(tmp_path, options={'epoches': [0, 2, 999]})
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -344,7 +344,7 @@ class TestDensityEdgeCases:
         step = max(1, n // 0) would fail. This tests robustness."""
         model = _StubModel(_make_history(5))
         ctx = _make_ctx(tmp_path, options={'max_curves': 0})
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         # This may raise ZeroDivisionError if not handled --
         # document the current behavior
@@ -367,7 +367,7 @@ class TestDensityOutputFile:
         """Density plot should save a PNG file."""
         model = _StubModel(_make_history(SMALL_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
@@ -377,17 +377,17 @@ class TestDensityOutputFile:
         assert path.suffix == '.png'
 
     @pytest.mark.unit
-    def test_output_in_dscv_subdirectory(self, tmp_path: Path) -> None:
-        """Output should be in a 'dscv' subdirectory."""
+    def test_output_in_discover_subdirectory(self, tmp_path: Path) -> None:
+        """Output should be in a 'discover' subdirectory."""
         model = _StubModel(_make_history(SMALL_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 
         path = result.paths[0]
-        assert 'dscv' in path.parts, (
-            f"Expected output in dscv/ subdirectory, got {path}"
+        assert 'discover' in path.parts, (
+            f"Expected output in discover/ subdirectory, got {path}"
         )
 
     @pytest.mark.unit
@@ -395,7 +395,7 @@ class TestDensityOutputFile:
         """VizResult intent should be 'density'."""
         model = _StubModel(_make_history(SMALL_EPOCH_COUNT))
         ctx = _make_ctx(tmp_path)
-        adapter = DSCVVizAdapter()
+        adapter = DiscoverVizAdapter()
 
         result = adapter._density(model, ctx)
 

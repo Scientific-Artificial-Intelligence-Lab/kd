@@ -9,7 +9,7 @@ from pathlib import Path
 from importlib import resources
 from pyDOE import lhs
 import matplotlib.pyplot as plt
-from discover.task.pde.utils_noise import np2tensor, tensor2np, load_PI_data
+from .utils_noise import np2tensor, tensor2np, load_PI_data
 
 class Dataset():
     def __init__(self,
@@ -89,7 +89,7 @@ def _resolve_file(filename: str, legacy_dir: str) -> Path:
     """Resolve data file path with preference on the centralized dataset directory."""
     try:
         candidate = resources.files('kd.dataset.data') / filename
-        print(f"[DSCV data] Using centralized data: {candidate}", flush=True)
+        print(f"[Discover data] Using centralized data: {candidate}", flush=True)
         if candidate.exists():
             return candidate
         with resources.as_file(candidate) as tmp_path:
@@ -97,7 +97,7 @@ def _resolve_file(filename: str, legacy_dir: str) -> Path:
     except FileNotFoundError:
         primary = Path(legacy_dir) / filename
         if primary.exists():
-            print(f"[DSCV data] Fallback to legacy path: {primary}", flush=True)
+            print(f"[Discover data] Fallback to legacy path: {primary}", flush=True)
             return primary
         return primary
 

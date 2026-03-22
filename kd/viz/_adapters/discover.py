@@ -1,4 +1,4 @@
-"""DSCV model adapter skeleton for the unified visualization façade."""
+"""Discover model adapter skeleton for the unified visualization façade."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-from .. import dscv_viz
+from .. import discover_viz
 from .._contracts import (
     FieldComparisonData,
     ParityPlotData,
@@ -19,8 +19,8 @@ from ..discover_eq2latex import discover_program_to_latex
 from ..equation_renderer import render_latex_to_image
 
 
-class DSCVVizAdapter:
-    """Placeholder DSCV adapter exposing planned capabilities.
+class DiscoverVizAdapter:
+    """Placeholder Discover adapter exposing planned capabilities.
 
     Each intent currently returns a structured warning so that downstream
     callers can detect support without triggering legacy visualizers. Actual
@@ -56,7 +56,7 @@ class DSCVVizAdapter:
             return VizResult(
                 intent=request.kind,
                 warnings=[
-                    "DSCV adapter stub: intent '%s' not implemented yet." % request.kind
+                    "Discover adapter stub: intent '%s' not implemented yet." % request.kind
                 ],
                 metadata={'capabilities': sorted(self.capabilities)},
             )
@@ -241,7 +241,7 @@ class DSCVVizAdapter:
             return VizResult(intent='residual', warnings=['No best program available for residual analysis.'])
 
         try:
-            fields = dscv_viz._calculate_pde_fields(model, program)
+            fields = discover_viz._calculate_pde_fields(model, program)
         except Exception as exc:  # pragma: no cover - heavy upstream dependency
             return VizResult(intent='residual', warnings=[f'Unable to compute PDE fields: {exc}'])
 
@@ -382,7 +382,7 @@ class DSCVVizAdapter:
             return VizResult(intent='field_comparison', warnings=['No best program available for field comparison.'])
 
         try:
-            fields = dscv_viz._calculate_pde_fields(model, program)
+            fields = discover_viz._calculate_pde_fields(model, program)
         except Exception as exc:
             return VizResult(intent='field_comparison', warnings=[f'Unable to compute PDE fields: {exc}'])
 
@@ -401,7 +401,7 @@ class DSCVVizAdapter:
                 )
             else:
                 spatial_coords = fields['spatial_coords_list']
-                # DSCV N-D returns (nt, *spatial) — transpose to (*spatial, t) for contract
+                # Discover N-D returns (nt, *spatial) — transpose to (*spatial, t) for contract
                 n_dims = true_field.ndim
                 perm = list(range(1, n_dims)) + [0]
                 data = FieldComparisonData(
@@ -541,7 +541,7 @@ class DSCVVizAdapter:
             return VizResult(intent='parity', warnings=['No best program available for parity plot.'])
 
         try:
-            fields = dscv_viz._calculate_pde_fields(model, program)
+            fields = discover_viz._calculate_pde_fields(model, program)
         except Exception as exc:
             return VizResult(intent='parity', warnings=[f'Unable to compute PDE fields: {exc}'])
 
@@ -578,7 +578,7 @@ class DSCVVizAdapter:
 
     def _spr_residual(self, model, ctx) -> VizResult:
         try:
-            pinn_fields = dscv_viz._calculate_pinn_fields(model, self._get_best_program(model))
+            pinn_fields = discover_viz._calculate_pinn_fields(model, self._get_best_program(model))
         except Exception as exc:
             return VizResult(intent='spr_residual', warnings=[f'Unable to compute PINN fields: {exc}'])
 
@@ -626,7 +626,7 @@ class DSCVVizAdapter:
 
     def _spr_field_comparison(self, model, ctx) -> VizResult:
         try:
-            pinn_fields = dscv_viz._calculate_pinn_fields(model, self._get_best_program(model))
+            pinn_fields = discover_viz._calculate_pinn_fields(model, self._get_best_program(model))
         except Exception as exc:
             return VizResult(intent='spr_field_comparison', warnings=[f'Unable to compute PINN fields: {exc}'])
 
@@ -801,10 +801,10 @@ class DSCVVizAdapter:
 
         base = ctx.options.get('output_dir')
         if base is not None:
-            base_path = Path(base) / 'dscv'
+            base_path = Path(base) / 'discover'
             base_path.mkdir(parents=True, exist_ok=True)
             return base_path, base_path / filename
-        path = ctx.save_path(f'dscv/{filename}')
+        path = ctx.save_path(f'discover/{filename}')
         return path.parent, path
 
     def _build_reward_evolution(self, model) -> Optional[RewardEvolutionData]:

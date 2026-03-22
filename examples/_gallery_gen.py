@@ -1,12 +1,12 @@
 """Generate high-quality Gallery images for README.
 
 Use reference-implementation-aligned parameters for best results.
-Output: artifacts/gallery/{sga,dscv}/
+Output: artifacts/gallery/{sga,discover}/
 """
 
 from kd.dataset import load_pde
 from kd.model.kd_sga import KD_SGA
-from kd.model.kd_dscv import KD_DSCV
+from kd.model.kd_discover import KD_Discover
 from kd.viz import (
     configure,
     render_equation,
@@ -15,7 +15,7 @@ from kd.viz import (
 )
 
 dataset_sga = load_pde("burgers")
-dataset_dscv = load_pde("burgers")
+dataset_discover = load_pde("burgers")
 
 # ===== SGA on Burgers =====
 
@@ -41,27 +41,27 @@ plot_field_comparison(
 )
 plot_parity(sga, title="Parity Plot")
 
-# ===== DSCV on Burgers =====
+# ===== Discover on Burgers =====
 
 print()
 print("=" * 60)
-print("[Gallery] DSCV on Burgers")
+print("[Gallery] Discover on Burgers")
 print("=" * 60)
 
-configure(save_dir="artifacts/gallery/dscv")
+configure(save_dir="artifacts/gallery/discover")
 
-dscv = KD_DSCV(
+discover = KD_Discover(
     binary_operators=["add", "mul", "div", "diff", "diff2", "diff3"],
     unary_operators=["n2", "n3"],
     n_samples_per_batch=500,
     n_iterations=100,
     seed=0,
 )
-dscv.fit_dataset(dataset_dscv, n_epochs=100)
+discover.fit_dataset(dataset_discover, n_epochs=100)
 
-render_equation(dscv)
+render_equation(discover)
 plot_field_comparison(
-    dscv, x_coords=dataset_dscv.x, t_coords=dataset_dscv.t,
+    discover, x_coords=dataset_discover.x, t_coords=dataset_discover.t,
     true_field=None, predicted_field=None,
 )
-plot_parity(dscv, title="Parity Plot")
+plot_parity(discover, title="Parity Plot")

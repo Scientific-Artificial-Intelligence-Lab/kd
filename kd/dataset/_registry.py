@@ -25,15 +25,15 @@ Notes (SGA-related):
 #   },
 #   'shape': (512, 201),            # 可选: 当文件只有 u 矩阵时, 指定 (nx, nt) 用于 reshape
 #   'domain': {'x': (-1.0, 1.0), 't': (0.0, 1.0)},  # 物理范围; 如果未知/无意义可设为 None
-#   'sym_true': 'add,mul,...',      # 可选: 真实方程, 提供给 DSCV pipeline 做评估
+#   'sym_true': 'add,mul,...',      # 可选: 真实方程, 提供给 Discover pipeline 做评估
 #   'aliases': {                    # 可选: legacy 别名, 或者各模型需要的特殊 problem 名称
 #       'legacy': 'Kdv',
 #       'sga_problem': 'kdv'
 #   },
 #   'models': {                     # 维护每个模型是否已验证通过
 #       'sga': True,
-#       'dscv': True,
-#       'dscv_spr': False
+#       'discover': True,
+#       'discover_spr': False
 #   },
 #   'status': 'active',             # active: 已验证; pending: 待处理; legacy: 仅保留兼容
 #   'notes': '可选描述, 记录数据来源或特殊注意事项'
@@ -50,8 +50,8 @@ PDE_REGISTRY = {
         'domain': None,
         'models': {
             'sga': True,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': True,
         },
         'status': 'active',
@@ -71,8 +71,8 @@ PDE_REGISTRY = {
         },
         'models': {
             'sga': True,
-            'dscv': True,
-            'dscv_spr': True,
+            'discover': True,
+            'discover_spr': True,
             'dlga': True,
         },
         'status': 'active',
@@ -92,8 +92,8 @@ PDE_REGISTRY = {
         },
         'models': {
             'sga': True,
-            'dscv': True,
-            'dscv_spr': True,
+            'discover': True,
+            'discover_spr': True,
             'dlga': True,
         },
         'status': 'active',
@@ -113,8 +113,8 @@ PDE_REGISTRY = {
         },
         'models': {
             'sga': True,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': True,
         },
         'status': 'active',
@@ -126,8 +126,8 @@ PDE_REGISTRY = {
         'domain': {'x': (1, 2), 't': (0, 1)},
         'models': {
             'sga': False,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': False,
         },
         'status': 'active',
@@ -139,8 +139,8 @@ PDE_REGISTRY = {
         'domain': {'x': (1, 2), 't': (0, 0.5)},
         'models': {
             'sga': False,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': False,
         },
         'status': 'active',
@@ -156,8 +156,8 @@ PDE_REGISTRY = {
         'domain': {'x': (-1.0, 1.0), 't': (0.0, 1.0)},
         'models': {
             'sga': False,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': False,
         },
         'status': 'active',
@@ -173,8 +173,8 @@ PDE_REGISTRY = {
         'domain': {'x': (-1.0, 1.0), 't': (0.0, 1.0)},
         'models': {
             'sga': False,
-            'dscv': True,
-            'dscv_spr': False,
+            'discover': True,
+            'discover_spr': False,
             'dlga': False,
         },
         'status': 'active',
@@ -190,8 +190,8 @@ PDE_REGISTRY = {
         'domain': None,
         'models': {
             'sga': False,
-            'dscv': False,
-            'dscv_spr': False,
+            'discover': False,
+            'discover_spr': False,
             'dlga': False,
         },
         'status': 'pending',

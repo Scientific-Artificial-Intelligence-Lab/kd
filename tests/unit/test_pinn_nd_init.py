@@ -4,7 +4,7 @@ The PINN_model.load_inner_data() pathway crashes when the dataset_name
 is not in the built-in registry (e.g., "2d_decay" from a custom
 N-D PDEDataset).  The bug chain:
 
-    KD_DSCV_SPR.import_dataset()
+    KD_Discover_SPR.import_dataset()
       -> setup()
         -> make_pinn_model()  passes self.config_task['dataset']
           -> PINN_model.__init__()  calls self.load_inner_data()
@@ -141,12 +141,12 @@ class TestPINNLoadInnerDataBug:
 
 
 # ---------------------------------------------------------------------------
-# Integration: KD_DSCV_SPR.import_dataset with custom N-D data
+# Integration: KD_Discover_SPR.import_dataset with custom N-D data
 # ---------------------------------------------------------------------------
 
 
-class TestDSCVSPRImportNDDataset:
-    """KD_DSCV_SPR.import_dataset() should succeed with custom N-D datasets.
+class TestDiscoverSPRImportNDDataset:
+    """KD_Discover_SPR.import_dataset() should succeed with custom N-D datasets.
 
     Before the fix this raises AssertionError inside PINN_model.__init__.
     """
@@ -157,15 +157,15 @@ class TestDSCVSPRImportNDDataset:
         torch = pytest.importorskip("torch", reason="requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         # This should NOT raise AssertionError anymore
@@ -187,15 +187,15 @@ class TestDSCVSPRImportNDDataset:
         torch = pytest.importorskip("torch", reason="requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         model.import_dataset(
@@ -216,15 +216,15 @@ class TestDSCVSPRImportNDDataset:
         torch = pytest.importorskip("torch", reason="requires torch")
         pytest.importorskip("tensorflow", reason="Mode2 pipeline depends on TensorFlow")
 
-        from kd.model.kd_dscv import KD_DSCV_SPR
+        from kd.model.kd_discover import KD_Discover_SPR
 
-        model = KD_DSCV_SPR(
+        model = KD_Discover_SPR(
             n_iterations=1,
             n_samples_per_batch=5,
             seed=0,
         )
         monkeypatch.setattr(
-            KD_DSCV_SPR, "make_gp_aggregator", lambda self: None, raising=False
+            KD_Discover_SPR, "make_gp_aggregator", lambda self: None, raising=False
         )
 
         model.import_dataset(

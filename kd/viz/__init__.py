@@ -41,19 +41,19 @@ from .api import (
 try:  # pragma: no cover - defensive import
     from .adapters import (
         DLGAVizAdapter,
-        DSCVVizAdapter,
+        DiscoverVizAdapter,
         register_default_adapters,
     )
 except Exception:  # pragma: no cover - adapter import failure shouldn't break base API
     DLGAVizAdapter = None  # type: ignore
-    DSCVVizAdapter = None  # type: ignore
+    DiscoverVizAdapter = None  # type: ignore
     register_default_adapters = None  # type: ignore
 else:
     register_default_adapters()
 
 # Re-export legacy visualization modules for backward compatibility.
 from . import dlga_viz  # noqa: E402,F401
-from . import dscv_viz  # noqa: E402,F401
+from . import discover_viz  # noqa: E402,F401
 from . import equation_renderer  # noqa: E402,F401
 from . import dlga_eq2latex  # noqa: E402,F401
 from . import discover_eq2latex  # noqa: E402,F401
@@ -87,10 +87,10 @@ __all__ = [
     'plot_parity',
     'render_equation',
     'DLGAVizAdapter',
-    'DSCVVizAdapter',
+    'DiscoverVizAdapter',
     'register_default_adapters',
     'dlga_viz',
-    'dscv_viz',
+    'discover_viz',
     'equation_renderer',
     'dlga_eq2latex',
     'discover_eq2latex',

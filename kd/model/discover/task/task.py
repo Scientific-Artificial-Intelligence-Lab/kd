@@ -208,20 +208,23 @@ def make_task(task_type, **config_task):
 
 
     if task_type == "pde":
-        from discover.task.pde.pde import PDETask
+        from .pde.pde import PDETask
         task_class = PDETask
+    elif task_type == "regression":
+        from .regression import RegressionTask
+        task_class = RegressionTask
     elif task_type == "pde_pinn":
-        from discover.task.pde.pde_pinn import PDEPINNTask
+        from .pde.pde_pinn import PDEPINNTask
         task_class=PDEPINNTask
         
     elif task_type == "pde_subgrid":
-        from discover.task.pde.multi_task import PDESubgridTask
+        from .pde.multi_task import PDESubgridTask
         task_class=PDESubgridTask
     else:
         # Custom task import
         task_class = import_custom_source(task_type)
         assert issubclass(task_class, Task), \
-            "Custom task {} must subclass discover.task.Task.".format(task_class)
+            "Custom task {} must subclass kd.model.discover.task.Task.".format(task_class)
 
     task = task_class(**config_task)
     return task

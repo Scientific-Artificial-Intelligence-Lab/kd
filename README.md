@@ -72,8 +72,8 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 |-------|-------------|
 | **KD_SGA** | PDE discovery via symbolic genetic algorithm |
 | **KD_DLGA** | PDE discovery via deep-learning genetic algorithm |
-| **KD_DSCV** | PDE discovery via reinforcement learning and sparse regression |
-| **KD_DSCV_SPR** | DSCV variant with PINN for sparse / noisy data |
+| **KD_Discover** | PDE discovery via reinforcement learning and sparse regression |
+| **KD_Discover_SPR** | Discover variant with PINN for sparse / noisy data |
 | **KD_PySR** | General symbolic regression via PySR (optional) |
 
 ## Example Gallery
@@ -81,7 +81,7 @@ plot_field_comparison(model, ...)     # predicted vs true field heatmap
 <table>
 <tr>
 <td align="center"><img src="docs/images/equation_sga.png" width="420"><br><em>Burgers equation — KD_SGA</em></td>
-<td align="center"><img src="docs/images/equation_dscv.png" width="420"><br><em>Burgers equation — KD_DSCV</em></td>
+<td align="center"><img src="docs/images/equation_dscv.png" width="420"><br><em>Burgers equation — KD_Discover</em></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/images/equation_dlga.png" width="420"><br><em>KdV equation — KD_DLGA</em></td>
@@ -124,7 +124,7 @@ dataset = PDEDataset(
 kd/
 ├── base.py        # Shared estimator base class
 ├── dataset/       # PDEDataset, registry, loaders
-├── model/         # KD_SGA, KD_DLGA, KD_DSCV, KD_PySR
+├── model/         # KD_SGA, KD_DLGA, KD_Discover, KD_PySR
 ├── viz/           # Unified visualization facade
 └── utils/         # Logging, FD helpers, solver utilities
 ```
