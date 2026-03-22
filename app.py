@@ -27,7 +27,7 @@ from kd.viz.core import VizRequest, render, configure
 
 # ── GPU offloading ────────────────────────────────────────────
 
-GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR"}
+GPU_MODELS = {"KD_DLGA", "KD_Discover_SPR"}
 
 try:
     from kd.job import submit_gpu_job, check_job, download_result
@@ -51,8 +51,8 @@ def _is_bohrium_env(request):
 MODEL_KEYS = {
     "KD_SGA": "sga",
     "KD_DLGA": "dlga",
-    "KD_DSCV": "dscv",
-    "KD_DSCV_SPR": "dscv_spr",
+    "KD_Discover": "discover",
+    "KD_Discover_SPR": "discover_spr",
 }
 
 ACTIVE_DATASETS = sorted([
@@ -108,10 +108,10 @@ def on_model_change(model_name):
     """Show/hide parameter groups and auto-switch operator presets."""
     sga_vis = model_name == "KD_SGA"
     dlga_vis = model_name == "KD_DLGA"
-    dscv_vis = model_name in ("KD_DSCV", "KD_DSCV_SPR")
-    spr_vis = model_name == "KD_DSCV_SPR"
+    dscv_vis = model_name in ("KD_Discover", "KD_Discover_SPR")
+    spr_vis = model_name == "KD_Discover_SPR"
 
-    if model_name == "KD_DSCV_SPR":
+    if model_name == "KD_Discover_SPR":
         binary_val = SPR_BINARY_DEFAULT
         unary_val = SPR_UNARY_DEFAULT
     else:
@@ -151,8 +151,8 @@ def _get_model_capabilities(model):
         return []
     caps = list(list_capabilities(model))
     # spr_* intents only work for KD_DSCV_SPR (PINN mode)
-    from kd.model.kd_dscv import KD_DSCV_SPR
-    if not isinstance(model, KD_DSCV_SPR):
+    from kd.model.kd_discover import KD_Discover_SPR
+    if not isinstance(model, KD_Discover_SPR):
         caps = [c for c in caps if not c.startswith("spr_")]
     return sorted(caps)
 
@@ -266,9 +266,9 @@ def _run_local(
             sample = int(dlga_sample) if dlga_sample else None
             model.fit_dataset(dataset, sample=sample)
 
-        elif model_name == "KD_DSCV":
-            from kd.model.kd_dscv import KD_DSCV
-            model = KD_DSCV(
+        elif model_name == "KD_Discover":
+            from kd.model.kd_discover import KD_Discover
+            model = KD_Discover(
                 binary_operators=_parse_ops(dscv_binary),
                 unary_operators=_parse_ops(dscv_unary),
                 n_samples_per_batch=int(dscv_batch),
@@ -277,9 +277,9 @@ def _run_local(
             np.random.seed(int(dscv_seed))
             result = model.fit_dataset(dataset, n_epochs=int(dscv_epochs))
 
-        elif model_name == "KD_DSCV_SPR":
-            from kd.model.kd_dscv import KD_DSCV_SPR
-            model = KD_DSCV_SPR(
+        elif model_name == "KD_Discover_SPR":
+            from kd.model.kd_discover import KD_Discover_SPR
+            model = KD_Discover_SPR(
                 binary_operators=_parse_ops(dscv_binary),
                 unary_operators=_parse_ops(dscv_unary),
                 n_samples_per_batch=int(dscv_batch),
@@ -323,7 +323,7 @@ def _submit_gpu_training(
             "max_iter": int(dlga_max_iter),
             "sample": int(dlga_sample) if dlga_sample else None,
         }
-    else:  # KD_DSCV_SPR
+    else:  # KD_Discover_SPR
         runner_model = "dscv_spr"
         params = {
             "binary_operators": dscv_binary,
@@ -611,6 +611,49 @@ def build_app():
 # ── Entry Point ────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app = build_app()
     os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-    app.launch(server_name="0.0.0.0", server_port=50001)
+    blocks = build_app()
+
+    # Bohrium serves apps behind an HTTPS proxy that does NOT forward
+    # X-Forwarded-Proto.  This ASGI middleware forces the scheme to HTTPS
+    # so Gradio generates correct URLs in its frontend config.
+    class _ForceHTTPS:
+        """Fix Mixed Content when running behind Bohrium's HTTPS proxy.
+
+        1. Injects X-Forwarded-Proto into requests so Gradio generates
+           HTTPS URLs in its frontend config (``root``).
+        2. Adds Content-Security-Policy: upgrade-insecure-requests to
+           responses so the browser auto-upgrades any remaining HTTP
+           sub-resource requests (e.g. theme.css loaded by Gradio JS
+           via window.location).
+        """
+        def __init__(self, app):
+            self.app = app
+        async def __call__(self, scope, receive, send):
+            if scope["type"] in ("http", "websocket"):
+                headers = list(scope.get("headers", []))
+                headers.append((b"x-forwarded-proto", b"https"))
+                scope = dict(scope, scheme="https", headers=headers)
+
+                async def send_with_csp(message):
+                    if message["type"] == "http.response.start":
+                        resp_headers = list(message.get("headers", []))
+                        resp_headers.append((
+                            b"content-security-policy",
+                            b"upgrade-insecure-requests",
+                        ))
+                        message = dict(message, headers=resp_headers)
+                    await send(message)
+
+                await self.app(scope, receive, send_with_csp)
+            else:
+                await self.app(scope, receive, send)
+
+    import uvicorn
+    from fastapi import FastAPI
+
+    fastapi_app = FastAPI()
+    inner = gr.mount_gradio_app(fastapi_app, blocks, path="/")
+    app = _ForceHTTPS(inner)
+
+    uvicorn.run(app, host="0.0.0.0", port=50001)

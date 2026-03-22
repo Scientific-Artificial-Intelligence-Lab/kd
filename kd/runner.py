@@ -99,10 +99,10 @@ def run_dlga(dataset, params):
 
 
 def run_dscv_spr(dataset, params):
-    """Run KD_DSCV_SPR and return ``(equation_str, model)``."""
-    from kd.model.kd_dscv import KD_DSCV_SPR
+    """Run KD_Discover_SPR and return ``(equation_str, model)``."""
+    from kd.model.kd_discover import KD_Discover_SPR
 
-    model = KD_DSCV_SPR(
+    model = KD_Discover_SPR(
         binary_operators=_parse_ops(
             params.get("binary_operators", "add_t,mul_t,div_t,diff_t,diff2_t")
         ),
