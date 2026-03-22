@@ -9,14 +9,26 @@ from ..functions import create_tokens
 from ..library import Library
 
 
-def make_regression_metric(name: str):
+def make_regression_metric(name: str, parsimony_coeff: float = 0.0):
+    """Create a regression reward metric.
+
+    Args:
+        name: Metric name. ``"inv_nrmse"`` supported.
+        parsimony_coeff: Per-token penalty on expression length.
+            ``reward *= max(0, 1 - parsimony_coeff * n_tokens)``.
+            Set to 0.0 (default) to disable.
+    """
     if name != "inv_nrmse":
         raise ValueError(f"Unrecognized regression reward function: {name}")
 
-    def metric(y: np.ndarray, y_hat: np.ndarray) -> float:
+    def metric(y: np.ndarray, y_hat: np.ndarray, n_tokens: int = 0) -> float:
         variance = max(float(np.var(y)), 1e-12)
         mse = float(np.mean((y - y_hat) ** 2))
-        return 1.0 / (1.0 + np.sqrt(mse / variance))
+        accuracy = 1.0 / (1.0 + np.sqrt(mse / variance))
+        if parsimony_coeff > 0.0 and n_tokens > 0:
+            penalty = max(0.0, 1.0 - parsimony_coeff * n_tokens)
+            return accuracy * penalty
+        return accuracy
 
     return metric, 0.0, 1.0
 
@@ -37,6 +49,7 @@ class RegressionTask(HierarchicalTask):
         reward_noise: float = 0.0,
         use_torch: bool = False,
         decision_tree_threshold_set=None,
+        parsimony_coeff: float = 0.0,
         **_: object,
     ) -> None:
         super().__init__()
@@ -49,7 +62,10 @@ class RegressionTask(HierarchicalTask):
         self.protected = protected
         self.use_torch = use_torch
         self.decision_tree_threshold_set = decision_tree_threshold_set
-        self.metric, self.invalid_reward, self.max_reward = make_regression_metric(metric)
+        self.parsimony_coeff = float(parsimony_coeff)
+        self.metric, self.invalid_reward, self.max_reward = make_regression_metric(
+            metric, parsimony_coeff=self.parsimony_coeff
+        )
         self.stochastic = reward_noise > 0.0
 
     def load_data(self, dataset: dict) -> None:
@@ -71,7 +87,7 @@ class RegressionTask(HierarchicalTask):
         y_hat, _, weights = p.execute_direct(self.x)
         if p.invalid or y_hat is None:
             return self.invalid_reward, [0.0], None, None
-        reward = self.metric(self.y, y_hat)
+        reward = self.metric(self.y, y_hat, n_tokens=len(p.traversal))
         return reward, weights, y_hat, None
 
     def mse_function(self, p) -> float:
