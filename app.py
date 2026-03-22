@@ -25,6 +25,27 @@ from kd.dataset._registry import PDE_REGISTRY
 from kd.viz.core import VizRequest, render, configure
 
 
+# ── GPU offloading ────────────────────────────────────────────
+
+GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR"}
+
+try:
+    from kd.job import submit_gpu_job, check_job, download_result
+    _HAS_BOHRIUM = True
+except ImportError:
+    _HAS_BOHRIUM = False
+
+
+def _is_bohrium_env(request):
+    """Return True when running on Bohrium platform with valid auth cookies."""
+    if not _HAS_BOHRIUM or request is None:
+        return False
+    try:
+        return "appAccessKey" in (request.headers.get("cookie") or "")
+    except Exception:
+        return False
+
+
 # ── Constants ──────────────────────────────────────────────────
 
 MODEL_KEYS = {
@@ -165,6 +186,11 @@ def _render_equation_fig(model, equation_text):
 
 # ── Training ───────────────────────────────────────────────────
 
+# 7-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
+#                         job_state, job_status, check_btn)
+_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False))
+
+
 def run_training(
     dataset_name, model_name,
     # SGA
@@ -175,11 +201,42 @@ def run_training(
     dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
     # SPR extra
     spr_sample_ratio, spr_epochs,
+    # Gradio injects this automatically
+    request: gr.Request = None,
 ):
-    """Core training function called by Gradio."""
+    """Core training function — routes to local or GPU offline execution."""
     if not dataset_name or not model_name:
-        return "Please select dataset and model first.", None, None
+        return ("Please select dataset and model first.",
+                None, None, gr.update()) + _NO_GPU
 
+    # GPU models on Bohrium → submit as offline task
+    if model_name in GPU_MODELS and _is_bohrium_env(request):
+        return _submit_gpu_training(
+            dataset_name, model_name,
+            dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
+            dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
+            spr_sample_ratio, spr_epochs,
+            request,
+        )
+
+    # All other cases (including local dev) → run in-process
+    return _run_local(
+        dataset_name, model_name,
+        sga_run, sga_num, sga_depth, sga_seed,
+        dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
+        dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
+        spr_sample_ratio, spr_epochs,
+    )
+
+
+def _run_local(
+    dataset_name, model_name,
+    sga_run, sga_num, sga_depth, sga_seed,
+    dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
+    dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
+    spr_sample_ratio, spr_epochs,
+):
+    """Run model training in the current process (CPU or local GPU)."""
     configure(save_dir=None)
 
     try:
@@ -199,9 +256,8 @@ def run_training(
 
         elif model_name == "KD_DLGA":
             from kd.model.kd_dlga import KD_DLGA
-            ops = _parse_ops(dlga_ops)
             model = KD_DLGA(
-                operators=ops,
+                operators=_parse_ops(dlga_ops),
                 epi=float(dlga_epi),
                 input_dim=2,
                 verbose=True,
@@ -236,22 +292,127 @@ def run_training(
                 sample_ratio=float(spr_sample_ratio),
             )
         else:
-            return f"Unknown model: {model_name}", None, None
+            return (f"Unknown model: {model_name}",
+                    None, None, gr.update()) + _NO_GPU
 
-        # Extract equation text
         equation = _get_equation_text(model, model_name, result)
-
-        # Generate equation visualization
         fig = _render_equation_fig(model, equation)
-
-        # Get available viz types for this model
         caps = _get_model_capabilities(model)
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
-        return equation, fig, model, viz_update
+        return (equation, fig, model, viz_update) + _NO_GPU
 
     except Exception as e:
-        return f"Training error:\n{e}\n\n{traceback.format_exc()}", None, None, gr.update()
+        return (f"Training error:\n{e}\n\n{traceback.format_exc()}",
+                None, None, gr.update()) + _NO_GPU
+
+
+def _submit_gpu_training(
+    dataset_name, model_name,
+    dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
+    dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
+    spr_sample_ratio, spr_epochs,
+    request,
+):
+    """Submit training to Bohrium GPU offline task."""
+    if model_name == "KD_DLGA":
+        runner_model = "dlga"
+        params = {
+            "operators": dlga_ops,
+            "epi": float(dlga_epi),
+            "max_iter": int(dlga_max_iter),
+            "sample": int(dlga_sample) if dlga_sample else None,
+        }
+    else:  # KD_DSCV_SPR
+        runner_model = "dscv_spr"
+        params = {
+            "binary_operators": dscv_binary,
+            "unary_operators": dscv_unary,
+            "n_samples_per_batch": int(dscv_batch),
+            "seed": int(dscv_seed),
+            "n_epochs": int(spr_epochs),
+            "sample_ratio": float(spr_sample_ratio),
+        }
+
+    try:
+        job_id = submit_gpu_job(runner_model, dataset_name, params, request)
+        return (
+            f"GPU task submitted — Job ID: {job_id}\n"
+            "Click 'Check GPU Job' to monitor progress.",
+            None, None, gr.update(),
+            job_id,
+            gr.update(visible=True, value=f"Job {job_id}: Submitted"),
+            gr.update(visible=True),
+        )
+    except Exception as e:
+        return (f"GPU submit error:\n{e}\n\n{traceback.format_exc()}",
+                None, None, gr.update()) + _NO_GPU
+
+
+def check_gpu_status(job_id, request: gr.Request = None):
+    """Poll GPU job status; download results when finished."""
+    if not job_id:
+        return ("No active GPU job.",
+                None, None, gr.update()) + _NO_GPU
+
+    try:
+        status = check_job(job_id, request)
+    except Exception as e:
+        return (
+            f"Status check failed: {e}", None, None, gr.update(),
+            job_id,
+            gr.update(visible=True, value=f"Error: {e}"),
+            gr.update(visible=True),
+        )
+
+    if status["failed"]:
+        return (
+            f"Job {job_id} failed: {status['status_text']}",
+            None, None, gr.update(),
+            None,
+            gr.update(visible=True, value=f"Job {job_id}: {status['status_text']}"),
+            gr.update(visible=False),
+        )
+
+    if not status["finished"]:
+        elapsed = status.get("spend_time", "")
+        return (
+            f"Job {job_id} still running... ({status['status_text']})",
+            None, None, gr.update(),
+            job_id,
+            gr.update(visible=True,
+                      value=f"Job {job_id}: {status['status_text']}  {elapsed}"),
+            gr.update(visible=True),
+        )
+
+    # ── Job finished → download & display ──
+    try:
+        result_data, save_dir = download_result(job_id, request)
+        equation = result_data.get("equation", "(unknown)")
+
+        eq_fig = None
+        eq_img = os.path.join(save_dir, "equation.png")
+        if os.path.exists(eq_img):
+            import matplotlib.pyplot as plt
+            import matplotlib.image as mpimg
+            img = mpimg.imread(eq_img)
+            fig, ax = plt.subplots(figsize=(8, 3))
+            ax.imshow(img)
+            ax.axis("off")
+            fig.tight_layout(pad=0)
+            eq_fig = fig
+
+        elapsed_s = result_data.get("elapsed_seconds", "?")
+        return (
+            equation, eq_fig, None,
+            gr.update(choices=[], value=None),
+            None,
+            gr.update(visible=True, value=f"Job {job_id}: Finished ({elapsed_s}s)"),
+            gr.update(visible=False),
+        )
+    except Exception as e:
+        return (f"Download failed: {e}",
+                None, None, gr.update()) + _NO_GPU
 
 
 # ── Visualization ──────────────────────────────────────────────
@@ -307,6 +468,7 @@ def build_app():
         )
 
         model_state = gr.State(None)
+        job_state = gr.State(None)
 
         with gr.Tabs():
             # ── Tab 1: Training ──────────────────────────
@@ -375,6 +537,12 @@ def build_app():
                     with gr.Column(scale=2):
                         eq_text = gr.Textbox(label="Discovered Equation", lines=4, interactive=False)
                         eq_plot = gr.Plot(label="Equation Visualization")
+                        job_status = gr.Textbox(
+                            label="GPU Job Status", interactive=False, visible=False,
+                        )
+                        check_btn = gr.Button(
+                            "Check GPU Job", visible=False, variant="secondary",
+                        )
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -401,6 +569,11 @@ def build_app():
             outputs=[sga_group, dlga_group, dscv_group, spr_group, dscv_binary, dscv_unary],
         )
 
+        _train_outputs = [
+            eq_text, eq_plot, model_state, viz_dd,
+            job_state, job_status, check_btn,
+        ]
+
         train_event = train_btn.click(
             run_training,
             inputs=[
@@ -410,13 +583,20 @@ def build_app():
                 dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
                 spr_sample_ratio, spr_epochs,
             ],
-            outputs=[eq_text, eq_plot, model_state, viz_dd],
+            outputs=_train_outputs,
         )
 
         cancel_btn.click(
-            fn=lambda: ("Training cancelled.", None, None, gr.update()),
-            outputs=[eq_text, eq_plot, model_state, viz_dd],
+            fn=lambda: ("Training cancelled.", None, None, gr.update(),
+                        None, gr.update(visible=False), gr.update(visible=False)),
+            outputs=_train_outputs,
             cancels=[train_event],
+        )
+
+        check_btn.click(
+            check_gpu_status,
+            inputs=[job_state],
+            outputs=_train_outputs,
         )
 
         viz_btn.click(
