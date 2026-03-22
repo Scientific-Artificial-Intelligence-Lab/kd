@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kd.dataset &#8212; KD 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=a66d8bb5" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">KD</a></h1>
+
+
+
+<p class="blurb">Knowledge Discovery Documentation</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Scientific-Artificial-Intelligence-Lab&repo=kd&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pde_backends.html">PDE Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../viz.html">Visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Documentation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for kd.dataset</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">._base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">PDEDataset</span><span class="p">,</span>
+                    <span class="n">load_burgers_equation</span><span class="p">,</span>
+                    <span class="n">load_kdv_equation</span><span class="p">,</span>
+                    <span class="n">load_pde_dataset</span><span class="p">,</span>
+                    <span class="n">load_mat_file</span><span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._registry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">PDE_REGISTRY</span><span class="p">,</span>
+                        <span class="n">get_dataset_info</span><span class="p">,</span>
+                        <span class="n">list_available_datasets</span><span class="p">,</span>
+                        <span class="n">get_dataset_sym_true</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">resources</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_tag_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PDEDataset</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PDEDataset</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Attach registry metadata (registry_name / aliases) to dataset instances.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nb">setattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;registry_name&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="n">PDE_REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">aliases</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;aliases&#39;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="nb">setattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;aliases&#39;</span><span class="p">,</span> <span class="n">aliases</span><span class="p">)</span>
+    <span class="n">legacy_name</span> <span class="o">=</span> <span class="n">aliases</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;legacy&#39;</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;legacy_name&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">legacy_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">legacy_name</span> <span class="o">=</span> <span class="n">name</span>
+    <span class="nb">setattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s1">&#39;legacy_name&#39;</span><span class="p">,</span> <span class="n">legacy_name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dataset</span>
+
+<div class="viewcode-block" id="load_pde">
+<a class="viewcode-back" href="../../api.html#kd.dataset.load_pde">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_pde</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PDEDataset</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unified entry point for loading PDE benchmark datasets.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name: Dataset name (e.g. ``&quot;kdv&quot;``, ``&quot;burgers&quot;``,</span>
+<span class="sd">            ``&quot;chafee-infante&quot;``).</span>
+<span class="sd">        **kwargs: Additional keyword arguments forwarded to</span>
+<span class="sd">            :class:`PDEDataset`.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        PDEDataset: The loaded dataset instance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="n">get_dataset_info</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    
+    <span class="c1"># 处理不同文件格式</span>
+    <span class="k">if</span> <span class="s1">&#39;files&#39;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>  <span class="c1"># 多文件情况（如chafee-infante）</span>
+        <span class="n">data_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="s2">&quot;kd.dataset.data&quot;</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_path</span> <span class="o">/</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;files&#39;</span><span class="p">][</span><span class="s1">&#39;u&#39;</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_path</span> <span class="o">/</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;files&#39;</span><span class="p">][</span><span class="s1">&#39;x&#39;</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_path</span> <span class="o">/</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;files&#39;</span><span class="p">][</span><span class="s1">&#39;t&#39;</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">u</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)):</span>
+            <span class="n">u</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">PDEDataset</span><span class="p">(</span>
+            <span class="n">equation_name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">pde_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">usol</span><span class="o">=</span><span class="n">u</span><span class="p">,</span>
+            <span class="n">domain</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;domain&#39;</span><span class="p">),</span>
+            <span class="n">epi</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;epi&#39;</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_tag_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;file&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.npy&#39;</span><span class="p">):</span>
+        <span class="c1"># 处理单个npy文件的特殊情况（如PDE_divide, PDE_compound）</span>
+        <span class="n">data_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="s2">&quot;kd.dataset.data&quot;</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_path</span> <span class="o">/</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;file&#39;</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="c1"># 这些数据集通常直接是u矩阵，需要根据shape和domain生成x, t</span>
+        <span class="n">target_shape</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;shape&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">target_shape</span><span class="p">:</span>
+            <span class="c1"># 数据文件有时是 (nt, nx)，因此需要在匹配时考虑转置</span>
+            <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">target_shape</span><span class="p">)):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">T</span>
+            <span class="k">elif</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target_shape</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">target_shape</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="n">domain</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;domain&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)}</span>
+        <span class="n">x_bounds</span> <span class="o">=</span> <span class="n">domain</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+        <span class="n">t_bounds</span> <span class="o">=</span> <span class="n">domain</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+
+        <span class="n">nx</span><span class="p">,</span> <span class="n">nt</span> <span class="o">=</span> <span class="n">shape</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">x_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">nx</span><span class="p">)</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">t_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">t_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">nt</span><span class="p">)</span>
+
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">PDEDataset</span><span class="p">(</span>
+            <span class="n">equation_name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">pde_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">usol</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">domain</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span>
+            <span class="n">epi</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;epi&#39;</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_tag_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># 单mat文件情况</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">load_pde_dataset</span><span class="p">(</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;file&#39;</span><span class="p">],</span>
+            <span class="n">equation_name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">domain</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;domain&#39;</span><span class="p">),</span>
+            <span class="o">**</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;keys&#39;</span><span class="p">,</span> <span class="p">{}),</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_tag_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></div>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;PDEDataset&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;load_pde&quot;</span><span class="p">,</span>  <span class="c1"># 新增统一接口</span>
+    <span class="s2">&quot;load_burgers_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;load_mat_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;load_kdv_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;load_pde_dataset&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;list_available_datasets&quot;</span><span class="p">,</span>  <span class="c1"># 新增辅助函数</span>
+    <span class="s2">&quot;get_dataset_sym_true&quot;</span><span class="p">,</span>  <span class="c1"># 新增辅助函数</span>
+    <span class="s2">&quot;Burgers_equation_shock&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;KdV_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;KdV_equation_sine&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Chaffee_Infante_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;KG_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Allen_Cahn_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Convection_diffusion_equation_solution&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Convection_diffusion_equation_simulation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Wave_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;KS_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Beam_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Heat_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Heat_equation_sin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Diffusion_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Parametric_convection_diffusion&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Parametric_Burgers_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Parametric_wave_equation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Burgers_2D&quot;</span>
+<span class="p">]</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &#169;2025-2026, Scientific-Artificial-Intelligence-Lab.
+      
+    </div>
+
+    
+    <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" class="github">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"  class="github"/>
+    </a>
+    
+
+    
+  </body>
+</html>
