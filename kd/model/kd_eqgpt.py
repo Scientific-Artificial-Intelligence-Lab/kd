@@ -226,38 +226,51 @@ class KD_EqGPT:
         all_nt: List[int] = []
 
         # When retraining, use a temp directory to avoid overwriting pre-trained weights
+        import shutil
         import tempfile
+        retrain_tmpdir_obj = None
         retrain_tmpdir = None
         if self.retrain_surrogate:
-            retrain_tmpdir = Path(tempfile.mkdtemp(prefix="eqgpt_surrogate_"))
+            retrain_tmpdir_obj = tempfile.TemporaryDirectory(prefix="eqgpt_surrogate_")
+            retrain_tmpdir = Path(retrain_tmpdir_obj.name)
             logger.info("Retrain surrogate weights → %s", retrain_tmpdir)
 
-        for name in sorted(data_dict.keys()):
-            if self.case_filter == "N" and "N" not in name:
-                continue
-            data = data_dict[name]
-            pretrained_dir = (
-                _EQGPT_DIR
-                / f"model_save/{_EQUATION_NAME}"
-                / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
-            )
-            if self.retrain_surrogate:
-                model_dir = retrain_tmpdir / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
-                self._train_single_surrogate(
-                    name, data, model_dir, device, device_str,
-                )
-            else:
-                model_dir = pretrained_dir
-                if not model_dir.exists():
-                    logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
+        try:
+            for name in sorted(data_dict.keys()):
+                if self.case_filter == "N" and "N" not in name:
                     continue
-            net, db, nx, nt = self._build_single_surrogate(
-                name, data, model_dir, device, device_str, load_checkpoint,
+                data = data_dict[name]
+                pretrained_dir = (
+                    _EQGPT_DIR
+                    / f"model_save/{_EQUATION_NAME}"
+                    / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
+                )
+                if self.retrain_surrogate:
+                    model_dir = retrain_tmpdir / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
+                    self._train_single_surrogate(
+                        name, data, model_dir, device, device_str,
+                    )
+                else:
+                    model_dir = pretrained_dir
+                    if not model_dir.exists():
+                        logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
+                        continue
+                net, db, nx, nt = self._build_single_surrogate(
+                    name, data, model_dir, device, device_str, load_checkpoint,
+                )
+                all_Net.append(net)
+                all_database.append(db)
+                all_nx.append(nx)
+                all_nt.append(nt)
+        finally:
+            if retrain_tmpdir_obj is not None:
+                retrain_tmpdir_obj.cleanup()
+
+        if not all_Net:
+            raise RuntimeError(
+                "No surrogate models loaded. Check model_save/ directory "
+                "or use retrain_surrogate=True."
             )
-            all_Net.append(net)
-            all_database.append(db)
-            all_nx.append(nx)
-            all_nt.append(nt)
 
         return all_Net, all_database, all_nx, all_nt
 
@@ -326,9 +339,15 @@ class KD_EqGPT:
                         loss.item(), val_err,
                     )
 
-        best_epoch = (validate_errors.index(min(validate_errors)) + 1) * 500
+        if not validate_errors:
+            # surrogate_epochs < 500: save final weights as only checkpoint
+            best_epoch = self.surrogate_epochs
+            torch.save(net.state_dict(), str(model_dir / f"Net_Sin_{best_epoch}.pkl"))
+            logger.warning("  [%s] No validation checkpoints (epochs=%d < 500)", trail_num, self.surrogate_epochs)
+        else:
+            best_epoch = (validate_errors.index(min(validate_errors)) + 1) * 500
+            logger.info("  [%s] best_epoch=%d  val_err=%.6f", trail_num, best_epoch, min(validate_errors))
         np.save(str(model_dir / "best_epoch.npy"), np.array([best_epoch]))
-        logger.info("  [%s] best_epoch=%d  val_err=%.6f", trail_num, best_epoch, min(validate_errors))
 
     def _build_single_surrogate(
         self,
