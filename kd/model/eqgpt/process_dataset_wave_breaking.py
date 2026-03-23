@@ -27,18 +27,18 @@ def get_data(cell_refs):
 if __name__ == '__main__':
     filename = 'Surface_Chen.mat'
     with h5py.File(filename, 'r') as f:
-    surface_struct=f['Surface']
-    case_name=list(surface_struct.keys())
-    print("case name:", case_name)
-    data_dict={}
-    for name in case_name:
-        l_field = surface_struct[name]
-        surf_global = l_field[b'Surface_global']
-        cell_refs = np.array(surf_global).squeeze()
-        all_data=get_data(cell_refs)
-        data_dict[name]=all_data
+            surface_struct=f['Surface']
+            case_name=list(surface_struct.keys())
+            print("case name:", case_name)
+            data_dict={}
+            for name in case_name:
+                l_field = surface_struct[name]
+                surf_global = l_field[b'Surface_global']
+                cell_refs = np.array(surf_global).squeeze()
+                all_data=get_data(cell_refs)
+                data_dict[name]=all_data
 
-        surf_global_interp = l_field[b'Surface_global_interp']
+                surf_global_interp = l_field[b'Surface_global_interp']
 
-    pickle.dump(data_dict,
-                open(f'wave_breaking_data.pkl', 'wb'))
+            pickle.dump(data_dict,
+                        open(f'wave_breaking_data.pkl', 'wb'))
