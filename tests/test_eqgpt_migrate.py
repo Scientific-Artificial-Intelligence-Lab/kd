@@ -146,16 +146,16 @@ class TestLevel3KDModelUnaffected:
         )
         assert KD_Discover is not None
 
-    def test_kd_model_all_unchanged(self) -> None:
-        """kd.model.__all__ should not contain eqgpt entries (lazy only)."""
+    def test_kd_model_all_no_subpackage_leak(self) -> None:
+        """kd.model.__all__ should not expose eqgpt subpackage modules."""
         import kd.model
 
         all_names = getattr(kd.model, "__all__", [])
-        # EqGPT should NOT be auto-exported via __all__
+        # KD_EqGPT is expected (Task B), but raw subpackage names should not leak
+        subpackage_names = {"gpt_model", "neural_network", "surrogate_model"}
         for name in all_names:
-            assert "eqgpt" not in name.lower(), (
-                f"EqGPT entry {name!r} in kd.model.__all__ "
-                "-- should be lazy or explicit import only"
+            assert name not in subpackage_names, (
+                f"EqGPT subpackage module {name!r} leaked into kd.model.__all__"
             )
 
 

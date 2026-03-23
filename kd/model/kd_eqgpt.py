@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Paths resolved lazily but defined at module level (no heavy imports)
 _EQGPT_DIR = Path(__file__).resolve().parent / "eqgpt"
-_REF_LIB_DIR = _EQGPT_DIR.resolve().parent.parent / "ref_lib" / "EqGPT_wave_breaking"
+_REF_LIB_DIR = _EQGPT_DIR.resolve().parent.parent.parent / "ref_lib" / "EqGPT_wave_breaking"
 
 # Surrogate training constants
 _CHOOSE = 95
@@ -104,8 +104,6 @@ class KD_EqGPT:
 
         from .eqgpt._device import device, DEVICE_STR, load_checkpoint
         from .eqgpt.gpt_model import GPT, max_pos, CLIP, word2id, id2word
-        from .eqgpt.neural_network import NN
-        from .eqgpt.calculate_terms import calculate_terms
         from .eqgpt.continue_train_GPT_all import (
             calculate_reward,
             get_mask_invalid,
@@ -126,9 +124,14 @@ class KD_EqGPT:
         model_Q.load_state_dict(load_checkpoint(str(gpt_path)))
 
         # --- Load wave-breaking data and build surrogates ---
-        data_dict = pickle.load(
-            open(str(_REF_LIB_DIR / "wave_breaking_data.pkl"), "rb")
-        )
+        pkl_path = _REF_LIB_DIR / "wave_breaking_data.pkl"
+        if not pkl_path.exists():
+            raise FileNotFoundError(
+                f"wave_breaking_data.pkl not found at {pkl_path}. "
+                "Ensure ref_lib/EqGPT_wave_breaking/ is available."
+            )
+        with open(str(pkl_path), "rb") as f:
+            data_dict = pickle.load(f)
         all_Net, all_database, all_nx, all_nt = self._load_surrogates(
             data_dict, device, DEVICE_STR, load_checkpoint
         )
@@ -163,10 +166,11 @@ class KD_EqGPT:
                 all_sentence.append(sentence)
 
             # Update top-10 list
+            _samples_k = min(self.samples_per_epoch, len(all_sentence))
             best_award, best_sentence = self._update_top10(
                 epoch, all_reward, all_sentence,
                 best_award, best_sentence,
-                find_min_no_repeat,
+                find_min_no_repeat, _samples_k,
             )
 
             # Fine-tune GPT on top candidates
@@ -180,12 +184,15 @@ class KD_EqGPT:
                 collate_fn=dataset.padding_batch,
             )
             criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
+            # NOTE: ref_lib creates a new GPT() for training but binds optimizer
+            # to model_Q, making fine-tuning effectively a no-op. We train
+            # model_Q directly — deliberate divergence that makes RL work.
             for _ in range(5):
                 train_step(model_Q, data_loader, optimizer, criterion, CLIP)
 
         # --- Build result ---
         equations, rewards = self._format_results(
-            best_sentence, best_award, id2word, delete_duplicate,
+            best_sentence, best_award, id2word, delete_duplicate, word2id,
         )
         return {
             "equations": equations,
@@ -218,6 +225,14 @@ class KD_EqGPT:
             if self.case_filter == "N" and "N" not in name:
                 continue
             data = data_dict[name]
+            model_dir = (
+                _EQGPT_DIR
+                / f"model_save/{_EQUATION_NAME}"
+                / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
+            )
+            if not model_dir.exists():
+                logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
+                continue
             net, db, nx, nt = self._build_single_surrogate(
                 name, data, device, device_str, load_checkpoint,
             )
@@ -291,7 +306,7 @@ class KD_EqGPT:
         inputs_tensor = torch.from_numpy(
             inputs.astype(np.float32)
         ).to(device)
-        database = torch.tensor(inputs_tensor, requires_grad=True)
+        database = inputs_tensor.clone().detach().requires_grad_(True)
 
         return net, database, nx, nt
 
@@ -303,14 +318,19 @@ class KD_EqGPT:
         best_award: Optional[List[float]],
         best_sentence: Optional[List[List[int]]],
         find_min_no_repeat: Any,
+        samples_k: int = 400,
     ) -> Tuple[List[float], List[List[int]]]:
         """Merge current epoch candidates into running top-10."""
         if epoch == 0 or best_award is None or best_sentence is None:
-            best_index, best_award_new = find_min_no_repeat(all_reward)
+            best_index, best_award_new = find_min_no_repeat(
+                all_reward, samples=samples_k,
+            )
             best_sentence_new = [all_sentence[idx] for idx in best_index]
             return best_award_new, best_sentence_new
 
-        second_index, second_award = find_min_no_repeat(all_reward)
+        second_index, second_award = find_min_no_repeat(
+            all_reward, samples=samples_k,
+        )
         for p_idx in range(len(second_award)):
             potential_award = second_award[p_idx]
             potential_text = all_sentence[second_index[p_idx]]
@@ -360,20 +380,24 @@ class KD_EqGPT:
         best_award: Optional[List[float]],
         id2word: list,
         delete_duplicate: Any,
+        word2id: Optional[Dict[str, int]] = None,
     ) -> Tuple[List[str], List[float]]:
         """Convert final top-10 into human-readable equations."""
         if best_sentence is None or best_award is None:
             return [], []
+        # Token IDs from vocabulary (fallback to known defaults)
+        e_token = word2id["E"] if word2id else 1
+        s_token = word2id["S"] if word2id else 5
         equations: List[str] = []
         rewards: List[float] = []
         for i in range(len(best_award)):
             sentence_data = list(best_sentence[i])
             sentence_data = delete_duplicate(sentence_data)
-            if sentence_data[-1] == 1:  # 'E' token
+            if sentence_data[-1] == e_token:
                 sentence_data.pop(-1)
-            if 5 not in sentence_data:  # 'S' token
-                sentence_data.insert(0, 5)
-                sentence_data.append(1)
+            if s_token not in sentence_data:
+                sentence_data.insert(0, s_token)
+                sentence_data.append(e_token)
             vis = [id2word[int(tok)] for tok in sentence_data]
             eq_str = "".join(vis[1:-1])
             equations.append(eq_str)
