@@ -239,7 +239,7 @@ class KD_EqGPT:
             try:
                 parity_data = self._extract_parity_data(
                     best_sentence[0], all_Net, all_database,
-                    words2value, variables, nx, nt,
+                    words2value, _VARIABLES, all_nx, all_nt,
                 )
             except Exception:
                 logger.warning(
@@ -498,19 +498,9 @@ class KD_EqGPT:
         )
 
         sentence = delete_duplicate(list(sentence))
-        # Parse terms and operators (same logic as calculate_reward)
-        terms, operators = [], []
-        for tok in sentence:
-            if tok in (2, 3, 4, 1):  # +, *, /, E
-                if terms:
-                    operators.append(tok)
-            else:
-                terms.append(tok)
-                operators.append(0)  # placeholder
-        # Align lengths
-        if len(operators) < len(terms):
-            operators.append(1)
-        operators = operators[: len(terms)]
+        # Parse terms/operators via even/odd split — same as calculate_reward
+        terms = sentence[::2]       # positions 0, 2, 4, ...
+        operators = sentence[1::2]  # positions 1, 3, 5, ...
 
         all_lhs: List[np.ndarray] = []
         all_rhs: List[np.ndarray] = []
@@ -547,13 +537,11 @@ class KD_EqGPT:
             if len(A_cols) < 2:
                 continue  # need at least LHS + 1 RHS term
 
-            import pandas as pd
             A = np.vstack(A_cols).T
             A = delete_dulplicate_A_column(A)
-            # Remove inf rows
-            df = pd.DataFrame(A)
-            inf_idx = df[df.isin([np.inf, -np.inf]).any(axis=1)].index
-            A = np.delete(A, inf_idx, axis=0)
+            # Remove rows containing inf (matches calculate_reward logic)
+            inf_mask = np.isinf(A).any(axis=1)
+            A = A[~inf_mask]
             if A.shape[0] == 0 or A.shape[1] < 2:
                 continue
             if np.any(np.isnan(A)):
