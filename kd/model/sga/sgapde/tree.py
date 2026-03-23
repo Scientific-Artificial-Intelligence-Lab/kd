@@ -28,7 +28,7 @@ class Node:
         self.status = self.child_num
         self.var = var
         self.full = full
-        self.cache = copy.deepcopy(var) # self.cache = var
+        self.cache = var
 
     def __str__(self): # 提供节点详情
         return self.name

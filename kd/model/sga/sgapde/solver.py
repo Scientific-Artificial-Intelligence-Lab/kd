@@ -30,9 +30,8 @@ class SGAPDE_Solver:
         np.random.seed(config.seed)
         random.seed(config.seed)
         
-        # Initialize PDE and error libraries
-        self.pde_lib = []
-        self.err_lib = []
+        # Initialize PDE library (set for O(1) dedup)
+        self.pde_lib = set()
         self.best_equation_details_ = None
 
     def run(self, context):
@@ -62,8 +61,7 @@ class SGAPDE_Solver:
             p_mute=self.config.p_mute,
             p_rep=self.config.p_rep,
             p_cro=self.config.p_cro,
-            pde_lib=self.pde_lib,
-            err_lib=self.err_lib
+            pde_lib=self.pde_lib
         )
         
         # Run the genetic algorithm
@@ -80,10 +78,10 @@ class SGAPDE_Solver:
 class SGA:
     """Genetic Algorithm for PDE discovery (refactored from original sga.py)."""
     
-    def __init__(self, context, num, depth, width, p_var, p_mute, p_rep, p_cro, pde_lib, err_lib):
+    def __init__(self, context, num, depth, width, p_var, p_mute, p_rep, p_cro, pde_lib):
         """
         Initialize the SGA algorithm.
-        
+
         Args:
             context: ProblemContext object
             num: Number of PDEs in the pool
@@ -93,11 +91,10 @@ class SGA:
             p_rep: Probability of replacing a term
             p_mute: Mutation probability for each node
             p_cro: Crossover probability between PDEs
-            pde_lib: PDE library list
-            err_lib: Error library list
+            pde_lib: PDE dedup set
         """
         from .pde import PDE, evaluate_mse
-        
+
         self.context = context
         self.num = num
         self.p_mute = p_mute
@@ -109,34 +106,27 @@ class SGA:
         self.repeat_cross = 0
         self.repeat_change = 0
         self.pde_lib = pde_lib
-        self.err_lib = err_lib
-        
+
         print('Creating the original pdes in the pool ...')
         for i in range(num * self.ratio):
             a_pde = PDE(self.context, depth, width, p_var)
             a_err, a_w = evaluate_mse(a_pde, self.context)
-            self.pde_lib.append(a_pde)
-            self.err_lib.append((a_err, a_w))
-            
+
             while a_err < -100 or a_err == np.inf:
                 print(a_err)
                 a_pde = PDE(self.context, depth, width, p_var)
                 a_err, a_w = evaluate_mse(a_pde, self.context)
-                self.pde_lib.append(a_pde)
-                self.err_lib.append((a_err, a_w))
-                
+
             print('Creating the ith pde, i=', i)
             print('a_pde.visualize():', a_pde.visualize())
             print('evaluate_aic:', a_err)
             self.eqs.append(a_pde)
             self.mses.append(a_err)
-        
-        # Sort by MSE
-        new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        sorted_indices = np.argsort(new_mse)
-        for i, ix in enumerate(sorted_indices):
-            self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
-        self.mses, self.eqs = self.mses[0:num], self.eqs[0:num]
+
+        # Sort by AIC (Fix #2-A: no deepcopy needed)
+        paired = sorted(zip(self.mses, self.eqs), key=lambda x: x[0])
+        self.mses = [m for m, _ in paired[:num]]
+        self.eqs = [e for _, e in paired[:num]]
     
     @profile
     def run(self, gen=100):
@@ -183,35 +173,33 @@ class SGA:
             new_pde2.elements[ix2] = pde1.elements[ix1]
             return new_pde1, new_pde2
         
+        # Fix #2-B: sort without deepcopy
         num_ix = int(self.num * percentage)
-        new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        sorted_indices = np.argsort(new_mse)
-        for i, ix in enumerate(sorted_indices):
-            self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
-        copy_mses, copy_eqs = self.mses[0:num_ix], self.eqs[0:num_ix]
-        
-        new_eqs, new_mse = copy.deepcopy(copy_eqs), copy.deepcopy(copy_mses)
-        reo_eqs, reo_mse = copy.deepcopy(copy_eqs), copy.deepcopy(copy_mses)
-        random.shuffle(reo_mse)
+        paired = sorted(zip(self.mses, self.eqs), key=lambda x: x[0])
+        self.mses = [m for m, _ in paired]
+        self.eqs = [e for _, e in paired]
+        copy_eqs = self.eqs[:num_ix]
+
+        # Fix #2-CD: shallow list copy for shuffle (no deepcopy needed)
+        new_eqs = list(copy_eqs)
+        reo_eqs = list(copy_eqs)
         random.shuffle(reo_eqs)
-        
+
         for a, b in zip(new_eqs, reo_eqs):
             new_a, new_b = cross_individual(a, b)
             if new_a.visualize() in self.pde_lib:
                 self.repeat_cross += 1
             else:
                 a_err, a_w = evaluate_mse(new_a, self.context)
-                self.pde_lib.append(new_a.visualize())
-                self.err_lib.append((a_err, a_w))
+                self.pde_lib.add(new_a.visualize())
                 self.mses.append(a_err)
                 self.eqs.append(new_a)
-            
+
             if new_b.visualize() in self.pde_lib:
                 self.repeat_cross += 1
             else:
                 b_err, b_w = evaluate_mse(new_b, self.context)
-                self.pde_lib.append(new_b.visualize())
-                self.err_lib.append((b_err, b_w))
+                self.pde_lib.add(new_b.visualize())
                 self.mses.append(b_err)
                 self.eqs.append(new_b)
         
@@ -229,30 +217,27 @@ class SGA:
     def change(self, p_mute=0.05, p_rep=0.3):
         """Perform mutation and replacement operations."""
         
-        # new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        new_eqs = self.eqs.copy() # 新：eqs列表本身是新的，但内部的PDE对象是引用
-        new_mse = self.mses.copy()
-
-        sorted_indices = np.argsort(new_mse)
-        for i, ix in enumerate(sorted_indices):
-            self.mses[i], self.eqs[i] = new_mse[ix], new_eqs[ix]
+        # Sort before mutation (no deepcopy needed for sort)
+        paired = sorted(zip(self.mses, self.eqs), key=lambda x: x[0])
+        self.mses = [m for m, _ in paired]
+        self.eqs = [e for _, e in paired]
+        # deepcopy for mutation — mutate/replace modify trees in-place
         new_eqs, new_mse = copy.deepcopy(self.eqs), copy.deepcopy(self.mses)
-        
+
         for i in range(self.num):
             if i < 1:  # Keep the best sample unchanged
                 continue
-            
+
             new_eqs[i].mutate(p_mute)
             replace_or_not = np.random.choice([False, True], p=([1 - p_rep, p_rep]))
             if replace_or_not:
                 new_eqs[i].replace()
-            
+
             if new_eqs[i].visualize() in self.pde_lib:
                 self.repeat_change += 1
             else:
                 a_err, a_w = evaluate_mse(new_eqs[i], self.context)
-                self.pde_lib.append(new_eqs[i].visualize())
-                self.err_lib.append((a_err, a_w))
+                self.pde_lib.add(new_eqs[i].visualize())
                 self.mses.append(a_err)
                 self.eqs.append(new_eqs[i])
         

@@ -265,7 +265,7 @@ class SolverConfig:
     def divide(up, down, eta=1e-10):
         """Safe division function."""
         while np.any(down == 0):
-            down += eta
+            down = down + eta
         return up / down
         
     def get_device(self):
