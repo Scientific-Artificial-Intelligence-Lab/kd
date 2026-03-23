@@ -339,7 +339,11 @@ def regression_program_to_latex(
     str
         LaTeX string, e.g. ``"$y = 1.5 Rf1 + 2.0$"``.
     """
-    expr = program.sympy_expr[0]
+    sympy_expr = getattr(program, "sympy_expr", None)
+    if not sympy_expr or not isinstance(sympy_expr, (list, tuple)) or len(sympy_expr) == 0:
+        return f"${target_name} = \\text{{(no expression)}}$"
+
+    expr = sympy_expr[0]
 
     if isinstance(expr, str):
         return f"${target_name} = \\text{{{expr}}}$"

@@ -144,9 +144,9 @@ class DiscoverRegressionVizAdapter:
             pass
 
         residual_stats = {
-            "mean_residual": float(np.mean(data.residuals)),
-            "max_abs_residual": float(np.max(np.abs(data.residuals))),
-            "rmse": float(np.sqrt(np.mean(np.square(data.residuals)))),
+            "mean_residual": float(np.nanmean(data.residuals)),
+            "max_abs_residual": float(np.nanmax(np.abs(data.residuals))),
+            "rmse": float(np.sqrt(np.nanmean(np.square(data.residuals)))),
         }
         return VizResult(
             intent="parity",
@@ -209,9 +209,9 @@ class DiscoverRegressionVizAdapter:
             pass
 
         summary = {
-            "mean": float(np.mean(data.residuals)),
-            "std": float(np.std(data.residuals)),
-            "max_abs": float(np.max(np.abs(data.residuals))),
+            "mean": float(np.nanmean(data.residuals)),
+            "std": float(np.nanstd(data.residuals)),
+            "max_abs": float(np.nanmax(np.abs(data.residuals))),
             "count": int(data.residuals.size),
         }
         return VizResult(
@@ -438,7 +438,17 @@ class DiscoverRegressionVizAdapter:
             logger.warning("predict() failed during visualization: %s", exc)
             return None, None
 
-        return np.asarray(y_true).reshape(-1), np.asarray(y_pred).reshape(-1)
+        y_true_arr = np.asarray(y_true).reshape(-1)
+        y_pred_arr = np.asarray(y_pred).reshape(-1)
+
+        if not np.all(np.isfinite(y_pred_arr)):
+            logger.warning(
+                "predict() returned non-finite values (NaN/Inf count: %d/%d)",
+                int(np.sum(~np.isfinite(y_pred_arr))),
+                y_pred_arr.size,
+            )
+
+        return y_true_arr, y_pred_arr
 
     def _build_reward_evolution(
         self, model: Any,
@@ -459,8 +469,8 @@ class DiscoverRegressionVizAdapter:
         cumulative_best = -np.inf
         for batch in rewards:
             arr = np.asarray(batch)
-            max_val = float(np.max(arr))
-            mean_val = float(np.mean(arr))
+            max_val = float(np.nanmax(arr))
+            mean_val = float(np.nanmean(arr))
             cumulative_best = max(cumulative_best, max_val)
             max_vals.append(max_val)
             mean_vals.append(mean_val)
