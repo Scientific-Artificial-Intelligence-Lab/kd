@@ -31,6 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 pysr = ["pysr"]
 viz = ["Pillow"]
+eqgpt = ["openpyxl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -52,3 +53,12 @@ include = ["kd*"]
 
 [tool.setuptools.package-data]
 "kd.dataset" = ["data/*.mat", "data/*.csv", "data/*.npy", "data/*.txt"]
+"kd.model.eqgpt" = [
+    "*.json",
+    "*.xlsx",
+    "gpt_model/*.pt",
+    "model_save/**/*.npy",
+    "model_save/**/*.pkl",
+    "model_save/**/*.txt",
+    "result_save/**/*",
+]
