@@ -85,8 +85,8 @@ def discover_equation(name, seed=1):
     model = KD_Discover_Regression(
         binary_operators=["add", "sub", "mul", "div"],
         unary_operators=["inv"],
-        n_iterations=50,
-        n_samples_per_batch=500,
+        n_iterations=200,
+        n_samples_per_batch=1000,
         seed=seed,
         config_out={"task": {"parsimony_coeff": 0.005}},
     )
