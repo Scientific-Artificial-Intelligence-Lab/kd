@@ -120,9 +120,34 @@ def run_dscv_spr(dataset, params):
     return equation, model
 
 
+def run_eqgpt(dataset, params):
+    """Run KD_EqGPT and return ``(equation_str, model)``."""
+    from kd.model.kd_eqgpt import KD_EqGPT
+
+    model = KD_EqGPT(
+        optimize_epochs=int(params.get("optimize_epochs", 5)),
+        samples_per_epoch=int(params.get("samples_per_epoch", 400)),
+        case_filter=params.get("case_filter", "N"),
+        seed=int(params.get("seed", 0)),
+    )
+    result = model.fit_pretrained()
+
+    # Build multi-line equation text with top-10
+    best = result.get("best_equation", "(no equation)")
+    best_r = result.get("best_reward", 0.0)
+    lines = [f"Best: {best}  (reward={best_r:.4f})"]
+    for i, (eq, rw) in enumerate(
+        zip(result.get("equations", []), result.get("rewards", []))
+    ):
+        lines.append(f"  {i+1:2d}. [reward={rw:.4f}]  {eq}")
+    equation = "\n".join(lines)
+    return equation, model
+
+
 RUNNERS = {
     "dlga": run_dlga,
     "dscv_spr": run_dscv_spr,
+    "eqgpt": run_eqgpt,
 }
 
 
@@ -208,7 +233,8 @@ def main():
 
     t0 = time.time()
     try:
-        dataset = load_dataset(config)
+        # EqGPT loads its own data internally; others need a dataset
+        dataset = None if model_name == "eqgpt" else load_dataset(config)
         equation, model = RUNNERS[model_name](dataset, params)
         elapsed = time.time() - t0
 

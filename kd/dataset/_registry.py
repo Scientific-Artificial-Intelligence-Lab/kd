@@ -179,6 +179,15 @@ PDE_REGISTRY = {
         },
         'status': 'active',
     },
+    'wave_breaking': {
+        'file': None,  # EqGPT loads from EQGPT_DATA_DIR (wave_breaking_data.pkl)
+        'domain': None,
+        'models': {
+            'eqgpt': True,
+        },
+        'status': 'active',
+        'notes': 'Wave-breaking experimental data (23 cases). Loaded internally by KD_EqGPT.',
+    },
     'advection_diffusion': {
         'file': 'Advection_diffusion.mat',
         'keys': {
