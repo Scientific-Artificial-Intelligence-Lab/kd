@@ -317,10 +317,28 @@ def discover_program_to_latex(program_object, # lhs_name_str,
     return f"${lhs_latex} = {final_rhs_latex}$"
 
 
+_DEFAULT_SIG_FIGS = 4
+
+
+def _round_floats(expr: sympy.Basic, sig_figs: int) -> sympy.Basic:
+    """Round all numeric atoms in a SymPy expression to *sig_figs* significant figures."""
+    if not isinstance(expr, sympy.Basic):
+        return expr
+    replacements = {}
+    for atom in expr.atoms(sympy.Number):
+        if atom.is_Integer:
+            continue
+        rounded = sympy.Float(float(atom), sig_figs)
+        if rounded != atom:
+            replacements[atom] = rounded
+    return expr.xreplace(replacements) if replacements else expr
+
+
 def regression_program_to_latex(
     program: "Program",
     var_names: Optional[list] = None,
     target_name: str = "y",
+    sig_figs: int = _DEFAULT_SIG_FIGS,
 ) -> str:
     """Convert a regression Program to a LaTeX equation string.
 
@@ -333,11 +351,14 @@ def regression_program_to_latex(
         If given, replaces the default ``x1, x2, ...`` placeholders.
     target_name : str
         Name for the LHS of the equation. Default ``"y"``.
+    sig_figs : int
+        Number of significant figures for constants. Default 4
+        (matches TLC-CC paper convention).
 
     Returns
     -------
     str
-        LaTeX string, e.g. ``"$y = 1.5 Rf1 + 2.0$"``.
+        LaTeX string, e.g. ``"$y = 0.1472 Rf1 + 0.0114$"``.
     """
     sympy_expr = getattr(program, "sympy_expr", None)
     if not sympy_expr or not isinstance(sympy_expr, (list, tuple)) or len(sympy_expr) == 0:
@@ -351,6 +372,8 @@ def regression_program_to_latex(
     if var_names:
         for i, name in enumerate(var_names):
             expr = expr.subs(sympy.Symbol(f"x{i + 1}"), sympy.Symbol(name))
+
+    expr = _round_floats(expr, sig_figs)
 
     rhs = sympy.latex(expr)
     return f"${target_name} = {rhs}$"
