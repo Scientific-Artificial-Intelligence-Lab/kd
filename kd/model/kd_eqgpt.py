@@ -2,10 +2,36 @@
 
 Wraps the EqGPT pre-trained model (GPT + surrogate NN) to perform
 RL-guided equation search on wave-breaking data.
+
+Data setup
+----------
+EqGPT requires two large files that are NOT included in the git repo:
+
+  wave_breaking_data.pkl   (199 MB)  — 23-case wave-breaking observation data
+  gpt_model/PDEGPT_wave_breaking.pt  (145 MB)  — Pre-trained GPT weights
+
+These files are resolved from the directory specified by the environment
+variable ``EQGPT_DATA_DIR``. Expected layout::
+
+    $EQGPT_DATA_DIR/
+    ├── wave_breaking_data.pkl
+    └── gpt_model/
+        └── PDEGPT_wave_breaking.pt
+
+If ``EQGPT_DATA_DIR`` is not set, the code falls back to
+``<project_root>/ref_lib/EqGPT_wave_breaking/`` for local development.
+
+For Bohrium deployment, upload these files as a Bohrium Dataset and set::
+
+    EQGPT_DATA_DIR=/bohr/eqgpt-data/v1
+
+Small files (surrogate weights in ``model_save/``, vocabulary JSON, etc.)
+ship with the package and require no extra setup.
 """
 
 import logging
 import math
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,13 +41,10 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # --- Path configuration ---
-# Code/weights that ship with the package (small files only)
+# Code + small weights that ship with the package
 _EQGPT_DIR = Path(__file__).resolve().parent / "eqgpt"
 
-# Large data files (pkl + GPT .pt) — configurable via env var.
-#   Local dev default: ref_lib/EqGPT_wave_breaking/
-#   Bohrium deploy:    /bohr/eqgpt-data/v1/  (set EQGPT_DATA_DIR)
-import os
+# Large data files — configurable via EQGPT_DATA_DIR env var
 _DATA_DIR = Path(os.environ.get(
     "EQGPT_DATA_DIR",
     str(_EQGPT_DIR.resolve().parent.parent.parent / "ref_lib" / "EqGPT_wave_breaking"),
