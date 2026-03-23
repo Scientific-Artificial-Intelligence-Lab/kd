@@ -49,6 +49,8 @@ class KD_EqGPT:
         samples_per_epoch: int = 400,
         case_filter: str = "N",
         seed: int = 0,
+        retrain_surrogate: bool = False,
+        surrogate_epochs: int = 50000,
     ) -> None:
         _SUPPORTED_PRETRAINED = ("wave_breaking",)
         if pretrained not in _SUPPORTED_PRETRAINED:
@@ -84,6 +86,8 @@ class KD_EqGPT:
         self.samples_per_epoch = samples_per_epoch
         self.case_filter = case_filter
         self.seed = seed
+        self.retrain_surrogate = retrain_surrogate
+        self.surrogate_epochs = surrogate_epochs
 
     def fit_pretrained(self) -> dict:
         """Run pre-trained GPT + surrogate RL search on wave-breaking data.
@@ -230,7 +234,11 @@ class KD_EqGPT:
                 / f"model_save/{_EQUATION_NAME}"
                 / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
             )
-            if not model_dir.exists():
+            if self.retrain_surrogate:
+                self._train_single_surrogate(
+                    name, data, model_dir, device, device_str,
+                )
+            elif not model_dir.exists():
                 logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
                 continue
             net, db, nx, nt = self._build_single_surrogate(
@@ -242,6 +250,75 @@ class KD_EqGPT:
             all_nt.append(nt)
 
         return all_Net, all_database, all_nx, all_nt
+
+    def _train_single_surrogate(
+        self,
+        trail_num: str,
+        data: np.ndarray,
+        model_dir: Path,
+        device: Any,
+        device_str: str,
+    ) -> None:
+        """Train one surrogate NN from scratch (wave_breaking data)."""
+        import os
+        import torch
+        from .eqgpt.neural_network import NN
+
+        os.makedirs(str(model_dir), exist_ok=True)
+
+        net = NN(
+            Num_Hidden_Layers=6, Neurons_Per_Layer=60,
+            Input_Dim=2, Output_Dim=1,
+            Data_Type=torch.float32, Device=device_str,
+            Activation_Function="Sin", Batch_Norm=False,
+        ).to(device)
+
+        # Prepare data (same as surrogate_model.py train())
+        inputs = data[:, 0:2].copy()
+        inputs[:, 1] = inputs[:, 1] - 8
+        outputs = data[:, 2].reshape(-1, 1) * 100
+
+        n_samples = inputs.shape[0]
+        indices = np.arange(n_samples)
+        np.random.shuffle(indices)
+        n_train = int(_CHOOSE / 100 * n_samples)
+        n_val = int(0.05 * n_samples)
+
+        train_in = torch.from_numpy(inputs[indices[:n_train]]).float().to(device)
+        train_out = torch.from_numpy(outputs[indices[:n_train]]).float().to(device)
+        val_in = torch.from_numpy(inputs[indices[n_train:n_train + n_val]]).float().to(device)
+        val_out = outputs[indices[n_train:n_train + n_val]]
+
+        optimizer = torch.optim.Adam(net.parameters())
+        mse = torch.nn.MSELoss()
+        validate_errors: List[float] = []
+
+        logger.info("Training surrogate for %s (%d epochs)...", trail_num, self.surrogate_epochs)
+        for step in range(self.surrogate_epochs):
+            optimizer.zero_grad()
+            loss = mse(train_out, net(train_in))
+            loss.backward()
+            optimizer.step()
+
+            if (step + 1) % 500 == 0:
+                with torch.no_grad():
+                    pred_val = net(val_in).cpu().numpy()
+                val_err = float(np.mean((val_out - pred_val) ** 2))
+                validate_errors.append(val_err)
+                torch.save(
+                    net.state_dict(),
+                    str(model_dir / f"Net_Sin_{step + 1}.pkl"),
+                )
+                if (step + 1) % 5000 == 0:
+                    logger.info(
+                        "  [%s] step %d/%d  loss=%.6f  val=%.6f",
+                        trail_num, step + 1, self.surrogate_epochs,
+                        loss.item(), val_err,
+                    )
+
+        best_epoch = (validate_errors.index(min(validate_errors)) + 1) * 500
+        np.save(str(model_dir / "best_epoch.npy"), np.array([best_epoch]))
+        logger.info("  [%s] best_epoch=%d  val_err=%.6f", trail_num, best_epoch, min(validate_errors))
 
     def _build_single_surrogate(
         self,
