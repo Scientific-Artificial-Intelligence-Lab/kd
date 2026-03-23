@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from ._adapters import DLGAVizAdapter, DiscoverVizAdapter, EqGPTVizAdapter, PySRVizAdapter, SGAVizAdapter
+from ._adapters import DLGAVizAdapter, DiscoverRegressionVizAdapter, DiscoverVizAdapter, EqGPTVizAdapter, PySRVizAdapter, SGAVizAdapter
 from .registry import register_adapter
 
 __all__ = [
     'DLGAVizAdapter',
+    'DiscoverRegressionVizAdapter',
     'DiscoverVizAdapter',
     'EqGPTVizAdapter',
     'register_default_adapters',
@@ -27,6 +28,13 @@ def register_default_adapters() -> None:
         KD_Discover = None  # type: ignore
     else:
         register_adapter(KD_Discover, DiscoverVizAdapter())
+
+    try:
+        from kd.model.kd_discover_regression import KD_Discover_Regression  # type: ignore
+    except Exception:  # pragma: no cover
+        KD_Discover_Regression = None  # type: ignore
+    else:
+        register_adapter(KD_Discover_Regression, DiscoverRegressionVizAdapter())
 
     try:
         from kd.model.kd_sga import KD_SGA  # type: ignore

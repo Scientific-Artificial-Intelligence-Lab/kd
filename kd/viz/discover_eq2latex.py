@@ -315,3 +315,38 @@ def discover_program_to_latex(program_object, # lhs_name_str,
     final_rhs_latex = final_rhs_latex.replace("  ", " ")
 
     return f"${lhs_latex} = {final_rhs_latex}$"
+
+
+def regression_program_to_latex(
+    program: "Program",
+    var_names: Optional[list] = None,
+    target_name: str = "y",
+) -> str:
+    """Convert a regression Program to a LaTeX equation string.
+
+    Parameters
+    ----------
+    program : Program
+        A fitted Discover Program with ``sympy_expr`` attribute.
+    var_names : list of str, optional
+        Human-readable feature names (e.g. ``["Rf1", "Rf2"]``).
+        If given, replaces the default ``x1, x2, ...`` placeholders.
+    target_name : str
+        Name for the LHS of the equation. Default ``"y"``.
+
+    Returns
+    -------
+    str
+        LaTeX string, e.g. ``"$y = 1.5 Rf1 + 2.0$"``.
+    """
+    expr = program.sympy_expr[0]
+
+    if isinstance(expr, str):
+        return f"${target_name} = \\text{{{expr}}}$"
+
+    if var_names:
+        for i, name in enumerate(var_names):
+            expr = expr.subs(sympy.Symbol(f"x{i + 1}"), sympy.Symbol(name))
+
+    rhs = sympy.latex(expr)
+    return f"${target_name} = {rhs}$"
