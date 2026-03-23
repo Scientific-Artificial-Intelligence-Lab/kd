@@ -27,7 +27,7 @@ from kd.viz.core import VizRequest, render, configure
 
 # ── GPU offloading ────────────────────────────────────────────
 
-GPU_MODELS = {"KD_DLGA", "KD_Discover_SPR"}
+GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR"}
 
 try:
     from kd.job import submit_gpu_job, check_job, download_result
@@ -51,8 +51,9 @@ def _is_bohrium_env(request):
 MODEL_KEYS = {
     "KD_SGA": "sga",
     "KD_DLGA": "dlga",
-    "KD_Discover": "discover",
-    "KD_Discover_SPR": "discover_spr",
+    "KD_DSCV": "dscv",
+    "KD_DSCV_SPR": "dscv_spr",
+    "KD_EqGPT": "eqgpt",
 }
 
 ACTIVE_DATASETS = sorted([
@@ -91,10 +92,14 @@ def get_compatible_models(dataset_name):
         return []
     info = PDE_REGISTRY.get(dataset_name, {})
     models_map = info.get("models", {})
-    return [
+    result = [
         display for display, key in MODEL_KEYS.items()
         if models_map.get(key, False)
     ]
+    # EqGPT uses its own wave_breaking data, always available
+    if "KD_EqGPT" not in result:
+        result.append("KD_EqGPT")
+    return result
 
 
 def on_dataset_change(dataset_name):
@@ -108,10 +113,11 @@ def on_model_change(model_name):
     """Show/hide parameter groups and auto-switch operator presets."""
     sga_vis = model_name == "KD_SGA"
     dlga_vis = model_name == "KD_DLGA"
-    dscv_vis = model_name in ("KD_Discover", "KD_Discover_SPR")
-    spr_vis = model_name == "KD_Discover_SPR"
+    dscv_vis = model_name in ("KD_DSCV", "KD_DSCV_SPR")
+    spr_vis = model_name == "KD_DSCV_SPR"
+    eqgpt_vis = model_name == "KD_EqGPT"
 
-    if model_name == "KD_Discover_SPR":
+    if model_name == "KD_DSCV_SPR":
         binary_val = SPR_BINARY_DEFAULT
         unary_val = SPR_UNARY_DEFAULT
     else:
@@ -119,12 +125,13 @@ def on_model_change(model_name):
         unary_val = DSCV_UNARY_DEFAULT
 
     return (
-        gr.update(visible=sga_vis),   # sga_group
-        gr.update(visible=dlga_vis),  # dlga_group
-        gr.update(visible=dscv_vis),  # dscv_group
-        gr.update(visible=spr_vis),   # spr_group
-        gr.update(value=binary_val),  # dscv_binary
-        gr.update(value=unary_val),   # dscv_unary
+        gr.update(visible=sga_vis),    # sga_group
+        gr.update(visible=dlga_vis),   # dlga_group
+        gr.update(visible=dscv_vis),   # dscv_group
+        gr.update(visible=spr_vis),    # spr_group
+        gr.update(visible=eqgpt_vis),  # eqgpt_group
+        gr.update(value=binary_val),   # dscv_binary
+        gr.update(value=unary_val),    # dscv_unary
     )
 
 
@@ -139,6 +146,10 @@ def _get_equation_text(model, model_name, result=None):
         return model.equation_latex()
     elif model_name == "KD_DLGA":
         return getattr(model, "eq_latex", None) or "(equation renderer unavailable)"
+    elif model_name == "KD_EqGPT":
+        if result is not None:
+            return result.get("best_equation", "(no equation found)")
+        return "(no equation found)"
     elif result is not None:
         return result.get("expression", "(no expression found)")
     return "(unknown)"
@@ -151,8 +162,8 @@ def _get_model_capabilities(model):
         return []
     caps = list(list_capabilities(model))
     # spr_* intents only work for KD_DSCV_SPR (PINN mode)
-    from kd.model.kd_discover import KD_Discover_SPR
-    if not isinstance(model, KD_Discover_SPR):
+    from kd.model.kd_dscv import KD_DSCV_SPR
+    if not isinstance(model, KD_DSCV_SPR):
         caps = [c for c in caps if not c.startswith("spr_")]
     return sorted(caps)
 
@@ -201,6 +212,8 @@ def run_training(
     dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
     # SPR extra
     spr_sample_ratio, spr_epochs,
+    # EqGPT
+    eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
     # Gradio injects this automatically
     request: gr.Request = None,
 ):
@@ -226,6 +239,7 @@ def run_training(
         dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
         dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
         spr_sample_ratio, spr_epochs,
+        eqgpt_epochs, eqgpt_samples, eqgpt_cases,
     )
 
 
@@ -235,69 +249,81 @@ def _run_local(
     dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
     dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
     spr_sample_ratio, spr_epochs,
+    eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
 ):
     """Run model training in the current process (CPU or local GPU)."""
     configure(save_dir=None)
 
     try:
-        dataset = load_pde(dataset_name)
         model = None
         result = None
 
-        if model_name == "KD_SGA":
-            from kd.model.kd_sga import KD_SGA
-            model = KD_SGA(
-                sga_run=int(sga_run),
-                num=int(sga_num),
-                depth=int(sga_depth),
-                seed=int(sga_seed),
+        if model_name == "KD_EqGPT":
+            from kd.model.kd_eqgpt import KD_EqGPT
+            case_filter = "N" if "N only" in str(eqgpt_cases) else "all"
+            model = KD_EqGPT(
+                optimize_epochs=int(eqgpt_epochs),
+                samples_per_epoch=int(eqgpt_samples),
+                case_filter=case_filter,
             )
-            model.fit_dataset(dataset)
-
-        elif model_name == "KD_DLGA":
-            from kd.model.kd_dlga import KD_DLGA
-            model = KD_DLGA(
-                operators=_parse_ops(dlga_ops),
-                epi=float(dlga_epi),
-                input_dim=2,
-                verbose=True,
-                max_iter=int(dlga_max_iter),
-            )
-            sample = int(dlga_sample) if dlga_sample else None
-            model.fit_dataset(dataset, sample=sample)
-
-        elif model_name == "KD_Discover":
-            from kd.model.kd_discover import KD_Discover
-            model = KD_Discover(
-                binary_operators=_parse_ops(dscv_binary),
-                unary_operators=_parse_ops(dscv_unary),
-                n_samples_per_batch=int(dscv_batch),
-                seed=int(dscv_seed),
-            )
-            np.random.seed(int(dscv_seed))
-            result = model.fit_dataset(dataset, n_epochs=int(dscv_epochs))
-
-        elif model_name == "KD_Discover_SPR":
-            from kd.model.kd_discover import KD_Discover_SPR
-            model = KD_Discover_SPR(
-                binary_operators=_parse_ops(dscv_binary),
-                unary_operators=_parse_ops(dscv_unary),
-                n_samples_per_batch=int(dscv_batch),
-                seed=int(dscv_seed),
-            )
-            np.random.seed(int(dscv_seed))
-            result = model.fit_dataset(
-                dataset,
-                n_epochs=int(spr_epochs),
-                sample_ratio=float(spr_sample_ratio),
-            )
+            result = model.fit_pretrained()
         else:
-            return (f"Unknown model: {model_name}",
-                    None, None, gr.update()) + _NO_GPU
+            dataset = load_pde(dataset_name)
+
+            if model_name == "KD_SGA":
+                from kd.model.kd_sga import KD_SGA
+                model = KD_SGA(
+                    sga_run=int(sga_run),
+                    num=int(sga_num),
+                    depth=int(sga_depth),
+                    seed=int(sga_seed),
+                )
+                model.fit_dataset(dataset)
+
+            elif model_name == "KD_DLGA":
+                from kd.model.kd_dlga import KD_DLGA
+                model = KD_DLGA(
+                    operators=_parse_ops(dlga_ops),
+                    epi=float(dlga_epi),
+                    input_dim=2,
+                    verbose=True,
+                    max_iter=int(dlga_max_iter),
+                )
+                sample = int(dlga_sample) if dlga_sample else None
+                model.fit_dataset(dataset, sample=sample)
+
+            elif model_name == "KD_DSCV":
+                from kd.model.kd_dscv import KD_DSCV
+                model = KD_DSCV(
+                    binary_operators=_parse_ops(dscv_binary),
+                    unary_operators=_parse_ops(dscv_unary),
+                    n_samples_per_batch=int(dscv_batch),
+                    seed=int(dscv_seed),
+                )
+                np.random.seed(int(dscv_seed))
+                result = model.fit_dataset(dataset, n_epochs=int(dscv_epochs))
+
+            elif model_name == "KD_DSCV_SPR":
+                from kd.model.kd_dscv import KD_DSCV_SPR
+                model = KD_DSCV_SPR(
+                    binary_operators=_parse_ops(dscv_binary),
+                    unary_operators=_parse_ops(dscv_unary),
+                    n_samples_per_batch=int(dscv_batch),
+                    seed=int(dscv_seed),
+                )
+                np.random.seed(int(dscv_seed))
+                result = model.fit_dataset(
+                    dataset,
+                    n_epochs=int(spr_epochs),
+                    sample_ratio=float(spr_sample_ratio),
+                )
+            else:
+                return (f"Unknown model: {model_name}",
+                        None, None, gr.update()) + _NO_GPU
 
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
-        caps = _get_model_capabilities(model)
+        caps = _get_model_capabilities(model) if model_name != "KD_EqGPT" else []
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
         return (equation, fig, model, viz_update) + _NO_GPU
@@ -323,7 +349,7 @@ def _submit_gpu_training(
             "max_iter": int(dlga_max_iter),
             "sample": int(dlga_sample) if dlga_sample else None,
         }
-    else:  # KD_Discover_SPR
+    else:  # KD_DSCV_SPR
         runner_model = "dscv_spr"
         params = {
             "binary_operators": dscv_binary,
@@ -529,6 +555,25 @@ def build_app():
                             )
                             spr_epochs = gr.Number(value=5, label="PINN search epochs", precision=0)
 
+                        # -- EqGPT params --
+                        with gr.Group(visible=False) as eqgpt_group:
+                            gr.Markdown("**EqGPT Parameters**")
+                            gr.Markdown(
+                                "_Uses pre-trained GPT + surrogate models"
+                                " on wave-breaking data._"
+                            )
+                            eqgpt_epochs = gr.Number(
+                                value=5, label="Optimize epochs", precision=0,
+                            )
+                            eqgpt_samples = gr.Number(
+                                value=400, label="Samples per epoch", precision=0,
+                            )
+                            eqgpt_cases = gr.Dropdown(
+                                choices=["N only (12 cases)", "All (23 cases)"],
+                                value="N only (12 cases)",
+                                label="Case filter",
+                            )
+
                         with gr.Row():
                             train_btn = gr.Button("Start Training", variant="primary", size="lg")
                             cancel_btn = gr.Button("Cancel", variant="stop", size="lg")
@@ -566,7 +611,8 @@ def build_app():
         model_dd.change(
             on_model_change,
             inputs=[model_dd],
-            outputs=[sga_group, dlga_group, dscv_group, spr_group, dscv_binary, dscv_unary],
+            outputs=[sga_group, dlga_group, dscv_group, spr_group, eqgpt_group,
+                     dscv_binary, dscv_unary],
         )
 
         _train_outputs = [
@@ -582,6 +628,7 @@ def build_app():
                 dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
                 dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
                 spr_sample_ratio, spr_epochs,
+                eqgpt_epochs, eqgpt_samples, eqgpt_cases,
             ],
             outputs=_train_outputs,
         )
@@ -611,49 +658,6 @@ def build_app():
 # ── Entry Point ────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    app = build_app()
     os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-    blocks = build_app()
-
-    # Bohrium serves apps behind an HTTPS proxy that does NOT forward
-    # X-Forwarded-Proto.  This ASGI middleware forces the scheme to HTTPS
-    # so Gradio generates correct URLs in its frontend config.
-    class _ForceHTTPS:
-        """Fix Mixed Content when running behind Bohrium's HTTPS proxy.
-
-        1. Injects X-Forwarded-Proto into requests so Gradio generates
-           HTTPS URLs in its frontend config (``root``).
-        2. Adds Content-Security-Policy: upgrade-insecure-requests to
-           responses so the browser auto-upgrades any remaining HTTP
-           sub-resource requests (e.g. theme.css loaded by Gradio JS
-           via window.location).
-        """
-        def __init__(self, app):
-            self.app = app
-        async def __call__(self, scope, receive, send):
-            if scope["type"] in ("http", "websocket"):
-                headers = list(scope.get("headers", []))
-                headers.append((b"x-forwarded-proto", b"https"))
-                scope = dict(scope, scheme="https", headers=headers)
-
-                async def send_with_csp(message):
-                    if message["type"] == "http.response.start":
-                        resp_headers = list(message.get("headers", []))
-                        resp_headers.append((
-                            b"content-security-policy",
-                            b"upgrade-insecure-requests",
-                        ))
-                        message = dict(message, headers=resp_headers)
-                    await send(message)
-
-                await self.app(scope, receive, send_with_csp)
-            else:
-                await self.app(scope, receive, send)
-
-    import uvicorn
-    from fastapi import FastAPI
-
-    fastapi_app = FastAPI()
-    inner = gr.mount_gradio_app(fastapi_app, blocks, path="/")
-    app = _ForceHTTPS(inner)
-
-    uvicorn.run(app, host="0.0.0.0", port=50001)
+    app.launch(server_name="0.0.0.0", server_port=50001)

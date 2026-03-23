@@ -75,9 +75,13 @@ class Node(object):
     """Basic tree class supporting printing"""
 
     def __init__(self, val):
-        self.val = val.name
+        if isinstance(val, str):
+            self.val = val
+            self.token = None
+        else:
+            self.val = val.name
+            self.token = val
         self.children = []
-        self.token = val
         self.symbol = 1
         
 
@@ -94,7 +98,7 @@ class Node(object):
         node_op_name = self.val  # 这是 KD_Discover 内部的原始操作名，如 "n2", "diff2", "add", "u1"
 
         # 基本情况：叶子节点 (通常是变量如 "u1", "x1", 或已解析的常数)
-        if not self.children: # 即 self.token.arity == 0
+        if not self.children:  # leaf node (variable or constant)
             # 叶子节点的 node_op_name (来自 token.name) 通常可以直接用。
             # sympy.parse_expr 会在 local_dict 的帮助下将 "u1", "x1" 识别为符号，并能直接解析数字字符串（如果常数节点的 .val 是数字字符串）
             return node_op_name

@@ -100,6 +100,59 @@ def load_pde(name: str, **kwargs) -> PDEDataset:
             **kwargs)
         return _tag_dataset(dataset, name)
 
+_REGRESSION_REGISTRY = {
+    "tlc_cc_t1": {
+        "file": "tlc_cc_Rf_t1.npy",
+        "x_cols": [0, 1],
+        "y_col": 2,
+        "var_names": ["R_F", "r"],
+        "target_name": "mean(V_S)",
+        "description": "TLC-CC: Rf vs start retention volume (mean)",
+        "source": "Nature Comm. 2025:16:832",
+    },
+    "tlc_cc_t2": {
+        "file": "tlc_cc_Rf_t2.npy",
+        "x_cols": [0, 1],
+        "y_col": 2,
+        "var_names": ["R_F", "r"],
+        "target_name": "mean(V_E)",
+        "description": "TLC-CC: Rf vs end retention volume (mean)",
+        "source": "Nature Comm. 2025:16:832",
+    },
+}
+
+
+def load_regression(name: str):
+    """Load a tabular regression dataset.
+
+    Args:
+        name: Dataset name (e.g. ``"tlc_cc_t1"``, ``"tlc_cc_t2"``).
+
+    Returns:
+        tuple: ``(X, y, meta)`` where *X* is ``(n_samples, n_features)``,
+        *y* is ``(n_samples,)``, and *meta* is a dict with
+        ``var_names``, ``target_name``, etc.
+    """
+    if name not in _REGRESSION_REGISTRY:
+        available = ", ".join(sorted(_REGRESSION_REGISTRY))
+        raise ValueError(
+            f"Unknown regression dataset '{name}'. "
+            f"Available: {available}"
+        )
+    info = _REGRESSION_REGISTRY[name]
+    data_path = resources.files("kd.dataset.data")
+    data = np.load(data_path / info["file"])
+    X = data[:, info["x_cols"]]
+    y = data[:, info["y_col"]]
+    meta = {
+        "var_names": info["var_names"],
+        "target_name": info["target_name"],
+        "description": info["description"],
+        "source": info["source"],
+    }
+    return X, y, meta
+
+
 __all__ = [
     "PDEDataset",
     "load_pde",  # 新增统一接口
@@ -126,5 +179,6 @@ __all__ = [
     "Parametric_convection_diffusion",
     "Parametric_Burgers_equation",
     "Parametric_wave_equation",
-    "Burgers_2D"
+    "Burgers_2D",
+    "load_regression",
 ]
