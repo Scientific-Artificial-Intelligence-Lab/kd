@@ -225,24 +225,34 @@ class KD_EqGPT:
         all_nx: List[int] = []
         all_nt: List[int] = []
 
+        # When retraining, use a temp directory to avoid overwriting pre-trained weights
+        import tempfile
+        retrain_tmpdir = None
+        if self.retrain_surrogate:
+            retrain_tmpdir = Path(tempfile.mkdtemp(prefix="eqgpt_surrogate_"))
+            logger.info("Retrain surrogate weights → %s", retrain_tmpdir)
+
         for name in sorted(data_dict.keys()):
             if self.case_filter == "N" and "N" not in name:
                 continue
             data = data_dict[name]
-            model_dir = (
+            pretrained_dir = (
                 _EQGPT_DIR
                 / f"model_save/{_EQUATION_NAME}"
                 / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
             )
             if self.retrain_surrogate:
+                model_dir = retrain_tmpdir / f"{_CHOOSE}_{_NOISE_LEVEL}_{name}(Non_unit)"
                 self._train_single_surrogate(
                     name, data, model_dir, device, device_str,
                 )
-            elif not model_dir.exists():
-                logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
-                continue
+            else:
+                model_dir = pretrained_dir
+                if not model_dir.exists():
+                    logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
+                    continue
             net, db, nx, nt = self._build_single_surrogate(
-                name, data, device, device_str, load_checkpoint,
+                name, data, model_dir, device, device_str, load_checkpoint,
             )
             all_Net.append(net)
             all_database.append(db)
@@ -324,6 +334,7 @@ class KD_EqGPT:
         self,
         trail_num: str,
         data: np.ndarray,
+        model_dir: Path,
         device: Any,
         device_str: str,
         load_checkpoint: Any,
@@ -343,11 +354,6 @@ class KD_EqGPT:
             Batch_Norm=False,
         )
 
-        model_dir = (
-            _EQGPT_DIR
-            / f"model_save/{_EQUATION_NAME}"
-            / f"{_CHOOSE}_{_NOISE_LEVEL}_{trail_num}(Non_unit)"
-        )
         best_epoch = int(np.load(str(model_dir / "best_epoch.npy"))[0])
         load_state = f"Net_Sin_{best_epoch}"
         net.load_state_dict(
