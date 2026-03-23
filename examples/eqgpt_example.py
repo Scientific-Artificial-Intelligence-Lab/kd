@@ -1,67 +1,90 @@
-"""KD_EqGPT example: wave-breaking PDE discovery with pre-trained GPT.
+"""KD_EqGPT example with unified visualization output.
 
-Demonstrates the EqGPT workflow using pre-trained surrogate models and
-GPT-guided RL search on wave-breaking experimental data.
-
-Two modes:
-  1. fit_pretrained (default): Load pre-trained surrogates → RL search
-  2. retrain_surrogate=True: Train surrogates from scratch → RL search
-
-Requirements:
-  - ref_lib/EqGPT_wave_breaking/wave_breaking_data.pkl (199MB observation data)
-  - kd/model/eqgpt/gpt_model/PDEGPT_wave_breaking.pt (GPT weights)
-  - kd/model/eqgpt/model_save/ (pre-trained surrogate weights, for mode 1)
+This script runs the pre-trained EqGPT workflow, logs the top discovered
+equations, and saves visualization outputs to ``outputs/eqgpt_example/``.
 
 Usage:
-    python examples/eqgpt_example.py
+    /Users/hao/miniconda3/envs/kd-env/bin/python examples/eqgpt_example.py
 """
 
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Dict, List
+
 from kd.model import KD_EqGPT
+from kd.viz.core import VizRequest, configure, render
 
-# ============================================================
-# 1. Pre-trained mode (default) / 预训练模式（默认）
-# ============================================================
+logger = logging.getLogger(__name__)
 
-# Uses pre-trained surrogate NN weights + pre-trained GPT.
-# RL search only — fastest path. ~12 min on MPS, ~3 min on CUDA.
-# 使用预训练 surrogate NN 权重 + 预训练 GPT，仅做 RL 搜索。
+_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "eqgpt_example"
+_VIZ_KINDS = ("equation", "reward_ranking", "reward_evolution")
 
-model = KD_EqGPT(
-    optimize_epochs=5,        # RL search epochs / RL 搜索轮数
-    samples_per_epoch=400,    # Candidates per epoch / 每轮采样数
-    case_filter="N",          # "N" = 12 N-type cases, "all" = 23 cases
-    seed=0,                   # Random seed / 随机种子
-)
 
-result = model.fit_pretrained()
+def _save_result_summary(result: Dict[str, object]) -> Path:
+    """Persist the EqGPT search summary to JSON."""
+    summary_path = _OUTPUT_DIR / "result_summary.json"
+    payload = {
+        "best_equation": result.get("best_equation", ""),
+        "best_reward": result.get("best_reward", 0.0),
+        "equations": result.get("equations", []),
+        "rewards": result.get("rewards", []),
+        "reward_history": result.get("reward_history", []),
+    }
+    summary_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return summary_path
 
-print("=" * 60)
-print("EqGPT Wave-Breaking PDE Discovery Results")
-print("=" * 60)
-print(f"Best equation:  {result['best_equation']}")
-print(f"Best reward:    {result['best_reward']:.4f}")
-print()
-print("Top-10 equations:")
-for i, (eq, rw) in enumerate(zip(result["equations"], result["rewards"])):
-    print(f"  {i+1:2d}. [reward={rw:.4f}]  {eq}")
 
-# ============================================================
-# 2. Retrain mode (optional) / 重训练模式（可选）
-# ============================================================
+def _log_top_equations(equations: List[str], rewards: List[float]) -> None:
+    """Log the discovered equation ranking."""
+    logger.info("Top-%d equations:", len(equations))
+    for idx, (equation, reward) in enumerate(zip(equations, rewards), start=1):
+        logger.info("  %02d. [reward=%.4f] %s", idx, reward, equation)
 
-# Uncomment to train surrogates from scratch before RL search.
-# This verifies the full pipeline but takes longer (~18 min on MPS).
-# 取消注释可从头训练 surrogate，验证完整 pipeline，但更慢。
 
-# model_retrain = KD_EqGPT(
-#     optimize_epochs=5,
-#     samples_per_epoch=400,
-#     case_filter="N",
-#     seed=0,
-#     retrain_surrogate=True,       # Train surrogates from scratch
-#     surrogate_epochs=50000,       # Full training (default)
-#     # surrogate_epochs=5000,      # Quick test (~6x faster)
-# )
-# result_retrain = model_retrain.fit_pretrained()
-# print(f"\nRetrained best: {result_retrain['best_equation']}")
-# print(f"Retrained reward: {result_retrain['best_reward']:.4f}")
+def main() -> None:
+    """Run EqGPT discovery and save visualization outputs."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    model = KD_EqGPT(
+        optimize_epochs=5,
+        samples_per_epoch=400,
+        case_filter="N",
+        seed=0,
+    )
+    result = model.fit_pretrained()
+
+    equations = list(result.get("equations", []))
+    rewards = [float(value) for value in result.get("rewards", [])]
+
+    logger.info("EqGPT wave-breaking PDE discovery")
+    logger.info("Best equation: %s", result.get("best_equation", ""))
+    logger.info("Best reward: %.4f", float(result.get("best_reward", 0.0)))
+    _log_top_equations(equations, rewards)
+
+    summary_path = _save_result_summary(result)
+    logger.info("Saved summary: %s", summary_path)
+
+    configure(save_dir=_OUTPUT_DIR)
+    try:
+        for kind in _VIZ_KINDS:
+            viz_result = render(
+                VizRequest(kind=kind, target=model, options={"output_dir": _OUTPUT_DIR})
+            )
+            if viz_result.warnings:
+                logger.warning("%s warnings: %s", kind, "; ".join(viz_result.warnings))
+                continue
+            if viz_result.paths:
+                logger.info("Saved %s: %s", kind, viz_result.paths[0])
+    finally:
+        configure(save_dir=None)
+
+
+if __name__ == "__main__":
+    main()

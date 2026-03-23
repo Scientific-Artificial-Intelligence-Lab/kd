@@ -182,6 +182,7 @@ class KD_EqGPT:
         mask_invalid = get_mask_invalid(_VARIABLES)
         best_award: Optional[List[float]] = None
         best_sentence: Optional[List[List[int]]] = None
+        reward_history: List[List[float]] = []
 
         optimizer = optim.Adam(model_Q.parameters(), lr=1e-5)
 
@@ -213,6 +214,7 @@ class KD_EqGPT:
                 best_award, best_sentence,
                 find_min_no_repeat, _samples_k,
             )
+            reward_history.append(self._snapshot_reward_history(best_award))
 
             # Fine-tune GPT on top candidates
             continue_train_data = self._prepare_train_data(
@@ -240,6 +242,7 @@ class KD_EqGPT:
             "rewards": rewards,
             "best_equation": equations[0] if equations else "",
             "best_reward": rewards[0] if rewards else 0.0,
+            "reward_history": reward_history,
         }
         self.result_ = result  # store for viz adapter access
         return result
@@ -454,6 +457,20 @@ class KD_EqGPT:
         database = inputs_tensor.clone().detach().requires_grad_(True)
 
         return net, database, nx, nt
+
+    @staticmethod
+    def _snapshot_reward_history(
+        best_award: Optional[List[float]],
+    ) -> List[float]:
+        """Convert the current epoch top-k rewards into a clean snapshot."""
+        if not best_award:
+            return []
+
+        rewards_arr = np.asarray(best_award, dtype=float).reshape(-1)
+        finite_mask = np.isfinite(rewards_arr)
+        if not np.any(finite_mask):
+            return []
+        return rewards_arr[finite_mask].astype(float).tolist()
 
     @staticmethod
     def _update_top10(

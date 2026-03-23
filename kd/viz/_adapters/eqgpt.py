@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .._contracts import RewardEvolutionData
 from ..core import VizResult
 from ..equation_renderer import render_latex_to_image
 
@@ -189,9 +190,14 @@ class EqGPTVizAdapter:
 
     * ``'equation'``        -- render best equation as LaTeX image;
     * ``'reward_ranking'``  -- top-N reward bar chart.
+    * ``'reward_evolution'`` -- per-epoch top-k reward lines.
     """
 
-    capabilities: Iterable[str] = {"equation", "reward_ranking"}
+    capabilities: Iterable[str] = {
+        "equation",
+        "reward_ranking",
+        "reward_evolution",
+    }
 
     def __init__(self, *, subdir: str = "eqgpt") -> None:
         self._subdir = subdir
@@ -205,6 +211,7 @@ class EqGPTVizAdapter:
         handler = {
             "equation": self._equation,
             "reward_ranking": self._reward_ranking,
+            "reward_evolution": self._reward_evolution,
         }.get(kind)
         if handler is None:
             return VizResult(
@@ -364,6 +371,66 @@ class EqGPTVizAdapter:
             top_eqs, top_rewards, n_bars, ctx, warnings
         )
 
+    def _reward_evolution(self, model: Any, ctx: Any) -> VizResult:
+        """Create a line chart of per-epoch EqGPT top-k rewards."""
+        if not hasattr(model, "result_"):
+            return VizResult(
+                intent="reward_evolution",
+                warnings=["Model has no result_ attribute."],
+            )
+
+        data, warnings = self._build_reward_evolution(
+            model.result_.get("reward_history")
+        )
+        if data is None:
+            return VizResult(
+                intent="reward_evolution",
+                warnings=warnings or ["No reward history available."],
+            )
+
+        fig, ax = plt.subplots(
+            figsize=ctx.options.get("figsize", (8, 5))
+        )
+        try:
+            self._plot_reward_series(
+                ax, data.steps, data.best_reward,
+                label="Top-1", color="black", linestyle="-",
+            )
+            if data.max_reward is not None:
+                self._plot_reward_series(
+                    ax, data.steps, data.max_reward,
+                    label="Top-5", color="#F47E62", linestyle="--",
+                )
+            if data.mean_reward is not None:
+                self._plot_reward_series(
+                    ax, data.steps, data.mean_reward,
+                    label="Top-10", color="#4F8FBA", linestyle="-.",
+                )
+
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Reward")
+            ax.set_title(
+                ctx.options.get("title", "EqGPT Reward Evolution")
+            )
+            ax.grid(True, linestyle="--", alpha=0.4)
+            ax.legend(loc="best", frameon=False)
+
+            _, path = self._resolve_output(ctx, "reward_evolution.png")
+            fig.savefig(
+                str(path),
+                dpi=ctx.options.get("dpi", 300),
+                bbox_inches="tight",
+            )
+        finally:
+            plt.close(fig)
+
+        return VizResult(
+            intent="reward_evolution",
+            paths=[path],
+            warnings=warnings,
+            metadata={"reward_evolution": data},
+        )
+
     def _plot_ranking(
         self,
         equations: List[str],
@@ -404,6 +471,115 @@ class EqGPTVizAdapter:
             warnings=warnings or [],
             metadata={"n_bars": n_bars},
         )
+
+    @staticmethod
+    def _plot_reward_series(
+        ax: Any,
+        steps: np.ndarray,
+        values: np.ndarray,
+        *,
+        label: str,
+        color: str,
+        linestyle: str,
+    ) -> None:
+        """Plot one reward series while skipping non-finite points."""
+        values_arr = np.asarray(values, dtype=float)
+        finite_mask = np.isfinite(values_arr)
+        if not np.any(finite_mask):
+            return
+        ax.plot(
+            steps[finite_mask],
+            values_arr[finite_mask],
+            label=label,
+            color=color,
+            linestyle=linestyle,
+            linewidth=2,
+        )
+
+    def _build_reward_evolution(
+        self,
+        reward_history: Any,
+    ) -> Tuple[Optional[RewardEvolutionData], List[str]]:
+        """Convert raw per-epoch top-k rewards into plotting data."""
+        if reward_history is None:
+            return None, ["No reward_history available."]
+
+        try:
+            history = list(reward_history)
+        except TypeError:
+            return None, ["reward_history is not iterable."]
+        if not history:
+            return None, ["Reward history is empty."]
+
+        warnings: List[str] = []
+        top1: List[float] = []
+        top5: List[float] = []
+        top10: List[float] = []
+
+        filtered_nonfinite = False
+        for epoch_idx, epoch_rewards in enumerate(history, start=1):
+            try:
+                rewards_arr = np.asarray(epoch_rewards, dtype=float).reshape(-1)
+            except (TypeError, ValueError):
+                warnings.append(
+                    f"Epoch {epoch_idx} reward data is invalid; leaving a gap."
+                )
+                top1.append(np.nan)
+                top5.append(np.nan)
+                top10.append(np.nan)
+                continue
+            finite_rewards = rewards_arr[np.isfinite(rewards_arr)]
+
+            if finite_rewards.size != rewards_arr.size:
+                filtered_nonfinite = True
+            if finite_rewards.size == 0:
+                warnings.append(
+                    f"Epoch {epoch_idx} has no finite rewards; leaving a gap."
+                )
+                top1.append(np.nan)
+                top5.append(np.nan)
+                top10.append(np.nan)
+                continue
+
+            top1.append(float(finite_rewards[0]))
+            top5.append(self._reward_at_rank(finite_rewards, 5))
+            top10.append(self._reward_at_rank(finite_rewards, 10))
+
+        if filtered_nonfinite:
+            warnings.append(
+                "Filtered non-finite values from reward history."
+            )
+
+        best_arr = np.asarray(top1, dtype=float)
+        top5_arr = np.asarray(top5, dtype=float)
+        top10_arr = np.asarray(top10, dtype=float)
+        if not np.isfinite(best_arr).any():
+            return None, warnings + ["Reward history has no finite values."]
+
+        data = RewardEvolutionData(
+            steps=np.arange(1, len(history) + 1),
+            best_reward=best_arr,
+            max_reward=top5_arr,
+            mean_reward=top10_arr,
+            metadata={
+                "series_labels": {
+                    "best_reward": "Top-1",
+                    "max_reward": "Top-5",
+                    "mean_reward": "Top-10",
+                }
+            },
+        )
+        return data, warnings
+
+    @staticmethod
+    def _reward_at_rank(
+        rewards: np.ndarray,
+        rank: int,
+    ) -> float:
+        """Return the reward at the given 1-based rank or NaN if missing."""
+        if rewards.size < rank:
+            return np.nan
+        return float(rewards[rank - 1])
 
 
 __all__ = ["EqGPTVizAdapter", "_eqgpt_to_latex"]

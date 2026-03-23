@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pytest
 
+from kd.viz import RewardEvolutionData
 from kd.viz._adapters.eqgpt import EqGPTVizAdapter, _eqgpt_to_latex
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
@@ -26,7 +27,7 @@ from kd.viz.core import VizRequest, VizResult
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-EXPECTED_CAPABILITIES = {"equation", "reward_ranking"}
+EXPECTED_CAPABILITIES = {"equation", "reward_ranking", "reward_evolution"}
 
 # Representative token -> LaTeX mappings derived from the spec and vocabulary.
 # These are independently determined from the task description, NOT from code.
@@ -120,6 +121,7 @@ class StubEqGPT:
         rewards: Optional[List[float]] = None,
         best_equation: Optional[str] = None,
         best_reward: Optional[float] = None,
+        reward_history: Optional[List[List[float]]] = None,
     ) -> None:
         if equations is None:
             equations = [
@@ -135,12 +137,19 @@ class StubEqGPT:
             best_equation = equations[0]
         if best_reward is None:
             best_reward = rewards[0]
+        if reward_history is None:
+            reward_history = [
+                [0.75, 0.72, 0.70, 0.68, 0.66],
+                [0.83, 0.80, 0.78, 0.76, 0.74],
+                [0.95, 0.90, 0.88, 0.85, 0.82],
+            ]
 
         self.result_: Dict[str, Any] = {
             "equations": equations,
             "rewards": rewards,
             "best_equation": best_equation,
             "best_reward": best_reward,
+            "reward_history": reward_history,
         }
 
 
@@ -158,6 +167,7 @@ class StubEqGPTEmptyResult:
             "rewards": [],
             "best_equation": "",
             "best_reward": 0.0,
+            "reward_history": [],
         }
 
 
@@ -728,7 +738,106 @@ class TestRewardRanking:
 
 
 # ===================================================================
-# E. result_ storage integration
+# E. reward_evolution line chart intent
+# ===================================================================
+class TestRewardEvolution:
+    """Tests for the 'reward_evolution' line chart intent."""
+
+    def test_smoke_reward_evolution(self, tmp_path: Path) -> None:
+        """reward_evolution intent returns a VizResult."""
+        _register_eqgpt()
+        model = StubEqGPT()
+        request = VizRequest(
+            kind="reward_evolution",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "reward_evolution"
+
+    def test_reward_evolution_produces_chart_and_contract(
+        self, tmp_path: Path
+    ) -> None:
+        """reward_evolution writes a chart and returns RewardEvolutionData."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            reward_history=[
+                [0.70, 0.65, 0.60, 0.55, 0.50],
+                [0.80, 0.76, 0.72, 0.68, 0.64],
+                [0.90, 0.87, 0.84, 0.81, 0.78],
+            ]
+        )
+        request = VizRequest(
+            kind="reward_evolution",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.paths
+        assert result.paths[0].exists()
+        assert "reward_evolution" in result.metadata
+        data = result.metadata["reward_evolution"]
+        assert isinstance(data, RewardEvolutionData)
+        assert data.steps.tolist() == [1, 2, 3]
+        assert np.allclose(data.best_reward, [0.70, 0.80, 0.90])
+
+    def test_reward_evolution_missing_history_warns(
+        self, tmp_path: Path
+    ) -> None:
+        """Missing reward_history produces a warning, not a crash."""
+        _register_eqgpt()
+        model = StubEqGPT()
+        model.result_.pop("reward_history")
+        request = VizRequest(
+            kind="reward_evolution",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.warnings
+
+    def test_reward_evolution_empty_history_warns(
+        self, tmp_path: Path
+    ) -> None:
+        """Empty reward history produces a warning, not a chart."""
+        _register_eqgpt()
+        model = StubEqGPT(reward_history=[])
+        request = VizRequest(
+            kind="reward_evolution",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.warnings
+
+    def test_reward_evolution_filters_nonfinite_values(
+        self, tmp_path: Path
+    ) -> None:
+        """NaN/Inf entries are filtered while finite epochs still plot."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            reward_history=[
+                [0.70, 0.60, 0.50, 0.40, 0.30],
+                [float("nan"), float("inf"), 0.72, 0.62, 0.52],
+                [0.90, 0.80, 0.70, 0.60, 0.50],
+            ]
+        )
+        request = VizRequest(
+            kind="reward_evolution",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.paths
+        assert result.warnings
+        data = result.metadata["reward_evolution"]
+        assert isinstance(data, RewardEvolutionData)
+        assert np.isfinite(data.best_reward[[0, 2]]).all()
+
+
+# ===================================================================
+# F. result_ storage integration
 # ===================================================================
 class TestResultStorage:
     """Test adapter reads model.result_ correctly."""
@@ -756,12 +865,18 @@ class TestResultStorage:
     def test_result_dict_has_all_keys(self) -> None:
         """result_ dict contains all required keys."""
         model = StubEqGPT()
-        required_keys = {"equations", "rewards", "best_equation", "best_reward"}
+        required_keys = {
+            "equations",
+            "rewards",
+            "best_equation",
+            "best_reward",
+            "reward_history",
+        }
         assert required_keys.issubset(model.result_.keys())
 
 
 # ===================================================================
-# F. Registration and discovery
+# G. Registration and discovery
 # ===================================================================
 class TestRegistration:
     """Test adapter registration and capability discovery."""
