@@ -253,3 +253,6 @@ trash/
 # Project management docs (local only)
 RESEARCH.md
 DESIGN.md
+
+# EqGPT large data files (load from EQGPT_DATA_DIR or ref_lib/)
+kd/model/eqgpt/gpt_model/*.pt

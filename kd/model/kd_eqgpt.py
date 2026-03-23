@@ -14,9 +14,18 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Paths resolved lazily but defined at module level (no heavy imports)
+# --- Path configuration ---
+# Code/weights that ship with the package (small files only)
 _EQGPT_DIR = Path(__file__).resolve().parent / "eqgpt"
-_REF_LIB_DIR = _EQGPT_DIR.resolve().parent.parent.parent / "ref_lib" / "EqGPT_wave_breaking"
+
+# Large data files (pkl + GPT .pt) — configurable via env var.
+#   Local dev default: ref_lib/EqGPT_wave_breaking/
+#   Bohrium deploy:    /bohr/eqgpt-data/v1/  (set EQGPT_DATA_DIR)
+import os
+_DATA_DIR = Path(os.environ.get(
+    "EQGPT_DATA_DIR",
+    str(_EQGPT_DIR.resolve().parent.parent.parent / "ref_lib" / "EqGPT_wave_breaking"),
+))
 
 # Surrogate training constants
 _CHOOSE = 95
@@ -124,15 +133,20 @@ class KD_EqGPT:
 
         # --- Load pretrained GPT ---
         model_Q = GPT().to(device)
-        gpt_path = _EQGPT_DIR / f"gpt_model/PDEGPT_{_EQUATION_NAME}.pt"
+        gpt_path = _DATA_DIR / f"gpt_model/PDEGPT_{_EQUATION_NAME}.pt"
+        if not gpt_path.exists():
+            raise FileNotFoundError(
+                f"GPT weights not found at {gpt_path}. "
+                "Set EQGPT_DATA_DIR or ensure ref_lib/EqGPT_wave_breaking/ is available."
+            )
         model_Q.load_state_dict(load_checkpoint(str(gpt_path)))
 
         # --- Load wave-breaking data and build surrogates ---
-        pkl_path = _REF_LIB_DIR / "wave_breaking_data.pkl"
+        pkl_path = _DATA_DIR / "wave_breaking_data.pkl"
         if not pkl_path.exists():
             raise FileNotFoundError(
                 f"wave_breaking_data.pkl not found at {pkl_path}. "
-                "Ensure ref_lib/EqGPT_wave_breaking/ is available."
+                "Set EQGPT_DATA_DIR or ensure ref_lib/EqGPT_wave_breaking/ is available."
             )
         with open(str(pkl_path), "rb") as f:
             data_dict = pickle.load(f)
