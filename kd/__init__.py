@@ -16,24 +16,30 @@ _submodules = [
     'viz'
 ]
 
-__all__ = _submodules + [
-    "load_burgers_equation",
-    "load_mat_file",
-    "load_kdv_equation", 
+_model_names = [
     "DLGA",
     "KD_DLGA",
     "KD_Discover",
     "KD_Discover_SPR",
     "KD_Discover_Regression",
-    "viz"
+    "KD_SGA",
+    "KD_PySR",
+    "KD_EqGPT",
 ]
+
+__all__ = _submodules + [
+    "load_burgers_equation",
+    "load_mat_file",
+    "load_kdv_equation",
+    "viz",
+] + _model_names
 
 
 def __getattr__(name: str):
     if name == "viz":
         from . import viz as _viz
         return _viz
-    if name in {"DLGA", "KD_DLGA", "KD_Discover", "KD_Discover_SPR", "KD_Discover_Regression"}:
+    if name in _model_names:
         from . import model as _model
         return getattr(_model, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

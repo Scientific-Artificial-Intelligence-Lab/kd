@@ -23,6 +23,10 @@ import gradio as gr
 from kd.dataset import load_pde
 from kd.dataset._registry import PDE_REGISTRY
 from kd.viz.core import VizRequest, render, configure
+from kd.app_helpers import (
+    MODEL_KEYS, DSCV_BINARY_DEFAULT, DSCV_UNARY_DEFAULT,
+    _parse_ops, get_compatible_models,
+)
 
 
 # ── GPU offloading ────────────────────────────────────────────
@@ -48,22 +52,12 @@ def _is_bohrium_env(request):
 
 # ── Constants ──────────────────────────────────────────────────
 
-MODEL_KEYS = {
-    "KD_SGA": "sga",
-    "KD_DLGA": "dlga",
-    "KD_DSCV": "dscv",
-    "KD_DSCV_SPR": "dscv_spr",
-    "KD_EqGPT": "eqgpt",
-}
-
 ACTIVE_DATASETS = sorted([
     name for name, info in PDE_REGISTRY.items()
     if info.get("status") != "pending"
 ])
 
-# Operator presets per model
-DSCV_BINARY_DEFAULT = "add, mul, diff"
-DSCV_UNARY_DEFAULT = "n2"
+# Operator presets per model (DSCV defaults imported from app_helpers)
 SPR_BINARY_DEFAULT = "add_t, mul_t, div_t, diff_t, diff2_t"
 SPR_UNARY_DEFAULT = "n2_t"
 DLGA_OPS_DEFAULT = "u, u_x, u_xx, u_xxx"
@@ -86,22 +80,6 @@ VIZ_INTENTS = [
 
 # ── Helpers ────────────────────────────────────────────────────
 
-def get_compatible_models(dataset_name):
-    """Return model display names compatible with a given dataset."""
-    if not dataset_name:
-        return []
-    info = PDE_REGISTRY.get(dataset_name, {})
-    models_map = info.get("models", {})
-    result = [
-        display for display, key in MODEL_KEYS.items()
-        if models_map.get(key, False)
-    ]
-    # EqGPT uses its own wave_breaking data, always available
-    if "KD_EqGPT" not in result:
-        result.append("KD_EqGPT")
-    return result
-
-
 def on_dataset_change(dataset_name):
     """Update model dropdown when dataset changes."""
     models = get_compatible_models(dataset_name)
@@ -115,7 +93,7 @@ def on_model_change(model_name):
     dlga_vis = model_name == "KD_DLGA"
     dscv_vis = model_name in ("KD_DSCV", "KD_DSCV_SPR")
     spr_vis = model_name == "KD_DSCV_SPR"
-    eqgpt_vis = model_name == "KD_EqGPT"
+    eqgpt_vis = "EqGPT" in (model_name or "")
 
     if model_name == "KD_DSCV_SPR":
         binary_val = SPR_BINARY_DEFAULT
@@ -135,9 +113,7 @@ def on_model_change(model_name):
     )
 
 
-def _parse_ops(text):
-    """Parse comma-separated operator string into list."""
-    return [op.strip() for op in text.split(",") if op.strip()]
+# _parse_ops imported from kd.app_helpers
 
 
 def _get_equation_text(model, model_name, result=None):
@@ -146,7 +122,7 @@ def _get_equation_text(model, model_name, result=None):
         return model.equation_latex()
     elif model_name == "KD_DLGA":
         return getattr(model, "eq_latex", None) or "(equation renderer unavailable)"
-    elif model_name == "KD_EqGPT":
+    elif "EqGPT" in (model_name or ""):
         if result is not None:
             return result.get("best_equation", "(no equation found)")
         return "(no equation found)"
@@ -258,7 +234,7 @@ def _run_local(
         model = None
         result = None
 
-        if model_name == "KD_EqGPT":
+        if "EqGPT" in (model_name or ""):
             from kd.model.kd_eqgpt import KD_EqGPT
             case_filter = "N" if "N only" in str(eqgpt_cases) else "all"
             model = KD_EqGPT(
@@ -323,7 +299,7 @@ def _run_local(
 
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
-        caps = _get_model_capabilities(model) if model_name != "KD_EqGPT" else []
+        caps = _get_model_capabilities(model) if "EqGPT" not in (model_name or "") else []
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
         return (equation, fig, model, viz_update) + _NO_GPU
