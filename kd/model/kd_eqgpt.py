@@ -235,12 +235,14 @@ class KD_EqGPT:
         equations, rewards = self._format_results(
             best_sentence, best_award, id2word, delete_duplicate, word2id,
         )
-        return {
+        result = {
             "equations": equations,
             "rewards": rewards,
             "best_equation": equations[0] if equations else "",
             "best_reward": rewards[0] if rewards else 0.0,
         }
+        self.result_ = result  # store for viz adapter access
+        return result
 
     # ------------------------------------------------------------------
     # Private helpers

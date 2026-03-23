@@ -1,0 +1,16 @@
+{
+  "round": 2,
+  "phase": "dev",
+  "issues": [
+    {"id": "H1", "severity": "High", "title": "_equation may return paths to non-existent file", "status": "fixed", "fix": "Added path.exists() check after render"},
+    {"id": "H2", "severity": "High", "title": "_plot_ranking figure leak on exception", "status": "fixed", "fix": "Wrapped in try/finally"},
+    {"id": "M1", "severity": "Medium", "title": "_equation exception catch lacks logging", "status": "fixed", "fix": "Added logger.warning in H1 fix"},
+    {"id": "M2", "severity": "Medium", "title": "_reward_ranking assumes sorted input", "status": "open"},
+    {"id": "M3", "severity": "Medium", "title": "np.array(rewards) no defense for non-numeric", "status": "open"},
+    {"id": "M4", "severity": "Medium", "title": "_resolve_output return type inconsistent with SGA", "status": "open"},
+    {"id": "L1", "severity": "Low", "title": "equations param unused in _plot_ranking", "status": "open"},
+    {"id": "L2", "severity": "Low", "title": "_split_equation depth can go negative", "status": "open"},
+    {"id": "L3", "severity": "Low", "title": "No spaces around + in LaTeX", "status": "open"},
+    {"id": "L4", "severity": "Low", "title": "capabilities is mutable set (could use frozenset)", "status": "open"}
+  ]
+}

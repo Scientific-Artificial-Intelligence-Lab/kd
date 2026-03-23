@@ -412,7 +412,7 @@ def _run_local(
 
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
-        caps = _get_model_capabilities(model) if model_name != "KD_EqGPT" else []
+        caps = _get_model_capabilities(model)
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
         return (equation, fig, model, viz_update) + _NO_GPU

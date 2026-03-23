@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from ._adapters import DLGAVizAdapter, DiscoverVizAdapter, PySRVizAdapter, SGAVizAdapter
+from ._adapters import DLGAVizAdapter, DiscoverVizAdapter, EqGPTVizAdapter, PySRVizAdapter, SGAVizAdapter
 from .registry import register_adapter
 
 __all__ = [
     'DLGAVizAdapter',
     'DiscoverVizAdapter',
+    'EqGPTVizAdapter',
     'register_default_adapters',
 ]
 
@@ -40,6 +41,10 @@ def register_default_adapters() -> None:
     from .registry import register_lazy_adapter
     register_lazy_adapter("KD_PySR", _resolve_pysr)
 
+    # EqGPT adapter is registered lazily to avoid importing torch at
+    # package load time (EqGPT depends on torch).
+    register_lazy_adapter("KD_EqGPT", _resolve_eqgpt)
+
 
 def _resolve_pysr():
     """Lazily resolve KD_PySR class and its adapter."""
@@ -48,3 +53,12 @@ def _resolve_pysr():
     except Exception:  # pragma: no cover
         return None, None
     return KD_PySR, PySRVizAdapter()
+
+
+def _resolve_eqgpt():
+    """Lazily resolve KD_EqGPT class and its adapter."""
+    try:
+        from kd.model.kd_eqgpt import KD_EqGPT  # type: ignore
+    except Exception:  # pragma: no cover
+        return None, None
+    return KD_EqGPT, EqGPTVizAdapter()
