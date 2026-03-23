@@ -111,15 +111,20 @@ self.result_ = result  # store for viz adapter access
    - 折线图：x=epoch, y=reward, 多条线表示 top-1/top-5/top-10
    - 复用 `RewardEvolutionData` 数据类
 
-### Phase 3：LHS vs RHS + 观测 vs 预测（较大改动，可选）
+### Phase 3：LHS vs RHS Parity（仅 parity，posterior prediction 不做）
 
-**数据来源**：需要暴露 surrogate 中间计算
+**数据来源**：训练结束后对 best equation 重跑一次 reward 计算逻辑，保留 LHS/RHS 中间数组
 
-1. `calculate_reward` 返回扩展：除了标量 reward，还返回 LHS/RHS 数组
-2. `posterial_solution` 重构：接受参数化的坐标范围，返回 (observed, predicted) 数组
-3. adapter 新增：
-   - `"parity"`：LHS vs RHS 散点（复用 `ParityPlotData`）
-   - `"posterior_prediction"`：观测 vs 预测曲线
+**不做 posterior prediction**——`posterial_solution.py` 高度硬编码（固定探针位置、xlim、plt.show），
+重构为通用 API 投入产出比太低。
+
+1. 在 `fit_pretrained()` 末尾，对 best equation 提取 LHS/RHS 数组
+   - 不改 `calculate_reward()` 签名（它在训练循环中被调用几千次）
+   - 新建一个轻量函数或内联逻辑，复用 `calculate_reward` 的 A 矩阵构建 + lstsq 部分
+   - 将 `{"lhs": np.ndarray, "rhs": np.ndarray}` 存入 `self.result_["parity_data"]`
+2. adapter 新增 capability `"parity"`
+   - 复用 `ParityPlotData`（`from_actual_predicted` 工厂方法）
+   - LHS vs RHS 散点图 + 对角参考线
 
 ## Acceptance criteria
 
@@ -135,9 +140,11 @@ self.result_ = result  # store for viz adapter access
 - Visualization tab 新增 `reward_evolution` 选项
 - 折线图正确展示每 epoch 的 reward 趋势
 
-### Phase 3（可选）
-- Parity plot 展示 LHS vs RHS
-- 观测 vs 预测曲线可用
+### Phase 3
+- `fit_pretrained()` 对 best equation 提取 LHS/RHS 并存入 `result_["parity_data"]`
+- Visualization tab 新增 `parity` 选项
+- 散点图正确展示 LHS vs RHS + 对角参考线
+- 不做 posterior prediction
 
 ## Validation commands
 

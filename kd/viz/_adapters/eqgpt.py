@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .._contracts import RewardEvolutionData
+from .._contracts import ParityPlotData, RewardEvolutionData
 from ..core import VizResult
 from ..equation_renderer import render_latex_to_image
 
@@ -191,12 +191,14 @@ class EqGPTVizAdapter:
     * ``'equation'``        -- render best equation as LaTeX image;
     * ``'reward_ranking'``  -- top-N reward bar chart.
     * ``'reward_evolution'`` -- per-epoch top-k reward lines.
+    * ``'parity'``          -- LHS vs RHS scatter plot.
     """
 
     capabilities: Iterable[str] = {
         "equation",
         "reward_ranking",
         "reward_evolution",
+        "parity",
     }
 
     def __init__(self, *, subdir: str = "eqgpt") -> None:
@@ -212,6 +214,7 @@ class EqGPTVizAdapter:
             "equation": self._equation,
             "reward_ranking": self._reward_ranking,
             "reward_evolution": self._reward_evolution,
+            "parity": self._parity,
         }.get(kind)
         if handler is None:
             return VizResult(
@@ -430,6 +433,120 @@ class EqGPTVizAdapter:
             warnings=warnings,
             metadata={"reward_evolution": data},
         )
+
+    def _parity(self, model: Any, ctx: Any) -> VizResult:
+        """Create a LHS vs RHS parity scatter plot."""
+        if not hasattr(model, "result_"):
+            return VizResult(
+                intent="parity",
+                warnings=["Model has no result_ attribute."],
+            )
+
+        parity_raw = model.result_.get("parity_data")
+        if parity_raw is None:
+            return VizResult(
+                intent="parity",
+                warnings=["No parity_data available in result_."],
+            )
+
+        lhs, rhs, warnings = self._validate_parity_arrays(parity_raw)
+        if lhs is None or rhs is None:
+            return VizResult(
+                intent="parity", warnings=warnings,
+            )
+
+        parity_data = ParityPlotData.from_actual_predicted(lhs, rhs)
+        summary = self._compute_residual_stats(lhs, rhs)
+
+        fig, ax = plt.subplots(
+            figsize=ctx.options.get("figsize", (7, 7))
+        )
+        try:
+            ax.scatter(rhs, lhs, alpha=0.35, s=20, label="RHS vs LHS")
+            lo = float(min(lhs.min(), rhs.min()))
+            hi = float(max(lhs.max(), rhs.max()))
+            ref = np.linspace(lo, hi, 100)
+            ax.plot(ref, ref, "r--", linewidth=1.5, label="y = x")
+            ax.set_xlabel("RHS (predicted)")
+            ax.set_ylabel("LHS (actual)")
+            ax.set_title(ctx.options.get("title", "EqGPT Parity Plot"))
+            ax.legend()
+            ax.grid(True, linestyle="--", alpha=0.5)
+            ax.set_aspect("equal", "box")
+
+            _, path = self._resolve_output(ctx, "parity_plot.png")
+            fig.savefig(
+                str(path),
+                dpi=ctx.options.get("dpi", 300),
+                bbox_inches="tight",
+            )
+        finally:
+            plt.close(fig)
+
+        return VizResult(
+            intent="parity",
+            paths=[path],
+            warnings=warnings,
+            metadata={"parity": parity_data, "summary": summary},
+        )
+
+    @staticmethod
+    def _validate_parity_arrays(
+        parity_raw: Any,
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[str]]:
+        """Extract and validate lhs/rhs arrays from parity_data dict.
+
+        Returns (lhs, rhs, warnings). lhs/rhs are None on failure.
+        """
+        warnings: List[str] = []
+
+        if not isinstance(parity_raw, dict):
+            return None, None, ["parity_data is not a dict."]
+
+        lhs_raw = parity_raw.get("lhs")
+        rhs_raw = parity_raw.get("rhs")
+        if lhs_raw is None or rhs_raw is None:
+            return None, None, ["parity_data missing 'lhs' or 'rhs' key."]
+
+        lhs = np.asarray(lhs_raw, dtype=float).reshape(-1)
+        rhs = np.asarray(rhs_raw, dtype=float).reshape(-1)
+
+        # Shape mismatch
+        if lhs.shape[0] != rhs.shape[0]:
+            return None, None, [
+                f"lhs length ({lhs.shape[0]}) and rhs length "
+                f"({rhs.shape[0]}) mismatch."
+            ]
+
+        # Empty arrays
+        if lhs.size == 0:
+            return None, None, ["parity_data arrays are empty."]
+
+        # Filter NaN/Inf
+        finite_mask = np.isfinite(lhs) & np.isfinite(rhs)
+        n_invalid = int(np.sum(~finite_mask))
+        if n_invalid > 0:
+            warnings.append(
+                f"Filtered {n_invalid} non-finite points from parity data."
+            )
+        if not np.any(finite_mask):
+            return None, None, [
+                "All parity data points are NaN/Inf; no finite data to plot."
+            ]
+
+        return lhs[finite_mask], rhs[finite_mask], warnings
+
+    @staticmethod
+    def _compute_residual_stats(
+        lhs: np.ndarray, rhs: np.ndarray,
+    ) -> Dict[str, float]:
+        """Compute residual statistics for parity data."""
+        residuals = lhs - rhs
+        return {
+            "rmse": float(np.sqrt(np.mean(np.square(residuals)))),
+            "mean_residual": float(np.mean(residuals)),
+            "max_abs_residual": float(np.max(np.abs(residuals))),
+        }
 
     def _plot_ranking(
         self,

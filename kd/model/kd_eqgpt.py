@@ -233,6 +233,19 @@ class KD_EqGPT:
             for _ in range(5):
                 train_step(model_Q, data_loader, optimizer, criterion, CLIP)
 
+        # --- Extract parity data for best equation (viz Phase 3) ---
+        parity_data = None
+        if best_sentence:
+            try:
+                parity_data = self._extract_parity_data(
+                    best_sentence[0], all_Net, all_database,
+                    words2value, variables, nx, nt,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to extract parity data", exc_info=True,
+                )
+
         # --- Build result ---
         equations, rewards = self._format_results(
             best_sentence, best_award, id2word, delete_duplicate, word2id,
@@ -243,6 +256,7 @@ class KD_EqGPT:
             "best_equation": equations[0] if equations else "",
             "best_reward": rewards[0] if rewards else 0.0,
             "reward_history": reward_history,
+            "parity_data": parity_data,
         }
         self.result_ = result  # store for viz adapter access
         return result
@@ -457,6 +471,110 @@ class KD_EqGPT:
         database = inputs_tensor.clone().detach().requires_grad_(True)
 
         return net, database, nx, nt
+
+    @staticmethod
+    def _extract_parity_data(
+        sentence: List[int],
+        all_Net: list,
+        all_database: list,
+        words2value: dict,
+        variables: List[str],
+        nx: list,
+        nt: list,
+    ) -> Optional[Dict[str, Any]]:
+        """Extract LHS/RHS arrays for the best equation across all cases.
+
+        Mirrors the A-matrix construction + lstsq logic from
+        ``calculate_reward`` but retains LHS/RHS intermediate arrays.
+
+        Returns ``{"lhs": np.ndarray, "rhs": np.ndarray}`` (1-D,
+        concatenated over all cases) or *None* on failure.
+        """
+        from .eqgpt.continue_train_GPT_all import (  # lazy import
+            calculate_terms,
+            delete_dulplicate_A_column,
+            delete_duplicate,
+            id2word,
+        )
+
+        sentence = delete_duplicate(list(sentence))
+        # Parse terms and operators (same logic as calculate_reward)
+        terms, operators = [], []
+        for tok in sentence:
+            if tok in (2, 3, 4, 1):  # +, *, /, E
+                if terms:
+                    operators.append(tok)
+            else:
+                terms.append(tok)
+                operators.append(0)  # placeholder
+        # Align lengths
+        if len(operators) < len(terms):
+            operators.append(1)
+        operators = operators[: len(terms)]
+
+        all_lhs: List[np.ndarray] = []
+        all_rhs: List[np.ndarray] = []
+
+        for case_idx in range(len(all_Net)):
+            net = all_Net[case_idx]
+            database = all_database[case_idx]
+            A_cols: list = []
+            col = 1
+            divide_flag = 0
+            for i in range(len(terms)):
+                word = id2word[terms[i]]
+                value = calculate_terms(
+                    word, net, database, variables,
+                    nx[case_idx], nt[case_idx],
+                ).reshape(-1)
+                words2value[word] = value
+                if divide_flag == 0:
+                    col = col * value
+                else:
+                    col = col / value
+                    divide_flag = 0
+                op = operators[i]
+                if op == 2:       # +
+                    A_cols.append(col)
+                    col = 1
+                elif op == 3:     # *
+                    continue
+                elif op == 4:     # /
+                    divide_flag = 1
+                elif op == 1:     # E (end)
+                    A_cols.append(col)
+
+            if len(A_cols) < 2:
+                continue  # need at least LHS + 1 RHS term
+
+            import pandas as pd
+            A = np.vstack(A_cols).T
+            A = delete_dulplicate_A_column(A)
+            # Remove inf rows
+            df = pd.DataFrame(A)
+            inf_idx = df[df.isin([np.inf, -np.inf]).any(axis=1)].index
+            A = np.delete(A, inf_idx, axis=0)
+            if A.shape[0] == 0 or A.shape[1] < 2:
+                continue
+            if np.any(np.isnan(A)):
+                continue
+
+            try:
+                b = A[:, 0].copy()
+                x = np.linalg.lstsq(A[:, 1:], -b, rcond=None)[0]
+                lhs = -A[:, 0]
+                rhs = A[:, 1:].dot(x)
+                all_lhs.append(lhs)
+                all_rhs.append(rhs)
+            except np.linalg.LinAlgError:
+                continue
+
+        if not all_lhs:
+            return None
+        return {
+            "lhs": np.concatenate(all_lhs),
+            "rhs": np.concatenate(all_rhs),
+        }
 
     @staticmethod
     def _snapshot_reward_history(

@@ -1,10 +1,13 @@
-"""Tests for EqGPT visualization adapter (Phase 1).
+"""Tests for EqGPT visualization adapter (Phase 1-3).
 
 Covers:
 - _eqgpt_to_latex() token-to-LaTeX conversion
 - EqGPTVizAdapter protocol compliance and render dispatch
 - equation rendering intent
 - reward_ranking bar chart intent
+- reward_evolution line chart intent
+- parity plot intent (Phase 3)
+- ParityPlotData integration
 - result_ storage integration
 - adapter registration and discovery
 """
@@ -19,6 +22,7 @@ import pytest
 
 from kd.viz import RewardEvolutionData
 from kd.viz._adapters.eqgpt import EqGPTVizAdapter, _eqgpt_to_latex
+from kd.viz._contracts import ParityPlotData
 from kd.viz import core as viz_core
 from kd.viz import registry as viz_registry
 from kd.viz.core import VizRequest, VizResult
@@ -27,7 +31,13 @@ from kd.viz.core import VizRequest, VizResult
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-EXPECTED_CAPABILITIES = {"equation", "reward_ranking", "reward_evolution"}
+EXPECTED_CAPABILITIES = {"equation", "reward_ranking", "reward_evolution", "parity"}
+
+# Default parity data for happy-path tests.
+# Values represent LHS (actual) and RHS (predicted) from an EqGPT equation fit.
+# Independently chosen; NOT from any implementation output.
+_DEFAULT_PARITY_LHS = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+_DEFAULT_PARITY_RHS = np.array([1.1, 1.9, 3.2, 3.8, 5.1])
 
 # Representative token -> LaTeX mappings derived from the spec and vocabulary.
 # These are independently determined from the task description, NOT from code.
@@ -122,6 +132,7 @@ class StubEqGPT:
         best_equation: Optional[str] = None,
         best_reward: Optional[float] = None,
         reward_history: Optional[List[List[float]]] = None,
+        parity_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         if equations is None:
             equations = [
@@ -151,6 +162,8 @@ class StubEqGPT:
             "best_reward": best_reward,
             "reward_history": reward_history,
         }
+        if parity_data is not None:
+            self.result_["parity_data"] = parity_data
 
 
 class StubEqGPTNoResult:
@@ -943,3 +956,427 @@ class TestRegistration:
         dummy_caps = viz_core.list_capabilities(DummyModel())
         assert set(eqgpt_caps) == EXPECTED_CAPABILITIES
         assert set(dummy_caps) == {"dummy_cap"}
+
+
+# ===================================================================
+# H. Parity plot intent (Phase 3)
+# ===================================================================
+class TestParity:
+    """Tests for the 'parity' scatter plot intent.
+
+    Parity reads ``model.result_["parity_data"]`` (a dict with "lhs" and "rhs"
+    numpy arrays), constructs a ParityPlotData, renders LHS-vs-RHS scatter +
+    y=x reference line, and returns residual statistics in metadata.
+    """
+
+    # ------------------------------------------------------------------
+    # A. Adapter capability
+    # ------------------------------------------------------------------
+    def test_parity_in_capabilities(self) -> None:
+        """'parity' is declared in adapter capabilities."""
+        adapter = EqGPTVizAdapter()
+        assert "parity" in adapter.capabilities
+
+    # ------------------------------------------------------------------
+    # B. Smoke tests
+    # ------------------------------------------------------------------
+    def test_parity_smoke(self, tmp_path: Path) -> None:
+        """Parity intent returns a successful VizResult with content."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            parity_data={
+                "lhs": _DEFAULT_PARITY_LHS,
+                "rhs": _DEFAULT_PARITY_RHS,
+            }
+        )
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        # Smoke: parity with valid data must produce content (chart)
+        assert result.has_content, "Parity with valid data should produce content"
+
+    # ------------------------------------------------------------------
+    # C. Happy path
+    # ------------------------------------------------------------------
+    def test_parity_produces_chart(self, tmp_path: Path) -> None:
+        """Parity intent writes a PNG chart to disk."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            parity_data={
+                "lhs": _DEFAULT_PARITY_LHS,
+                "rhs": _DEFAULT_PARITY_RHS,
+            }
+        )
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.paths, "Expected at least one output path for parity chart"
+        for p in result.paths:
+            assert p.exists(), f"Output file {p} should exist"
+            assert p.suffix == ".png"
+
+    def test_parity_metadata_has_parity_data(self, tmp_path: Path) -> None:
+        """Parity result metadata contains a ParityPlotData instance."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            parity_data={
+                "lhs": _DEFAULT_PARITY_LHS,
+                "rhs": _DEFAULT_PARITY_RHS,
+            }
+        )
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert "parity" in result.metadata, "metadata must contain 'parity' key"
+        parity = result.metadata["parity"]
+        assert isinstance(parity, ParityPlotData)
+
+    def test_parity_metadata_has_residual_stats(self, tmp_path: Path) -> None:
+        """Parity metadata includes rmse, mean_residual, max_abs_residual."""
+        _register_eqgpt()
+        lhs = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        rhs = np.array([1.1, 1.9, 3.2, 3.8, 5.1])
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert "summary" in result.metadata, "metadata must contain 'summary' key"
+        summary = result.metadata["summary"]
+        assert "rmse" in summary
+        assert "mean_residual" in summary
+        assert "max_abs_residual" in summary
+        # Verify residual stats are finite and sensible
+        assert np.isfinite(summary["rmse"])
+        assert np.isfinite(summary["mean_residual"])
+        assert np.isfinite(summary["max_abs_residual"])
+
+    def test_parity_residual_stats_numerically_correct(
+        self, tmp_path: Path
+    ) -> None:
+        """Residual statistics match independently computed values."""
+        _register_eqgpt()
+        lhs = np.array([1.0, 2.0, 3.0])
+        rhs = np.array([1.5, 2.5, 3.5])
+        # residuals = actual - predicted = lhs - rhs = [-0.5, -0.5, -0.5]
+        expected_mean = -0.5
+        expected_rmse = 0.5
+        expected_max_abs = 0.5
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        summary = result.metadata["summary"]
+        assert np.isclose(summary["mean_residual"], expected_mean, atol=1e-10)
+        assert np.isclose(summary["rmse"], expected_rmse, atol=1e-10)
+        assert np.isclose(
+            summary["max_abs_residual"], expected_max_abs, atol=1e-10
+        )
+
+    def test_parity_large_dataset(self, tmp_path: Path) -> None:
+        """Parity handles a larger dataset (100 points) without issues."""
+        _register_eqgpt()
+        rng = np.random.RandomState(42)
+        lhs = rng.randn(100)
+        rhs = lhs + 0.1 * rng.randn(100)  # close to perfect fit
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert result.paths
+        parity = result.metadata["parity"]
+        assert isinstance(parity, ParityPlotData)
+        assert parity.actual_values.shape == (100,)
+        assert parity.predicted_values.shape == (100,)
+
+    # ------------------------------------------------------------------
+    # D. Edge cases -- missing / invalid data
+    # ------------------------------------------------------------------
+    def test_parity_no_result_(self, tmp_path: Path) -> None:
+        """Model without result_ attribute produces warning about result_."""
+        adapter = EqGPTVizAdapter()
+        viz_registry.register_adapter(StubEqGPTNoResult, adapter)
+        model = StubEqGPTNoResult()
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.warnings
+        # Must warn specifically about result_, not "does not support"
+        combined = " ".join(result.warnings).lower()
+        assert "result_" in combined or "result" in combined
+
+    def test_parity_no_parity_data(self, tmp_path: Path) -> None:
+        """result_ exists but no 'parity_data' key produces warning about parity data."""
+        _register_eqgpt()
+        model = StubEqGPT()  # no parity_data
+        assert "parity_data" not in model.result_
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.warnings, "Missing parity_data should produce a warning"
+        # Must warn specifically about parity *data*, not "does not support intent"
+        combined = " ".join(result.warnings).lower()
+        assert "parity_data" in combined or "parity data" in combined
+
+    def test_parity_empty_arrays(self, tmp_path: Path) -> None:
+        """parity_data with empty lhs/rhs arrays produces warning about empty."""
+        _register_eqgpt()
+        model = StubEqGPT(
+            parity_data={
+                "lhs": np.array([]),
+                "rhs": np.array([]),
+            }
+        )
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.warnings, "Empty parity arrays should produce a warning"
+        combined = " ".join(result.warnings).lower()
+        assert "empty" in combined or "no " in combined
+
+    def test_parity_nan_in_data(self, tmp_path: Path) -> None:
+        """parity_data containing NaN values is handled gracefully.
+
+        The adapter must either filter NaNs and produce a chart, or warn about
+        non-finite data. It must not crash and must not silently produce broken output.
+        """
+        _register_eqgpt()
+        lhs = np.array([1.0, np.nan, 3.0, 4.0])
+        rhs = np.array([1.1, 2.0, np.nan, 4.1])
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        # Must produce a chart (possibly with filtered finite points) or a
+        # meaningful warning -- but not an "unsupported intent" message.
+        if result.warnings:
+            combined = " ".join(result.warnings).lower()
+            assert "does not support" not in combined, (
+                "NaN handling must be done by parity handler, not fall through "
+                "to unsupported intent"
+            )
+        # If it produces a chart, ParityPlotData should exist in metadata
+        if result.paths:
+            assert "parity" in result.metadata
+            parity = result.metadata["parity"]
+            assert isinstance(parity, ParityPlotData)
+
+    def test_parity_inf_in_data(self, tmp_path: Path) -> None:
+        """parity_data containing Inf values is handled gracefully."""
+        _register_eqgpt()
+        lhs = np.array([1.0, np.inf, 3.0])
+        rhs = np.array([1.1, 2.0, -np.inf])
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        # Must produce either a chart or a meaningful warning --
+        # must not fall through to "unsupported intent".
+        if result.warnings:
+            combined = " ".join(result.warnings).lower()
+            assert "does not support" not in combined, (
+                "Inf handling must be done by parity handler, not fall through "
+                "to unsupported intent"
+            )
+
+    def test_parity_all_nan(self, tmp_path: Path) -> None:
+        """All-NaN parity data produces warning about non-finite, no chart."""
+        _register_eqgpt()
+        lhs = np.array([np.nan, np.nan, np.nan])
+        rhs = np.array([np.nan, np.nan, np.nan])
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        assert result.warnings, "All-NaN parity data should produce a warning"
+        combined = " ".join(result.warnings).lower()
+        assert "nan" in combined or "finite" in combined or "no " in combined
+
+    def test_parity_shape_mismatch(self, tmp_path: Path) -> None:
+        """lhs and rhs with different lengths produces warning about shape."""
+        _register_eqgpt()
+        lhs = np.array([1.0, 2.0, 3.0])
+        rhs = np.array([1.1, 1.9])  # shorter than lhs
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        assert result.warnings, "Shape mismatch should produce a warning"
+        combined = " ".join(result.warnings).lower()
+        assert "shape" in combined or "mismatch" in combined or "length" in combined
+
+    def test_parity_single_point(self, tmp_path: Path) -> None:
+        """Parity with a single data point produces a chart."""
+        _register_eqgpt()
+        lhs = np.array([3.14])
+        rhs = np.array([3.15])
+        model = StubEqGPT(parity_data={"lhs": lhs, "rhs": rhs})
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        # Single data point should still produce a chart file
+        assert result.paths, "Single-point parity should produce a chart"
+
+    def test_parity_parity_data_none_value(self, tmp_path: Path) -> None:
+        """parity_data key exists but value is None produces warning about parity."""
+        _register_eqgpt()
+        model = StubEqGPT()
+        model.result_["parity_data"] = None
+        request = VizRequest(
+            kind="parity",
+            target=model,
+            options={"output_dir": tmp_path},
+        )
+        result = viz_core.render(request)
+        assert isinstance(result, VizResult)
+        assert result.intent == "parity"
+        assert result.warnings, "None parity_data should produce a warning"
+        # Must warn about parity data specifically, not "unsupported intent"
+        combined = " ".join(result.warnings).lower()
+        assert "does not support" not in combined, (
+            "None parity_data must be handled by parity handler"
+        )
+        assert "parity" in combined
+
+
+# ===================================================================
+# I. ParityPlotData integration (Phase 3)
+# ===================================================================
+class TestParityDataIntegration:
+    """Tests verifying ParityPlotData creation from parity_data arrays.
+
+    These test the contract between EqGPT's parity output and the
+    ParityPlotData data class, independently of the adapter rendering.
+    """
+
+    def test_parity_data_from_actual_predicted(self) -> None:
+        """ParityPlotData.from_actual_predicted works with typical lhs/rhs."""
+        lhs = _DEFAULT_PARITY_LHS
+        rhs = _DEFAULT_PARITY_RHS
+        parity = ParityPlotData.from_actual_predicted(lhs, rhs)
+        assert isinstance(parity, ParityPlotData)
+        np.testing.assert_array_equal(parity.actual_values, lhs)
+        np.testing.assert_array_equal(parity.predicted_values, rhs)
+
+    def test_parity_data_residuals_correct(self) -> None:
+        """Residuals equal actual - predicted (lhs - rhs)."""
+        lhs = np.array([10.0, 20.0, 30.0])
+        rhs = np.array([11.0, 19.0, 31.0])
+        parity = ParityPlotData.from_actual_predicted(lhs, rhs)
+        expected_residuals = lhs - rhs  # [-1.0, 1.0, -1.0]
+        np.testing.assert_allclose(
+            parity.residuals, expected_residuals, atol=1e-12
+        )
+
+    def test_parity_data_arrays_are_1d(self) -> None:
+        """ParityPlotData reshapes inputs to 1D."""
+        # 2D inputs should be flattened to 1D
+        lhs_2d = np.array([[1.0, 2.0], [3.0, 4.0]])
+        rhs_2d = np.array([[1.1, 2.1], [3.1, 4.1]])
+        parity = ParityPlotData.from_actual_predicted(lhs_2d, rhs_2d)
+        assert parity.actual_values.ndim == 1
+        assert parity.predicted_values.ndim == 1
+        assert parity.residuals.ndim == 1
+        assert parity.actual_values.shape == (4,)
+
+    def test_parity_data_shape_mismatch_raises(self) -> None:
+        """ParityPlotData raises ValueError on shape mismatch."""
+        lhs = np.array([1.0, 2.0, 3.0])
+        rhs = np.array([1.0, 2.0])
+        # from_actual_predicted computes residuals = actual - predicted,
+        # which triggers numpy broadcast error for incompatible shapes.
+        # Either numpy raises or __post_init__ raises -- both ValueError.
+        with pytest.raises(ValueError):
+            ParityPlotData.from_actual_predicted(lhs, rhs)
+
+    def test_parity_data_metadata_passthrough(self) -> None:
+        """Metadata dict is preserved through factory method."""
+        meta = {"source": "eqgpt", "case_count": 5}
+        parity = ParityPlotData.from_actual_predicted(
+            _DEFAULT_PARITY_LHS,
+            _DEFAULT_PARITY_RHS,
+            metadata=meta,
+        )
+        assert parity.metadata == meta
+
+    def test_result_contains_parity_data(self) -> None:
+        """StubEqGPT with parity_data stores it in result_ dict."""
+        parity_dict = {
+            "lhs": _DEFAULT_PARITY_LHS,
+            "rhs": _DEFAULT_PARITY_RHS,
+        }
+        model = StubEqGPT(parity_data=parity_dict)
+        assert "parity_data" in model.result_
+        pd = model.result_["parity_data"]
+        np.testing.assert_array_equal(pd["lhs"], _DEFAULT_PARITY_LHS)
+        np.testing.assert_array_equal(pd["rhs"], _DEFAULT_PARITY_RHS)
+
+    def test_parity_data_lhs_rhs_are_1d_numpy(self) -> None:
+        """parity_data lhs and rhs stored in result_ are 1D numpy arrays."""
+        parity_dict = {
+            "lhs": _DEFAULT_PARITY_LHS,
+            "rhs": _DEFAULT_PARITY_RHS,
+        }
+        model = StubEqGPT(parity_data=parity_dict)
+        pd = model.result_["parity_data"]
+        lhs = np.asarray(pd["lhs"])
+        rhs = np.asarray(pd["rhs"])
+        assert lhs.ndim == 1
+        assert rhs.ndim == 1
+        assert lhs.shape == rhs.shape
