@@ -28,10 +28,16 @@ KD Discover Regression — 替代 PySR 的符号回归
     result = model.fit(X, y, var_names=meta["var_names"])
 """
 
+import logging
+from pathlib import Path
+
 import numpy as np
+
 from kd.dataset import load_regression
 from kd.model.kd_discover_regression import KD_Discover_Regression
 from kd.model.discover.functions import PlaceholderConstant
+
+logger = logging.getLogger(__name__)
 
 
 def program_to_readable(program, var_names=None):
@@ -96,10 +102,49 @@ def discover_equation(name, seed=1):
     print(f"MSE:    {result['mse']:.4f}")
     print(f"Reward: {result['reward']:.6f}")
 
-    return result, model
+    return result, model, X, y, meta
+
+
+def visualize(model, X, y, meta, output_dir="artifacts/regression_viz"):
+    """Generate all visualizations for a fitted regression model."""
+    from kd.viz.adapters import register_default_adapters
+    from kd.viz import api as viz_api
+
+    register_default_adapters()
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    target = meta["target_name"]
+
+    # 1. Equation rendering (LaTeX)
+    result = viz_api.render_equation(
+        model, output_dir=out, target_name=target,
+    )
+    logger.info("Equation: %s", result.metadata.get("latex", ""))
+
+    # 2. Parity plot (actual vs predicted)
+    result = viz_api.plot_parity(model, output_dir=out)
+    summary = result.metadata.get("summary", {})
+    logger.info("Parity RMSE: %.6f", summary.get("rmse", float("nan")))
+
+    # 3. Residual analysis
+    # The regression adapter auto-extracts y/y_pred from model.data_class,
+    # but api.plot_residuals requires actual/predicted kwargs.
+    y_pred = model.predict(X)
+    viz_api.plot_residuals(model, actual=y, predicted=y_pred, output_dir=out)
+
+    # 4. Search evolution curve
+    viz_api.plot_search_evolution(model, output_dir=out)
+
+    logger.info("Visualizations saved to %s", out)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     # 发现两个方程：V_S 和 V_E
-    result1, model1 = discover_equation("tlc_cc_t1")
-    result2, model2 = discover_equation("tlc_cc_t2")
+    result1, model1, X1, y1, meta1 = discover_equation("tlc_cc_t1")
+    result2, model2, X2, y2, meta2 = discover_equation("tlc_cc_t2")
+
+    # 可视化
+    visualize(model1, X1, y1, meta1, "artifacts/regression_viz/t1")
+    visualize(model2, X2, y2, meta2, "artifacts/regression_viz/t2")
