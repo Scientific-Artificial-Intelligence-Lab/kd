@@ -8,6 +8,7 @@ __all__ = [
     'KD_Discover_Regression',
     'KD_SGA',
     'KD_PySR',
+    'KD_EqGPT',
 ]
 
 
@@ -33,4 +34,7 @@ def __getattr__(name: str):
     if name == 'KD_PySR':
         from .kd_pysr import KD_PySR
         return KD_PySR
+    if name == 'KD_EqGPT':
+        from .kd_eqgpt import KD_EqGPT
+        return KD_EqGPT
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
