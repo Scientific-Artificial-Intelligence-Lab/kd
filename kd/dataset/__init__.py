@@ -106,8 +106,8 @@ _REGRESSION_REGISTRY = {
         "x_cols": [0, 1],
         "y_col": 2,
         "var_names": ["R_F", "r"],
-        "target_name": "mean(V_S)",
-        "description": "TLC-CC: Rf vs start retention volume (mean)",
+        "target_name": "V_S",
+        "description": "TLC-CC: Rf vs start retention volume",
         "source": "Nature Comm. 2025:16:832",
     },
     "tlc_cc_t2": {
@@ -115,8 +115,8 @@ _REGRESSION_REGISTRY = {
         "x_cols": [0, 1],
         "y_col": 2,
         "var_names": ["R_F", "r"],
-        "target_name": "mean(V_E)",
-        "description": "TLC-CC: Rf vs end retention volume (mean)",
+        "target_name": "V_E",
+        "description": "TLC-CC: Rf vs end retention volume",
         "source": "Nature Comm. 2025:16:832",
     },
 }
