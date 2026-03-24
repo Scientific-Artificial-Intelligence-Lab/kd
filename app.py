@@ -823,6 +823,7 @@ def build_app():
             check_gpu_status,
             inputs=[job_state],
             outputs=_train_outputs,
+            show_error=False,
         )
 
         # Auto-poll GPU job status every 30 seconds.
