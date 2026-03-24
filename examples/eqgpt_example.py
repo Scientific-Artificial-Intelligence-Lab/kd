@@ -1,7 +1,7 @@
 """KD_EqGPT example with unified visualization output.
 
 This script runs the pre-trained EqGPT workflow, logs the top discovered
-equations, and saves visualization outputs to ``outputs/eqgpt_example/``.
+equations, and saves visualization outputs to ``artifacts/eqgpt_example/``.
 
 Usage:
     /Users/hao/miniconda3/envs/kd-env/bin/python examples/eqgpt_example.py
@@ -19,7 +19,7 @@ from kd.viz.core import VizRequest, configure, render
 
 logger = logging.getLogger(__name__)
 
-_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "eqgpt_example"
+_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "artifacts" / "eqgpt_example"
 _VIZ_KINDS = ("equation", "reward_ranking", "reward_evolution")
 
 
