@@ -51,8 +51,8 @@ def _is_bohrium_env(request):
 MODEL_KEYS = {
     "KD_SGA": "sga",
     "KD_DLGA": "dlga",
-    "KD_DSCV": "dscv",
-    "KD_DSCV_SPR": "dscv_spr",
+    "KD_DSCV": "discover",
+    "KD_DSCV_SPR": "discover_spr",
     "KD_EqGPT": "eqgpt",
     "KD_Discover_Regression": "regression",
 }
@@ -224,11 +224,35 @@ def _render_equation_fig(model, equation_text):
     return fig
 
 
+# ── GPU job tracking ──────────────────────────────────────────
+
+_GPU_JOB_FILE = "/tmp/.kd_gpu_job_id"
+
+
+def _save_job_id(job_id):
+    """Persist job_id to file so it survives state loss."""
+    try:
+        with open(_GPU_JOB_FILE, "w") as f:
+            f.write(str(job_id) if job_id else "")
+    except Exception:
+        pass
+
+
+def _load_job_id():
+    """Load persisted job_id from file."""
+    try:
+        with open(_GPU_JOB_FILE) as f:
+            val = f.read().strip()
+            return int(val) if val else None
+    except Exception:
+        return None
+
+
 # ── Training ───────────────────────────────────────────────────
 
-# 7-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
-#                         job_state, job_status, check_btn)
-_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False))
+# 8-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
+#                         job_state, job_status, check_btn, gpu_timer)
+_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False), gr.Timer(active=False))
 
 
 def run_training(
@@ -438,13 +462,15 @@ def _submit_gpu_training(
 
     try:
         job_id = submit_gpu_job(runner_model, dataset_name, params, request)
+        _save_job_id(job_id)
         return (
             f"GPU task submitted — Job ID: {job_id}\n"
-            "Click 'Check GPU Job' to monitor progress.",
+            "Auto-polling every 30s. You can also click 'Check GPU Job'.",
             None, None, gr.update(),
             job_id,
             gr.update(visible=True, value=f"Job {job_id}: Submitted"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # start auto-polling
         )
     except Exception as e:
         return (f"GPU submit error:\n{e}\n\n{traceback.format_exc()}",
@@ -452,7 +478,36 @@ def _submit_gpu_training(
 
 
 def check_gpu_status(job_id, request: gr.Request = None):
-    """Poll GPU job status; download results when finished."""
+    """Poll GPU job status; download results when finished.
+
+    This function is called by both the manual Check button and the
+    auto-polling timer.  It must NEVER raise — any unhandled exception
+    would cause Gradio to return a non-JSON response, which the browser
+    shows as ``SyntaxError: Unexpected token '<'``.
+    """
+    try:
+        return _check_gpu_status_inner(job_id, request)
+    except Exception:
+        # Last-resort safety net — keep polling with existing job_id
+        safe_id = job_id or _load_job_id()
+        if safe_id:
+            return (
+                "Status check encountered an error, will retry...",
+                None, None, gr.update(),
+                safe_id,
+                gr.update(visible=True, value="Retrying..."),
+                gr.update(visible=True),
+                gr.Timer(active=True),
+            )
+        return ("No active GPU job.",
+                None, None, gr.update()) + _NO_GPU
+
+
+def _check_gpu_status_inner(job_id, request):
+    """Inner implementation of GPU status check."""
+    # Recover job_id from file if Gradio state lost it
+    if not job_id:
+        job_id = _load_job_id()
     if not job_id:
         return ("No active GPU job.",
                 None, None, gr.update()) + _NO_GPU
@@ -460,20 +515,24 @@ def check_gpu_status(job_id, request: gr.Request = None):
     try:
         status = check_job(job_id, request)
     except Exception as e:
+        # Keep polling on transient errors
         return (
             f"Status check failed: {e}", None, None, gr.update(),
             job_id,
             gr.update(visible=True, value=f"Error: {e}"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # keep polling
         )
 
     if status["failed"]:
+        _save_job_id(None)
         return (
             f"Job {job_id} failed: {status['status_text']}",
             None, None, gr.update(),
             None,
             gr.update(visible=True, value=f"Job {job_id}: {status['status_text']}"),
             gr.update(visible=False),
+            gr.Timer(active=False),  # stop polling
         )
 
     if not status["finished"]:
@@ -485,9 +544,11 @@ def check_gpu_status(job_id, request: gr.Request = None):
             gr.update(visible=True,
                       value=f"Job {job_id}: {status['status_text']}  {elapsed}"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # keep polling
         )
 
     # ── Job finished → download & display ──
+    _save_job_id(None)
     try:
         result_data, save_dir = download_result(job_id, request)
         equation = result_data.get("equation", "(unknown)")
@@ -511,6 +572,7 @@ def check_gpu_status(job_id, request: gr.Request = None):
             None,
             gr.update(visible=True, value=f"Job {job_id}: Finished ({elapsed_s}s)"),
             gr.update(visible=False),
+            gr.Timer(active=False),  # stop polling
         )
     except Exception as e:
         return (f"Download failed: {e}",
@@ -701,6 +763,7 @@ def build_app():
                         check_btn = gr.Button(
                             "Check GPU Job", visible=False, variant="secondary",
                         )
+                        gpu_timer = gr.Timer(30, active=False)
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -730,7 +793,7 @@ def build_app():
 
         _train_outputs = [
             eq_text, eq_plot, model_state, viz_dd,
-            job_state, job_status, check_btn,
+            job_state, job_status, check_btn, gpu_timer,
         ]
 
         train_event = train_btn.click(
@@ -750,7 +813,8 @@ def build_app():
 
         cancel_btn.click(
             fn=lambda: ("Training cancelled.", None, None, gr.update(),
-                        None, gr.update(visible=False), gr.update(visible=False)),
+                        None, gr.update(visible=False), gr.update(visible=False),
+                        gr.Timer(active=False)),
             outputs=_train_outputs,
             cancels=[train_event],
         )
@@ -759,6 +823,16 @@ def build_app():
             check_gpu_status,
             inputs=[job_state],
             outputs=_train_outputs,
+        )
+
+        # Auto-poll GPU job status every 30 seconds.
+        # show_error=False: suppress browser error popup on transient
+        # proxy failures (Bohrium gateway may return HTML intermittently).
+        gpu_timer.tick(
+            check_gpu_status,
+            inputs=[job_state],
+            outputs=_train_outputs,
+            show_error=False,
         )
 
         viz_btn.click(

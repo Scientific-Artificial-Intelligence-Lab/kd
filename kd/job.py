@@ -46,9 +46,17 @@ def get_credentials(request):
     are injected automatically by the gateway.
     """
     from http.cookies import SimpleCookie
+    if request is None:
+        raise ValueError("No request object — cannot extract Bohrium credentials")
     cookie_str = request.headers.get("cookie", "")
+    if not cookie_str:
+        raise ValueError("No cookies in request — session may have expired")
     sc = SimpleCookie()
     sc.load(cookie_str)
+    if "appAccessKey" not in sc:
+        raise ValueError("Missing 'appAccessKey' cookie — not on Bohrium or session expired")
+    if "clientName" not in sc:
+        raise ValueError("Missing 'clientName' cookie — session expired")
     return sc["appAccessKey"].value, sc["clientName"].value
 
 
