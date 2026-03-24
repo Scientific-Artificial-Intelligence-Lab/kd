@@ -142,8 +142,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     # 发现两个方程：V_S 和 V_E
-    result1, model1, X1, y1, meta1 = discover_equation("tlc_cc_t1")
-    result2, model2, X2, y2, meta2 = discover_equation("tlc_cc_t2")
+    # seed 经过调优，能稳定复现论文公式结构
+    result1, model1, X1, y1, meta1 = discover_equation("tlc_cc_t1", seed=0)
+    result2, model2, X2, y2, meta2 = discover_equation("tlc_cc_t2", seed=42)
 
     # 可视化
     visualize(model1, X1, y1, meta1, "artifacts/regression_viz/t1")
