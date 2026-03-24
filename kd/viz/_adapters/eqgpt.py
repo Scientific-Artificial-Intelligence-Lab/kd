@@ -271,6 +271,8 @@ class EqGPTVizAdapter:
         result = model.result_
         best_eq = result.get("best_equation", "")
         latex = _eqgpt_to_latex(best_eq)
+        if latex:
+            latex = latex + " = 0"
 
         _, path = self._resolve_output(ctx, "equation.png")
         font_size = ctx.options.get("font_size", 18)
@@ -572,6 +574,11 @@ class EqGPTVizAdapter:
             )
             ax.invert_yaxis()
             ax.grid(True, linestyle="--", alpha=0.3)
+
+            # Zoom x-axis to show differences when rewards are close
+            r_min, r_max = float(rewards.min()), float(rewards.max())
+            margin = max((r_max - r_min) * 0.3, 0.005)
+            ax.set_xlim(r_min - margin, r_max + margin)
 
             _, path = self._resolve_output(ctx, "reward_ranking.png")
             fig.savefig(

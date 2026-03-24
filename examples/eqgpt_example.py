@@ -20,7 +20,7 @@ from kd.viz.core import VizRequest, configure, render
 logger = logging.getLogger(__name__)
 
 _OUTPUT_DIR = Path(__file__).resolve().parents[1] / "artifacts" / "eqgpt_example"
-_VIZ_KINDS = ("equation", "reward_ranking", "reward_evolution")
+_VIZ_KINDS = ("equation", "reward_ranking", "reward_evolution", "parity")
 
 
 def _save_result_summary(result: Dict[str, object]) -> Path:

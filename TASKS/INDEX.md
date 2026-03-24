@@ -9,7 +9,7 @@
 | 任务 | 状态 | 描述 |
 |------|------|------|
 | [fix-dscv-latex/](fix-dscv-latex/) | **completed** | DSCV LaTeX 嵌套导数渲染修复。chain rule 展开 + 162 个验证测试 |
-| [fix-sga-searchspace/](fix-sga-searchspace/) | **HIGH** | SGA 搜索空间过度扩展导致方程过于复杂（可能是一类问题） |
+| [fix-sga-searchspace/](fix-sga-searchspace/) | **completed** | SGA Burgers 方程过于复杂。根因：数据+AIC。修复：减 sga_run + 重新生成 Gallery (e6a67c3) |
 | [dscv-nd/](dscv-nd/) | **completed** | DSCV N-D 升级：全部 3 Phase 完成 |
 | [viz-nd/](viz-nd/) | **completed** | viz 模块 N-D 兼容性（Phase 1 + Phase 2 + review fixes） |
 | [fix-diff2-3/](fix-diff2-3/) | **completed** | 修复 `Diff2_3` name==3 索引 bug（3 bugs: m→p, 3D→4D index, missing return） |
