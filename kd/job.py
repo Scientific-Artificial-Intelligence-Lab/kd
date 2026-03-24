@@ -3,8 +3,9 @@
 Used by ``app.py`` (running on a CPU web node) to submit GPU-intensive
 models as Bohrium offline tasks, poll their status, and download results.
 
-Configuration is read from environment variables so the same ``app.py``
-works both locally (no SDK, all models run in-process) and on Bohrium.
+The GPU offline app uses the Launching framework (dp.launching).
+Inputs are passed as flat key-value pairs matching the Options schema
+defined in ``launching.py``.
 
 Env vars (set in the Bohrium app image or .env):
     KD_GPU_APP_KEY      — app_key of the registered GPU offline app
@@ -15,13 +16,12 @@ Env vars (set in the Bohrium app image or .env):
 
 import json
 import os
-import tempfile
 
 # ── Configuration ─────────────────────────────────────────────
 
-KD_GPU_APP_KEY = os.environ.get("KD_GPU_APP_KEY", "kd-gpu-runner")
-KD_GPU_SUB_MODEL = os.environ.get("KD_GPU_SUB_MODEL", "KD_GPU")
-KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "0"))
+KD_GPU_APP_KEY = os.environ.get("KD_GPU_APP_KEY", "kd-gpu")
+KD_GPU_SUB_MODEL = os.environ.get("KD_GPU_SUB_MODEL", "Options")
+KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "1077376"))
 JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/home/outputs")
 
 JOB_STATUS_MAP = {
@@ -46,9 +46,17 @@ def get_credentials(request):
     are injected automatically by the gateway.
     """
     from http.cookies import SimpleCookie
+    if request is None:
+        raise ValueError("No request object — cannot extract Bohrium credentials")
     cookie_str = request.headers.get("cookie", "")
+    if not cookie_str:
+        raise ValueError("No cookies in request — session may have expired")
     sc = SimpleCookie()
     sc.load(cookie_str)
+    if "appAccessKey" not in sc:
+        raise ValueError("Missing 'appAccessKey' cookie — not on Bohrium or session expired")
+    if "clientName" not in sc:
+        raise ValueError("Missing 'clientName' cookie — session expired")
     return sc["appAccessKey"].value, sc["clientName"].value
 
 
@@ -58,10 +66,13 @@ def submit_gpu_job(model_name, dataset_name, params, request,
                    project_id=None, dataset_file=None):
     """Submit a GPU training job to the Bohrium offline task platform.
 
+    Inputs are passed as flat key-value pairs matching the Options schema
+    in ``launching.py`` (Launching framework).
+
     Args:
         model_name: Runner model key (``"dlga"`` or ``"dscv_spr"``).
         dataset_name: Built-in dataset name (e.g. ``"burgers"``).
-        params: Model hyper-parameter dict (forwarded to ``runner.py``).
+        params: Model hyper-parameter dict matching launching.py Options.
         request: ``gr.Request`` object (for auth cookies).
         project_id: Override Bohrium project ID.
         dataset_file: Optional local path to a user-uploaded data file.
@@ -69,61 +80,44 @@ def submit_gpu_job(model_name, dataset_name, params, request,
     Returns:
         int: The submitted job ID.
     """
-    from bohrium_open_sdk import UploadInputItem
-
     access_key, app_key = get_credentials(request)
     client = _client(access_key, app_key)
 
-    # Build the runner config JSON
-    config = {
+    # Build flat inputs matching launching.py Options schema
+    inputs = {
         "model": model_name,
-        "output_dir": "output",
-        "params": params,
+        "dataset_name": dataset_name or "burgers",
+        "output_dir": "./outputs",
     }
-    if dataset_name:
-        config["dataset_name"] = dataset_name
+    # Merge model-specific params directly into inputs
+    if params:
+        for key, value in params.items():
+            inputs[key] = value
 
-    # Write to a temp file for upload
-    fd, config_path = tempfile.mkstemp(suffix=".json", prefix="kd_cfg_")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(config, f, ensure_ascii=False)
-
-        inputs = {"config": "", "output_dir": "output"}
-        upload_files = [UploadInputItem(input_field="config", src=config_path)]
-
-        if dataset_file and os.path.exists(dataset_file):
-            inputs["dataset_file"] = ""
-            upload_files.append(
-                UploadInputItem(input_field="dataset_file", src=dataset_file)
-            )
-
-        # Resolve project ID
-        pid = project_id or KD_GPU_PROJECT_ID
-        if not pid:
-            proj_res = client.user.list_project()
-            items = proj_res.get("data", {}).get("items", [])
-            if items:
-                pid = items[0]["project_id"]
-            else:
-                raise RuntimeError(
-                    "No Bohrium project found. "
-                    "Set the KD_GPU_PROJECT_ID environment variable."
-                )
-
-        res = client.app.job.submit(
-            app_key=KD_GPU_APP_KEY,
-            sub_model_name=KD_GPU_SUB_MODEL,
-            project_id=pid,
-            inputs=inputs,
-            upload_files=upload_files,
+    # Resolve project ID
+    pid = project_id or KD_GPU_PROJECT_ID
+    if not pid:
+        raise RuntimeError(
+            "No Bohrium project ID configured. "
+            "Set the KD_GPU_PROJECT_ID environment variable."
         )
-        return res["data"]["jobId"]
-    finally:
-        try:
-            os.unlink(config_path)
-        except OSError:
-            pass
+
+    res = client.app.job.submit(
+        app_key=KD_GPU_APP_KEY,
+        sub_model_name=KD_GPU_SUB_MODEL,
+        project_id=pid,
+        inputs=inputs,
+        ext_config={"jobConfig": {"jobRead": 1}},
+    )
+    # Handle different response formats
+    if isinstance(res, dict):
+        if "data" in res:
+            return res["data"]["jobId"]
+        if "jobId" in res:
+            return res["jobId"]
+        if "job_id" in res:
+            return res["job_id"]
+    raise RuntimeError(f"Unexpected submit response: {res}")
 
 
 def check_job(job_id, request):
@@ -137,13 +131,14 @@ def check_job(job_id, request):
     access_key, app_key = get_credentials(request)
     client = _client(access_key, app_key)
     info = client.app.job.detail(job_id)
-    code = info["data"]["status"]
+    data = info.get("data", info) if isinstance(info, dict) else info
+    code = data.get("status", -1) if isinstance(data, dict) else -1
     return {
         "status_code": code,
         "status_text": JOB_STATUS_MAP.get(code, f"Unknown({code})"),
         "finished": code in (10, 11),
         "failed": code in (12, 13),
-        "spend_time": info["data"].get("spendTime", ""),
+        "spend_time": data.get("spendTime", "") if isinstance(data, dict) else "",
     }
 
 
@@ -160,8 +155,8 @@ def download_result(job_id, request, save_dir=None):
         save_dir = os.path.join(JOB_OUTPUT_DIR, f"kd_{job_id}")
     os.makedirs(save_dir, exist_ok=True)
 
-    client.web.sub_model.download(
-        job_id, remote_target="output", save_path=save_dir
+    client.app.job.download(
+        job_id, remote_target="outputs", save_path=save_dir
     )
 
     result_path = os.path.join(save_dir, "result.json")

@@ -290,8 +290,12 @@ class KD_EqGPT:
                 else:
                     model_dir = pretrained_dir
                     if not model_dir.exists():
-                        logger.warning("Skipping case %s: no surrogate model at %s", name, model_dir)
-                        continue
+                        # Auto-train surrogate when pre-trained weights are missing
+                        logger.info("No surrogate at %s — training from scratch for case %s", model_dir, name)
+                        model_dir.mkdir(parents=True, exist_ok=True)
+                        self._train_single_surrogate(
+                            name, data, model_dir, device, device_str,
+                        )
                 net, db, nx, nt = self._build_single_surrogate(
                     name, data, model_dir, device, device_str, load_checkpoint,
                 )

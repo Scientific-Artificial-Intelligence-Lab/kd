@@ -23,15 +23,11 @@ import gradio as gr
 from kd.dataset import load_pde
 from kd.dataset._registry import PDE_REGISTRY
 from kd.viz.core import VizRequest, render, configure
-from kd.app_helpers import (
-    MODEL_KEYS, DSCV_BINARY_DEFAULT, DSCV_UNARY_DEFAULT,
-    _parse_ops, get_compatible_models,
-)
 
 
 # ── GPU offloading ────────────────────────────────────────────
 
-GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR"}
+GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR", "KD_EqGPT"}
 
 try:
     from kd.job import submit_gpu_job, check_job, download_result
@@ -52,15 +48,33 @@ def _is_bohrium_env(request):
 
 # ── Constants ──────────────────────────────────────────────────
 
+MODEL_KEYS = {
+    "KD_SGA": "sga",
+    "KD_DLGA": "dlga",
+    "KD_DSCV": "discover",
+    "KD_DSCV_SPR": "discover_spr",
+    "KD_EqGPT": "eqgpt",
+    "KD_Discover_Regression": "regression",
+}
+
 ACTIVE_DATASETS = sorted([
     name for name, info in PDE_REGISTRY.items()
     if info.get("status") != "pending"
 ])
 
-# Operator presets per model (DSCV defaults imported from app_helpers)
+# Regression datasets (separate from PDE registry)
+from kd.dataset import load_regression
+_REGRESSION_DATASETS = ["tlc_cc_t1", "tlc_cc_t2"]
+ALL_DATASETS = ACTIVE_DATASETS + _REGRESSION_DATASETS
+
+# Operator presets per model
+DSCV_BINARY_DEFAULT = "add, mul, diff"
+DSCV_UNARY_DEFAULT = "n2"
 SPR_BINARY_DEFAULT = "add_t, mul_t, div_t, diff_t, diff2_t"
 SPR_UNARY_DEFAULT = "n2_t"
 DLGA_OPS_DEFAULT = "u, u_x, u_xx, u_xxx"
+REG_BINARY_DEFAULT = "add, sub, mul, div"
+REG_UNARY_DEFAULT = "inv"
 
 # Viz intents available for exploration
 VIZ_INTENTS = [
@@ -80,6 +94,21 @@ VIZ_INTENTS = [
 
 # ── Helpers ────────────────────────────────────────────────────
 
+def get_compatible_models(dataset_name):
+    """Return model display names compatible with a given dataset."""
+    if not dataset_name:
+        return []
+    # Regression datasets → only regression model
+    if dataset_name in _REGRESSION_DATASETS:
+        return ["KD_Discover_Regression"]
+    info = PDE_REGISTRY.get(dataset_name, {})
+    models_map = info.get("models", {})
+    return [
+        display for display, key in MODEL_KEYS.items()
+        if models_map.get(key, False)
+    ]
+
+
 def on_dataset_change(dataset_name):
     """Update model dropdown when dataset changes."""
     models = get_compatible_models(dataset_name)
@@ -93,7 +122,8 @@ def on_model_change(model_name):
     dlga_vis = model_name == "KD_DLGA"
     dscv_vis = model_name in ("KD_DSCV", "KD_DSCV_SPR")
     spr_vis = model_name == "KD_DSCV_SPR"
-    eqgpt_vis = "EqGPT" in (model_name or "")
+    eqgpt_vis = model_name == "KD_EqGPT"
+    reg_vis = model_name == "KD_Discover_Regression"
 
     if model_name == "KD_DSCV_SPR":
         binary_val = SPR_BINARY_DEFAULT
@@ -108,12 +138,15 @@ def on_model_change(model_name):
         gr.update(visible=dscv_vis),   # dscv_group
         gr.update(visible=spr_vis),    # spr_group
         gr.update(visible=eqgpt_vis),  # eqgpt_group
+        gr.update(visible=reg_vis),    # reg_group
         gr.update(value=binary_val),   # dscv_binary
         gr.update(value=unary_val),    # dscv_unary
     )
 
 
-# _parse_ops imported from kd.app_helpers
+def _parse_ops(text):
+    """Parse comma-separated operator string into list."""
+    return [op.strip() for op in text.split(",") if op.strip()]
 
 
 def _get_equation_text(model, model_name, result=None):
@@ -122,10 +155,21 @@ def _get_equation_text(model, model_name, result=None):
         return model.equation_latex()
     elif model_name == "KD_DLGA":
         return getattr(model, "eq_latex", None) or "(equation renderer unavailable)"
-    elif "EqGPT" in (model_name or ""):
+    elif model_name == "KD_EqGPT":
+        if result is None:
+            return "(no equation found)"
+        best = result.get("best_equation", "(no equation found)")
+        best_r = result.get("best_reward", 0.0)
+        lines = [f"Best: {best}  (reward={best_r:.4f})", "", "Top-10:"]
+        for i, (eq, rw) in enumerate(
+            zip(result.get("equations", []), result.get("rewards", []))
+        ):
+            lines.append(f"  {i+1:2d}. [reward={rw:.4f}]  {eq}")
+        return "\n".join(lines)
+    elif model_name == "KD_Discover_Regression":
         if result is not None:
-            return result.get("best_equation", "(no equation found)")
-        return "(no equation found)"
+            return result.get("expression_named", result.get("expression", "(no expression found)"))
+        return "(no expression found)"
     elif result is not None:
         return result.get("expression", "(no expression found)")
     return "(unknown)"
@@ -138,8 +182,12 @@ def _get_model_capabilities(model):
         return []
     caps = list(list_capabilities(model))
     # spr_* intents only work for KD_DSCV_SPR (PINN mode)
-    from kd.model.kd_dscv import KD_DSCV_SPR
-    if not isinstance(model, KD_DSCV_SPR):
+    try:
+        from kd.model.kd_discover import KD_Discover_SPR as _SPR
+        is_spr = isinstance(model, _SPR)
+    except ImportError:
+        is_spr = False
+    if not is_spr:
         caps = [c for c in caps if not c.startswith("spr_")]
     return sorted(caps)
 
@@ -159,23 +207,52 @@ def _render_equation_fig(model, equation_text):
     # Fallback: render equation text onto a matplotlib figure
     if not equation_text or equation_text.startswith("("):
         return None
+    # Strip existing $ delimiters to avoid double-wrapping ($$...$$)
+    eq_clean = equation_text.strip().strip("$").strip()
     fig, ax = plt.subplots(figsize=(8, 2))
     ax.axis("off")
     try:
-        ax.text(0.5, 0.5, f"${equation_text}$", fontsize=18,
+        ax.text(0.5, 0.5, f"${eq_clean}$", fontsize=18,
                 ha="center", va="center", transform=ax.transAxes)
+        fig.tight_layout()
     except Exception:
+        ax.clear()
+        ax.axis("off")
         ax.text(0.5, 0.5, equation_text, fontsize=14,
                 ha="center", va="center", transform=ax.transAxes, family="monospace")
-    fig.tight_layout()
+        fig.tight_layout()
     return fig
+
+
+# ── GPU job tracking ──────────────────────────────────────────
+
+_GPU_JOB_FILE = "/tmp/.kd_gpu_job_id"
+
+
+def _save_job_id(job_id):
+    """Persist job_id to file so it survives state loss."""
+    try:
+        with open(_GPU_JOB_FILE, "w") as f:
+            f.write(str(job_id) if job_id else "")
+    except Exception:
+        pass
+
+
+def _load_job_id():
+    """Load persisted job_id from file."""
+    try:
+        with open(_GPU_JOB_FILE) as f:
+            val = f.read().strip()
+            return int(val) if val else None
+    except Exception:
+        return None
 
 
 # ── Training ───────────────────────────────────────────────────
 
-# 7-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
-#                         job_state, job_status, check_btn)
-_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False))
+# 8-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
+#                         job_state, job_status, check_btn, gpu_timer)
+_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False), gr.Timer(active=False))
 
 
 def run_training(
@@ -190,6 +267,11 @@ def run_training(
     spr_sample_ratio, spr_epochs,
     # EqGPT
     eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
+    eqgpt_seed=0,
+    # Regression
+    reg_binary="add, sub, mul, div", reg_unary="inv",
+    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_parsimony=0.005,
     # Gradio injects this automatically
     request: gr.Request = None,
 ):
@@ -205,6 +287,7 @@ def run_training(
             dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
             dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
             spr_sample_ratio, spr_epochs,
+            eqgpt_epochs, eqgpt_samples, eqgpt_cases, eqgpt_seed,
             request,
         )
 
@@ -215,7 +298,9 @@ def run_training(
         dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
         dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
         spr_sample_ratio, spr_epochs,
-        eqgpt_epochs, eqgpt_samples, eqgpt_cases,
+        eqgpt_epochs, eqgpt_samples, eqgpt_cases, eqgpt_seed,
+        reg_binary, reg_unary, reg_iterations, reg_samples, reg_seed,
+        reg_parsimony,
     )
 
 
@@ -226,6 +311,10 @@ def _run_local(
     dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
     spr_sample_ratio, spr_epochs,
     eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
+    eqgpt_seed=0,
+    reg_binary="add, sub, mul, div", reg_unary="inv",
+    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_parsimony=0.005,
 ):
     """Run model training in the current process (CPU or local GPU)."""
     configure(save_dir=None)
@@ -234,13 +323,37 @@ def _run_local(
         model = None
         result = None
 
-        if "EqGPT" in (model_name or ""):
+        if model_name == "KD_Discover_Regression":
+            from kd.model.kd_discover_regression import KD_Discover_Regression
+            X, y, meta = load_regression(dataset_name)
+            model = KD_Discover_Regression(
+                binary_operators=_parse_ops(reg_binary),
+                unary_operators=_parse_ops(reg_unary),
+                n_iterations=int(reg_iterations),
+                n_samples_per_batch=int(reg_samples),
+                seed=int(reg_seed),
+                config_out={"task": {"parsimony_coeff": float(reg_parsimony)}},
+            )
+            result = model.fit(X, y, var_names=meta["var_names"], verbose=True)
+
+            # Compute R² for display
+            y_pred = model.predict(X)
+            r2 = 1 - np.sum((y - y_pred) ** 2) / np.sum((y - np.mean(y)) ** 2)
+            eq_text = _get_equation_text(model, model_name, result)
+            eq_text += f"\n\nR² = {r2:.6f}  |  MSE = {result['mse']:.4f}  |  Reward = {result['reward']:.6f}"
+            eq_text += f"\nTarget: {meta['target_name']}  |  Variables: {meta['var_names']}"
+            fig = _render_equation_fig(model, _get_equation_text(model, model_name, result))
+
+            return (eq_text, fig, model, gr.update(choices=[], value=None)) + _NO_GPU
+
+        elif model_name == "KD_EqGPT":
             from kd.model.kd_eqgpt import KD_EqGPT
             case_filter = "N" if "N only" in str(eqgpt_cases) else "all"
             model = KD_EqGPT(
                 optimize_epochs=int(eqgpt_epochs),
                 samples_per_epoch=int(eqgpt_samples),
                 case_filter=case_filter,
+                seed=int(eqgpt_seed),
             )
             result = model.fit_pretrained()
         else:
@@ -269,7 +382,7 @@ def _run_local(
                 model.fit_dataset(dataset, sample=sample)
 
             elif model_name == "KD_DSCV":
-                from kd.model.kd_dscv import KD_DSCV
+                from kd.model.kd_discover import KD_Discover as KD_DSCV
                 model = KD_DSCV(
                     binary_operators=_parse_ops(dscv_binary),
                     unary_operators=_parse_ops(dscv_unary),
@@ -280,7 +393,7 @@ def _run_local(
                 result = model.fit_dataset(dataset, n_epochs=int(dscv_epochs))
 
             elif model_name == "KD_DSCV_SPR":
-                from kd.model.kd_dscv import KD_DSCV_SPR
+                from kd.model.kd_discover import KD_Discover_SPR as KD_DSCV_SPR
                 model = KD_DSCV_SPR(
                     binary_operators=_parse_ops(dscv_binary),
                     unary_operators=_parse_ops(dscv_unary),
@@ -299,7 +412,7 @@ def _run_local(
 
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
-        caps = _get_model_capabilities(model) if "EqGPT" not in (model_name or "") else []
+        caps = _get_model_capabilities(model) if model_name != "KD_EqGPT" else []
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
         return (equation, fig, model, viz_update) + _NO_GPU
@@ -314,7 +427,9 @@ def _submit_gpu_training(
     dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
     dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
     spr_sample_ratio, spr_epochs,
-    request,
+    eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
+    eqgpt_seed=0,
+    request=None,
 ):
     """Submit training to Bohrium GPU offline task."""
     if model_name == "KD_DLGA":
@@ -324,6 +439,15 @@ def _submit_gpu_training(
             "epi": float(dlga_epi),
             "max_iter": int(dlga_max_iter),
             "sample": int(dlga_sample) if dlga_sample else None,
+        }
+    elif model_name == "KD_EqGPT":
+        runner_model = "eqgpt"
+        case_filter = "N" if "N only" in str(eqgpt_cases) else "all"
+        params = {
+            "optimize_epochs": int(eqgpt_epochs),
+            "samples_per_epoch": int(eqgpt_samples),
+            "case_filter": case_filter,
+            "seed": int(eqgpt_seed),
         }
     else:  # KD_DSCV_SPR
         runner_model = "dscv_spr"
@@ -338,13 +462,15 @@ def _submit_gpu_training(
 
     try:
         job_id = submit_gpu_job(runner_model, dataset_name, params, request)
+        _save_job_id(job_id)
         return (
             f"GPU task submitted — Job ID: {job_id}\n"
-            "Click 'Check GPU Job' to monitor progress.",
+            "Auto-polling every 30s. You can also click 'Check GPU Job'.",
             None, None, gr.update(),
             job_id,
             gr.update(visible=True, value=f"Job {job_id}: Submitted"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # start auto-polling
         )
     except Exception as e:
         return (f"GPU submit error:\n{e}\n\n{traceback.format_exc()}",
@@ -352,7 +478,36 @@ def _submit_gpu_training(
 
 
 def check_gpu_status(job_id, request: gr.Request = None):
-    """Poll GPU job status; download results when finished."""
+    """Poll GPU job status; download results when finished.
+
+    This function is called by both the manual Check button and the
+    auto-polling timer.  It must NEVER raise — any unhandled exception
+    would cause Gradio to return a non-JSON response, which the browser
+    shows as ``SyntaxError: Unexpected token '<'``.
+    """
+    try:
+        return _check_gpu_status_inner(job_id, request)
+    except Exception:
+        # Last-resort safety net — keep polling with existing job_id
+        safe_id = job_id or _load_job_id()
+        if safe_id:
+            return (
+                "Status check encountered an error, will retry...",
+                None, None, gr.update(),
+                safe_id,
+                gr.update(visible=True, value="Retrying..."),
+                gr.update(visible=True),
+                gr.Timer(active=True),
+            )
+        return ("No active GPU job.",
+                None, None, gr.update()) + _NO_GPU
+
+
+def _check_gpu_status_inner(job_id, request):
+    """Inner implementation of GPU status check."""
+    # Recover job_id from file if Gradio state lost it
+    if not job_id:
+        job_id = _load_job_id()
     if not job_id:
         return ("No active GPU job.",
                 None, None, gr.update()) + _NO_GPU
@@ -360,20 +515,24 @@ def check_gpu_status(job_id, request: gr.Request = None):
     try:
         status = check_job(job_id, request)
     except Exception as e:
+        # Keep polling on transient errors
         return (
             f"Status check failed: {e}", None, None, gr.update(),
             job_id,
             gr.update(visible=True, value=f"Error: {e}"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # keep polling
         )
 
     if status["failed"]:
+        _save_job_id(None)
         return (
             f"Job {job_id} failed: {status['status_text']}",
             None, None, gr.update(),
             None,
             gr.update(visible=True, value=f"Job {job_id}: {status['status_text']}"),
             gr.update(visible=False),
+            gr.Timer(active=False),  # stop polling
         )
 
     if not status["finished"]:
@@ -385,9 +544,11 @@ def check_gpu_status(job_id, request: gr.Request = None):
             gr.update(visible=True,
                       value=f"Job {job_id}: {status['status_text']}  {elapsed}"),
             gr.update(visible=True),
+            gr.Timer(active=True),  # keep polling
         )
 
     # ── Job finished → download & display ──
+    _save_job_id(None)
     try:
         result_data, save_dir = download_result(job_id, request)
         equation = result_data.get("equation", "(unknown)")
@@ -411,6 +572,7 @@ def check_gpu_status(job_id, request: gr.Request = None):
             None,
             gr.update(visible=True, value=f"Job {job_id}: Finished ({elapsed_s}s)"),
             gr.update(visible=False),
+            gr.Timer(active=False),  # stop polling
         )
     except Exception as e:
         return (f"Download failed: {e}",
@@ -478,12 +640,18 @@ def build_app():
                 with gr.Row():
                     # Left: controls
                     with gr.Column(scale=1):
+                        _init_ds = "burgers" if "burgers" in ALL_DATASETS else ALL_DATASETS[0]
+                        _init_models = get_compatible_models(_init_ds)
                         dataset_dd = gr.Dropdown(
-                            choices=ACTIVE_DATASETS,
-                            value="burgers" if "burgers" in ACTIVE_DATASETS else ACTIVE_DATASETS[0],
+                            choices=ALL_DATASETS,
+                            value=_init_ds,
                             label="Dataset",
                         )
-                        model_dd = gr.Dropdown(choices=[], label="Model")
+                        model_dd = gr.Dropdown(
+                            choices=_init_models,
+                            value=_init_models[0] if _init_models else None,
+                            label="Model",
+                        )
 
                         # -- SGA params --
                         with gr.Group(visible=False) as sga_group:
@@ -549,6 +717,37 @@ def build_app():
                                 value="N only (12 cases)",
                                 label="Case filter",
                             )
+                            eqgpt_seed = gr.Number(
+                                value=0, label="Seed", precision=0,
+                            )
+
+                        # -- Regression params --
+                        with gr.Group(visible=False) as reg_group:
+                            gr.Markdown("**Symbolic Regression Parameters**")
+                            gr.Markdown(
+                                "_Discover equations from tabular data (X → y)._"
+                            )
+                            reg_binary = gr.Textbox(
+                                value=REG_BINARY_DEFAULT,
+                                label="Binary operators",
+                                info="add, sub, mul, div",
+                            )
+                            reg_unary = gr.Textbox(
+                                value=REG_UNARY_DEFAULT,
+                                label="Unary operators",
+                                info="inv, sin, cos, sqrt, n2, n3, ...",
+                            )
+                            reg_iterations = gr.Number(
+                                value=50, label="Search iterations", precision=0,
+                            )
+                            reg_samples = gr.Number(
+                                value=500, label="Samples per batch", precision=0,
+                            )
+                            reg_parsimony = gr.Number(
+                                value=0.005, label="Parsimony coefficient",
+                                info="Higher = simpler equations",
+                            )
+                            reg_seed = gr.Number(value=1, label="Seed", precision=0)
 
                         with gr.Row():
                             train_btn = gr.Button("Start Training", variant="primary", size="lg")
@@ -564,6 +763,7 @@ def build_app():
                         check_btn = gr.Button(
                             "Check GPU Job", visible=False, variant="secondary",
                         )
+                        gpu_timer = gr.Timer(30, active=False)
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -588,12 +788,12 @@ def build_app():
             on_model_change,
             inputs=[model_dd],
             outputs=[sga_group, dlga_group, dscv_group, spr_group, eqgpt_group,
-                     dscv_binary, dscv_unary],
+                     reg_group, dscv_binary, dscv_unary],
         )
 
         _train_outputs = [
             eq_text, eq_plot, model_state, viz_dd,
-            job_state, job_status, check_btn,
+            job_state, job_status, check_btn, gpu_timer,
         ]
 
         train_event = train_btn.click(
@@ -604,14 +804,17 @@ def build_app():
                 dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
                 dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
                 spr_sample_ratio, spr_epochs,
-                eqgpt_epochs, eqgpt_samples, eqgpt_cases,
+                eqgpt_epochs, eqgpt_samples, eqgpt_cases, eqgpt_seed,
+                reg_binary, reg_unary, reg_iterations, reg_samples, reg_seed,
+                reg_parsimony,
             ],
             outputs=_train_outputs,
         )
 
         cancel_btn.click(
             fn=lambda: ("Training cancelled.", None, None, gr.update(),
-                        None, gr.update(visible=False), gr.update(visible=False)),
+                        None, gr.update(visible=False), gr.update(visible=False),
+                        gr.Timer(active=False)),
             outputs=_train_outputs,
             cancels=[train_event],
         )
@@ -620,6 +823,16 @@ def build_app():
             check_gpu_status,
             inputs=[job_state],
             outputs=_train_outputs,
+        )
+
+        # Auto-poll GPU job status every 30 seconds.
+        # show_error=False: suppress browser error popup on transient
+        # proxy failures (Bohrium gateway may return HTML intermittently).
+        gpu_timer.tick(
+            check_gpu_status,
+            inputs=[job_state],
+            outputs=_train_outputs,
+            show_error=False,
         )
 
         viz_btn.click(
@@ -634,6 +847,49 @@ def build_app():
 # ── Entry Point ────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app = build_app()
     os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-    app.launch(server_name="0.0.0.0", server_port=50001)
+    blocks = build_app()
+
+    # Bohrium serves apps behind an HTTPS proxy that does NOT forward
+    # X-Forwarded-Proto.  This ASGI middleware forces the scheme to HTTPS
+    # so Gradio generates correct URLs in its frontend config.
+    class _ForceHTTPS:
+        """Fix Mixed Content when running behind Bohrium's HTTPS proxy.
+
+        1. Injects X-Forwarded-Proto into requests so Gradio generates
+           HTTPS URLs in its frontend config (``root``).
+        2. Adds Content-Security-Policy: upgrade-insecure-requests to
+           responses so the browser auto-upgrades any remaining HTTP
+           sub-resource requests (e.g. theme.css loaded by Gradio JS
+           via window.location).
+        """
+        def __init__(self, app):
+            self.app = app
+        async def __call__(self, scope, receive, send):
+            if scope["type"] in ("http", "websocket"):
+                headers = list(scope.get("headers", []))
+                headers.append((b"x-forwarded-proto", b"https"))
+                scope = dict(scope, scheme="https", headers=headers)
+
+                async def send_with_csp(message):
+                    if message["type"] == "http.response.start":
+                        resp_headers = list(message.get("headers", []))
+                        resp_headers.append((
+                            b"content-security-policy",
+                            b"upgrade-insecure-requests",
+                        ))
+                        message = dict(message, headers=resp_headers)
+                    await send(message)
+
+                await self.app(scope, receive, send_with_csp)
+            else:
+                await self.app(scope, receive, send)
+
+    import uvicorn
+    from fastapi import FastAPI
+
+    fastapi_app = FastAPI()
+    inner = gr.mount_gradio_app(fastapi_app, blocks, path="/")
+    app = _ForceHTTPS(inner)
+
+    uvicorn.run(app, host="0.0.0.0", port=50000)
