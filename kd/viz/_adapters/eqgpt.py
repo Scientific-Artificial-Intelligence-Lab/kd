@@ -385,41 +385,39 @@ class EqGPTVizAdapter:
         fig, ax = plt.subplots(
             figsize=ctx.options.get("figsize", (8, 5))
         )
-        try:
+        self._plot_reward_series(
+            ax, data.steps, data.best_reward,
+            label="Top-1", color="black", linestyle="-",
+        )
+        if data.max_reward is not None:
             self._plot_reward_series(
-                ax, data.steps, data.best_reward,
-                label="Top-1", color="black", linestyle="-",
+                ax, data.steps, data.max_reward,
+                label="Top-5", color="#F47E62", linestyle="--",
             )
-            if data.max_reward is not None:
-                self._plot_reward_series(
-                    ax, data.steps, data.max_reward,
-                    label="Top-5", color="#F47E62", linestyle="--",
-                )
-            if data.mean_reward is not None:
-                self._plot_reward_series(
-                    ax, data.steps, data.mean_reward,
-                    label="Top-10", color="#4F8FBA", linestyle="-.",
-                )
+        if data.mean_reward is not None:
+            self._plot_reward_series(
+                ax, data.steps, data.mean_reward,
+                label="Top-10", color="#4F8FBA", linestyle="-.",
+            )
 
-            ax.set_xlabel("Epoch")
-            ax.set_ylabel("Reward")
-            ax.set_title(
-                ctx.options.get("title", "EqGPT Reward Evolution")
-            )
-            ax.grid(True, linestyle="--", alpha=0.4)
-            ax.legend(loc="best", frameon=False)
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Reward")
+        ax.set_title(
+            ctx.options.get("title", "EqGPT Reward Evolution")
+        )
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend(loc="best", frameon=False)
 
-            _, path = self._resolve_output(ctx, "reward_evolution.png")
-            fig.savefig(
-                str(path),
-                dpi=ctx.options.get("dpi", 300),
-                bbox_inches="tight",
-            )
-        finally:
-            plt.close(fig)
+        _, path = self._resolve_output(ctx, "reward_evolution.png")
+        fig.savefig(
+            str(path),
+            dpi=ctx.options.get("dpi", 300),
+            bbox_inches="tight",
+        )
 
         return VizResult(
             intent="reward_evolution",
+            figure=fig,
             paths=[path],
             warnings=warnings,
             metadata={"reward_evolution": data},
@@ -452,30 +450,28 @@ class EqGPTVizAdapter:
         fig, ax = plt.subplots(
             figsize=ctx.options.get("figsize", (7, 7))
         )
-        try:
-            ax.scatter(rhs, lhs, alpha=0.35, s=20, label="RHS vs LHS")
-            lo = float(min(lhs.min(), rhs.min()))
-            hi = float(max(lhs.max(), rhs.max()))
-            ref = np.linspace(lo, hi, 100)
-            ax.plot(ref, ref, "r--", linewidth=1.5, label="y = x")
-            ax.set_xlabel("RHS (predicted)")
-            ax.set_ylabel("LHS (actual)")
-            ax.set_title(ctx.options.get("title", "EqGPT Parity Plot"))
-            ax.legend()
-            ax.grid(True, linestyle="--", alpha=0.5)
-            ax.set_aspect("equal", "box")
+        ax.scatter(rhs, lhs, alpha=0.35, s=20, label="RHS vs LHS")
+        lo = float(min(lhs.min(), rhs.min()))
+        hi = float(max(lhs.max(), rhs.max()))
+        ref = np.linspace(lo, hi, 100)
+        ax.plot(ref, ref, "r--", linewidth=1.5, label="y = x")
+        ax.set_xlabel("RHS (predicted)")
+        ax.set_ylabel("LHS (actual)")
+        ax.set_title(ctx.options.get("title", "EqGPT Parity Plot"))
+        ax.legend()
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.set_aspect("equal", "box")
 
-            _, path = self._resolve_output(ctx, "parity_plot.png")
-            fig.savefig(
-                str(path),
-                dpi=ctx.options.get("dpi", 300),
-                bbox_inches="tight",
-            )
-        finally:
-            plt.close(fig)
+        _, path = self._resolve_output(ctx, "parity_plot.png")
+        fig.savefig(
+            str(path),
+            dpi=ctx.options.get("dpi", 300),
+            bbox_inches="tight",
+        )
 
         return VizResult(
             intent="parity",
+            figure=fig,
             paths=[path],
             warnings=warnings,
             metadata={"parity": parity_data, "summary": summary},
@@ -551,35 +547,33 @@ class EqGPTVizAdapter:
         fig, ax = plt.subplots(
             figsize=ctx.options.get("figsize", (8, 5))
         )
-        try:
-            ranks = np.arange(1, n_bars + 1)
-            ax.barh(ranks, rewards, align="center")
+        ranks = np.arange(1, n_bars + 1)
+        ax.barh(ranks, rewards, align="center")
 
-            ax.set_yticks(ranks)
-            ax.set_yticklabels([f"#{i}" for i in ranks])
-            ax.set_xlabel("Reward")
-            ax.set_title(
-                ctx.options.get("title", "EqGPT Reward Ranking")
-            )
-            ax.invert_yaxis()
-            ax.grid(True, linestyle="--", alpha=0.3)
+        ax.set_yticks(ranks)
+        ax.set_yticklabels([f"#{i}" for i in ranks])
+        ax.set_xlabel("Reward")
+        ax.set_title(
+            ctx.options.get("title", "EqGPT Reward Ranking")
+        )
+        ax.invert_yaxis()
+        ax.grid(True, linestyle="--", alpha=0.3)
 
-            # Zoom x-axis to show differences when rewards are close
-            r_min, r_max = float(rewards.min()), float(rewards.max())
-            margin = max((r_max - r_min) * 0.3, 0.005)
-            ax.set_xlim(r_min - margin, r_max + margin)
+        # Zoom x-axis to show differences when rewards are close
+        r_min, r_max = float(rewards.min()), float(rewards.max())
+        margin = max((r_max - r_min) * 0.3, 0.005)
+        ax.set_xlim(r_min - margin, r_max + margin)
 
-            _, path = self._resolve_output(ctx, "reward_ranking.png")
-            fig.savefig(
-                str(path),
-                dpi=ctx.options.get("dpi", 300),
-                bbox_inches="tight",
-            )
-        finally:
-            plt.close(fig)
+        _, path = self._resolve_output(ctx, "reward_ranking.png")
+        fig.savefig(
+            str(path),
+            dpi=ctx.options.get("dpi", 300),
+            bbox_inches="tight",
+        )
 
         return VizResult(
             intent="reward_ranking",
+            figure=fig,
             paths=[path],
             warnings=warnings or [],
             metadata={"n_bars": n_bars},

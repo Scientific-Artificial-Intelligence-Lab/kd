@@ -163,10 +163,6 @@ class DiscoverRegressionVizAdapter:
         fig.savefig(
             str(path), dpi=ctx.options.get("dpi", 300), bbox_inches="tight",
         )
-        try:
-            plt.close(fig)
-        except Exception:
-            pass
 
         residual_stats = {
             "mean_residual": float(np.nanmean(data.residuals)),
@@ -175,6 +171,7 @@ class DiscoverRegressionVizAdapter:
         }
         return VizResult(
             intent="parity",
+            figure=fig,
             paths=[path],
             metadata={"parity": data, "summary": residual_stats},
         )
@@ -228,10 +225,6 @@ class DiscoverRegressionVizAdapter:
         fig.savefig(
             str(path), dpi=ctx.options.get("dpi", 300), bbox_inches="tight",
         )
-        try:
-            plt.close(fig)
-        except Exception:
-            pass
 
         summary = {
             "mean": float(np.nanmean(data.residuals)),
@@ -241,6 +234,7 @@ class DiscoverRegressionVizAdapter:
         }
         return VizResult(
             intent="residual",
+            figure=fig,
             paths=[path],
             metadata={"residual_data": data, "summary": summary},
         )
@@ -286,13 +280,10 @@ class DiscoverRegressionVizAdapter:
         fig.savefig(
             str(path), dpi=ctx.options.get("dpi", 300), bbox_inches="tight",
         )
-        try:
-            plt.close(fig)
-        except Exception:
-            pass
 
         return VizResult(
             intent="search_evolution",
+            figure=fig,
             paths=[path],
             metadata={"reward_evolution": data},
         )
@@ -355,15 +346,11 @@ class DiscoverRegressionVizAdapter:
         fig.savefig(
             str(path), dpi=ctx.options.get("dpi", 300), bbox_inches="tight",
         )
-        try:
-            plt.close(fig)
-        except Exception:
-            pass
 
         metadata = {
             "epoches": epoches if epoches is not None else list(range(len(data))),
         }
-        return VizResult(intent="density", paths=[path], metadata=metadata)
+        return VizResult(intent="density", figure=fig, paths=[path], metadata=metadata)
 
     # ------------------------------------------------------------------
     # Expression tree
