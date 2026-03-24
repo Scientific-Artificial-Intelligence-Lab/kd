@@ -63,5 +63,11 @@ KD (Knowledge Discovery) 是一个从数值数据中自动发现偏微分方程 
   - [x] recover_row 始终可见 + Job ID 醒目显示 — SSE 断裂后用户可手动恢复 (2026-03-24)
   - [x] 页面恢复支持已完成任务 — 刷新后自动下载展示结果 (2026-03-24)
   - [x] 修复 `_train_outputs` 引用顺序 bug (2026-03-24)
+  - [x] JS 前端 SyntaxError 抑制 — MutationObserver 自动清除代理错误弹窗 (2026-03-24)
+  - [x] GPU 面板重构 — gpu_panel 统一管理，本地模型无空白横线 (2026-03-24)
+  - [x] 修复 result.json 双下载损坏 — 下载前清理 + raw_decode 容错 (2026-03-24)
+  - [x] check_btn 完成后不隐藏 + viz 错误提示友好化 (2026-03-24)
+  - [x] Job History — `/personal/.kd/` 记录历史，折叠面板展示 (2026-03-24)
+  - [x] 合并合作者 `3e650b6` — sympy 渲染、Regression viz、BrowserState 兼容 (2026-03-24)
   - [ ] 最终镜像发布 + 验证稳定性
   - [ ] 日志监控

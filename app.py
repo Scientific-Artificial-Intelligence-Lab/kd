@@ -57,6 +57,17 @@ MODEL_KEYS = {
     "KD_Discover_Regression": "regression",
 }
 
+# Friendly display names for the model dropdown.
+# Gradio Dropdown accepts (label, value) tuples: user sees label, code receives value.
+MODEL_DISPLAY = {
+    "KD_SGA": "SGA",
+    "KD_DLGA": "DLGA",
+    "KD_DSCV": "Discover",
+    "KD_DSCV_SPR": "Discover_SPR",
+    "KD_EqGPT": "EqGPT",
+    "KD_Discover_Regression": "Discover_Regression",
+}
+
 ACTIVE_DATASETS = sorted([
     name for name, info in PDE_REGISTRY.items()
     if info.get("status") != "pending"
@@ -95,17 +106,18 @@ VIZ_INTENTS = [
 # ── Helpers ────────────────────────────────────────────────────
 
 def get_compatible_models(dataset_name):
-    """Return model display names compatible with a given dataset."""
+    """Return (display_label, internal_key) tuples for the model dropdown."""
     if not dataset_name:
         return []
     # Regression datasets → only regression model
     if dataset_name in _REGRESSION_DATASETS:
-        return ["KD_Discover_Regression"]
+        return [(MODEL_DISPLAY["KD_Discover_Regression"], "KD_Discover_Regression")]
     info = PDE_REGISTRY.get(dataset_name, {})
     models_map = info.get("models", {})
     return [
-        display for display, key in MODEL_KEYS.items()
-        if models_map.get(key, False)
+        (MODEL_DISPLAY[name], name)
+        for name, reg_key in MODEL_KEYS.items()
+        if models_map.get(reg_key, False)
     ]
 
 
@@ -767,18 +779,18 @@ def build_app():
                             dlga_max_iter = gr.Number(value=3000, label="NN max iterations", precision=0)
                             dlga_sample = gr.Number(value=500, label="Sample points", precision=0)
 
-                        # -- DSCV / SPR shared params --
+                        # -- Discover / SPR shared params --
                         with gr.Group(visible=False) as dscv_group:
-                            gr.Markdown("**DSCV Parameters**")
+                            gr.Markdown("**Discover Parameters**")
                             dscv_binary = gr.Textbox(
                                 value=DSCV_BINARY_DEFAULT,
                                 label="Binary operators",
-                                info="DSCV: add, mul, diff ... | SPR: add_t, mul_t, diff_t ...",
+                                info="Discover: add, mul, diff ... | SPR: add_t, mul_t, diff_t ...",
                             )
                             dscv_unary = gr.Textbox(
                                 value=DSCV_UNARY_DEFAULT,
                                 label="Unary operators",
-                                info="DSCV: n2, n3, sin ... | SPR: n2_t ...",
+                                info="Discover: n2, n3, sin ... | SPR: n2_t ...",
                             )
                             dscv_batch = gr.Number(value=200, label="Samples per batch", precision=0)
                             dscv_epochs = gr.Number(value=5, label="Search epochs", precision=0)

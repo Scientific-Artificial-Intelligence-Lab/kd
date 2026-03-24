@@ -107,6 +107,52 @@
 | 2026-03-24 | Job ID 醒目显示 | `job_status` 格式改为 `>>> Job ID: xxx <<<`，确保用户在 SSE 错误前能记住 |
 | 2026-03-24 | 下载结果目录迁移 | `JOB_OUTPUT_DIR` 从 `/home/outputs` 改为 `/personal/outputs`，结果跨容器持久化 |
 | 2026-03-24 | 修复 `_train_outputs` 引用顺序 | 变量定义移至 `app.load()` 之前，修复 `UnboundLocalError` |
+| 2026-03-24 | JS 前端错误抑制 | MutationObserver 自动移除 Bohrium 代理导致的 SyntaxError 弹窗，无法修复代理本身 |
+| 2026-03-24 | GPU 面板重构 (`gpu_panel`) | job_status/check_btn/recover 合并为 `gr.Column`，本地模型时整体隐藏消除空白横线 |
+| 2026-03-24 | 修复 `result.json` 双下载损坏 | timer tick 与手动 Check 并发下载导致 JSON 追加；下载前清理 + `raw_decode` 容错 |
+| 2026-03-24 | Viz 错误提示友好化 | 不支持的 plot type 显示 "not yet implemented" 而非堆栈跟踪 |
+| 2026-03-24 | check_btn 完成后不隐藏 | job 完成/失败后 Check GPU Job 按钮保持可见，避免用户困惑 |
+| 2026-03-24 | Job History 功能 | `/personal/.kd/{uid}.history` 记录 GPU 任务历史；折叠面板展示最近 10 条，含方程结果 |
+| 2026-03-24 | 合并合作者 `3e650b6` | sympy 表达式渲染、Regression viz capabilities、BrowserState 兼容、viz adapter in-memory figure |
+
+## Post-Deploy Issues (2026-03-24 线上验证)
+
+上版本 (`9904f8e`) 部署后通过线上日志发现以下问题并逐一修复：
+
+### 1. SyntaxError 弹窗干扰用户
+- **现象**：页面显示 4 个 "Could not parse server response: SyntaxError: Unexpected token '<'" 错误
+- **根因**：Bohrium FC 代理偶发返回 HTML 而非 JSON，Gradio SSE 解析失败
+- **影响**：冷启动时加载事件并发高更容易触发；SSE 断裂后 timer 死掉
+- **修复**：`gr.Blocks(js=...)` 注入 MutationObserver，自动移除含 SyntaxError 的 DOM 节点
+- **局限**：只隐藏提示，不修复代理本身；如果 submit 首次响应就被代理拦截，Job ID 不会到达前端
+
+### 2. 刷新页面后任务和结果丢失
+- **现象**：用户刷新页面后 Job ID、状态、结果全部消失
+- **根因**：`/tmp/` 在 FC 容器重建时清空；BrowserState 可能未写入；`find_active_job` 只找运行中任务
+- **修复**：
+  - 持久化迁移到 `/personal/.kd/`（阿里云 NAS 挂载，跨容器存活）
+  - `_on_load_recover` 恢复链：NAS 文件 → BrowserState → API，已完成任务也触发下载
+- **验证**：日志确认 FC 容器重建后 BrowserState 第二级恢复成功
+
+### 3. Resume 入口不可见
+- **现象**：用户从未看到 "Enter Job ID to resume" 输入框
+- **根因**：`_on_load_recover` 和所有 GPU 路径返回 `recover_row=visible=False`
+- **修复**：GPU 面板 (`gpu_panel`) 包含 check_btn + recover 输入框，GPU 路径下整体显示
+
+### 4. 非 GPU 模型页面显示空白横线
+- **现象**：选择 KD_SGA/Regression 等本地模型时，结果区出现多条空白横线
+- **根因**：隐藏的 GPU 组件各自 `visible=False` 但仍占据空间
+- **修复**：GPU 组件合并为 `gpu_panel`（`gr.Column`），本地模型时整体隐藏
+
+### 5. result.json 解析失败 "Extra data"
+- **现象**：`Download failed: Extra data: line 13 column 2 (char 251)`，但实际有正确结果
+- **根因**：timer tick 与手动 Check GPU Job 并发触发 `client.app.job.download()`，SDK 追加写入导致文件包含两份 JSON
+- **修复**：下载前 `os.remove()` 清理旧文件 + `json.JSONDecoder().raw_decode()` 容错解析
+
+### 6. Check GPU Job 按钮消失
+- **现象**：多次点击 Check GPU Job 后按钮消失
+- **根因**：job 完成后返回 `check_btn=visible=False`，后续点击 job_id 已清空，按钮被隐藏
+- **修复**：gpu_panel 内组件不再单独控制 visible，由 gpu_panel 统一管理
 
 ## Known Issues
 
