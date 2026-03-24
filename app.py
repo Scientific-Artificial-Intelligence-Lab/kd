@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams["savefig.dpi"] = 200
 
 import numpy as np
 import gradio as gr
@@ -281,7 +282,7 @@ def _render_equation_fig(model, equation_text):
 
 # ── GPU job tracking ──────────────────────────────────────────
 
-_GPU_JOB_DIR = "/personal/.kd"
+_GPU_JOB_DIR = "/personal/.kd" if os.path.isdir("/personal") else "/tmp/.kd"
 os.makedirs(_GPU_JOB_DIR, exist_ok=True)
 
 
@@ -867,6 +868,7 @@ def build_app():
         title="KD - PDE Discovery",
         theme=gr.themes.Soft(),
         js=_ERROR_SUPPRESSION_JS,
+        css=".plot-capped img { max-height: 60vh; width: auto; }",
     ) as app:
 
         gr.Markdown(
@@ -1041,7 +1043,7 @@ def build_app():
                         label="Plot type (train a model first)",
                     )
                     viz_btn = gr.Button("Generate", variant="primary")
-                viz_plot = gr.Plot(label="Result")
+                viz_plot = gr.Plot(label="Result", elem_classes=["plot-capped"])
                 viz_msg = gr.Textbox(label="Status", interactive=False)
 
         # ── Event Wiring ─────────────────────────────────

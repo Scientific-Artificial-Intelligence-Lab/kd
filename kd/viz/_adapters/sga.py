@@ -461,6 +461,12 @@ class SGAVizAdapter:
         if context is None or details is None:
             return VizResult(intent='parity', warnings=['Equation details are unavailable; call fit() first.'])
 
+        # Skip parity when all terms were filtered out (u_t = 0).
+        # predicted_rhs may still be non-zero due to large feature magnitudes
+        # with tiny coefficients, which would produce a misleading plot.
+        if not list(details.nonzero_terms()):
+            return VizResult(intent='parity', warnings=['No non-zero terms in equation; parity plot not applicable.'])
+
         prediction = self._evaluate_equation_prediction(details, context)
         if prediction is None:
             return VizResult(intent='parity', warnings=['Failed to reconstruct equation prediction.'])
