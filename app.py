@@ -58,7 +58,6 @@ MODEL_KEYS = {
 }
 
 # Friendly display names for the model dropdown.
-# Gradio Dropdown accepts (label, value) tuples: user sees label, code receives value.
 MODEL_DISPLAY = {
     "KD_SGA": "SGA",
     "KD_DLGA": "DLGA",
@@ -67,6 +66,8 @@ MODEL_DISPLAY = {
     "KD_EqGPT": "EqGPT",
     "KD_Discover_Regression": "Discover_Regression",
 }
+# Reverse: display name → internal key
+_DISPLAY_TO_KEY = {v: k for k, v in MODEL_DISPLAY.items()}
 
 ACTIVE_DATASETS = sorted([
     name for name, info in PDE_REGISTRY.items()
@@ -106,16 +107,16 @@ VIZ_INTENTS = [
 # ── Helpers ────────────────────────────────────────────────────
 
 def get_compatible_models(dataset_name):
-    """Return (display_label, internal_key) tuples for the model dropdown."""
+    """Return friendly display names compatible with a given dataset."""
     if not dataset_name:
         return []
     # Regression datasets → only regression model
     if dataset_name in _REGRESSION_DATASETS:
-        return [(MODEL_DISPLAY["KD_Discover_Regression"], "KD_Discover_Regression")]
+        return [MODEL_DISPLAY["KD_Discover_Regression"]]
     info = PDE_REGISTRY.get(dataset_name, {})
     models_map = info.get("models", {})
     return [
-        (MODEL_DISPLAY[name], name)
+        MODEL_DISPLAY[name]
         for name, reg_key in MODEL_KEYS.items()
         if models_map.get(reg_key, False)
     ]
@@ -130,6 +131,7 @@ def on_dataset_change(dataset_name):
 
 def on_model_change(model_name):
     """Show/hide parameter groups and auto-switch operator presets."""
+    model_name = _DISPLAY_TO_KEY.get(model_name, model_name)
     sga_vis = model_name == "KD_SGA"
     dlga_vis = model_name == "KD_DLGA"
     dscv_vis = model_name in ("KD_DSCV", "KD_DSCV_SPR")
@@ -203,6 +205,29 @@ def _get_equation_text(model, model_name, result=None):
     elif result is not None:
         return result.get("expression", "(no expression found)")
     return "(unknown)"
+
+
+def _build_viz_proxy(result_data):
+    """Build a proxy model from result.json data for viz adapters.
+
+    The viz registry resolves adapters by ``type(target).__name__``,
+    so we create a dynamic class whose name matches the real model class.
+    """
+    model_name = result_data.get("model", "")
+    viz_keys = {"equations", "rewards", "best_equation", "reward_history", "parity_data"}
+    if not any(k in result_data for k in viz_keys):
+        return None
+    class_map = {
+        "eqgpt": "KD_EqGPT",
+        "dlga": "KD_DLGA",
+        "dscv_spr": "KD_DSCV_SPR",
+    }
+    cls_name = class_map.get(model_name, model_name)
+    # Dynamic class so type(proxy).__name__ == cls_name
+    ProxyClass = type(cls_name, (), {})
+    proxy = ProxyClass()
+    proxy.result_ = result_data
+    return proxy
 
 
 def _get_model_capabilities(model):
@@ -299,15 +324,94 @@ def _load_job_id(request=None):
         return None
 
 
+# ── GPU Job History ────────────────────────────────────────────
+
+_HISTORY_COLUMNS = ["Job ID", "Model", "Dataset", "Status", "Equation", "Submitted"]
+
+
+def _history_path(request=None):
+    return os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.history")
+
+
+def _append_history(job_id, model_name, dataset_name, request=None):
+    """Append a new job entry to per-user history."""
+    try:
+        path = _history_path(request)
+        entry = json.dumps({
+            "job_id": str(job_id), "model": model_name,
+            "dataset": dataset_name, "status": "Submitted",
+            "equation": "",
+            "submitted_at": time.strftime("%Y-%m-%d %H:%M"),
+        }, ensure_ascii=False)
+        with open(path, "a") as f:
+            f.write(entry + "\n")
+    except Exception as e:
+        print(f"[kd] _append_history failed: {e}", flush=True)
+
+
+def _update_history(job_id, status, equation="", request=None):
+    """Update status/equation for a job in history."""
+    try:
+        path = _history_path(request)
+        if not os.path.exists(path):
+            return
+        lines = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("job_id") == str(job_id):
+                    entry["status"] = status
+                    if equation:
+                        entry["equation"] = equation[:200]
+                lines.append(json.dumps(entry, ensure_ascii=False))
+        with open(path, "w") as f:
+            for l in lines[-50:]:
+                f.write(l + "\n")
+    except Exception as e:
+        print(f"[kd] _update_history failed: {e}", flush=True)
+
+
+def _load_history(request=None):
+    """Load recent GPU job history as list of lists for Dataframe."""
+    path = _history_path(request)
+    if not os.path.exists(path):
+        return []
+    try:
+        rows = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                rows.append([
+                    e.get("job_id", ""), e.get("model", ""),
+                    e.get("dataset", ""), e.get("status", ""),
+                    e.get("equation", "")[:60], e.get("submitted_at", ""),
+                ])
+        return rows[-10:][::-1]  # most recent first, max 10
+    except Exception:
+        return []
+
+
 # ── Training ───────────────────────────────────────────────────
 
 # 10-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
-#     job_state, job_status, check_btn, gpu_timer, browser_job_id, recover_row)
-# recover_row hidden — for local (non-GPU) training paths
-_NO_GPU = (None, gr.update(visible=False), gr.update(visible=False),
+#     job_state, job_status, check_btn, gpu_timer, browser_job_id, gpu_panel)
+# gpu_panel hidden — for local (non-GPU) training paths
+_NO_GPU = (None, gr.update(), gr.update(),
            gr.Timer(active=False), None, gr.update(visible=False))
-# recover_row visible — for GPU paths so user always has manual resume
-_NO_GPU_RESUME = (None, gr.update(visible=False), gr.update(visible=False),
+# gpu_panel visible — for GPU paths so user always has manual resume
+_NO_GPU_RESUME = (None, gr.update(), gr.update(),
                   gr.Timer(active=False), None, gr.update(visible=True))
 
 
@@ -332,6 +436,7 @@ def run_training(
     request: gr.Request = None,
 ):
     """Core training function — routes to local or GPU offline execution."""
+    model_name = _DISPLAY_TO_KEY.get(model_name, model_name)
     if not dataset_name or not model_name:
         return ("Please select dataset and model first.",
                 None, None, gr.update()) + _NO_GPU
@@ -521,16 +626,17 @@ def _submit_gpu_training(
     try:
         job_id = submit_gpu_job(runner_model, dataset_name, params, request)
         _save_job_id(job_id, request)
+        _append_history(job_id, model_name, dataset_name, request)
         return (
             f"GPU task submitted — Job ID: {job_id}\n"
             "Auto-polling every 30s. You can also click 'Check GPU Job'.",
             None, None, gr.update(),
             job_id,
-            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Status: Submitted"),
-            gr.update(visible=True),
+            gr.update(value=f">>> Job ID: {job_id} <<<  Status: Submitted"),
+            gr.update(),
             gr.Timer(active=True),
             job_id,                        # → browser_job_id (LocalStorage)
-            gr.update(visible=True),       # → show recover_row as fallback
+            gr.update(visible=True),       # → show gpu_panel
         )
     except Exception as e:
         return (f"GPU submit error:\n{e}\n\n{traceback.format_exc()}",
@@ -555,21 +661,21 @@ def check_gpu_status(job_id, browser_job_id=None, request: gr.Request = None):
                 f"Status check error: {exc}\nWill retry with job {safe_id}...",
                 None, None, gr.update(),
                 safe_id,
-                gr.update(visible=True, value=f">>> Job ID: {safe_id} <<<  Retrying..."),
-                gr.update(visible=True),
+                gr.update(value=f">>> Job ID: {safe_id} <<<  Retrying..."),
+                gr.update(),
                 gr.Timer(active=True),
-                safe_id,                       # keep browser_job_id
-                gr.update(visible=True),
+                safe_id,
+                gr.update(visible=True),       # → show gpu_panel
             )
-        # All recovery failed — show recover input
+        # All recovery failed — show gpu_panel with resume input
         return ("GPU job ID lost. Please enter your Job ID below to resume.",
                 None, None, gr.update(),
                 None,
-                gr.update(visible=False),
-                gr.update(visible=False),
+                gr.update(),
+                gr.update(),
                 gr.Timer(active=False),
                 None,
-                gr.update(visible=True),       # show recover_row
+                gr.update(visible=True),       # → show gpu_panel
                 )
 
 
@@ -602,12 +708,12 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
         except Exception as e:
             print(f"[kd] find_active_job failed: {e}", flush=True)
     if not job_id:
-        # Show recover input for user to enter job_id manually
+        # Show gpu_panel with resume input
         return ("GPU job ID lost. Please enter your Job ID below to resume.",
                 None, None, gr.update(),
                 None,
-                gr.update(visible=False),
-                gr.update(visible=False),
+                gr.update(),
+                gr.update(),
                 gr.Timer(active=False),
                 None,
                 gr.update(visible=True),
@@ -620,20 +726,21 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
         return (
             f"Status check failed: {e}", None, None, gr.update(),
             job_id,
-            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Error: {e}"),
-            gr.update(visible=True),
+            gr.update(value=f">>> Job ID: {job_id} <<<  Error: {e}"),
+            gr.update(),
             gr.Timer(active=True),
             job_id, gr.update(visible=True),
         )
 
     if status["failed"]:
         _save_job_id(None, request)
+        _update_history(job_id, "Failed", request=request)
         return (
             f"Job {job_id} failed: {status['status_text']}",
             None, None, gr.update(),
             None,
-            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  {status['status_text']}"),
-            gr.update(visible=False),
+            gr.update(value=f">>> Job ID: {job_id} <<<  {status['status_text']}"),
+            gr.update(),
             gr.Timer(active=False),
             None, gr.update(visible=True),
         )
@@ -644,9 +751,8 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
             f"Job {job_id} still running... ({status['status_text']})",
             None, None, gr.update(),
             job_id,
-            gr.update(visible=True,
-                      value=f">>> Job ID: {job_id} <<<  {status['status_text']}  {elapsed}"),
-            gr.update(visible=True),
+            gr.update(value=f">>> Job ID: {job_id} <<<  {status['status_text']}  {elapsed}"),
+            gr.update(),
             gr.Timer(active=True),
             job_id, gr.update(visible=True),
         )
@@ -656,6 +762,7 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
     try:
         result_data, save_dir = download_result(job_id, request)
         equation = result_data.get("equation", "(unknown)")
+        _update_history(job_id, "Finished", equation, request)
 
         eq_fig = None
         eq_img = os.path.join(save_dir, "equation.png")
@@ -669,13 +776,18 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
             fig.tight_layout(pad=0)
             eq_fig = fig
 
+        # Build a proxy model object from result_data so viz adapters work
+        proxy_model = _build_viz_proxy(result_data)
+        viz_choices = _get_model_capabilities(proxy_model) if proxy_model else []
+        viz_update = gr.update(choices=viz_choices, value=viz_choices[0] if viz_choices else None)
+
         elapsed_s = result_data.get("elapsed_seconds", "?")
         return (
-            equation, eq_fig, None,
-            gr.update(choices=[], value=None),
+            equation, eq_fig, proxy_model,
+            viz_update,
             None,
-            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Finished ({elapsed_s}s)"),
-            gr.update(visible=False),
+            gr.update(value=f">>> Job ID: {job_id} <<<  Finished ({elapsed_s}s)"),
+            gr.update(),
             gr.Timer(active=False),
             None, gr.update(visible=True),
         )
@@ -701,7 +813,10 @@ def run_viz(viz_type, model_state):
         try:
             viz_result = render(VizRequest(viz_type, model_state))
             if viz_result.warnings:
-                return None, "\n".join(viz_result.warnings)
+                warning_text = "\n".join(viz_result.warnings)
+                if "does not support" in warning_text:
+                    return None, f"Visualization '{viz_type}' is not yet implemented for this model."
+                return None, warning_text
 
             # Prefer in-memory figure
             if viz_result.figure is not None:
@@ -718,6 +833,9 @@ def run_viz(viz_type, model_state):
 
             return None, f"No output for '{viz_type}'."
         except Exception as e:
+            err_msg = str(e)
+            if "not support" in err_msg or "not registered" in err_msg:
+                return None, f"Visualization '{viz_type}' is not yet implemented for this model."
             return None, f"Visualization error: {e}"
         finally:
             configure(save_dir=None)
@@ -725,10 +843,30 @@ def run_viz(viz_type, model_state):
 
 # ── Gradio UI ──────────────────────────────────────────────────
 
+_ERROR_SUPPRESSION_JS = """
+() => {
+    const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType === 1) {
+                    const text = node.textContent || '';
+                    if (text.includes('SyntaxError') || text.includes('Unexpected token')) {
+                        node.remove();
+                    }
+                }
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+"""
+
+
 def build_app():
     with gr.Blocks(
         title="KD - PDE Discovery",
         theme=gr.themes.Soft(),
+        js=_ERROR_SUPPRESSION_JS,
     ) as app:
 
         gr.Markdown(
@@ -863,23 +1001,36 @@ def build_app():
                     with gr.Column(scale=2):
                         eq_text = gr.Textbox(label="Discovered Equation", lines=4, interactive=False)
                         eq_plot = gr.Plot(label="Equation Visualization")
-                        job_status = gr.Textbox(
-                            label="GPU Job Status", interactive=False, visible=False,
-                        )
-                        check_btn = gr.Button(
-                            "Check GPU Job", visible=False, variant="secondary",
-                        )
-                        gpu_timer = gr.Timer(30, active=False)
-                        if hasattr(gr, "BrowserState"):
-                            browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id")
-                        else:
-                            browser_job_id = gr.State(None)
-                        with gr.Row(visible=False) as recover_row:
-                            recover_input = gr.Number(
-                                label="Enter Job ID to resume",
-                                precision=0,
+                        with gr.Column(visible=False) as gpu_panel:
+                            job_status = gr.Textbox(
+                                label="GPU Job Status", interactive=False,
                             )
-                            recover_btn = gr.Button("Resume Tracking", variant="primary")
+                            check_btn = gr.Button(
+                                "Check GPU Job", variant="secondary",
+                            )
+                            gpu_timer = gr.Timer(30, active=False)
+                            if hasattr(gr, "BrowserState"):
+                                browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id")
+                            else:
+                                browser_job_id = gr.State(None)
+                            with gr.Row(equal_height=True):
+                                recover_input = gr.Number(
+                                    label="Enter GPU Job ID to resume",
+                                    precision=0, scale=3,
+                                )
+                                recover_btn = gr.Button(
+                                    "Resume Tracking", variant="primary",
+                                    scale=1, min_width=120,
+                                )
+
+                        with gr.Accordion("GPU Job History", open=False):
+                            history_df = gr.Dataframe(
+                                headers=_HISTORY_COLUMNS,
+                                datatype=["str"] * len(_HISTORY_COLUMNS),
+                                label="Recent GPU Jobs",
+                                interactive=False,
+                            )
+                            refresh_history_btn = gr.Button("Refresh", size="sm")
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -901,7 +1052,7 @@ def build_app():
         _train_outputs = [
             eq_text, eq_plot, model_state, viz_dd,
             job_state, job_status, check_btn, gpu_timer,
-            browser_job_id, recover_row,
+            browser_job_id, gpu_panel,
         ]
 
         # Initialize model list and parameter panel on page load.
@@ -927,7 +1078,7 @@ def build_app():
         _train_outputs = [
             eq_text, eq_plot, model_state, viz_dd,
             job_state, job_status, check_btn, gpu_timer,
-            browser_job_id, recover_row,
+            browser_job_id, gpu_panel,
         ]
 
         app.load(
@@ -961,7 +1112,7 @@ def build_app():
 
         cancel_btn.click(
             fn=lambda: ("Training cancelled.", None, None, gr.update(),
-                        None, gr.update(visible=False), gr.update(visible=False),
+                        None, gr.update(), gr.update(),
                         gr.Timer(active=False), None, gr.update(visible=False)),
             outputs=_train_outputs,
             cancels=[train_event],
@@ -994,6 +1145,13 @@ def build_app():
             inputs=[recover_input],
             outputs=_train_outputs,
         )
+
+        # GPU Job History refresh
+        def _refresh_history(request: gr.Request = None):
+            return _load_history(request)
+
+        refresh_history_btn.click(_refresh_history, outputs=[history_df])
+        app.load(_refresh_history, outputs=[history_df])
 
         viz_btn.click(
             run_viz,

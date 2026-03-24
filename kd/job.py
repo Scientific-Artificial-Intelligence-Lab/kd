@@ -313,14 +313,27 @@ def _bohrium_download(job_id, request, save_dir=None):
         save_dir = os.path.join(JOB_OUTPUT_DIR, f"kd_{job_id}")
     os.makedirs(save_dir, exist_ok=True)
 
+    # Remove stale result.json to prevent SDK append-corruption
+    result_path = os.path.join(save_dir, "result.json")
+    if os.path.exists(result_path):
+        os.remove(result_path)
+
     client.app.job.download(
         job_id, remote_target="outputs", save_path=save_dir
     )
 
-    result_path = os.path.join(save_dir, "result.json")
     if os.path.exists(result_path):
         with open(result_path) as f:
-            return json.load(f), save_dir
+            raw = f.read()
+        try:
+            return json.loads(raw), save_dir
+        except json.JSONDecodeError:
+            # Fallback: raw_decode handles "Extra data" from concat'd JSON
+            try:
+                obj, _ = json.JSONDecoder().raw_decode(raw)
+                return obj, save_dir
+            except json.JSONDecodeError:
+                return {"status": "error", "equation": "(result.json parse error)"}, save_dir
 
     return {"status": "error", "equation": "(result.json not found)"}, save_dir
 

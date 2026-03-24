@@ -154,7 +154,7 @@ RUNNERS = {
 # ── Output ────────────────────────────────────────────────────
 
 def save_output(output_dir, model_name, dataset_info, equation, elapsed,
-                params, error=None):
+                params, error=None, model=None):
     """Write ``result.json`` to the output directory."""
     os.makedirs(output_dir, exist_ok=True)
     result = {
@@ -167,6 +167,18 @@ def save_output(output_dir, model_name, dataset_info, equation, elapsed,
     }
     if error:
         result["error"] = str(error)
+    # Include model result_ data for viz reconstruction on Web side
+    if model is not None and hasattr(model, "result_"):
+        mr = model.result_
+        if isinstance(mr, dict):
+            for key in ("equations", "rewards", "best_equation", "best_reward",
+                        "reward_history", "parity_data"):
+                if key in mr:
+                    val = mr[key]
+                    # Convert numpy arrays to lists for JSON serialization
+                    if hasattr(val, "tolist"):
+                        val = val.tolist()
+                    result[key] = val
     path = os.path.join(output_dir, "result.json")
     with open(path, "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
@@ -238,7 +250,7 @@ def main():
         equation, model = RUNNERS[model_name](dataset, params)
         elapsed = time.time() - t0
 
-        save_output(output_dir, model_name, dataset_info, equation, elapsed, params)
+        save_output(output_dir, model_name, dataset_info, equation, elapsed, params, model=model)
         save_viz(output_dir, model)
 
         print(f"\nDone in {elapsed:.1f}s")
