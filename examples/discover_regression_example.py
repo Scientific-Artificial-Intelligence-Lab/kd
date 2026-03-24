@@ -21,8 +21,8 @@ KD Discover Regression — 替代 PySR 的符号回归
         binary_operators=["add", "sub", "mul", "div"],
         unary_operators=["inv"],
         n_iterations=50,
-        n_samples_per_batch=500,
-        seed=1,
+        n_samples_per_batch=1000,
+        seed=42,
         config_out={"task": {"parsimony_coeff": 0.005}},
     )
     result = model.fit(X, y, var_names=meta["var_names"])
@@ -72,7 +72,7 @@ def program_to_readable(program, var_names=None):
     return _build(tokens)
 
 
-def discover_equation(name, seed=1):
+def discover_equation(name, seed=42):
     """Run Discover regression on a named dataset."""
     X, y, meta = load_regression(name)
     var_names = meta["var_names"]
@@ -85,7 +85,7 @@ def discover_equation(name, seed=1):
     model = KD_Discover_Regression(
         binary_operators=["add", "sub", "mul", "div"],
         unary_operators=["inv"],
-        n_iterations=200,
+        n_iterations=50,
         n_samples_per_batch=1000,
         seed=seed,
         config_out={"task": {"parsimony_coeff": 0.005}},
