@@ -84,6 +84,9 @@ class DiscoverRegressionVizAdapter:
             )
 
         _, path = self._resolve_output(ctx, "equation.png")
+
+        # Try PNG file rendering (may silently fail on some environments)
+        png_ok = False
         try:
             render_latex_to_image(
                 latex,
@@ -91,15 +94,37 @@ class DiscoverRegressionVizAdapter:
                 font_size=ctx.options.get("font_size", 16),
                 show=False,
             )
+            png_ok = path.exists()
         except Exception as exc:
-            return VizResult(
-                intent="equation",
-                warnings=[f"Failed to render LaTeX equation: {exc}"],
-            )
+            logger.warning("Failed to render equation PNG: %s", exc)
+
+        # Always create in-memory figure (decoupled from PNG success)
+        fig = self._latex_figure(latex, ctx)
 
         return VizResult(
-            intent="equation", paths=[path], metadata={"latex": latex},
+            intent="equation",
+            figure=fig,
+            paths=[path] if png_ok else [],
+            metadata={"latex": latex},
         )
+
+    @staticmethod
+    def _latex_figure(latex: str, ctx: Any) -> Any:
+        """Create in-memory matplotlib figure with rendered LaTeX equation."""
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(10, 2))
+        ax.axis("off")
+        try:
+            ax.text(
+                0.5, 0.5, latex, fontsize=16,
+                ha="center", va="center", transform=ax.transAxes,
+            )
+            fig.tight_layout()
+        except Exception:
+            plt.close(fig)
+            return None
+        return fig
 
     # ------------------------------------------------------------------
     # Parity plot

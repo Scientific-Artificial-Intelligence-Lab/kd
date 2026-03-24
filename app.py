@@ -168,6 +168,24 @@ def _get_equation_text(model, model_name, result=None):
         return "\n".join(lines)
     elif model_name == "KD_Discover_Regression":
         if result is not None:
+            # Try sympy-based human-readable expression first
+            program = getattr(model, "best_program_", None)
+            if program is not None:
+                try:
+                    sympy_expr = program.sympy_expr
+                    if sympy_expr and len(sympy_expr) > 0:
+                        import sympy
+                        expr = sympy_expr[0]
+                        if not isinstance(expr, str):
+                            names = result.get("var_names", [])
+                            for i, name in enumerate(names):
+                                expr = expr.subs(
+                                    sympy.Symbol(f"x{i + 1}"),
+                                    sympy.Symbol(name),
+                                )
+                            return str(expr)
+                except Exception:
+                    pass
             return result.get("expression_named", result.get("expression", "(no expression found)"))
         return "(no expression found)"
     elif result is not None:
@@ -370,7 +388,9 @@ def _run_local(
             eq_text += f"\nTarget: {meta['target_name']}  |  Variables: {meta['var_names']}"
             fig = _render_equation_fig(model, _get_equation_text(model, model_name, result))
 
-            return (eq_text, fig, model, gr.update(choices=[], value=None)) + _NO_GPU
+            caps = _get_model_capabilities(model)
+            viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
+            return (eq_text, fig, model, viz_update) + _NO_GPU
 
         elif model_name == "KD_EqGPT":
             from kd.model.kd_eqgpt import KD_EqGPT
@@ -838,7 +858,10 @@ def build_app():
                             "Check GPU Job", visible=False, variant="secondary",
                         )
                         gpu_timer = gr.Timer(30, active=False)
-                        browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id")
+                        if hasattr(gr, "BrowserState"):
+                            browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id")
+                        else:
+                            browser_job_id = gr.State(None)
                         with gr.Row(visible=False) as recover_row:
                             recover_input = gr.Number(
                                 label="Enter Job ID to resume",
@@ -888,6 +911,12 @@ def build_app():
                 return check_gpu_status(jid, browser_jid, request)
             print("[kd] Page load: no job found, showing resume input", flush=True)
             return ("", None, None, gr.update()) + _NO_GPU_RESUME
+
+        _train_outputs = [
+            eq_text, eq_plot, model_state, viz_dd,
+            job_state, job_status, check_btn, gpu_timer,
+            browser_job_id, recover_row,
+        ]
 
         app.load(
             _on_load_recover,

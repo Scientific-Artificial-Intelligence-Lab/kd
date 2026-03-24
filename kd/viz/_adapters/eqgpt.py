@@ -276,6 +276,9 @@ class EqGPTVizAdapter:
 
         _, path = self._resolve_output(ctx, "equation.png")
         font_size = ctx.options.get("font_size", 18)
+
+        # Try PNG file rendering (may silently fail on some environments)
+        png_ok = False
         try:
             render_latex_to_image(
                 latex,
@@ -283,31 +286,17 @@ class EqGPTVizAdapter:
                 font_size=font_size,
                 show=False,
             )
+            png_ok = path.exists()
         except Exception as exc:
-            logger.warning("Failed to render EqGPT equation: %s", exc)
-            return VizResult(
-                intent="equation",
-                warnings=[
-                    f"Failed to render EqGPT equation: {exc}"
-                ],
-            )
+            logger.warning("Failed to render EqGPT equation PNG: %s", exc)
 
-        # render_latex_to_image may silently swallow errors; verify output
-        if not path.exists():
-            return VizResult(
-                intent="equation",
-                warnings=["Equation render produced no output file."],
-                metadata={"latex": latex},
-            )
-
-        # Build in-memory figure for callers that check VizResult.figure
-        # (e.g. app.py _render_equation_fig)
+        # Always create in-memory figure (decoupled from PNG success)
         fig = self._latex_figure(latex, font_size)
 
         return VizResult(
             intent="equation",
             figure=fig,
-            paths=[path],
+            paths=[path] if png_ok else [],
             metadata={"latex": latex},
         )
 
