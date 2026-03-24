@@ -101,6 +101,12 @@
 | 2026-03-24 | 动态 project_id 解析 | SDK 1.0.5 无 `list_project()`，改用 REST `openapi/v1/project/list` 自动获取用户项目 ID，支持多用户隔离 |
 | 2026-03-24 | 页面刷新任务恢复 | `app.load` 时检查 file/BrowserState 恢复未完成 GPU 任务轮询 |
 | 2026-03-24 | ForceHTTPS 条件激活 | 仅在 Host 含 `bohrium` 时注入 HTTPS headers，避免本地开发 SSL 问题 |
+| 2026-03-24 | 持久化存储迁移 `/tmp/` → `/personal/.kd/` | FC 容器重建时 `/tmp` 清空导致 job_id 丢失；`/personal/` 是 NAS 挂载，跨容器持久化 |
+| 2026-03-24 | recover_row 始终可见 | GPU 任务相关路径全部显示 Resume 输入框，SSE 断裂后用户有手动恢复入口 |
+| 2026-03-24 | 页面恢复支持已完成任务 | `_on_load_recover` 恢复链：NAS 文件 → BrowserState → API；已完成任务也触发下载展示 |
+| 2026-03-24 | Job ID 醒目显示 | `job_status` 格式改为 `>>> Job ID: xxx <<<`，确保用户在 SSE 错误前能记住 |
+| 2026-03-24 | 下载结果目录迁移 | `JOB_OUTPUT_DIR` 从 `/home/outputs` 改为 `/personal/outputs`，结果跨容器持久化 |
+| 2026-03-24 | 修复 `_train_outputs` 引用顺序 | 变量定义移至 `app.load()` 之前，修复 `UnboundLocalError` |
 
 ## Known Issues
 

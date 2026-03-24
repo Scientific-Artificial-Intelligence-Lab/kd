@@ -226,29 +226,46 @@ def _render_equation_fig(model, equation_text):
 
 # ── GPU job tracking ──────────────────────────────────────────
 
-_GPU_JOB_FILE = "/tmp/.kd_gpu_job_id"
+_GPU_JOB_DIR = "/personal/.kd"
+os.makedirs(_GPU_JOB_DIR, exist_ok=True)
 
 
-def _save_job_id(job_id):
-    """Persist job_id to file so it survives state loss."""
+def _get_uid(request=None):
+    """Extract user ID from request cookies."""
+    if request:
+        try:
+            from http.cookies import SimpleCookie
+            sc = SimpleCookie()
+            sc.load(request.headers.get("cookie", ""))
+            if "userId" in sc:
+                return sc["userId"].value
+        except Exception:
+            pass
+    return "default"
+
+
+def _save_job_id(job_id, request=None):
+    """Persist job_id to per-user file on NAS (/personal/)."""
     try:
-        with open(_GPU_JOB_FILE, "w") as f:
+        path = os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.job_id")
+        with open(path, "w") as f:
             f.write(str(job_id) if job_id else "")
-        print(f"[kd] _save_job_id({job_id}) → wrote to {_GPU_JOB_FILE}")
+        print(f"[kd] _save_job_id({job_id}) → {path}", flush=True)
     except Exception as e:
-        print(f"[kd] _save_job_id({job_id}) FAILED: {e}")
+        print(f"[kd] _save_job_id({job_id}) FAILED: {e}", flush=True)
 
 
-def _load_job_id():
-    """Load persisted job_id from file."""
+def _load_job_id(request=None):
+    """Load persisted job_id from per-user file."""
     try:
-        with open(_GPU_JOB_FILE) as f:
+        path = os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.job_id")
+        with open(path) as f:
             val = f.read().strip()
             result = int(val) if val else None
-        print(f"[kd] _load_job_id() → {result}")
+        print(f"[kd] _load_job_id() → {result}", flush=True)
         return result
     except Exception as e:
-        print(f"[kd] _load_job_id() FAILED: {e}")
+        print(f"[kd] _load_job_id() → None ({e})", flush=True)
         return None
 
 
@@ -256,8 +273,12 @@ def _load_job_id():
 
 # 10-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
 #     job_state, job_status, check_btn, gpu_timer, browser_job_id, recover_row)
+# recover_row hidden — for local (non-GPU) training paths
 _NO_GPU = (None, gr.update(visible=False), gr.update(visible=False),
            gr.Timer(active=False), None, gr.update(visible=False))
+# recover_row visible — for GPU paths so user always has manual resume
+_NO_GPU_RESUME = (None, gr.update(visible=False), gr.update(visible=False),
+                  gr.Timer(active=False), None, gr.update(visible=True))
 
 
 def run_training(
@@ -467,22 +488,21 @@ def _submit_gpu_training(
 
     try:
         job_id = submit_gpu_job(runner_model, dataset_name, params, request)
-        _save_job_id(job_id)
+        _save_job_id(job_id, request)
         return (
             f"GPU task submitted — Job ID: {job_id}\n"
-            f"⚠ Please save this ID: {job_id}\n"
             "Auto-polling every 30s. You can also click 'Check GPU Job'.",
             None, None, gr.update(),
             job_id,
-            gr.update(visible=True, value=f"Job {job_id}: Submitted"),
+            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Status: Submitted"),
             gr.update(visible=True),
             gr.Timer(active=True),
             job_id,                        # → browser_job_id (LocalStorage)
-            gr.update(visible=False),      # → hide recover_row
+            gr.update(visible=True),       # → show recover_row as fallback
         )
     except Exception as e:
         return (f"GPU submit error:\n{e}\n\n{traceback.format_exc()}",
-                None, None, gr.update()) + _NO_GPU
+                None, None, gr.update()) + _NO_GPU_RESUME
 
 
 def check_gpu_status(job_id, browser_job_id=None, request: gr.Request = None):
@@ -497,17 +517,17 @@ def check_gpu_status(job_id, browser_job_id=None, request: gr.Request = None):
         return _check_gpu_status_inner(job_id, browser_job_id, request)
     except Exception as exc:
         # Last-resort safety net — keep polling with existing job_id
-        safe_id = job_id or _load_job_id() or _to_int(browser_job_id)
+        safe_id = job_id or _load_job_id(request) or _to_int(browser_job_id)
         if safe_id:
             return (
                 f"Status check error: {exc}\nWill retry with job {safe_id}...",
                 None, None, gr.update(),
                 safe_id,
-                gr.update(visible=True, value=f"Retrying... ({type(exc).__name__})"),
+                gr.update(visible=True, value=f">>> Job ID: {safe_id} <<<  Retrying..."),
                 gr.update(visible=True),
                 gr.Timer(active=True),
                 safe_id,                       # keep browser_job_id
-                gr.update(visible=False),
+                gr.update(visible=True),
             )
         # All recovery failed — show recover input
         return ("GPU job ID lost. Please enter your Job ID below to resume.",
@@ -533,22 +553,22 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
     """Inner implementation of GPU status check."""
     # Recovery chain: Gradio state → file → browser LocalStorage → platform API
     if not job_id:
-        job_id = _load_job_id()
+        job_id = _load_job_id(request)
         if job_id:
-            print(f"[kd] Recovered job_id={job_id} from file")
+            print(f"[kd] Recovered job_id={job_id} from file", flush=True)
     if not job_id:
         job_id = _to_int(browser_job_id)
         if job_id:
-            _save_job_id(job_id)
-            print(f"[kd] Recovered job_id={job_id} from browser LocalStorage")
+            _save_job_id(job_id, request)
+            print(f"[kd] Recovered job_id={job_id} from browser LocalStorage", flush=True)
     if not job_id and _HAS_BOHRIUM and request:
         try:
             job_id = find_active_job(request)
             if job_id:
-                _save_job_id(job_id)
-                print(f"[kd] Recovered job_id={job_id} from platform API")
+                _save_job_id(job_id, request)
+                print(f"[kd] Recovered job_id={job_id} from platform API", flush=True)
         except Exception as e:
-            print(f"[kd] find_active_job failed: {e}")
+            print(f"[kd] find_active_job failed: {e}", flush=True)
     if not job_id:
         # Show recover input for user to enter job_id manually
         return ("GPU job ID lost. Please enter your Job ID below to resume.",
@@ -568,22 +588,22 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
         return (
             f"Status check failed: {e}", None, None, gr.update(),
             job_id,
-            gr.update(visible=True, value=f"Error: {e}"),
+            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Error: {e}"),
             gr.update(visible=True),
             gr.Timer(active=True),
-            job_id, gr.update(visible=False),
+            job_id, gr.update(visible=True),
         )
 
     if status["failed"]:
-        _save_job_id(None)
+        _save_job_id(None, request)
         return (
             f"Job {job_id} failed: {status['status_text']}",
             None, None, gr.update(),
             None,
-            gr.update(visible=True, value=f"Job {job_id}: {status['status_text']}"),
+            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  {status['status_text']}"),
             gr.update(visible=False),
             gr.Timer(active=False),
-            None, gr.update(visible=False),
+            None, gr.update(visible=True),
         )
 
     if not status["finished"]:
@@ -593,14 +613,14 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
             None, None, gr.update(),
             job_id,
             gr.update(visible=True,
-                      value=f"Job {job_id}: {status['status_text']}  {elapsed}"),
+                      value=f">>> Job ID: {job_id} <<<  {status['status_text']}  {elapsed}"),
             gr.update(visible=True),
             gr.Timer(active=True),
-            job_id, gr.update(visible=False),
+            job_id, gr.update(visible=True),
         )
 
     # ── Job finished → download & display ──
-    _save_job_id(None)
+    _save_job_id(None, request)
     try:
         result_data, save_dir = download_result(job_id, request)
         equation = result_data.get("equation", "(unknown)")
@@ -622,14 +642,14 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
             equation, eq_fig, None,
             gr.update(choices=[], value=None),
             None,
-            gr.update(visible=True, value=f"Job {job_id}: Finished ({elapsed_s}s)"),
+            gr.update(visible=True, value=f">>> Job ID: {job_id} <<<  Finished ({elapsed_s}s)"),
             gr.update(visible=False),
             gr.Timer(active=False),
-            None, gr.update(visible=False),
+            None, gr.update(visible=True),
         )
     except Exception as e:
-        return (f"Download failed: {e}",
-                None, None, gr.update()) + _NO_GPU
+        return (f"Download failed: {e}\nJob ID: {job_id}",
+                None, None, gr.update()) + _NO_GPU_RESUME
 
 
 # ── Visualization ──────────────────────────────────────────────
@@ -840,21 +860,34 @@ def build_app():
 
         # ── Event Wiring ─────────────────────────────────
 
-        # Initialize model list and parameter panel on page load.
-        # Two chained .load() calls: first updates the model dropdown,
-        # second shows the correct parameter group for the default model.
         _model_change_outputs = [sga_group, dlga_group, dscv_group, spr_group,
                                  eqgpt_group, reg_group, dscv_binary, dscv_unary]
+
+        _train_outputs = [
+            eq_text, eq_plot, model_state, viz_dd,
+            job_state, job_status, check_btn, gpu_timer,
+            browser_job_id, recover_row,
+        ]
+
+        # Initialize model list and parameter panel on page load.
         app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
         app.load(on_model_change, inputs=[model_dd], outputs=_model_change_outputs)
 
         # On page load, check if there's an unfinished GPU job to resume
         def _on_load_recover(browser_jid, request: gr.Request = None):
-            jid = _load_job_id() or _to_int(browser_jid)
+            jid = _load_job_id(request) or _to_int(browser_jid)
+            if not jid and _HAS_BOHRIUM and _is_bohrium_env(request):
+                try:
+                    jid = find_active_job(request)
+                    if jid:
+                        print(f"[kd] Page load: recovered job_id={jid} from API", flush=True)
+                except Exception as e:
+                    print(f"[kd] Page load: find_active_job failed: {e}", flush=True)
             if jid:
                 print(f"[kd] Page load: recovering job_id={jid}", flush=True)
                 return check_gpu_status(jid, browser_jid, request)
-            return ("", None, None, gr.update()) + _NO_GPU
+            print("[kd] Page load: no job found, showing resume input", flush=True)
+            return ("", None, None, gr.update()) + _NO_GPU_RESUME
 
         app.load(
             _on_load_recover,
@@ -869,12 +902,6 @@ def build_app():
             inputs=[model_dd],
             outputs=_model_change_outputs,
         )
-
-        _train_outputs = [
-            eq_text, eq_plot, model_state, viz_dd,
-            job_state, job_status, check_btn, gpu_timer,
-            browser_job_id, recover_row,
-        ]
 
         train_event = train_btn.click(
             run_training,
@@ -917,8 +944,8 @@ def build_app():
             jid = _to_int(user_job_id)
             if not jid:
                 return ("Please enter a valid Job ID.",
-                        None, None, gr.update()) + _NO_GPU
-            _save_job_id(jid)
+                        None, None, gr.update()) + _NO_GPU_RESUME
+            _save_job_id(jid, request)
             return check_gpu_status(jid, jid, request)
 
         recover_btn.click(

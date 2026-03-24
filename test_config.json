@@ -1,0 +1,11 @@
+{
+  "model": "dlga",
+  "dataset_name": "burgers",
+  "output_dir": "./outputs",
+  "params": {
+    "operators": "u,u_x,u_xx,u_xxx",
+    "epi": 0.1,
+    "max_iter": 3,
+    "sample": 500
+  }
+}
