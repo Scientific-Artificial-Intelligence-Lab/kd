@@ -23,7 +23,7 @@ import time
 
 KD_GPU_APP_KEY = os.environ.get("KD_GPU_APP_KEY", "kd-gpu")
 KD_GPU_SUB_MODEL = os.environ.get("KD_GPU_SUB_MODEL", "Options")
-KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "1077376"))
+KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "0"))
 JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/home/outputs")
 
 KD_JOB_BACKEND = os.environ.get("KD_JOB_BACKEND", "bohrium")
@@ -178,6 +178,7 @@ def get_credentials(request):
         raise ValueError("No cookies in request — session may have expired")
     sc = SimpleCookie()
     sc.load(cookie_str)
+    print(f"[kd] All cookie keys: {list(sc.keys())}", flush=True)
     if "appAccessKey" not in sc:
         raise ValueError("Missing 'appAccessKey' cookie — not on Bohrium or session expired")
     if "clientName" not in sc:
@@ -186,6 +187,48 @@ def get_credentials(request):
 
 
 # ── Bohrium public implementations ────────────────────────────
+
+def _get_user_project_id(client):
+    """Get the user's first available project ID from Bohrium.
+
+    Try SDK method first, then fall back to REST endpoint.
+    """
+    import json
+
+    # Strategy 1: try SDK method (in case it works in deployed env)
+    try:
+        if hasattr(client.user, "list_project"):
+            res = client.user.list_project()
+            print(f"[kd] SDK list_project response: {res}", flush=True)
+            data = res.get("data", res) if isinstance(res, dict) else res
+            items = data.get("items", []) if isinstance(data, dict) else []
+            if items:
+                pid = items[0].get("id") or items[0].get("project_id") or items[0].get("projectId")
+                if pid:
+                    print(f"[kd] Got project_id={pid} from SDK list_project", flush=True)
+                    return int(pid)
+        else:
+            print("[kd] SDK has no list_project method", flush=True)
+    except Exception as e:
+        print(f"[kd] SDK list_project failed: {e}", flush=True)
+
+    # Strategy 2: REST endpoint (confirmed working)
+    try:
+        r = client.get("openapi/v1/project/list", params={"page": 1, "pageSize": 5})
+        print(f"[kd] REST project/list: status={r.status_code} body={r.text[:500]}", flush=True)
+        if r.status_code == 200:
+            res = json.loads(r.text)
+            items = res.get("data", {}).get("items", [])
+            if items:
+                pid = items[0].get("id")
+                print(f"[kd] Got user project_id={pid} from REST", flush=True)
+                return int(pid)
+    except Exception as e:
+        print(f"[kd] REST project/list failed: {e}", flush=True)
+
+    print("[kd] All strategies to get project_id failed", flush=True)
+    return None
+
 
 def _bohrium_submit(model_name, dataset_name, params, request,
                     project_id=None, dataset_file=None):
@@ -201,12 +244,17 @@ def _bohrium_submit(model_name, dataset_name, params, request,
         for key, value in params.items():
             inputs[key] = value
 
-    pid = project_id or KD_GPU_PROJECT_ID
-    if not pid:
-        raise RuntimeError(
-            "No Bohrium project ID configured. "
-            "Set the KD_GPU_PROJECT_ID environment variable."
-        )
+    # Resolve project_id: explicit arg > env var > try user API
+    pid = project_id if project_id is not None else KD_GPU_PROJECT_ID
+    if pid == 0:
+        user_pid = _get_user_project_id(client)
+        if user_pid:
+            pid = user_pid
+        else:
+            raise RuntimeError(
+                "Cannot determine Bohrium project ID. "
+                "Please ensure you have at least one project on Bohrium."
+            )
 
     res = client.app.job.submit(
         app_key=KD_GPU_APP_KEY,
@@ -216,6 +264,10 @@ def _bohrium_submit(model_name, dataset_name, params, request,
         ext_config={"jobConfig": {"jobRead": 1}},
     )
     if isinstance(res, dict):
+        # API error response
+        if "error" in res and "code" in res:
+            msg = res["error"].get("msg", str(res["error"]))
+            raise RuntimeError(f"Bohrium API error: {msg}")
         if "data" in res:
             return res["data"]["jobId"]
         if "jobId" in res:

@@ -848,6 +848,20 @@ def build_app():
         app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
         app.load(on_model_change, inputs=[model_dd], outputs=_model_change_outputs)
 
+        # On page load, check if there's an unfinished GPU job to resume
+        def _on_load_recover(browser_jid, request: gr.Request = None):
+            jid = _load_job_id() or _to_int(browser_jid)
+            if jid:
+                print(f"[kd] Page load: recovering job_id={jid}", flush=True)
+                return check_gpu_status(jid, browser_jid, request)
+            return ("", None, None, gr.update()) + _NO_GPU
+
+        app.load(
+            _on_load_recover,
+            inputs=[browser_job_id],
+            outputs=_train_outputs,
+        )
+
         dataset_dd.change(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
 
         model_dd.change(
@@ -934,6 +948,10 @@ if __name__ == "__main__":
     class _ForceHTTPS:
         """Fix Mixed Content when running behind Bohrium's HTTPS proxy.
 
+        Only activates when the Host header contains ``bohrium`` (i.e. the
+        request comes through Bohrium's gateway).  Local development
+        (``localhost``) is left untouched to avoid SSL errors.
+
         1. Injects X-Forwarded-Proto into requests so Gradio generates
            HTTPS URLs in its frontend config (``root``).
         2. Adds Content-Security-Policy: upgrade-insecure-requests to
@@ -943,8 +961,19 @@ if __name__ == "__main__":
         """
         def __init__(self, app):
             self.app = app
+
+        @staticmethod
+        def _is_bohrium(headers):
+            """Return True if the request comes through Bohrium's proxy."""
+            for key, value in headers:
+                if key == b"host" and b"bohrium" in value:
+                    return True
+            return False
+
         async def __call__(self, scope, receive, send):
-            if scope["type"] in ("http", "websocket"):
+            if scope["type"] in ("http", "websocket") and self._is_bohrium(
+                scope.get("headers", [])
+            ):
                 headers = list(scope.get("headers", []))
                 headers.append((b"x-forwarded-proto", b"https"))
                 scope = dict(scope, scheme="https", headers=headers)
