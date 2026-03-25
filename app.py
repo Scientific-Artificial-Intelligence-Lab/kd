@@ -123,11 +123,23 @@ def get_compatible_models(dataset_name):
     ]
 
 
+# Per-dataset recommended params for Discover Regression.
+_REGRESSION_PRESETS = {
+    "tlc_cc_t1": {"seed": 0, "iterations": 50},
+    "tlc_cc_t2": {"seed": 42, "iterations": 50},
+}
+
+
 def on_dataset_change(dataset_name):
-    """Update model dropdown when dataset changes."""
+    """Update model dropdown and regression presets when dataset changes."""
     models = get_compatible_models(dataset_name)
     default = models[0] if models else None
-    return gr.update(choices=models, value=default)
+    preset = _REGRESSION_PRESETS.get(dataset_name, {})
+    return (
+        gr.update(choices=models, value=default),
+        gr.update(value=preset.get("seed", 0)),
+        gr.update(value=preset.get("iterations", 50)),
+    )
 
 
 def on_model_change(model_name):
@@ -431,7 +443,7 @@ def run_training(
     eqgpt_seed=0,
     # Regression
     reg_binary="add, sub, mul, div", reg_unary="inv",
-    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_iterations=50, reg_samples=1000, reg_seed=0,
     reg_parsimony=0.005,
     # Gradio injects this automatically
     request: gr.Request = None,
@@ -475,7 +487,7 @@ def _run_local(
     eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
     eqgpt_seed=0,
     reg_binary="add, sub, mul, div", reg_unary="inv",
-    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_iterations=50, reg_samples=1000, reg_seed=0,
     reg_parsimony=0.005,
 ):
     """Run model training in the current process (CPU or local GPU)."""
@@ -987,13 +999,13 @@ def build_app():
                                 value=50, label="Search iterations", precision=0,
                             )
                             reg_samples = gr.Number(
-                                value=500, label="Samples per batch", precision=0,
+                                value=1000, label="Samples per batch", precision=0,
                             )
                             reg_parsimony = gr.Number(
                                 value=0.005, label="Parsimony coefficient",
                                 info="Higher = simpler equations",
                             )
-                            reg_seed = gr.Number(value=1, label="Seed", precision=0)
+                            reg_seed = gr.Number(value=0, label="Seed", precision=0)
 
                         with gr.Row():
                             train_btn = gr.Button("Start Training", variant="primary", size="lg")
@@ -1058,7 +1070,7 @@ def build_app():
         ]
 
         # Initialize model list and parameter panel on page load.
-        app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
+        app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd, reg_seed, reg_iterations])
         app.load(on_model_change, inputs=[model_dd], outputs=_model_change_outputs)
 
         # On page load, check if there's an unfinished GPU job to resume
@@ -1089,7 +1101,11 @@ def build_app():
             outputs=_train_outputs,
         )
 
-        dataset_dd.change(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
+        dataset_dd.change(
+            on_dataset_change,
+            inputs=[dataset_dd],
+            outputs=[model_dd, reg_seed, reg_iterations],
+        )
 
         model_dd.change(
             on_model_change,
