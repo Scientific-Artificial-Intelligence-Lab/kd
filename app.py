@@ -9,6 +9,8 @@ Usage:
 import json
 import os
 import shutil
+import sys
+import threading
 import time
 import warnings
 import traceback
@@ -148,6 +150,8 @@ def on_model_change(model_name):
     eqgpt_vis = model_name == "KD_EqGPT"
     reg_vis = model_name == "KD_Discover_Regression"
 
+    gpu_vis = model_name in GPU_MODELS
+
     if model_name == "KD_DSCV_SPR":
         binary_val = SPR_BINARY_DEFAULT
         unary_val = SPR_UNARY_DEFAULT
@@ -164,6 +168,7 @@ def on_model_change(model_name):
         gr.update(visible=reg_vis),    # reg_group
         gr.update(value=binary_val),   # dscv_binary
         gr.update(value=unary_val),    # dscv_unary
+        gr.update(visible=gpu_vis),    # gpu_panel
     )
 
 
@@ -263,11 +268,17 @@ def _build_viz_proxy(result_data):
 
 
 def _get_model_capabilities(model):
-    """Return available viz capabilities for the current model."""
+    """Return available viz capabilities for the current model.
+
+    Filters the adapter's static capability set to only include intents
+    whose required data actually exists on *model*.  This prevents the
+    dropdown from showing options that always fail with a warning.
+    """
     from kd.viz.core import list_capabilities
     if model is None:
         return []
-    caps = list(list_capabilities(model))
+    caps = set(list_capabilities(model))
+
     # spr_* intents only work for KD_DSCV_SPR (PINN mode)
     try:
         from kd.model.kd_discover import KD_Discover_SPR as _SPR
@@ -275,7 +286,88 @@ def _get_model_capabilities(model):
     except ImportError:
         is_spr = False
     if not is_spr:
-        caps = [c for c in caps if not c.startswith("spr_")]
+        caps -= {c for c in caps if c.startswith("spr_")}
+
+    name = type(model).__name__
+
+    if name == "KD_DLGA":
+        # field_comparison / time_slices / residual require ctx.options
+        # that run_viz() never supplies → always fail in the UI
+        caps -= {"field_comparison", "time_slices", "residual"}
+        # parity / derivative_relationships need model.metadata
+        if not getattr(model, "metadata", None):
+            caps -= {"parity", "derivative_relationships"}
+        # optimization / search_evolution need evolution_history
+        if not getattr(model, "evolution_history", None):
+            caps -= {"optimization", "search_evolution"}
+        # validation_curve needs val_loss_history
+        if not getattr(model, "val_loss_history", None):
+            caps.discard("validation_curve")
+        # training_curve needs train_loss_history
+        if not getattr(model, "train_loss_history", None):
+            caps.discard("training_curve")
+
+    elif name in ("KD_Discover", "KD_DSCV_SPR"):
+        searcher = getattr(model, "searcher", None)
+        best_p = getattr(model, "best_p", None)
+        if best_p is None and searcher is not None:
+            best_p = getattr(searcher, "best_p", None)
+        # equation / residual / field_comparison / parity need best program
+        if not best_p:
+            caps -= {"equation", "residual", "field_comparison", "parity",
+                      "spr_residual", "spr_field_comparison"}
+        # search_evolution needs searcher.r_train
+        if not searcher or not getattr(searcher, "r_train", None):
+            caps.discard("search_evolution")
+        # density needs searcher.r_history
+        if not searcher or not getattr(searcher, "r_history", None):
+            caps.discard("density")
+        # tree needs searcher.plotter with tree_plot method
+        if not searcher or not hasattr(getattr(searcher, "plotter", None), "tree_plot"):
+            caps.discard("tree")
+
+    elif name == "KD_EqGPT":
+        result = getattr(model, "result_", None)
+        if not result or not isinstance(result, dict):
+            caps.clear()
+        else:
+            if not result.get("equations") or not result.get("rewards"):
+                caps.discard("reward_ranking")
+            if not result.get("reward_history"):
+                caps.discard("reward_evolution")
+            if not result.get("parity_data"):
+                caps.discard("parity")
+
+    elif name == "KD_Discover_Regression":
+        # equation needs best_program_
+        bp = getattr(model, "best_program_", None)
+        if bp is None:
+            bp = getattr(model, "best_p", None)
+            if isinstance(bp, list):
+                bp = bp[0] if bp else None
+        if not bp:
+            caps.discard("equation")
+        # parity / residual need data_class with X, y
+        dc = getattr(model, "data_class", None)
+        if not dc or getattr(dc, "y", None) is None or getattr(dc, "X", None) is None:
+            caps -= {"parity", "residual"}
+        searcher = getattr(model, "searcher", None)
+        if not searcher or not getattr(searcher, "r_train", None):
+            caps.discard("search_evolution")
+        if not searcher or not getattr(searcher, "r_history", None):
+            caps.discard("density")
+        if not searcher or not hasattr(getattr(searcher, "plotter", None), "tree_plot"):
+            caps.discard("tree")
+
+    elif name == "KD_SGA":
+        # field_comparison / time_slices / parity / residual need context_
+        if not getattr(model, "context_", None):
+            caps -= {"field_comparison", "time_slices", "parity", "residual"}
+
+    elif name == "KD_PySR":
+        if not hasattr(model, "X_train_") or not hasattr(model, "y_train_"):
+            caps -= {"parity", "residual"}
+
     return sorted(caps)
 
 
@@ -309,6 +401,75 @@ def _render_equation_fig(model, equation_text):
                 ha="center", va="center", transform=ax.transAxes, family="monospace")
         fig.tight_layout()
     return fig
+
+
+# ── Log capture for real-time training output ─────────────────
+
+class _LogTee:
+    """Thread-safe output tee that captures writes while forwarding to the
+    original stream.  Multiple instances can share the same buffer so that
+    stdout and stderr output is interleaved in capture order."""
+
+    def __init__(self, original, buf=None, lock=None):
+        self._orig = original
+        self._buf = buf if buf is not None else []
+        self._lock = lock if lock is not None else threading.Lock()
+
+    def write(self, s):
+        self._orig.write(s)
+        with self._lock:
+            self._buf.append(s)
+        return len(s)
+
+    def flush(self):
+        self._orig.flush()
+
+    def isatty(self):
+        return self._orig.isatty()
+
+    @property
+    def encoding(self):
+        return getattr(self._orig, "encoding", "utf-8")
+
+    def fileno(self):
+        return self._orig.fileno()
+
+    def get_log(self, max_lines=200):
+        """Return captured output as clean multi-line text."""
+        with self._lock:
+            raw = "".join(self._buf)
+        # Convert \r (tqdm carriage returns) into separate lines
+        parts = raw.replace("\r\n", "\n").split("\r")
+        lines = []
+        for p in parts:
+            for line in p.split("\n"):
+                stripped = line.rstrip()
+                if stripped:
+                    lines.append(stripped)
+        return "\n".join(lines[-max_lines:])
+
+
+def _log_progress(log_text, elapsed):
+    """Build 11-tuple for intermediate log yields during CPU training."""
+    if elapsed > 0:
+        mins, secs = divmod(int(elapsed), 60)
+        time_str = f"{mins}m{secs:02d}s" if mins else f"{secs}s"
+        status = f"Training in progress... ({time_str})"
+    else:
+        status = "Initializing..."
+    return (
+        status,                                    # eq_text
+        gr.update(),                               # eq_plot
+        gr.update(),                               # model_state
+        gr.update(),                               # viz_dd
+        gr.update(),                               # job_state
+        gr.update(),                               # job_status
+        gr.update(),                               # check_btn
+        gr.update(),                               # gpu_timer
+        gr.update(),                               # browser_job_id
+        gr.update(visible=False),                  # gpu_panel
+        gr.update(value=log_text, visible=True),   # train_log
+    )
 
 
 # ── GPU job tracking ──────────────────────────────────────────
@@ -701,7 +862,8 @@ def _clear_gpu_history(request=None):
     return gr.update(value=[])
 
 
-def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model):
+def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model,
+                     equation_latex=None):
     """Save CPU training result to /data/outputs/{cpu_job_id}/result.json."""
     try:
         from kd.runner import _serialize_viz_data
@@ -714,6 +876,8 @@ def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, mo
             "elapsed_seconds": round(elapsed, 2),
             "status": "success",
         }
+        if equation_latex:
+            result_data["equation_latex"] = equation_latex
         _serialize_viz_data(model, result_data)
         with open(os.path.join(save_dir, "result.json"), "w") as f:
             json.dump(result_data, f, indent=2, ensure_ascii=False,
@@ -755,15 +919,19 @@ def run_training(
     # Gradio injects this automatically
     request: gr.Request = None,
 ):
-    """Core training function — routes to local or GPU offline execution."""
+    """Core training function — generator yielding 11-tuples (10 train + log).
+
+    Routes to GPU offline submission or local CPU training with live log.
+    """
     model_name = _DISPLAY_TO_KEY.get(model_name, model_name)
     if not dataset_name or not model_name:
-        return ("Please select dataset and model first.",
-                None, None, gr.update()) + _NO_GPU
+        yield ("Please select dataset and model first.",
+                None, None, gr.update()) + _NO_GPU + (gr.update(visible=False),)
+        return
 
-    # GPU models on Bohrium → submit as offline task
+    # GPU models on Bohrium → submit as offline task (no log)
     if model_name in GPU_MODELS and _is_bohrium_env(request):
-        return _submit_gpu_training(
+        result = _submit_gpu_training(
             dataset_name, model_name,
             dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
             dscv_binary, dscv_unary, dscv_batch, dscv_epochs, dscv_seed,
@@ -771,9 +939,11 @@ def run_training(
             eqgpt_epochs, eqgpt_samples, eqgpt_cases, eqgpt_seed,
             request,
         )
+        yield result + (gr.update(visible=False),)
+        return
 
-    # All other cases (including local dev) → run in-process
-    return _run_local(
+    # All other cases (including local dev) → run in-process with live log
+    yield from _run_local(
         dataset_name, model_name,
         sga_run, sga_num, sga_depth, sga_seed,
         dlga_ops, dlga_epi, dlga_max_iter, dlga_sample,
@@ -799,13 +969,23 @@ def _run_local(
     reg_parsimony=0.005,
     request=None,
 ):
-    """Run model training in the current process (CPU or local GPU)."""
+    """Run model training in a background thread, yielding live log updates.
+
+    Generator that produces 11-tuples (10 train outputs + train_log).
+    """
     configure(save_dir=None)
     cpu_job_id = f"cpu_{int(time.time())}"
     t0 = time.time()
     _append_cpu_history(cpu_job_id, model_name, dataset_name, request)
 
-    try:
+    # Initial yield: show log panel
+    yield _log_progress("Initializing model...", 0)
+
+    # Results populated by the training thread
+    holder = {}  # 'output': 10-tuple for the final yield
+
+    def _do_train():
+        """Actual training — runs in a background thread."""
         model = None
         result = None
 
@@ -822,21 +1002,23 @@ def _run_local(
             )
             result = model.fit(X, y, var_names=meta["var_names"], verbose=True)
 
-            # Compute R² for display
             y_pred = model.predict(X)
             r2 = 1 - np.sum((y - y_pred) ** 2) / np.sum((y - np.mean(y)) ** 2)
-            eq_text = _get_equation_text(model, model_name, result)
+            eq_raw = _get_equation_text(model, model_name, result)
+            eq_text = eq_raw
             eq_text += f"\n\nR² = {r2:.6f}  |  MSE = {result['mse']:.4f}  |  Reward = {result['reward']:.6f}"
             eq_text += f"\nTarget: {meta['target_name']}  |  Variables: {meta['var_names']}"
-            fig = _render_equation_fig(model, _get_equation_text(model, model_name, result))
+            fig = _render_equation_fig(model, eq_raw)
 
             caps = _get_model_capabilities(model)
             print(f"[kd] _run_local(Regression) caps={caps}", flush=True)
             viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
             elapsed = round(time.time() - t0, 1)
-            _save_cpu_result(cpu_job_id, model_name, dataset_name, eq_text, elapsed, model)
+            _save_cpu_result(cpu_job_id, model_name, dataset_name, eq_text, elapsed, model,
+                             equation_latex=eq_raw)
             _update_cpu_history(cpu_job_id, "Finished", eq_text, f"{elapsed}s", request)
-            return (eq_text, fig, model, viz_update) + _NO_GPU
+            holder['output'] = (eq_text, fig, model, viz_update) + _NO_GPU
+            return
 
         elif model_name == "KD_EqGPT":
             from kd.model.kd_eqgpt import KD_EqGPT
@@ -899,8 +1081,9 @@ def _run_local(
                     sample_ratio=float(spr_sample_ratio),
                 )
             else:
-                return (f"Unknown model: {model_name}",
-                        None, None, gr.update()) + _NO_GPU
+                holder['output'] = (f"Unknown model: {model_name}",
+                                    None, None, gr.update()) + _NO_GPU
+                return
 
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
@@ -908,15 +1091,56 @@ def _run_local(
         print(f"[kd] _run_local({model_name}) caps={caps}", flush=True)
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
         elapsed = round(time.time() - t0, 1)
-        _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model)
+        _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model,
+                         equation_latex=equation)
         _update_cpu_history(cpu_job_id, "Finished", equation, f"{elapsed}s", request)
+        holder['output'] = (equation, fig, model, viz_update) + _NO_GPU
 
-        return (equation, fig, model, viz_update) + _NO_GPU
+    # ── Run training in background thread with log capture ──
+    shared_buf = []
+    shared_lock = threading.Lock()
+    out_tee = _LogTee(sys.stdout, shared_buf, shared_lock)
+    err_tee = _LogTee(sys.stderr, shared_buf, shared_lock)
+    old_out, old_err = sys.stdout, sys.stderr
+    error_info = {}
+    done = threading.Event()
 
-    except Exception as e:
-        _update_cpu_history(cpu_job_id, "Failed", str(e), "", request)
-        return (f"Training error:\n{e}\n\n{traceback.format_exc()}",
-                None, None, gr.update()) + _NO_GPU
+    def _worker():
+        try:
+            sys.stdout = out_tee
+            sys.stderr = err_tee
+            _do_train()
+        except Exception as exc:
+            error_info['exc'] = exc
+            error_info['tb'] = traceback.format_exc()
+        finally:
+            sys.stdout = old_out
+            sys.stderr = old_err
+            done.set()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+
+    # Yield log updates every 2 seconds while training runs
+    while not done.wait(timeout=2):
+        log = out_tee.get_log()
+        yield _log_progress(log or "(waiting for output...)", time.time() - t0)
+
+    # ── Training finished ──
+    log = out_tee.get_log()
+    elapsed = round(time.time() - t0, 1)
+
+    if error_info:
+        exc = error_info['exc']
+        tb = error_info['tb']
+        _update_cpu_history(cpu_job_id, "Failed", str(exc), "", request)
+        final_log = log + f"\n\nTraining failed ({elapsed}s): {exc}"
+        yield (f"Training error:\n{exc}\n\n{tb}",
+               None, None, gr.update()) + _NO_GPU + (gr.update(value=final_log),)
+        return
+
+    final_log = log + f"\n\nTraining complete ({elapsed}s)"
+    yield holder['output'] + (gr.update(value=final_log),)
 
 
 def _submit_gpu_training(
@@ -1209,6 +1433,17 @@ _ERROR_SUPPRESSION_JS = """
                 el.textContent = t.replace(/(\d+\.?\d*)\/\d+\.?\d*s/, '$1s');
             }
         });
+        // Hide progress timer on "GPU Job Status" component only
+        document.querySelectorAll('label span, .label-wrap span').forEach(lbl => {
+            if (lbl.textContent.trim() === 'GPU Job Status') {
+                const container = lbl.closest('.block, .gradio-textbox, [class*="textbox"]');
+                if (container) {
+                    container.querySelectorAll('.progress-text, .eta-bar, .progress-bar, .meta-text, .meta-text-center, [class*="progress"]').forEach(p => {
+                        p.style.display = 'none';
+                    });
+                }
+            }
+        });
     }, 500);
 }
 """
@@ -1353,6 +1588,10 @@ def build_app():
                     with gr.Column(scale=2):
                         eq_text = gr.Textbox(label="Discovered Equation", lines=4, interactive=False)
                         eq_plot = gr.Plot(label="Equation Visualization")
+                        train_log = gr.Textbox(
+                            label="Training Log", lines=10, max_lines=12,
+                            interactive=False, visible=False,
+                        )
                         with gr.Column(visible=False) as gpu_panel:
                             job_status = gr.Textbox(
                                 label="GPU Job Status", interactive=False,
@@ -1367,6 +1606,16 @@ def build_app():
                                 browser_job_id = gr.State(None)
 
                         with gr.Row(equal_height=True):
+                            cpu_recover_input = gr.Textbox(
+                                label="Enter CPU Job ID to resume",
+                                placeholder="cpu_1742000000",
+                                scale=3,
+                            )
+                            cpu_recover_btn = gr.Button(
+                                "Resume CPU-Job Tracking", variant="primary",
+                                scale=1, min_width=160,
+                            )
+                        with gr.Row(equal_height=True):
                             recover_input = gr.Number(
                                 label="Enter GPU Job ID to resume",
                                 precision=0, scale=3,
@@ -1380,6 +1629,7 @@ def build_app():
                             cpu_history_df = gr.Dataframe(
                                 headers=_HISTORY_COLUMNS,
                                 datatype=["str"] * len(_HISTORY_COLUMNS),
+                                column_widths=["160px", "100px", "100px", "80px", "200px", "80px", "130px"],
                                 label="Recent CPU Jobs",
                                 interactive=False,
                             )
@@ -1391,6 +1641,7 @@ def build_app():
                             history_df = gr.Dataframe(
                                 headers=_HISTORY_COLUMNS,
                                 datatype=["str"] * len(_HISTORY_COLUMNS),
+                                column_widths=["120px", "100px", "100px", "80px", "200px", "80px", "130px"],
                                 label="Recent GPU Jobs",
                                 interactive=False,
                             )
@@ -1414,7 +1665,8 @@ def build_app():
         # ── Event Wiring ─────────────────────────────────
 
         _model_change_outputs = [sga_group, dlga_group, dscv_group, spr_group,
-                                 eqgpt_group, reg_group, dscv_binary, dscv_unary]
+                                 eqgpt_group, reg_group, dscv_binary, dscv_unary,
+                                 gpu_panel]
 
         _train_outputs = [
             eq_text, eq_plot, model_state, viz_dd,
@@ -1452,6 +1704,7 @@ def build_app():
             _on_load_recover,
             inputs=[browser_job_id],
             outputs=_train_outputs,
+            show_progress="hidden",
         )
 
         dataset_dd.change(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
@@ -1462,7 +1715,13 @@ def build_app():
             outputs=_model_change_outputs,
         )
 
+        _train_outputs_with_log = _train_outputs + [train_log]
+
+        # Disable button immediately on click → run training → re-enable
         train_event = train_btn.click(
+            fn=lambda: gr.update(interactive=False, value="Training..."),
+            outputs=[train_btn],
+        ).then(
             run_training,
             inputs=[
                 dataset_dd, model_dd,
@@ -1474,14 +1733,19 @@ def build_app():
                 reg_binary, reg_unary, reg_iterations, reg_samples, reg_seed,
                 reg_parsimony,
             ],
-            outputs=_train_outputs,
+            outputs=_train_outputs_with_log,
+        ).then(
+            fn=lambda: gr.update(interactive=True, value="Start Training"),
+            outputs=[train_btn],
         )
 
         cancel_btn.click(
             fn=lambda: ("Training cancelled.", None, None, gr.update(),
                         None, gr.update(), gr.update(),
-                        gr.Timer(active=False), None, gr.update(visible=False)),
-            outputs=_train_outputs,
+                        gr.Timer(active=False), None, gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(interactive=True, value="Start Training")),
+            outputs=_train_outputs_with_log + [train_btn],
             cancels=[train_event],
         )
 
@@ -1513,6 +1777,42 @@ def build_app():
             _recover_job,
             inputs=[recover_input],
             outputs=_train_outputs,
+            show_progress="hidden",
+        )
+
+        # Recover CPU job results from saved result.json
+        def _recover_cpu_job(cpu_job_id, request: gr.Request = None):
+            cpu_job_id = (cpu_job_id or "").strip()
+            if not cpu_job_id:
+                return ("Please enter a valid CPU Job ID (e.g. cpu_1742000000).",
+                        None, None, gr.update()) + _NO_GPU
+            result_path = os.path.join(_CPU_OUTPUT_DIR, cpu_job_id, "result.json")
+            if not os.path.exists(result_path):
+                return (f"Result not found: {result_path}",
+                        None, None, gr.update()) + _NO_GPU
+            try:
+                with open(result_path) as f:
+                    result_data = json.load(f)
+                equation = result_data.get("equation", "(unknown)")
+                # equation_latex stores only the formula; fall back to first
+                # line of equation for old result.json files without it.
+                eq_latex = result_data.get("equation_latex") or equation.split("\n")[0]
+                proxy_model = _build_viz_proxy(result_data)
+                eq_fig = _render_equation_fig(proxy_model, eq_latex)
+                viz_choices = _get_model_capabilities(proxy_model) if proxy_model else []
+                viz_update = gr.update(choices=viz_choices, value=viz_choices[0] if viz_choices else None)
+                elapsed = result_data.get("elapsed_seconds", "?")
+                equation += f"\n\n[Restored from {cpu_job_id}, elapsed={elapsed}s]"
+                return (equation, eq_fig, proxy_model, viz_update) + _NO_GPU
+            except Exception as e:
+                return (f"Failed to load CPU job: {e}",
+                        None, None, gr.update()) + _NO_GPU
+
+        cpu_recover_btn.click(
+            _recover_cpu_job,
+            inputs=[cpu_recover_input],
+            outputs=_train_outputs,
+            show_progress="hidden",
         )
 
         # CPU Job History
