@@ -1,0 +1,46 @@
+[
+  {
+    "id": "wave_breaking",
+    "dir": "eqgpt_wave_breaking",
+    "model": "EqGPT",
+    "dataset": "wave_breaking",
+    "equation": "ut+uxxx+(uux)xx+ux",
+    "description": "EqGPT pre-trained model on wave-breaking data",
+    "available_plots": [
+      "equation",
+      "reward_ranking",
+      "reward_evolution",
+      "parity"
+    ]
+  },
+  {
+    "id": "tlc_cc_t1",
+    "dir": "regression_tlc_cc_t1",
+    "model": "Discover_Regression",
+    "dataset": "tlc_cc_t1",
+    "equation": "div,5.893557,add,0.066601,R_F",
+    "description": "TLC-CC: Rf vs start retention volume",
+    "available_plots": [
+      "equation",
+      "parity",
+      "residual",
+      "search_evolution",
+      "density"
+    ]
+  },
+  {
+    "id": "tlc_cc_t2",
+    "dir": "regression_tlc_cc_t2",
+    "model": "Discover_Regression",
+    "dataset": "tlc_cc_t2",
+    "equation": "div,r,add,mul,R_F,0.068772,0.00545",
+    "description": "TLC-CC: Rf vs end retention volume",
+    "available_plots": [
+      "equation",
+      "parity",
+      "residual",
+      "search_evolution",
+      "density"
+    ]
+  }
+]

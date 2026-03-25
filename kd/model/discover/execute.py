@@ -38,9 +38,7 @@ def python_execute(traversal, u, x):
                         intermediate_result = token(*[*terminals, x])
                     else:
                         intermediate_result = token(*terminals)
-                except Exception as e:
-                    print(e)
-                    print(f"illegal token {token.name} utilization")
+                except Exception:
                     return None
             if len(apply_stack) != 1:
                 apply_stack.pop()

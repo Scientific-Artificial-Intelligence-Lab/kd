@@ -19,6 +19,19 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+# Monkey-patch Gradio bug: additionalProperties=True causes
+# "argument of type 'bool' is not iterable" in get_api_info().
+try:
+    import gradio_client.utils as _gcu
+    _orig_json_schema = _gcu._json_schema_to_python_type
+    def _patched_json_schema(schema, defs=None):
+        if isinstance(schema, bool):
+            return "Any"
+        return _orig_json_schema(schema, defs)
+    _gcu._json_schema_to_python_type = _patched_json_schema
+except Exception:
+    pass
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -535,7 +548,7 @@ def _history_path(request=None):
     return os.path.join(_user_dir(request), "job_list.txt")
 
 
-def _append_history(job_id, model_name, dataset_name, request=None):
+def _append_history(job_id, model_name, dataset_name, params=None, request=None):
     """Append a new job entry to per-user history."""
     try:
         path = _history_path(request)
@@ -546,6 +559,7 @@ def _append_history(job_id, model_name, dataset_name, request=None):
             "dataset": dataset_name, "status": "Submitted",
             "equation": "", "elapsed": "",
             "submitted_at": time.strftime("%Y-%m-%d %H:%M"),
+            "params": params or {},
         }, ensure_ascii=False)
         with open(path, "a") as f:
             f.write(entry + "\n")
@@ -733,7 +747,7 @@ def _cpu_history_path(request=None):
     return os.path.join(_user_dir(request), "cpu_job_list.txt")
 
 
-def _append_cpu_history(job_id, model_name, dataset_name, request=None):
+def _append_cpu_history(job_id, model_name, dataset_name, params=None, request=None):
     """Append a new CPU job entry to per-user history."""
     try:
         path = _cpu_history_path(request)
@@ -743,6 +757,7 @@ def _append_cpu_history(job_id, model_name, dataset_name, request=None):
             "dataset": dataset_name, "status": "Submitted",
             "equation": "", "elapsed": "",
             "submitted_at": time.strftime("%Y-%m-%d %H:%M"),
+            "params": params or {},
         }, ensure_ascii=False)
         with open(path, "a") as f:
             f.write(entry + "\n")
@@ -812,8 +827,92 @@ def _load_cpu_history(request=None):
         return []
 
 
+def _get_cpu_job_params(job_id, request=None):
+    """Look up params for a CPU job from history file."""
+    path = _cpu_history_path(request)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if e.get("job_id") == job_id:
+                    return e.get("params", {})
+    except Exception:
+        pass
+    return {}
+
+
+def _cpu_history_choices(request=None):
+    """Build CheckboxGroup choices from CPU history: (label, job_id) pairs."""
+    path = _cpu_history_path(request)
+    if not os.path.exists(path):
+        return []
+    choices = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                jid = e.get("job_id", "")
+                model = e.get("model", "")
+                ds = e.get("dataset", "")
+                t = e.get("submitted_at", "")
+                status = e.get("status", "")
+                label = f"{jid}  |  {model}  |  {ds}  |  {status}  |  {t}"
+                choices.append((label, jid))
+    except Exception:
+        pass
+    return choices[-10:][::-1]
+
+
+def _delete_cpu_jobs(job_ids, request=None):
+    """Delete specific CPU jobs from history and their output directories."""
+    if not job_ids:
+        return
+    to_delete = set(job_ids)
+    path = _cpu_history_path(request)
+    if not os.path.exists(path):
+        return
+    try:
+        keep = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                jid = e.get("job_id", "")
+                if jid in to_delete:
+                    out_dir = os.path.join(_CPU_OUTPUT_DIR, jid)
+                    if os.path.isdir(out_dir):
+                        shutil.rmtree(out_dir)
+                        print(f"[kd] _delete_cpu_jobs: removed {out_dir}", flush=True)
+                else:
+                    keep.append(json.dumps(e, ensure_ascii=False))
+        with open(path, "w") as f:
+            for l in keep:
+                f.write(l + "\n")
+    except Exception as exc:
+        print(f"[kd] _delete_cpu_jobs failed: {exc}", flush=True)
+
+
 def _clear_cpu_history(request=None):
-    """Clear CPU job history and associated result files for current user."""
+    """Clear ALL CPU job history and associated result files."""
     path = _cpu_history_path(request)
     if os.path.exists(path):
         try:
@@ -860,6 +959,90 @@ def _clear_gpu_history(request=None):
         except Exception as exc:
             print(f"[kd] _clear_gpu_history failed: {exc}", flush=True)
     return gr.update(value=[])
+
+
+def _get_gpu_job_params(job_id, request=None):
+    """Look up params for a GPU job from history file."""
+    path = _history_path(request)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if e.get("job_id") == str(job_id):
+                    return e.get("params", {})
+    except Exception:
+        pass
+    return {}
+
+
+def _gpu_history_choices(request=None):
+    """Build CheckboxGroup choices from GPU history."""
+    path = _history_path(request)
+    if not os.path.exists(path):
+        return []
+    choices = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                jid = e.get("job_id", "")
+                model = e.get("model", "")
+                ds = e.get("dataset", "")
+                t = e.get("submitted_at", "")
+                status = e.get("status", "")
+                label = f"{jid}  |  {model}  |  {ds}  |  {status}  |  {t}"
+                choices.append((label, jid))
+    except Exception:
+        pass
+    return choices[-10:][::-1]
+
+
+def _delete_gpu_jobs(job_ids, request=None):
+    """Delete specific GPU jobs from history and their output directories."""
+    if not job_ids:
+        return
+    to_delete = {str(j) for j in job_ids}
+    path = _history_path(request)
+    if not os.path.exists(path):
+        return
+    try:
+        keep = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                jid = e.get("job_id", "")
+                if jid in to_delete:
+                    out_dir = os.path.join(_CPU_OUTPUT_DIR, jid)
+                    if os.path.isdir(out_dir):
+                        shutil.rmtree(out_dir)
+                        print(f"[kd] _delete_gpu_jobs: removed {out_dir}", flush=True)
+                else:
+                    keep.append(json.dumps(e, ensure_ascii=False))
+        with open(path, "w") as f:
+            for l in keep:
+                f.write(l + "\n")
+    except Exception as exc:
+        print(f"[kd] _delete_gpu_jobs failed: {exc}", flush=True)
 
 
 def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model,
@@ -976,7 +1159,30 @@ def _run_local(
     configure(save_dir=None)
     cpu_job_id = f"cpu_{int(time.time())}"
     t0 = time.time()
-    _append_cpu_history(cpu_job_id, model_name, dataset_name, request)
+
+    # Build params dict for history
+    if model_name == "KD_SGA":
+        params = {"run": sga_run, "num_terms": sga_num, "depth": sga_depth, "seed": sga_seed}
+    elif model_name == "KD_DLGA":
+        params = {"operators": dlga_ops, "epi": dlga_epi, "max_iter": dlga_max_iter, "sample": dlga_sample}
+    elif model_name == "KD_DSCV":
+        params = {"binary_ops": dscv_binary, "unary_ops": dscv_unary,
+                  "batch_size": dscv_batch, "epochs": dscv_epochs, "seed": dscv_seed}
+    elif model_name == "KD_DSCV_SPR":
+        params = {"binary_ops": dscv_binary, "unary_ops": dscv_unary,
+                  "batch_size": dscv_batch, "epochs": spr_epochs, "seed": dscv_seed,
+                  "sample_ratio": spr_sample_ratio}
+    elif model_name == "KD_EqGPT":
+        params = {"epochs": eqgpt_epochs, "samples": eqgpt_samples,
+                  "cases": eqgpt_cases, "seed": eqgpt_seed}
+    elif model_name == "KD_Discover_Regression":
+        params = {"binary_ops": reg_binary, "unary_ops": reg_unary,
+                  "iterations": reg_iterations, "samples": reg_samples,
+                  "seed": reg_seed, "parsimony": reg_parsimony}
+    else:
+        params = {}
+
+    _append_cpu_history(cpu_job_id, model_name, dataset_name, params, request)
 
     # Initial yield: show log panel
     yield _log_progress("Initializing model...", 0)
@@ -1184,7 +1390,7 @@ def _submit_gpu_training(
     try:
         job_id = submit_gpu_job(runner_model, dataset_name, params, request)
         _save_job_id(job_id, request)
-        _append_history(job_id, model_name, dataset_name, request)
+        _append_history(job_id, model_name, dataset_name, params, request)
         return (
             f"GPU task submitted — Job ID: {job_id}\n"
             "Auto-polling every 30s. You can also click 'Check GPU Job'.",
@@ -1449,6 +1655,101 @@ _ERROR_SUPPRESSION_JS = """
 """
 
 
+# ── Example Experiment Helpers ──────────────────────────────────
+
+_EXAMPLE_DIR = os.path.join(os.path.dirname(__file__), "example_experiment")
+
+
+def _load_example_index():
+    """Load example experiment index; returns list of dicts."""
+    index_path = os.path.join(_EXAMPLE_DIR, "index.json")
+    if not os.path.exists(index_path):
+        return []
+    try:
+        with open(index_path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _example_choices():
+    """Build dropdown choices from example index: (label, dir_name)."""
+    index = _load_example_index()
+    choices = []
+    for item in index:
+        model = item.get("model", "?")
+        dataset = item.get("dataset", "?")
+        label = f"{model} — {dataset}"
+        choices.append((label, item["dir"]))
+    return choices
+
+
+def _load_example_result(dir_name):
+    """Load result.json for an example experiment."""
+    result_path = os.path.join(_EXAMPLE_DIR, dir_name, "result.json")
+    if not os.path.exists(result_path):
+        return None
+    with open(result_path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _example_info_text(result_data):
+    """Format experiment info as readable text."""
+    if result_data is None:
+        return "No result data found."
+    lines = []
+    lines.append(f"Model:    {result_data.get('model', '?')}")
+    lines.append(f"Dataset:  {result_data.get('dataset', '?')}")
+    desc = result_data.get("description", "")
+    if desc:
+        lines.append(f"Description: {desc}")
+    eq = result_data.get("equation", "")
+    if eq:
+        target = result_data.get("target_name", "y")
+        lines.append(f"Equation: {target} = {eq}")
+    r2 = result_data.get("r2")
+    if r2 is not None:
+        lines.append(f"R²:       {r2}")
+    mse = result_data.get("mse")
+    if mse is not None:
+        lines.append(f"MSE:      {mse}")
+    reward = result_data.get("reward")
+    if reward is not None:
+        lines.append(f"Reward:   {reward}")
+    elapsed = result_data.get("elapsed_seconds")
+    if elapsed is not None:
+        lines.append(f"Elapsed:  {elapsed}s")
+    # Params
+    params = result_data.get("params", {})
+    if params:
+        lines.append("")
+        lines.append("Parameters:")
+        for k, v in params.items():
+            lines.append(f"  {k}: {v}")
+    return "\n".join(lines)
+
+
+def _example_plot_choices(result_data):
+    """Return list of available plot types for an example experiment."""
+    if result_data is None:
+        return []
+    return result_data.get("available_plots", [])
+
+
+def _load_example_plot(dir_name, plot_type):
+    """Load a pre-rendered PNG for an example experiment."""
+    # Check multiple possible subdirs (adapter may save under model subdir)
+    candidates = [
+        os.path.join(_EXAMPLE_DIR, dir_name, f"{plot_type}.png"),
+        os.path.join(_EXAMPLE_DIR, dir_name, "discover_regression", f"{plot_type}.png"),
+        os.path.join(_EXAMPLE_DIR, dir_name, "eqgpt", f"{plot_type}.png"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def build_app():
     with gr.Blocks(
         title="KD - PDE Discovery",
@@ -1633,9 +1934,21 @@ def build_app():
                                 label="Recent CPU Jobs",
                                 interactive=False,
                             )
+                            cpu_job_detail = gr.Textbox(
+                                label="Job Parameters",
+                                lines=3, max_lines=8,
+                                interactive=False,
+                                visible=False,
+                            )
+                            cpu_job_selector = gr.CheckboxGroup(
+                                choices=[], label="Select jobs to delete",
+                                visible=False,
+                            )
                             with gr.Row():
                                 refresh_cpu_history_btn = gr.Button("Refresh", size="sm")
-                                clear_cpu_history_btn = gr.Button("Clear History", size="sm", variant="stop")
+                                manage_cpu_history_btn = gr.Button("Manage", size="sm")
+                                delete_cpu_selected_btn = gr.Button("Delete Selected", size="sm", variant="stop", visible=False)
+                                clear_cpu_history_btn = gr.Button("Clear All", size="sm", variant="stop")
 
                         with gr.Accordion("GPU Job History", open=False):
                             history_df = gr.Dataframe(
@@ -1645,9 +1958,21 @@ def build_app():
                                 label="Recent GPU Jobs",
                                 interactive=False,
                             )
+                            gpu_job_detail = gr.Textbox(
+                                label="Job Parameters",
+                                lines=3, max_lines=8,
+                                interactive=False,
+                                visible=False,
+                            )
+                            gpu_job_selector = gr.CheckboxGroup(
+                                choices=[], label="Select jobs to delete",
+                                visible=False,
+                            )
                             with gr.Row():
                                 refresh_history_btn = gr.Button("Refresh", size="sm")
-                                clear_gpu_history_btn = gr.Button("Clear History", size="sm", variant="stop")
+                                manage_gpu_history_btn = gr.Button("Manage", size="sm")
+                                delete_gpu_selected_btn = gr.Button("Delete Selected", size="sm", variant="stop", visible=False)
+                                clear_gpu_history_btn = gr.Button("Clear All", size="sm", variant="stop")
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -1661,6 +1986,38 @@ def build_app():
                     viz_btn = gr.Button("Generate", variant="primary")
                 viz_plot = gr.Plot(label="Result")
                 viz_msg = gr.Textbox(label="Status", interactive=False)
+
+            # ── Tab 3: Example Results ────────────────────
+            with gr.TabItem("Example Results"):
+                gr.Markdown(
+                    "Pre-computed experiment results for demonstration. "
+                    "Select an experiment to view its equation and visualizations."
+                )
+                _ex_choices = _example_choices()
+                with gr.Row():
+                    ex_dd = gr.Dropdown(
+                        choices=_ex_choices,
+                        value=_ex_choices[0][1] if _ex_choices else None,
+                        label="Select Experiment",
+                        scale=3,
+                    )
+                    ex_plot_dd = gr.Dropdown(
+                        choices=[],
+                        value=None,
+                        label="Plot Type",
+                        scale=2,
+                    )
+                ex_info = gr.Textbox(
+                    label="Experiment Info",
+                    lines=12,
+                    max_lines=20,
+                    interactive=False,
+                )
+                ex_image = gr.Image(
+                    label="Visualization",
+                    type="filepath",
+                    height=500,
+                )
 
         # ── Event Wiring ─────────────────────────────────
 
@@ -1816,26 +2173,194 @@ def build_app():
         )
 
         # CPU Job History
-        def _refresh_cpu_history(request: gr.Request = None):
-            return _load_cpu_history(request)
+        _cpu_manage_outputs = [cpu_history_df, cpu_job_detail, cpu_job_selector, delete_cpu_selected_btn]
 
-        refresh_cpu_history_btn.click(_refresh_cpu_history, outputs=[cpu_history_df])
-        clear_cpu_history_btn.click(_clear_cpu_history, outputs=[cpu_history_df])
-        app.load(_refresh_cpu_history, outputs=[cpu_history_df])
+        def _refresh_cpu_history(request: gr.Request = None):
+            return (
+                _load_cpu_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            )
+
+        def _on_cpu_history_select(evt: gr.SelectData, request: gr.Request = None):
+            """Show params when user clicks a row in CPU history."""
+            row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
+            data = _load_cpu_history(request)
+            if not data or row_idx >= len(data):
+                return gr.update(visible=False)
+            job_id = data[row_idx][0]
+            params = _get_cpu_job_params(job_id, request)
+            if not params:
+                return gr.update(visible=True, value=f"[{job_id}]  No parameters recorded.")
+            lines = [f"[{job_id}]  Training Parameters:"]
+            for k, v in params.items():
+                lines.append(f"  {k}: {v}")
+            return gr.update(visible=True, value="\n".join(lines))
+
+        def _toggle_manage_cpu(request: gr.Request = None):
+            """Toggle the job selector CheckboxGroup."""
+            choices = _cpu_history_choices(request)
+            if not choices:
+                return (
+                    gr.update(visible=True, choices=[], value=[]),
+                    gr.update(visible=False),
+                )
+            return (
+                gr.update(visible=True, choices=choices, value=[]),
+                gr.update(visible=True),
+            )
+
+        def _delete_selected_cpu(selected, request: gr.Request = None):
+            """Delete selected jobs and refresh."""
+            if selected:
+                _delete_cpu_jobs(selected, request)
+            return (
+                _load_cpu_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            )
+
+        cpu_history_df.select(_on_cpu_history_select, outputs=[cpu_job_detail])
+        manage_cpu_history_btn.click(
+            _toggle_manage_cpu,
+            outputs=[cpu_job_selector, delete_cpu_selected_btn],
+        )
+        delete_cpu_selected_btn.click(
+            _delete_selected_cpu,
+            inputs=[cpu_job_selector],
+            outputs=_cpu_manage_outputs,
+        )
+        refresh_cpu_history_btn.click(_refresh_cpu_history, outputs=_cpu_manage_outputs)
+        clear_cpu_history_btn.click(
+            lambda request=None: (
+                _clear_cpu_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            ),
+            outputs=_cpu_manage_outputs,
+        )
+        app.load(lambda request=None: _load_cpu_history(request), outputs=[cpu_history_df])
 
         # GPU Job History
-        def _refresh_history(request: gr.Request = None):
-            return _load_history(request)
+        _gpu_manage_outputs = [history_df, gpu_job_detail, gpu_job_selector, delete_gpu_selected_btn]
 
-        refresh_history_btn.click(_refresh_history, outputs=[history_df])
-        clear_gpu_history_btn.click(_clear_gpu_history, outputs=[history_df])
-        app.load(_refresh_history, outputs=[history_df])
+        def _refresh_gpu_history(request: gr.Request = None):
+            return (
+                _load_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            )
+
+        def _on_gpu_history_select(evt: gr.SelectData, request: gr.Request = None):
+            """Show params when user clicks a row in GPU history."""
+            row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
+            data = _load_history(request)
+            if not data or row_idx >= len(data):
+                return gr.update(visible=False)
+            job_id = data[row_idx][0]
+            params = _get_gpu_job_params(job_id, request)
+            if not params:
+                return gr.update(visible=True, value=f"[{job_id}]  No parameters recorded.")
+            lines = [f"[{job_id}]  Training Parameters:"]
+            for k, v in params.items():
+                lines.append(f"  {k}: {v}")
+            return gr.update(visible=True, value="\n".join(lines))
+
+        def _toggle_manage_gpu(request: gr.Request = None):
+            choices = _gpu_history_choices(request)
+            if not choices:
+                return (
+                    gr.update(visible=True, choices=[], value=[]),
+                    gr.update(visible=False),
+                )
+            return (
+                gr.update(visible=True, choices=choices, value=[]),
+                gr.update(visible=True),
+            )
+
+        def _delete_selected_gpu(selected, request: gr.Request = None):
+            if selected:
+                _delete_gpu_jobs(selected, request)
+            return (
+                _load_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            )
+
+        history_df.select(_on_gpu_history_select, outputs=[gpu_job_detail])
+        manage_gpu_history_btn.click(
+            _toggle_manage_gpu,
+            outputs=[gpu_job_selector, delete_gpu_selected_btn],
+        )
+        delete_gpu_selected_btn.click(
+            _delete_selected_gpu,
+            inputs=[gpu_job_selector],
+            outputs=_gpu_manage_outputs,
+        )
+        refresh_history_btn.click(_refresh_gpu_history, outputs=_gpu_manage_outputs)
+        clear_gpu_history_btn.click(
+            lambda request=None: (
+                _clear_gpu_history(request),
+                gr.update(visible=False, value=""),
+                gr.update(visible=False, choices=[], value=[]),
+                gr.update(visible=False),
+            ),
+            outputs=_gpu_manage_outputs,
+        )
+        app.load(lambda request=None: _load_history(request), outputs=[history_df])
 
         viz_btn.click(
             run_viz,
             inputs=[viz_dd, model_state],
             outputs=[viz_plot, viz_msg],
         )
+
+        # ── Example Results Event Wiring ────────────────
+
+        def _on_example_select(dir_name):
+            """Load experiment info and plot choices when user selects an experiment."""
+            if not dir_name:
+                return ("No experiment selected.",
+                        gr.update(choices=[], value=None), None)
+            result_data = _load_example_result(dir_name)
+            info = _example_info_text(result_data)
+            plots = _example_plot_choices(result_data)
+            first_plot = plots[0] if plots else None
+            # Auto-load the first plot
+            img_path = _load_example_plot(dir_name, first_plot) if first_plot else None
+            return (info,
+                    gr.update(choices=plots, value=first_plot),
+                    img_path)
+
+        def _on_example_plot_change(plot_type, dir_name):
+            """Load the selected plot PNG."""
+            if not dir_name or not plot_type:
+                return None
+            return _load_example_plot(dir_name, plot_type)
+
+        ex_dd.change(
+            _on_example_select,
+            inputs=[ex_dd],
+            outputs=[ex_info, ex_plot_dd, ex_image],
+        )
+        ex_plot_dd.change(
+            _on_example_plot_change,
+            inputs=[ex_plot_dd, ex_dd],
+            outputs=[ex_image],
+        )
+
+        # Auto-load the first experiment on page load
+        if _ex_choices:
+            app.load(
+                _on_example_select,
+                inputs=[ex_dd],
+                outputs=[ex_info, ex_plot_dd, ex_image],
+            )
 
     return app
 
