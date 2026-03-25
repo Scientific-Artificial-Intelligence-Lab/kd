@@ -386,6 +386,7 @@ class DiscoverRegressionVizAdapter:
                 warnings=["Tree plotter did not return a graph object."],
             )
 
+        graph.attr(dpi=str(ctx.options.get("dpi", 200)))
         try:
             png_bytes = graph.pipe(format="png")
         except Exception as exc:

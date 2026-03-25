@@ -34,6 +34,7 @@ except Exception:
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams["savefig.dpi"] = 200
 
 import numpy as np
 import gradio as gr
@@ -146,11 +147,23 @@ def get_compatible_models(dataset_name):
     ]
 
 
+# Per-dataset recommended params for Discover Regression.
+_REGRESSION_PRESETS = {
+    "tlc_cc_t1": {"seed": 0, "iterations": 50},
+    "tlc_cc_t2": {"seed": 42, "iterations": 50},
+}
+
+
 def on_dataset_change(dataset_name):
-    """Update model dropdown when dataset changes."""
+    """Update model dropdown and regression presets when dataset changes."""
     models = get_compatible_models(dataset_name)
     default = models[0] if models else None
-    return gr.update(choices=models, value=default)
+    preset = _REGRESSION_PRESETS.get(dataset_name, {})
+    return (
+        gr.update(choices=models, value=default),
+        gr.update(value=preset.get("seed", 0)),
+        gr.update(value=preset.get("iterations", 50)),
+    )
 
 
 def on_model_change(model_name):
@@ -1858,6 +1871,7 @@ def build_app():
         title="KD - PDE Discovery",
         theme=gr.themes.Soft(),
         js=_ERROR_SUPPRESSION_JS,
+        css=".plot-capped img { max-height: 60vh; width: auto; }",
     ) as app:
 
         gr.Markdown(
@@ -2087,7 +2101,7 @@ def build_app():
                         label="Plot type (train a model first)",
                     )
                     viz_btn = gr.Button("Generate", variant="primary")
-                viz_plot = gr.Plot(label="Result")
+                viz_plot = gr.Plot(label="Result", elem_classes=["plot-capped"])
                 viz_msg = gr.Textbox(label="Status", interactive=False)
 
             # ── Tab 3: Example Results ────────────────────
@@ -2135,7 +2149,7 @@ def build_app():
         ]
 
         # Initialize model list and parameter panel on page load.
-        app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
+        app.load(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd, reg_seed, reg_iterations])
         app.load(on_model_change, inputs=[model_dd], outputs=_model_change_outputs)
 
         # On page load, check if there's an unfinished GPU job to resume
@@ -2167,7 +2181,11 @@ def build_app():
             show_progress="hidden",
         )
 
-        dataset_dd.change(on_dataset_change, inputs=[dataset_dd], outputs=[model_dd])
+        dataset_dd.change(
+            on_dataset_change,
+            inputs=[dataset_dd],
+            outputs=[model_dd, reg_seed, reg_iterations],
+        )
 
         model_dd.change(
             on_model_change,
