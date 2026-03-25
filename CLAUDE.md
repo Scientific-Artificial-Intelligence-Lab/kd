@@ -28,8 +28,8 @@
 
 ## Bash Usage
 
-- `cat`/`head`/`tail`/`grep`/`find` 已从自动批准列表移除，优先使用内置工具 `Read`/`Grep`/`Glob`
-- 内置工具不受权限控制，响应更快
+- `cat`/`head`/`tail`/`grep`/`find` 等常用命令已在 `settings.local.json` 的 allow 列表中，可直接使用
+- 内置工具 `Read`/`Grep`/`Glob` 同样可用，按场景选择即可
 
 ## Quick Reference
 

@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "/code/SR/refs/kd/app.py", line 24, in <module>
+    import gradio as gr
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio/__init__.py", line 3, in <module>
+    import gradio._simple_templates
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio/_simple_templates/__init__.py", line 1, in <module>
+    from .simpledropdown import SimpleDropdown
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio/_simple_templates/simpledropdown.py", line 6, in <module>
+    from gradio.components.base import Component, FormComponent
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio/components/__init__.py", line 1, in <module>
+    from gradio.components.annotated_image import AnnotatedImage
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio/components/annotated_image.py", line 7, in <module>
+    import gradio_client.utils as client_utils
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio_client/__init__.py", line 1, in <module>
+    from gradio_client.client import Client
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio_client/client.py", line 37, in <module>
+    from gradio_client import utils
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/gradio_client/utils.py", line 23, in <module>
+    import fsspec.asyn
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/fsspec/__init__.py", line 71, in <module>
+    process_entries()
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/site-packages/fsspec/__init__.py", line 45, in process_entries
+    eps = entry_points()
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/importlib/metadata.py", line 580, in entry_points
+    ordered = sorted(eps, key=by_group)
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/importlib/metadata.py", line 578, in <genexpr>
+    dist.entry_points for dist in distributions())
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/importlib/metadata.py", line 270, in entry_points
+    return EntryPoint._from_text(self.read_text('entry_points.txt'))
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/importlib/metadata.py", line 115, in _from_text
+    config = ConfigParser(delimiters='=')
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/configparser.py", line 613, in __init__
+    self._proxies[default_section] = SectionProxy(self, default_section)
+  File "/root/miniconda3/envs/kd-env/lib/python3.9/configparser.py", line 1249, in __init__
+    getter = functools.partial(self.get, _impl=getattr(parser, key))
+KeyboardInterrupt

@@ -20,7 +20,7 @@ KD Discover Regression — 替代 PySR 的符号回归
     model = KD_Discover_Regression(
         binary_operators=["add", "sub", "mul", "div"],
         unary_operators=["inv"],
-        n_iterations=50,
+        n_iterations=200,
         n_samples_per_batch=1000,
         seed=42,
         config_out={"task": {"parsimony_coeff": 0.005}},

@@ -243,18 +243,32 @@ def _build_viz_proxy(result_data):
     they need (e.g. ``model.searcher.r_train`` for Discover).
     """
     model_name = result_data.get("model", "")
-    # Check if any viz data was serialized
-    eqgpt_keys = {"equations", "rewards", "best_equation", "reward_history", "parity_data"}
-    has_viz = any(k in eqgpt_keys or k.startswith("viz_") for k in result_data)
-    if not has_viz:
+    if not model_name:
         return None
+
+    # Map model names (from both GPU runner and CPU training) to the class
+    # names the viz adapter registry knows about.
     class_map = {
+        # GPU runner names (lowercase)
         "eqgpt": "KD_EqGPT",
         "dlga": "KD_DLGA",
         "dscv_spr": "KD_Discover",
+        # CPU training names
+        "KD_DSCV": "KD_Discover",
+        "KD_DSCV_SPR": "KD_Discover",
     }
     cls_name = class_map.get(model_name, model_name)
-    ProxyClass = type(cls_name, (), {})
+
+    # Build proxy class with equation_latex() so the equation viz works
+    # for all models on resume (SGA, DLGA, Discover, etc.).
+    eq_latex = result_data.get("equation_latex") or result_data.get("equation", "")
+
+    class ProxyClass:
+        def equation_latex(self, *, include_coefficients=True, notation="subscript"):
+            return eq_latex
+
+    ProxyClass.__name__ = cls_name
+    ProxyClass.__qualname__ = cls_name
     proxy = ProxyClass()
 
     # EqGPT: store full result_data as result_
@@ -276,6 +290,37 @@ def _build_viz_proxy(result_data):
         key = f"viz_{attr}"
         if key in result_data:
             setattr(proxy, attr, result_data[key])
+
+    # SGA: restore context_ for field_comparison / parity / residual
+    has_ctx = any(k.startswith("viz_ctx_") for k in result_data)
+    if has_ctx:
+        import numpy as np
+        ctx_obj = type("ProblemContext", (), {})()
+        for attr in ("u", "u_origin", "ut", "ut_origin", "x", "t"):
+            val = result_data.get(f"viz_ctx_{attr}")
+            if val is not None:
+                setattr(ctx_obj, attr, np.asarray(val))
+        for attr in ("axis_order", "lhs_axis"):
+            val = result_data.get(f"viz_ctx_{attr}")
+            if val is not None:
+                setattr(ctx_obj, attr, val)
+        coords_1d = result_data.get("viz_ctx_coords_1d")
+        if coords_1d is not None:
+            ctx_obj.coords_1d = {k: np.asarray(v) for k, v in coords_1d.items()}
+        proxy.context_ = ctx_obj
+
+        # Restore best_equation_details_ with predicted_rhs for parity
+        pred_rhs = result_data.get("viz_ctx_predicted_rhs")
+        if pred_rhs is not None:
+            details = type("EquationDetails", (), {})()
+            details.predicted_rhs = np.asarray(pred_rhs)
+            proxy.best_equation_details_ = details
+        else:
+            # truthy sentinel so equation viz isn't stripped
+            proxy.best_equation_details_ = True
+    elif cls_name == "KD_SGA":
+        # Old result without context data — at least allow equation
+        proxy.best_equation_details_ = True
 
     return proxy
 
@@ -1047,7 +1092,7 @@ def _delete_gpu_jobs(job_ids, request=None):
 
 def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model,
                      equation_latex=None):
-    """Save CPU training result to /data/outputs/{cpu_job_id}/result.json."""
+    """Save CPU training result to /data/outputs/{cpu_job_id}/result.json + pre-rendered PNGs."""
     try:
         from kd.runner import _serialize_viz_data
         save_dir = os.path.join(_CPU_OUTPUT_DIR, cpu_job_id)
@@ -1062,12 +1107,51 @@ def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, mo
         if equation_latex:
             result_data["equation_latex"] = equation_latex
         _serialize_viz_data(model, result_data)
+
+        # Pre-render all available viz PNGs so resume can load them directly
+        saved_plots = _prerender_viz_pngs(model, save_dir)
+        if saved_plots:
+            result_data["available_plots"] = saved_plots
+
         with open(os.path.join(save_dir, "result.json"), "w") as f:
             json.dump(result_data, f, indent=2, ensure_ascii=False,
                       default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
-        print(f"[kd] _save_cpu_result({cpu_job_id}) → {save_dir}", flush=True)
+        print(f"[kd] _save_cpu_result({cpu_job_id}) → {save_dir}, plots={saved_plots}", flush=True)
     except Exception as e:
         print(f"[kd] _save_cpu_result failed: {e}", flush=True)
+
+
+def _prerender_viz_pngs(model, save_dir):
+    """Pre-render all available viz types as PNGs into save_dir."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    caps = _get_model_capabilities(model)
+    saved = []
+    for viz_type in caps:
+        try:
+            configure(save_dir=save_dir)
+            viz_result = render(VizRequest(viz_type, model))
+            if viz_result.warnings and "does not support" in "\n".join(viz_result.warnings):
+                continue
+            png_path = os.path.join(save_dir, f"{viz_type}.png")
+            if viz_result.figure is not None:
+                viz_result.figure.savefig(png_path, dpi=150, bbox_inches="tight")
+                plt.close(viz_result.figure)
+                saved.append(viz_type)
+            elif viz_result.paths:
+                # Adapter saved to file — copy/rename to standard location
+                import shutil
+                src = str(viz_result.paths[0])
+                if src != png_path and os.path.exists(src):
+                    shutil.copy2(src, png_path)
+                saved.append(viz_type)
+        except Exception as e:
+            print(f"[kd] _prerender_viz skip {viz_type}: {e}", flush=True)
+        finally:
+            configure(save_dir=None)
+    return saved
 
 
 # ── Training ───────────────────────────────────────────────────
@@ -1541,12 +1625,19 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
 
         # Build a proxy model object from result_data so viz adapters work
         proxy_model = _build_viz_proxy(result_data)
+        if proxy_model is not None:
+            proxy_model._viz_save_dir = save_dir
 
         # Render equation figure on CPU using the same viz adapter as GPU
         eq_fig = _render_equation_fig(proxy_model, equation)
-        viz_choices = _get_model_capabilities(proxy_model) if proxy_model else []
-        print(f"[kd] proxy_model={proxy_model}, viz_choices={viz_choices}", flush=True)
-        viz_update = gr.update(choices=viz_choices, value=viz_choices[0] if viz_choices else None)
+
+        # Use pre-rendered PNGs from GPU output if available
+        available = [os.path.splitext(f)[0] for f in os.listdir(save_dir)
+                     if f.endswith(".png")] if os.path.isdir(save_dir) else []
+        if not available:
+            available = _get_model_capabilities(proxy_model) if proxy_model else []
+        print(f"[kd] proxy_model={proxy_model}, viz_choices={available}", flush=True)
+        viz_update = gr.update(choices=available, value=available[0] if available else None)
 
         elapsed_s = result_data.get("elapsed_seconds", "?")
         return (
@@ -1578,7 +1669,19 @@ def run_viz(viz_type, model_state):
 
     print(f"[kd] run_viz(viz_type={viz_type!r}, model={type(model_state).__name__})", flush=True)
 
-    # Use a temp dir so adapters that save-to-file still work
+    # Check for pre-rendered PNG first (from _save_cpu_result or GPU output)
+    save_dir = getattr(model_state, "_viz_save_dir", None)
+    if save_dir:
+        png_path = os.path.join(save_dir, f"{viz_type}.png")
+        if os.path.exists(png_path):
+            img = mpimg.imread(png_path)
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.imshow(img)
+            ax.axis("off")
+            fig.tight_layout(pad=0)
+            return fig, f"'{viz_type}' loaded from pre-rendered image."
+
+    # Live rendering via viz adapter
     with tempfile.TemporaryDirectory() as tmpdir:
         configure(save_dir=tmpdir)
         try:
@@ -2151,13 +2254,31 @@ def build_app():
                 with open(result_path) as f:
                     result_data = json.load(f)
                 equation = result_data.get("equation", "(unknown)")
-                # equation_latex stores only the formula; fall back to first
-                # line of equation for old result.json files without it.
                 eq_latex = result_data.get("equation_latex") or equation.split("\n")[0]
                 proxy_model = _build_viz_proxy(result_data)
                 eq_fig = _render_equation_fig(proxy_model, eq_latex)
-                viz_choices = _get_model_capabilities(proxy_model) if proxy_model else []
-                viz_update = gr.update(choices=viz_choices, value=viz_choices[0] if viz_choices else None)
+
+                # Use pre-rendered PNGs if available; otherwise render+cache now
+                save_dir = os.path.join(_CPU_OUTPUT_DIR, cpu_job_id)
+                available = result_data.get("available_plots", [])
+                if not available:
+                    available = [os.path.splitext(f)[0] for f in os.listdir(save_dir)
+                                 if f.endswith(".png")]
+                if not available and proxy_model is not None:
+                    # No PNGs yet — render from proxy and cache for next time
+                    available = _prerender_viz_pngs(proxy_model, save_dir)
+                    if available:
+                        result_data["available_plots"] = available
+                        with open(result_path, "w") as f:
+                            json.dump(result_data, f, indent=2, ensure_ascii=False,
+                                      default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
+                        print(f"[kd] backfill PNGs for {cpu_job_id}: {available}", flush=True)
+                viz_update = gr.update(choices=available, value=available[0] if available else None)
+
+                # Tag proxy with save_dir so run_viz can find pre-rendered PNGs
+                if proxy_model is not None:
+                    proxy_model._viz_save_dir = save_dir
+
                 elapsed = result_data.get("elapsed_seconds", "?")
                 equation += f"\n\n[Restored from {cpu_job_id}, elapsed={elapsed}s]"
                 return (equation, eq_fig, proxy_model, viz_update) + _NO_GPU

@@ -200,6 +200,28 @@ def _serialize_viz_data(model, result):
         if val is not None:
             result[f"viz_{attr}"] = _to_list(val)
 
+    # ── SGA: context_ field data for field_comparison / parity / residual ──
+    ctx = getattr(model, "context_", None)
+    if ctx is not None:
+        for attr in ("u", "u_origin", "ut", "ut_origin", "x", "t"):
+            val = getattr(ctx, attr, None)
+            if val is not None:
+                result[f"viz_ctx_{attr}"] = _to_list(val)
+        # N-D context extras
+        for attr in ("axis_order", "lhs_axis"):
+            val = getattr(ctx, attr, None)
+            if val is not None:
+                result[f"viz_ctx_{attr}"] = _to_list(val)
+        coords_1d = getattr(ctx, "coords_1d", None)
+        if coords_1d is not None:
+            result["viz_ctx_coords_1d"] = {k: _to_list(v) for k, v in coords_1d.items()}
+        # Pre-compute predicted RHS for parity plot
+        details = getattr(model, "best_equation_details_", None)
+        if details is not None:
+            pred_rhs = getattr(details, "predicted_rhs", None)
+            if pred_rhs is not None:
+                result["viz_ctx_predicted_rhs"] = _to_list(pred_rhs)
+
 
 # ── Output ────────────────────────────────────────────────────
 
