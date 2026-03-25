@@ -53,6 +53,23 @@
 1. `configure(save_dir=...)` → 全局配置
 2. `render(VizRequest(kind, model))` → Registry 查 adapter → 绘图 → VizResult
 
+### GPU 离线任务路径 (Bohrium)
+```
+CPU Web Node (app.py)                    GPU Node (launching.py → runner.py)
+─────────────────────                    ──────────────────────────────────
+1. submit_gpu_job()  ──[Bohrium API]──→  2. entry_function() → model.fit_dataset()
+                                         3. save_output(): _serialize_viz_data()
+                                            → result.json (含 model/equation/viz_*)
+4. download_result() ←─[SDK download]──
+5. _build_viz_proxy(result_data)
+   → 动态 ProxyClass + result_ 属性
+6. _render_equation_fig(proxy, eq)
+   → viz adapter LaTeX 渲染
+7. _get_model_capabilities(proxy)
+   → Viz tab 下拉菜单
+```
+GPU 只传 JSON 数据（`result.json`），CPU 用代理模型 + 同一套 viz adapter 渲染所有图像。
+
 ## Key Design Decisions
 
 | Decision | Rationale |
@@ -105,7 +122,7 @@
 | 2026-03-24 | recover_row 始终可见 | GPU 任务相关路径全部显示 Resume 输入框，SSE 断裂后用户有手动恢复入口 |
 | 2026-03-24 | 页面恢复支持已完成任务 | `_on_load_recover` 恢复链：NAS 文件 → BrowserState → API；已完成任务也触发下载展示 |
 | 2026-03-24 | Job ID 醒目显示 | `job_status` 格式改为 `>>> Job ID: xxx <<<`，确保用户在 SSE 错误前能记住 |
-| 2026-03-24 | 下载结果目录迁移 | `JOB_OUTPUT_DIR` 从 `/home/outputs` 改为 `/personal/outputs`，结果跨容器持久化 |
+| 2026-03-24 | ~~下载结果目录迁移~~ | ~~`/home/outputs` → `/personal/outputs`~~ (后被撤回，`/personal/` 跨发布丢失) |
 | 2026-03-24 | 修复 `_train_outputs` 引用顺序 | 变量定义移至 `app.load()` 之前，修复 `UnboundLocalError` |
 | 2026-03-24 | JS 前端错误抑制 | MutationObserver 自动移除 Bohrium 代理导致的 SyntaxError 弹窗，无法修复代理本身 |
 | 2026-03-24 | GPU 面板重构 (`gpu_panel`) | job_status/check_btn/recover 合并为 `gr.Column`，本地模型时整体隐藏消除空白横线 |
@@ -117,7 +134,7 @@
 | 2026-03-24 | 修复 `launching.py` save_output 缺少 model 参数 | GPU 离线任务 result.json 不含 viz 数据，导致 Web 端 proxy model 为 None，Viz tab 不可用 |
 | 2026-03-24 | Viz 下拉菜单 `allow_custom_value` | Gradio FC 环境下 `gr.update(choices=...)` 不同步服务端状态，导致选择报错；加 `allow_custom_value=True` 绕过验证 |
 | 2026-03-24 | 持久化存储迁移 → `/data/` | `/personal/` 跨发布清空、`/share/` 生产容器为空、`/home/` 不完全持久；发现 `/data/` 是 App 专属 NAS（跨发布持久）|
-| 2026-03-24 | History 存储路径最终确定 | `/data/kd_users/{userId}/job_list.txt`（App NAS）；outputs 保留 `/home/outputs/{job_id}/` |
+| 2026-03-24 | History 存储路径最终确定 | `/data/kd_users/{userId}/job_list.txt`（App NAS）|
 | 2026-03-24 | 对齐官方 SDK 文档 | download API 优先 `web.sub_model.download` + fallback；`output_dir`/`remote_target` 统一为 `"output"`；output 目录去掉 `kd_` 前缀 |
 | 2026-03-24 | 修复 SDK 下载 `s/` 子目录问题 | Bohrium SDK 下载文件放在 `{save_dir}/s/` 下；`result.json` 和 `equation.png` 查找路径扩展到 `s/` |
 | 2026-03-24 | History 三层恢复机制 | 1) `job_list.txt` 主数据源 2) API 实时查询未完成任务 3) 扫描 `/home/outputs/` 目录兜底恢复 |
@@ -132,6 +149,11 @@
 | 2026-03-24 | 修复代理类名 registry 匹配 | `dscv_spr` 的 class_map 从 `KD_DSCV_SPR` 改为 `KD_Discover`，因为 registry 注册的是父类 `KD_Discover`，名称回退机制需类名完全匹配 |
 | 2026-03-24 | equation.png 4 路径搜索 | 扩展 `save_dir/` `s/` `s/output/` `s/outputs/` 四个候选路径，兼容 SDK 下载的嵌套目录结构 |
 | 2026-03-24 | GPU 镜像清理 5.7G | 删除 `/tmp/*.whl`(2.7G) + `/root/.cache/pip`(3G) + `.git`(30M) + `tests/docs/log/trash` 等，镜像从 13G 降至 7.3G |
+| 2026-03-24 | CPU 侧方程渲染 | 废弃 equation.png 文件搜索；CPU 用 `_build_viz_proxy()` 构建代理模型 + `_render_equation_fig()` 调用 viz adapter 的 LaTeX 渲染，GPU 只传 JSON 数据 |
+| 2026-03-24 | ndarray 序列化修复 | `_to_list()` 增加 `isinstance(val, dict)` 递归处理；`json.dump` 增加 `default=lambda o: o.tolist()` 兜底；修复 EqGPT parity_data 133500×2 的 TypeError |
+| 2026-03-24 | SystemExit 保护 | Bohrium SDK `APIResponseManager.__exit__` 在 401 时调用 `exit(1)` 杀死 ASGI 进程；在 job.py (3处) 和 app.py (4处) 添加 `except SystemExit` 捕获 |
+| 2026-03-24 | 友好模型显示名 | `MODEL_DISPLAY` 映射 KD_EqGPT→EqGPT 等，UI 文案更清晰 |
+| 2026-03-24 | 下载结果持久化 `/data/outputs` | `JOB_OUTPUT_DIR` 从 `/home/outputs`(容器 overlay) 改为 `/data/outputs`(App NAS)，结果跨发布持久 |
 
 ## Post-Deploy Issues (2026-03-24 线上验证)
 
@@ -151,6 +173,7 @@
   - ~~持久化迁移到 `/personal/.kd/`~~ → 最终迁移到 `/data/kd_users/`（App 专属 NAS，跨发布持久）
   - `_on_load_recover` 恢复链：NAS 文件 → BrowserState → API，已完成任务也触发下载
 - **存储路径排查**：`/personal/` 跨发布清空 | `/share/` 生产容器为空 | `/home/` 保存镜像时打包但不完全持久 | `/data/` ✅ App NAS 跨发布持久
+- **最终方案**：History → `/data/kd_users/`，下载结果 → `/data/outputs/`（均为 App NAS 持久存储）
 - **验证**：日志确认 FC 容器重建后 BrowserState 第二级恢复成功
 
 ### 3. Resume 入口不可见
@@ -187,3 +210,4 @@
 10. ~~SDK 下载结果在 `s/` 子目录，`result.json` 找不到~~ → 已修复（多路径搜索）
 11. `web.sub_model.download` 在生产 SDK 中不可用，始终 fallback 到 `app.job.download`（功能正常，待确认 SDK 版本差异）
 12. GPU 任务 DSCV_SPR 的 `spr_residual` / `spr_field_comparison` 两个 viz 能力不可用 — 需要完整数据集和模型内部对象，无法通过 JSON 序列化还原（设计限制，非 bug）
+13. Bohrium SDK `APIResponseManager.__exit__` 在 API 错误时调用 `exit(1)` — 当前通过 `except SystemExit` 保护，但属于 SDK 架构缺陷，升级 SDK 版本时需复验

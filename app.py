@@ -8,6 +8,7 @@ Usage:
 
 import json
 import os
+import shutil
 import time
 import warnings
 import traceback
@@ -562,6 +563,166 @@ def _load_history(request=None):
         return []
 
 
+# ── CPU Job History ───────────────────────────────────────────
+
+_CPU_OUTPUT_DIR = os.environ.get("KD_CPU_OUTPUT_DIR", "/data/outputs")
+
+
+def _cpu_history_path(request=None):
+    return os.path.join(_user_dir(request), "cpu_job_list.txt")
+
+
+def _append_cpu_history(job_id, model_name, dataset_name, request=None):
+    """Append a new CPU job entry to per-user history."""
+    try:
+        path = _cpu_history_path(request)
+        display_name = MODEL_DISPLAY.get(model_name, model_name)
+        entry = json.dumps({
+            "job_id": str(job_id), "model": display_name,
+            "dataset": dataset_name, "status": "Submitted",
+            "equation": "", "elapsed": "",
+            "submitted_at": time.strftime("%Y-%m-%d %H:%M"),
+        }, ensure_ascii=False)
+        with open(path, "a") as f:
+            f.write(entry + "\n")
+        print(f"[kd] _append_cpu_history({job_id}) OK", flush=True)
+    except Exception as e:
+        print(f"[kd] _append_cpu_history failed: {e}", flush=True)
+
+
+def _update_cpu_history(job_id, status, equation="", elapsed="", request=None):
+    """Update status/equation/elapsed for a CPU job in history."""
+    try:
+        path = _cpu_history_path(request)
+        if not os.path.exists(path):
+            return
+        lines = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("job_id") == str(job_id):
+                    entry["status"] = status
+                    if equation:
+                        entry["equation"] = equation[:200]
+                    if elapsed:
+                        entry["elapsed"] = str(elapsed)
+                lines.append(json.dumps(entry, ensure_ascii=False))
+        with open(path, "w") as f:
+            for l in lines[-50:]:
+                f.write(l + "\n")
+    except Exception as e:
+        print(f"[kd] _update_cpu_history failed: {e}", flush=True)
+
+
+def _load_cpu_history(request=None):
+    """Load CPU job history as list of lists for Dataframe."""
+    path = _cpu_history_path(request)
+    if not os.path.exists(path):
+        return []
+    try:
+        rows = []
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                rows.append([
+                    e.get("job_id", ""),
+                    e.get("model", ""),
+                    e.get("dataset", ""),
+                    e.get("status", ""),
+                    (e.get("equation", "") or "")[:60],
+                    e.get("elapsed", ""),
+                    e.get("submitted_at", ""),
+                ])
+        return rows[-10:][::-1]
+    except Exception as e:
+        print(f"[kd] _load_cpu_history failed: {e}", flush=True)
+        return []
+
+
+def _clear_cpu_history(request=None):
+    """Clear CPU job history and associated result files for current user."""
+    path = _cpu_history_path(request)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    jid = e.get("job_id", "")
+                    out_dir = os.path.join(_CPU_OUTPUT_DIR, jid)
+                    if os.path.isdir(out_dir):
+                        shutil.rmtree(out_dir)
+                        print(f"[kd] _clear_cpu_history: removed {out_dir}", flush=True)
+            open(path, "w").close()
+        except Exception as exc:
+            print(f"[kd] _clear_cpu_history failed: {exc}", flush=True)
+    return gr.update(value=[])
+
+
+def _clear_gpu_history(request=None):
+    """Clear GPU job history and associated result files for current user."""
+    path = _history_path(request)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    jid = e.get("job_id", "")
+                    out_dir = os.path.join(_CPU_OUTPUT_DIR, jid)
+                    if os.path.isdir(out_dir):
+                        shutil.rmtree(out_dir)
+                        print(f"[kd] _clear_gpu_history: removed {out_dir}", flush=True)
+            open(path, "w").close()
+        except Exception as exc:
+            print(f"[kd] _clear_gpu_history failed: {exc}", flush=True)
+    return gr.update(value=[])
+
+
+def _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model):
+    """Save CPU training result to /data/outputs/{cpu_job_id}/result.json."""
+    try:
+        from kd.runner import _serialize_viz_data
+        save_dir = os.path.join(_CPU_OUTPUT_DIR, cpu_job_id)
+        os.makedirs(save_dir, exist_ok=True)
+        result_data = {
+            "model": model_name,
+            "dataset": dataset_name,
+            "equation": equation,
+            "elapsed_seconds": round(elapsed, 2),
+            "status": "success",
+        }
+        _serialize_viz_data(model, result_data)
+        with open(os.path.join(save_dir, "result.json"), "w") as f:
+            json.dump(result_data, f, indent=2, ensure_ascii=False,
+                      default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
+        print(f"[kd] _save_cpu_result({cpu_job_id}) → {save_dir}", flush=True)
+    except Exception as e:
+        print(f"[kd] _save_cpu_result failed: {e}", flush=True)
+
+
 # ── Training ───────────────────────────────────────────────────
 
 # 10-value output tuple: (eq_text, eq_plot, model_state, viz_dd,
@@ -589,7 +750,7 @@ def run_training(
     eqgpt_seed=0,
     # Regression
     reg_binary="add, sub, mul, div", reg_unary="inv",
-    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_iterations=200, reg_samples=1000, reg_seed=42,
     reg_parsimony=0.005,
     # Gradio injects this automatically
     request: gr.Request = None,
@@ -621,6 +782,7 @@ def run_training(
         eqgpt_epochs, eqgpt_samples, eqgpt_cases, eqgpt_seed,
         reg_binary, reg_unary, reg_iterations, reg_samples, reg_seed,
         reg_parsimony,
+        request=request,
     )
 
 
@@ -633,11 +795,15 @@ def _run_local(
     eqgpt_epochs=5, eqgpt_samples=400, eqgpt_cases="N only (12 cases)",
     eqgpt_seed=0,
     reg_binary="add, sub, mul, div", reg_unary="inv",
-    reg_iterations=50, reg_samples=500, reg_seed=1,
+    reg_iterations=200, reg_samples=1000, reg_seed=42,
     reg_parsimony=0.005,
+    request=None,
 ):
     """Run model training in the current process (CPU or local GPU)."""
     configure(save_dir=None)
+    cpu_job_id = f"cpu_{int(time.time())}"
+    t0 = time.time()
+    _append_cpu_history(cpu_job_id, model_name, dataset_name, request)
 
     try:
         model = None
@@ -667,6 +833,9 @@ def _run_local(
             caps = _get_model_capabilities(model)
             print(f"[kd] _run_local(Regression) caps={caps}", flush=True)
             viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
+            elapsed = round(time.time() - t0, 1)
+            _save_cpu_result(cpu_job_id, model_name, dataset_name, eq_text, elapsed, model)
+            _update_cpu_history(cpu_job_id, "Finished", eq_text, f"{elapsed}s", request)
             return (eq_text, fig, model, viz_update) + _NO_GPU
 
         elif model_name == "KD_EqGPT":
@@ -738,10 +907,14 @@ def _run_local(
         caps = _get_model_capabilities(model)
         print(f"[kd] _run_local({model_name}) caps={caps}", flush=True)
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
+        elapsed = round(time.time() - t0, 1)
+        _save_cpu_result(cpu_job_id, model_name, dataset_name, equation, elapsed, model)
+        _update_cpu_history(cpu_job_id, "Finished", equation, f"{elapsed}s", request)
 
         return (equation, fig, model, viz_update) + _NO_GPU
 
     except Exception as e:
+        _update_cpu_history(cpu_job_id, "Failed", str(e), "", request)
         return (f"Training error:\n{e}\n\n{traceback.format_exc()}",
                 None, None, gr.update()) + _NO_GPU
 
@@ -1026,6 +1199,17 @@ _ERROR_SUPPRESSION_JS = """
         }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // Hide ETA estimate from progress display (keep elapsed time only)
+    // "processing | 473.4/669.65s" → "processing | 473.4s"
+    setInterval(() => {
+        document.querySelectorAll('.progress-text, .eta-bar, .timer').forEach(el => {
+            const t = el.textContent;
+            if (t && t.includes('/')) {
+                el.textContent = t.replace(/(\d+\.?\d*)\/\d+\.?\d*s/, '$1s');
+            }
+        });
+    }, 500);
 }
 """
 
@@ -1150,16 +1334,16 @@ def build_app():
                                 info="inv, sin, cos, sqrt, n2, n3, ...",
                             )
                             reg_iterations = gr.Number(
-                                value=50, label="Search iterations", precision=0,
+                                value=200, label="Search iterations", precision=0,
                             )
                             reg_samples = gr.Number(
-                                value=500, label="Samples per batch", precision=0,
+                                value=1000, label="Samples per batch", precision=0,
                             )
                             reg_parsimony = gr.Number(
                                 value=0.005, label="Parsimony coefficient",
                                 info="Higher = simpler equations",
                             )
-                            reg_seed = gr.Number(value=1, label="Seed", precision=0)
+                            reg_seed = gr.Number(value=42, label="Seed", precision=0)
 
                         with gr.Row():
                             train_btn = gr.Button("Start Training", variant="primary", size="lg")
@@ -1181,15 +1365,27 @@ def build_app():
                                 browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id", secret="kd_browser_v1")
                             else:
                                 browser_job_id = gr.State(None)
-                            with gr.Row(equal_height=True):
-                                recover_input = gr.Number(
-                                    label="Enter GPU Job ID to resume",
-                                    precision=0, scale=3,
-                                )
-                                recover_btn = gr.Button(
-                                    "Resume Tracking", variant="primary",
-                                    scale=1, min_width=120,
-                                )
+
+                        with gr.Row(equal_height=True):
+                            recover_input = gr.Number(
+                                label="Enter GPU Job ID to resume",
+                                precision=0, scale=3,
+                            )
+                            recover_btn = gr.Button(
+                                "Resume GPU-Job Tracking", variant="primary",
+                                scale=1, min_width=160,
+                            )
+
+                        with gr.Accordion("CPU Job History", open=False):
+                            cpu_history_df = gr.Dataframe(
+                                headers=_HISTORY_COLUMNS,
+                                datatype=["str"] * len(_HISTORY_COLUMNS),
+                                label="Recent CPU Jobs",
+                                interactive=False,
+                            )
+                            with gr.Row():
+                                refresh_cpu_history_btn = gr.Button("Refresh", size="sm")
+                                clear_cpu_history_btn = gr.Button("Clear History", size="sm", variant="stop")
 
                         with gr.Accordion("GPU Job History", open=False):
                             history_df = gr.Dataframe(
@@ -1198,7 +1394,9 @@ def build_app():
                                 label="Recent GPU Jobs",
                                 interactive=False,
                             )
-                            refresh_history_btn = gr.Button("Refresh", size="sm")
+                            with gr.Row():
+                                refresh_history_btn = gr.Button("Refresh", size="sm")
+                                clear_gpu_history_btn = gr.Button("Clear History", size="sm", variant="stop")
 
             # ── Tab 2: Visualization ─────────────────────
             with gr.TabItem("Visualization"):
@@ -1291,6 +1489,7 @@ def build_app():
             check_gpu_status,
             inputs=[job_state, browser_job_id],
             outputs=_train_outputs,
+            show_progress="hidden",
         )
 
         # Auto-poll GPU job status every 30 seconds.
@@ -1298,6 +1497,7 @@ def build_app():
             check_gpu_status,
             inputs=[job_state, browser_job_id],
             outputs=_train_outputs,
+            show_progress="hidden",
         )
 
         # Recover tracking from user-provided Job ID
@@ -1315,11 +1515,20 @@ def build_app():
             outputs=_train_outputs,
         )
 
-        # GPU Job History refresh
+        # CPU Job History
+        def _refresh_cpu_history(request: gr.Request = None):
+            return _load_cpu_history(request)
+
+        refresh_cpu_history_btn.click(_refresh_cpu_history, outputs=[cpu_history_df])
+        clear_cpu_history_btn.click(_clear_cpu_history, outputs=[cpu_history_df])
+        app.load(_refresh_cpu_history, outputs=[cpu_history_df])
+
+        # GPU Job History
         def _refresh_history(request: gr.Request = None):
             return _load_history(request)
 
         refresh_history_btn.click(_refresh_history, outputs=[history_df])
+        clear_gpu_history_btn.click(_clear_gpu_history, outputs=[history_df])
         app.load(_refresh_history, outputs=[history_df])
 
         viz_btn.click(

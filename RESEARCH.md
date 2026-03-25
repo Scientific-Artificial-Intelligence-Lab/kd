@@ -28,7 +28,8 @@ KD (Knowledge Discovery) 是一个从数值数据中自动发现偏微分方程 
 ## Current Phase
 
 项目 v1.0.0 已完成，核心功能稳定。当前目标：**集成到玻尔 (Bohrium) 线上平台**。
-采用 Gradio 自定义 Web App 方案（非 Launching 框架），已完成 `app.py` 基础版。
+采用 CPU/GPU 双节点架构：CPU 运行 Gradio Web App (`app.py`)，GPU 通过 Launching 框架执行离线训练任务。
+GPU 传回 JSON 数据（含 viz 字段），CPU 侧用代理模型 + viz adapter 渲染所有图像。
 
 ## TODO
 
@@ -84,7 +85,13 @@ KD (Knowledge Discovery) 是一个从数值数据中自动发现偏微分方程 
   - [x] GPU Viz 数据序列化 — `_serialize_viz_data()` 提取 Discover/DLGA/EqGPT 的 viz 数据写入 result.json (2026-03-24)
   - [x] CPU 代理模型增强 — `_build_viz_proxy()` 还原 `searcher.r_train`、DLGA loss/equation 组件，Viz tab 不再为空 (2026-03-24)
   - [x] 修复代理类名匹配 — `dscv_spr` → `KD_Discover`（匹配 registry 注册的父类名）(2026-03-24)
-  - [x] equation.png 4 路径搜索 — 兼容 SDK 下载的 `s/output/` 子目录 (2026-03-24)
+  - [x] ~~equation.png 4 路径搜索~~ → 已被 CPU 侧渲染替代 (2026-03-24)
   - [x] GPU 镜像清理 5.7G — 删除 /tmp whl、pip cache、.git、tests/docs/log 等 (2026-03-24)
-  - [ ] 最终镜像发布 + 验证稳定性
-  - [ ] 日志监控
+  - [x] CPU 侧方程渲染 — `_build_viz_proxy()` + `_render_equation_fig()` 替代 equation.png 文件搜索 (2026-03-24)
+  - [x] ndarray 序列化修复 — `_to_list()` 支持 dict 递归 + `json.dump` default 兜底 (2026-03-24)
+  - [x] SystemExit 保护 — SDK `exit(1)` 不再杀死 ASGI 进程 (job.py 3 处, app.py 4 处) (2026-03-24)
+  - [x] 友好模型显示名 — UI 文案 KD_EqGPT→EqGPT 等 (2026-03-24)
+  - [x] 下载结果持久化 — `JOB_OUTPUT_DIR` `/home/outputs` → `/data/outputs` (2026-03-24)
+  - [ ] 保存 CPU 镜像并发布新版本
+  - [ ] 保存 GPU 镜像并发布新版本
+  - [ ] 三模型全链路线上验证 (EqGPT / DSCV_SPR / DLGA)

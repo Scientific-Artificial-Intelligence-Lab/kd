@@ -24,7 +24,7 @@ import time
 KD_GPU_APP_KEY = os.environ.get("KD_GPU_APP_KEY", "kd-gpu")
 KD_GPU_SUB_MODEL = os.environ.get("KD_GPU_SUB_MODEL", "Options")
 KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "0"))
-JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/home/outputs")
+JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/data/outputs")
 
 KD_JOB_BACKEND = os.environ.get("KD_JOB_BACKEND", "bohrium")
 MOCK_DIR = "/tmp/kd_mock_jobs"
