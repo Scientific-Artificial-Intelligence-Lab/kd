@@ -24,7 +24,7 @@ import time
 KD_GPU_APP_KEY = os.environ.get("KD_GPU_APP_KEY", "kd-gpu")
 KD_GPU_SUB_MODEL = os.environ.get("KD_GPU_SUB_MODEL", "Options")
 KD_GPU_PROJECT_ID = int(os.environ.get("KD_GPU_PROJECT_ID", "0"))
-JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/personal/outputs")
+JOB_OUTPUT_DIR = os.environ.get("KD_JOB_OUTPUT_DIR", "/home/outputs")
 
 KD_JOB_BACKEND = os.environ.get("KD_JOB_BACKEND", "bohrium")
 MOCK_DIR = "/tmp/kd_mock_jobs"
@@ -125,7 +125,7 @@ def _mock_download(job_id, request, save_dir=None):
         meta = json.load(f)
 
     if save_dir is None:
-        save_dir = os.path.join(JOB_OUTPUT_DIR, f"kd_{job_id}")
+        save_dir = os.path.join(JOB_OUTPUT_DIR, f"{job_id}")
     os.makedirs(save_dir, exist_ok=True)
 
     result = {
@@ -238,7 +238,7 @@ def _bohrium_submit(model_name, dataset_name, params, request,
     inputs = {
         "model": model_name,
         "dataset_name": dataset_name or "burgers",
-        "output_dir": "./outputs",
+        "output_dir": "output",
     }
     if params:
         for key, value in params.items():
@@ -280,7 +280,15 @@ def _bohrium_submit(model_name, dataset_name, params, request,
 def _bohrium_find_active(request):
     access_key, app_key = get_credentials(request)
     client = _client(access_key, app_key)
-    res = client.app.job.list(page=1, page_size=5)
+    try:
+        res = client.app.job.list(page=1, page_size=5)
+    except SystemExit as e:
+        # SDK calls exit(1) on 401 — catch to prevent process termination
+        print(f"[kd] _bohrium_find_active: SDK called exit({e.code}), returning None", flush=True)
+        return None
+    except Exception as e:
+        print(f"[kd] _bohrium_find_active: job.list failed: {e}", flush=True)
+        return None
     data = res.get("data", res) if isinstance(res, dict) else res
     items = data.get("items", []) if isinstance(data, dict) else []
     for item in items:
@@ -293,7 +301,11 @@ def _bohrium_find_active(request):
 def _bohrium_check(job_id, request):
     access_key, app_key = get_credentials(request)
     client = _client(access_key, app_key)
-    info = client.app.job.detail(job_id)
+    try:
+        info = client.app.job.detail(job_id)
+    except SystemExit as e:
+        print(f"[kd] _bohrium_check: SDK called exit({e.code}), treating as error", flush=True)
+        raise RuntimeError(f"Bohrium SDK exited with code {e.code}") from e
     data = info.get("data", info) if isinstance(info, dict) else info
     code = data.get("status", -1) if isinstance(data, dict) else -1
     return {
@@ -310,7 +322,7 @@ def _bohrium_download(job_id, request, save_dir=None):
     client = _client(access_key, app_key)
 
     if save_dir is None:
-        save_dir = os.path.join(JOB_OUTPUT_DIR, f"kd_{job_id}")
+        save_dir = os.path.join(JOB_OUTPUT_DIR, f"{job_id}")
     os.makedirs(save_dir, exist_ok=True)
 
     # Remove stale result.json to prevent SDK append-corruption
@@ -318,13 +330,57 @@ def _bohrium_download(job_id, request, save_dir=None):
     if os.path.exists(result_path):
         os.remove(result_path)
 
-    client.app.job.download(
-        job_id, remote_target="outputs", save_path=save_dir
-    )
+    # Try official SDK method first (web.sub_model.download),
+    # fall back to app.job.download if not available.
+    downloaded = False
+    if hasattr(client, "web") and hasattr(client.web, "sub_model"):
+        try:
+            print(f"[kd] Trying web.sub_model.download(job_id={job_id})", flush=True)
+            client.web.sub_model.download(
+                job_id, remote_target="output", save_path=save_dir
+            )
+            downloaded = True
+            print(f"[kd] web.sub_model.download OK", flush=True)
+        except Exception as e:
+            print(f"[kd] web.sub_model.download failed: {e}, trying app.job.download", flush=True)
 
-    if os.path.exists(result_path):
+    if not downloaded:
+        print(f"[kd] Using app.job.download(job_id={job_id})", flush=True)
+        try:
+            client.app.job.download(
+                job_id, remote_target="output", save_path=save_dir
+            )
+        except SystemExit as e:
+            print(f"[kd] app.job.download: SDK called exit({e.code})", flush=True)
+            raise RuntimeError(f"Bohrium SDK exited with code {e.code} during download") from e
+        print(f"[kd] app.job.download OK", flush=True)
+
+    print(f"[kd] Download dir contents: {os.listdir(save_dir)}", flush=True)
+    s_dir = os.path.join(save_dir, "s")
+    if os.path.isdir(s_dir):
+        for root, dirs, files in os.walk(s_dir):
+            for fname in files:
+                print(f"[kd]   s/{os.path.relpath(os.path.join(root, fname), s_dir)}", flush=True)
+
+    # Bohrium SDK downloads files into an 's/' subdirectory.
+    # Search result.json in: save_dir, save_dir/s/, save_dir/s/output/
+    result_path = None
+    for candidate in [
+        os.path.join(save_dir, "result.json"),
+        os.path.join(save_dir, "s", "result.json"),
+        os.path.join(save_dir, "s", "output", "result.json"),
+        os.path.join(save_dir, "s", "outputs", "result.json"),
+    ]:
+        if os.path.exists(candidate):
+            result_path = candidate
+            break
+
+    print(f"[kd] result.json found at: {result_path}", flush=True)
+
+    if result_path:
         with open(result_path) as f:
             raw = f.read()
+        print(f"[kd] result.json size={len(raw)} bytes", flush=True)
         try:
             return json.loads(raw), save_dir
         except json.JSONDecodeError:
@@ -335,6 +391,7 @@ def _bohrium_download(job_id, request, save_dir=None):
             except json.JSONDecodeError:
                 return {"status": "error", "equation": "(result.json parse error)"}, save_dir
 
+    print(f"[kd] result.json not found in {save_dir}", flush=True)
     return {"status": "error", "equation": "(result.json not found)"}, save_dir
 
 

@@ -114,6 +114,24 @@
 | 2026-03-24 | check_btn 完成后不隐藏 | job 完成/失败后 Check GPU Job 按钮保持可见，避免用户困惑 |
 | 2026-03-24 | Job History 功能 | `/personal/.kd/{uid}.history` 记录 GPU 任务历史；折叠面板展示最近 10 条，含方程结果 |
 | 2026-03-24 | 合并合作者 `3e650b6` | sympy 表达式渲染、Regression viz capabilities、BrowserState 兼容、viz adapter in-memory figure |
+| 2026-03-24 | 修复 `launching.py` save_output 缺少 model 参数 | GPU 离线任务 result.json 不含 viz 数据，导致 Web 端 proxy model 为 None，Viz tab 不可用 |
+| 2026-03-24 | Viz 下拉菜单 `allow_custom_value` | Gradio FC 环境下 `gr.update(choices=...)` 不同步服务端状态，导致选择报错；加 `allow_custom_value=True` 绕过验证 |
+| 2026-03-24 | 持久化存储迁移 → `/data/` | `/personal/` 跨发布清空、`/share/` 生产容器为空、`/home/` 不完全持久；发现 `/data/` 是 App 专属 NAS（跨发布持久）|
+| 2026-03-24 | History 存储路径最终确定 | `/data/kd_users/{userId}/job_list.txt`（App NAS）；outputs 保留 `/home/outputs/{job_id}/` |
+| 2026-03-24 | 对齐官方 SDK 文档 | download API 优先 `web.sub_model.download` + fallback；`output_dir`/`remote_target` 统一为 `"output"`；output 目录去掉 `kd_` 前缀 |
+| 2026-03-24 | 修复 SDK 下载 `s/` 子目录问题 | Bohrium SDK 下载文件放在 `{save_dir}/s/` 下；`result.json` 和 `equation.png` 查找路径扩展到 `s/` |
+| 2026-03-24 | History 三层恢复机制 | 1) `job_list.txt` 主数据源 2) API 实时查询未完成任务 3) 扫描 `/home/outputs/` 目录兜底恢复 |
+| 2026-03-24 | 恢复的 job 自动补 history | 从 BrowserState/API 恢复的 job_id 如果 `job_list.txt` 无记录，自动补写条目 |
+| 2026-03-24 | BrowserState 固定 `secret` | FC 冷启动时 `secret` 随机重生成导致旧 localStorage 解密失败；固定为 `"kd_browser_v1"` 使 BrowserState 跨重启持久 |
+| 2026-03-24 | 下载后递归列出 `s/` 内容 | `os.walk(s_dir)` 打印 SDK 实际文件布局，一轮部署即可确认 result.json 路径 |
+| 2026-03-24 | `find_active_job` 用 GPU app_key | `_bohrium_find_active` 原用 `clientName` cookie（Web App key），`job.list()` 按 header 过滤查不到 GPU 任务；改用 `KD_GPU_APP_KEY` |
+| 2026-03-24 | 修复 `launching.py` save_output | 缺少 `model=model` 参数，GPU 端 EqGPT 的 viz 数据（equations/rewards/reward_history）不写入 result.json |
+| 2026-03-24 | GPU 镜像全量文件同步 | `kd_eqgpt.py` 旧版缺少 `self.result_ = result`（根因）；`kd/viz/_adapters/eqgpt.py` 完全缺失导致 `save_viz` 跳过 EqGPT 图片生成；md5 全量对比修复 13+2 个文件差异 |
+| 2026-03-24 | GPU Viz 数据序列化 (`_serialize_viz_data`) | 新增 `runner.py` 辅助函数：提取 Discover `searcher.r_train/r_history`、DLGA `train_loss_history/evolution_history/Chrom/coef`、EqGPT `result_` 写入 result.json，使 CPU 端可重建代理模型 |
+| 2026-03-24 | CPU 代理模型增强 (`_build_viz_proxy`) | 从 result.json 的 `viz_*` 前缀字段还原模型属性：`proxy.searcher.r_train`（Discover）、`proxy.train_loss_history`（DLGA）等；Viz tab 下拉菜单不再为空 |
+| 2026-03-24 | 修复代理类名 registry 匹配 | `dscv_spr` 的 class_map 从 `KD_DSCV_SPR` 改为 `KD_Discover`，因为 registry 注册的是父类 `KD_Discover`，名称回退机制需类名完全匹配 |
+| 2026-03-24 | equation.png 4 路径搜索 | 扩展 `save_dir/` `s/` `s/output/` `s/outputs/` 四个候选路径，兼容 SDK 下载的嵌套目录结构 |
+| 2026-03-24 | GPU 镜像清理 5.7G | 删除 `/tmp/*.whl`(2.7G) + `/root/.cache/pip`(3G) + `.git`(30M) + `tests/docs/log/trash` 等，镜像从 13G 降至 7.3G |
 
 ## Post-Deploy Issues (2026-03-24 线上验证)
 
@@ -130,8 +148,9 @@
 - **现象**：用户刷新页面后 Job ID、状态、结果全部消失
 - **根因**：`/tmp/` 在 FC 容器重建时清空；BrowserState 可能未写入；`find_active_job` 只找运行中任务
 - **修复**：
-  - 持久化迁移到 `/personal/.kd/`（阿里云 NAS 挂载，跨容器存活）
+  - ~~持久化迁移到 `/personal/.kd/`~~ → 最终迁移到 `/data/kd_users/`（App 专属 NAS，跨发布持久）
   - `_on_load_recover` 恢复链：NAS 文件 → BrowserState → API，已完成任务也触发下载
+- **存储路径排查**：`/personal/` 跨发布清空 | `/share/` 生产容器为空 | `/home/` 保存镜像时打包但不完全持久 | `/data/` ✅ App NAS 跨发布持久
 - **验证**：日志确认 FC 容器重建后 BrowserState 第二级恢复成功
 
 ### 3. Resume 入口不可见
@@ -163,3 +182,8 @@
 5. `KD_DLGA` 继承 DLGA (非 BaseEstimator) — `get_params()`/`set_params()` 可能异常
 6. ~~`execute.py` 残留 `pdb.set_trace()` 调试断点~~ → 已修复 (2026-03-21)
 7. ~~`stridge.py` 未处理 execute 返回 None 的情况~~ → 已修复 (2026-03-21)
+8. ~~Viz 下拉菜单 choices=[] 服务端验证失败~~ → 已修复 (`allow_custom_value=True`)
+9. ~~持久化存储路径 `/personal/` 跨发布丢失~~ → 已修复（迁移到 `/data/` App NAS）
+10. ~~SDK 下载结果在 `s/` 子目录，`result.json` 找不到~~ → 已修复（多路径搜索）
+11. `web.sub_model.download` 在生产 SDK 中不可用，始终 fallback 到 `app.job.download`（功能正常，待确认 SDK 版本差异）
+12. GPU 任务 DSCV_SPR 的 `spr_residual` / `spr_field_comparison` 两个 viz 能力不可用 — 需要完整数据集和模型内部对象，无法通过 JSON 序列化还原（设计限制，非 bug）

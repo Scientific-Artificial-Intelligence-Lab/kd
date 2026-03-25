@@ -151,6 +151,56 @@ RUNNERS = {
 }
 
 
+# ── Viz data serialization ────────────────────────────────────
+
+def _to_list(val):
+    """Convert numpy arrays/scalars to JSON-safe Python objects."""
+    if hasattr(val, "tolist"):
+        return val.tolist()
+    if isinstance(val, dict):
+        return {k: _to_list(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_to_list(v) for v in val]
+    return val
+
+
+def _serialize_viz_data(model, result):
+    """Extract serializable viz data from a fitted model into *result* dict.
+
+    Supports EqGPT (result_), Discover/DSCV_SPR (searcher), and DLGA
+    (loss/evolution history + equation components).
+    """
+    # ── EqGPT: result_ dict ──
+    if hasattr(model, "result_"):
+        mr = model.result_
+        if isinstance(mr, dict):
+            for key in ("equations", "rewards", "best_equation", "best_reward",
+                        "reward_history", "parity_data"):
+                if key in mr:
+                    result[key] = _to_list(mr[key])
+
+    # ── Discover / DSCV_SPR: searcher reward data ──
+    searcher = getattr(model, "searcher", None)
+    if searcher is not None:
+        r_train = getattr(searcher, "r_train", None)
+        if r_train:
+            result["viz_searcher_r_train"] = _to_list(r_train)
+        r_history = getattr(searcher, "r_history", None)
+        if r_history:
+            result["viz_searcher_r_history"] = _to_list(r_history)
+
+    # ── DLGA: loss curves + evolution + equation components ──
+    for attr in ("train_loss_history", "val_loss_history", "evolution_history"):
+        val = getattr(model, attr, None)
+        if val is not None:
+            result[f"viz_{attr}"] = _to_list(val)
+    # DLGA equation components (Chrom, coef, name, user_operators)
+    for attr in ("Chrom", "coef", "name", "user_operators"):
+        val = getattr(model, attr, None)
+        if val is not None:
+            result[f"viz_{attr}"] = _to_list(val)
+
+
 # ── Output ────────────────────────────────────────────────────
 
 def save_output(output_dir, model_name, dataset_info, equation, elapsed,
@@ -167,21 +217,13 @@ def save_output(output_dir, model_name, dataset_info, equation, elapsed,
     }
     if error:
         result["error"] = str(error)
-    # Include model result_ data for viz reconstruction on Web side
-    if model is not None and hasattr(model, "result_"):
-        mr = model.result_
-        if isinstance(mr, dict):
-            for key in ("equations", "rewards", "best_equation", "best_reward",
-                        "reward_history", "parity_data"):
-                if key in mr:
-                    val = mr[key]
-                    # Convert numpy arrays to lists for JSON serialization
-                    if hasattr(val, "tolist"):
-                        val = val.tolist()
-                    result[key] = val
+    # Include model viz data for reconstruction on Web side
+    if model is not None:
+        _serialize_viz_data(model, result)
     path = os.path.join(output_dir, "result.json")
     with open(path, "w") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
+        json.dump(result, f, indent=2, ensure_ascii=False,
+                  default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
     print(f"Results saved to {path}")
 
 

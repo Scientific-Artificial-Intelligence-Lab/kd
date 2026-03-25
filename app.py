@@ -6,7 +6,9 @@ Usage:
     python app.py
 """
 
+import json
 import os
+import time
 import warnings
 import traceback
 
@@ -29,15 +31,21 @@ from kd.viz.core import VizRequest, render, configure
 
 GPU_MODELS = {"KD_DLGA", "KD_DSCV_SPR", "KD_EqGPT"}
 
+# KD_FAKE_BOHRIUM=1 enables local debugging of the full GPU path
+# without a real Bohrium deployment.  Combine with KD_JOB_BACKEND=mock.
+_FAKE_BOHRIUM = os.environ.get("KD_FAKE_BOHRIUM", "") == "1"
+
 try:
     from kd.job import submit_gpu_job, check_job, download_result, find_active_job
     _HAS_BOHRIUM = True
 except ImportError:
-    _HAS_BOHRIUM = False
+    _HAS_BOHRIUM = _FAKE_BOHRIUM  # fake mode doesn't need the SDK
 
 
 def _is_bohrium_env(request):
     """Return True when running on Bohrium platform with valid auth cookies."""
+    if _FAKE_BOHRIUM:
+        return True
     if not _HAS_BOHRIUM or request is None:
         return False
     try:
@@ -212,21 +220,44 @@ def _build_viz_proxy(result_data):
 
     The viz registry resolves adapters by ``type(target).__name__``,
     so we create a dynamic class whose name matches the real model class.
+    Restores serialized viz attributes so that adapters find the data
+    they need (e.g. ``model.searcher.r_train`` for Discover).
     """
     model_name = result_data.get("model", "")
-    viz_keys = {"equations", "rewards", "best_equation", "reward_history", "parity_data"}
-    if not any(k in result_data for k in viz_keys):
+    # Check if any viz data was serialized
+    eqgpt_keys = {"equations", "rewards", "best_equation", "reward_history", "parity_data"}
+    has_viz = any(k in eqgpt_keys or k.startswith("viz_") for k in result_data)
+    if not has_viz:
         return None
     class_map = {
         "eqgpt": "KD_EqGPT",
         "dlga": "KD_DLGA",
-        "dscv_spr": "KD_DSCV_SPR",
+        "dscv_spr": "KD_Discover",
     }
     cls_name = class_map.get(model_name, model_name)
-    # Dynamic class so type(proxy).__name__ == cls_name
     ProxyClass = type(cls_name, (), {})
     proxy = ProxyClass()
+
+    # EqGPT: store full result_data as result_
     proxy.result_ = result_data
+
+    # Discover/DSCV_SPR: restore searcher with r_train / r_history
+    if "viz_searcher_r_train" in result_data or "viz_searcher_r_history" in result_data:
+        searcher = type("Searcher", (), {})()
+        searcher.r_train = result_data.get("viz_searcher_r_train")
+        searcher.r_history = result_data.get("viz_searcher_r_history")
+        proxy.searcher = searcher
+
+    # DLGA: restore loss/evolution history + equation components
+    for attr in ("train_loss_history", "val_loss_history", "evolution_history"):
+        key = f"viz_{attr}"
+        if key in result_data:
+            setattr(proxy, attr, result_data[key])
+    for attr in ("Chrom", "coef", "name", "user_operators"):
+        key = f"viz_{attr}"
+        if key in result_data:
+            setattr(proxy, attr, result_data[key])
+
     return proxy
 
 
@@ -281,12 +312,13 @@ def _render_equation_fig(model, equation_text):
 
 # ── GPU job tracking ──────────────────────────────────────────
 
-_GPU_JOB_DIR = "/personal/.kd"
-os.makedirs(_GPU_JOB_DIR, exist_ok=True)
+_GPU_JOB_BASE = "/data/kd_users"
 
 
 def _get_uid(request=None):
     """Extract user ID from request cookies."""
+    if _FAKE_BOHRIUM:
+        return "dev_user"
     if request:
         try:
             from http.cookies import SimpleCookie
@@ -299,10 +331,18 @@ def _get_uid(request=None):
     return "default"
 
 
+def _user_dir(request=None):
+    """Return per-user directory under /data/kd_users/{userId}/."""
+    uid = _get_uid(request)
+    d = os.path.join(_GPU_JOB_BASE, uid)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _save_job_id(job_id, request=None):
-    """Persist job_id to per-user file on NAS (/personal/)."""
+    """Persist job_id to per-user file."""
     try:
-        path = os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.job_id")
+        path = os.path.join(_user_dir(request), "job_id")
         with open(path, "w") as f:
             f.write(str(job_id) if job_id else "")
         print(f"[kd] _save_job_id({job_id}) → {path}", flush=True)
@@ -313,7 +353,7 @@ def _save_job_id(job_id, request=None):
 def _load_job_id(request=None):
     """Load persisted job_id from per-user file."""
     try:
-        path = os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.job_id")
+        path = os.path.join(_user_dir(request), "job_id")
         with open(path) as f:
             val = f.read().strip()
             result = int(val) if val else None
@@ -326,33 +366,37 @@ def _load_job_id(request=None):
 
 # ── GPU Job History ────────────────────────────────────────────
 
-_HISTORY_COLUMNS = ["Job ID", "Model", "Dataset", "Status", "Equation", "Submitted"]
+_HISTORY_COLUMNS = ["Job ID", "Model", "Dataset", "Status", "Equation", "Duration", "Submitted"]
 
 
 def _history_path(request=None):
-    return os.path.join(_GPU_JOB_DIR, f"{_get_uid(request)}.history")
+    return os.path.join(_user_dir(request), "job_list.txt")
 
 
 def _append_history(job_id, model_name, dataset_name, request=None):
     """Append a new job entry to per-user history."""
     try:
         path = _history_path(request)
+        print(f"[kd] _append_history({job_id}, {model_name}, {dataset_name}) → {path}", flush=True)
+        display_name = MODEL_DISPLAY.get(model_name, model_name)
         entry = json.dumps({
-            "job_id": str(job_id), "model": model_name,
+            "job_id": str(job_id), "model": display_name,
             "dataset": dataset_name, "status": "Submitted",
-            "equation": "",
+            "equation": "", "elapsed": "",
             "submitted_at": time.strftime("%Y-%m-%d %H:%M"),
         }, ensure_ascii=False)
         with open(path, "a") as f:
             f.write(entry + "\n")
+        print(f"[kd] _append_history OK, wrote {len(entry)} bytes", flush=True)
     except Exception as e:
         print(f"[kd] _append_history failed: {e}", flush=True)
 
 
-def _update_history(job_id, status, equation="", request=None):
-    """Update status/equation for a job in history."""
+def _update_history(job_id, status, equation="", elapsed="", request=None):
+    """Update status/equation/elapsed for a job in history."""
     try:
         path = _history_path(request)
+        print(f"[kd] _update_history({job_id}, {status}, elapsed={elapsed}) path={path} exists={os.path.exists(path)}", flush=True)
         if not os.path.exists(path):
             return
         lines = []
@@ -369,6 +413,8 @@ def _update_history(job_id, status, equation="", request=None):
                     entry["status"] = status
                     if equation:
                         entry["equation"] = equation[:200]
+                    if elapsed:
+                        entry["elapsed"] = str(elapsed)
                 lines.append(json.dumps(entry, ensure_ascii=False))
         with open(path, "w") as f:
             for l in lines[-50:]:
@@ -377,29 +423,142 @@ def _update_history(job_id, status, equation="", request=None):
         print(f"[kd] _update_history failed: {e}", flush=True)
 
 
+def _scan_output_dirs():
+    """Scan /home/outputs/ for completed job results as history fallback."""
+    output_base = "/home/outputs"
+    entries = []
+    if not os.path.isdir(output_base):
+        return entries
+    for name in os.listdir(output_base):
+        if not name.isdigit():
+            continue
+        # Search result.json in root or s/ subdirectory
+        result_path = None
+        for candidate in [
+            os.path.join(output_base, name, "result.json"),
+            os.path.join(output_base, name, "s", "result.json"),
+        ]:
+            if os.path.exists(candidate):
+                result_path = candidate
+                break
+        if not result_path:
+            continue
+        try:
+            with open(result_path) as f:
+                data = json.loads(f.read())
+            # Map runner model name (e.g. "eqgpt") to display name
+            runner_model = data.get("model", "")
+            _RUNNER_DISPLAY = {"dlga": "DLGA", "eqgpt": "EqGPT",
+                               "dscv_spr": "Discover_SPR"}
+            display = _RUNNER_DISPLAY.get(runner_model, runner_model)
+            elapsed = data.get("elapsed_seconds", "")
+            entries.append({
+                "job_id": name,
+                "model": display,
+                "dataset": data.get("dataset", ""),
+                "status": "Finished" if data.get("status") == "success" else "Failed",
+                "equation": (data.get("equation", "") or "")[:200],
+                "elapsed": f"{elapsed}s" if elapsed else "",
+                "submitted_at": "",
+            })
+        except Exception:
+            continue
+    print(f"[kd] _scan_output_dirs: found {len(entries)} jobs", flush=True)
+    return entries
+
+
 def _load_history(request=None):
-    """Load recent GPU job history as list of lists for Dataframe."""
+    """Load recent GPU job history as list of lists for Dataframe.
+
+    For unfinished jobs, queries the Bohrium API for real-time status
+    and updates the local file (following the official example pattern).
+    Falls back to scanning /home/outputs/ when job_list.txt is missing.
+    """
     path = _history_path(request)
+    print(f"[kd] _load_history: path={path} exists={os.path.exists(path)}", flush=True)
     if not os.path.exists(path):
+        # Fallback: recover history from downloaded output directories
+        fallback = _scan_output_dirs()
+        if fallback:
+            rows = []
+            for e in fallback:
+                rows.append([
+                    e.get("job_id", ""), e.get("model", ""),
+                    e.get("dataset", ""), e.get("status", ""),
+                    e.get("equation", "")[:60],
+                    e.get("elapsed", ""),
+                    e.get("submitted_at", ""),
+                ])
+            return rows[-10:][::-1]
         return []
     try:
-        rows = []
+        entries = []
         with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    e = json.loads(line)
+                    entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-                rows.append([
-                    e.get("job_id", ""), e.get("model", ""),
-                    e.get("dataset", ""), e.get("status", ""),
-                    e.get("equation", "")[:60], e.get("submitted_at", ""),
-                ])
+
+        # For unfinished jobs, query API for real-time status update
+        # (mirrors official example: check all non-terminal statuses)
+        _TERMINAL = {"Finished", "Failed", "Error"}
+        updated = False
+        if _HAS_BOHRIUM and request and _is_bohrium_env(request):
+            for e in entries:
+                status = e.get("status", "")
+                if status and status not in _TERMINAL:
+                    jid = e.get("job_id")
+                    try:
+                        from kd.job import check_job, download_result
+                        info = check_job(int(jid), request)
+                        new_status = info.get("status_text", status)
+                        print(f"[kd] _load_history: job {jid} API status={new_status}", flush=True)
+                        e["status"] = new_status
+                        if info.get("spend_time"):
+                            e["elapsed"] = info["spend_time"]
+                        updated = True
+
+                        # Auto-download results for newly finished jobs
+                        if info.get("finished"):
+                            try:
+                                result_data, _ = download_result(int(jid), request)
+                                eq = result_data.get("equation", "")
+                                if eq:
+                                    e["equation"] = eq[:200]
+                                print(f"[kd] _load_history: auto-downloaded job {jid}", flush=True)
+                            except Exception as dl_ex:
+                                print(f"[kd] _load_history: auto-download job {jid} failed: {dl_ex}", flush=True)
+
+                    except (Exception, SystemExit) as ex:
+                        print(f"[kd] _load_history: API check job {jid} failed: {ex}", flush=True)
+
+        # Write back updated statuses
+        if updated:
+            try:
+                with open(path, "w") as f:
+                    for e in entries[-50:]:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+                print(f"[kd] _load_history: wrote back {len(entries)} updated entries", flush=True)
+            except Exception as ex:
+                print(f"[kd] _load_history: write-back failed: {ex}", flush=True)
+
+        rows = []
+        for e in entries:
+            rows.append([
+                e.get("job_id", ""), e.get("model", ""),
+                e.get("dataset", ""), e.get("status", ""),
+                e.get("equation", "")[:60],
+                e.get("elapsed", ""),
+                e.get("submitted_at", ""),
+            ])
+        print(f"[kd] _load_history: {len(rows)} entries loaded", flush=True)
         return rows[-10:][::-1]  # most recent first, max 10
-    except Exception:
+    except Exception as e:
+        print(f"[kd] _load_history failed: {e}", flush=True)
         return []
 
 
@@ -506,6 +665,7 @@ def _run_local(
             fig = _render_equation_fig(model, _get_equation_text(model, model_name, result))
 
             caps = _get_model_capabilities(model)
+            print(f"[kd] _run_local(Regression) caps={caps}", flush=True)
             viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
             return (eq_text, fig, model, viz_update) + _NO_GPU
 
@@ -576,6 +736,7 @@ def _run_local(
         equation = _get_equation_text(model, model_name, result)
         fig = _render_equation_fig(model, equation)
         caps = _get_model_capabilities(model)
+        print(f"[kd] _run_local({model_name}) caps={caps}", flush=True)
         viz_update = gr.update(choices=caps, value=caps[0] if caps else None)
 
         return (equation, fig, model, viz_update) + _NO_GPU
@@ -653,7 +814,7 @@ def check_gpu_status(job_id, browser_job_id=None, request: gr.Request = None):
     """
     try:
         return _check_gpu_status_inner(job_id, browser_job_id, request)
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         # Last-resort safety net — keep polling with existing job_id
         safe_id = job_id or _load_job_id(request) or _to_int(browser_job_id)
         if safe_id:
@@ -705,8 +866,15 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
             if job_id:
                 _save_job_id(job_id, request)
                 print(f"[kd] Recovered job_id={job_id} from platform API", flush=True)
-        except Exception as e:
+        except (Exception, SystemExit) as e:
             print(f"[kd] find_active_job failed: {e}", flush=True)
+
+    # Ensure recovered job has a history entry (job_list.txt may not exist)
+    if job_id:
+        hist_path = _history_path(request)
+        if not os.path.exists(hist_path) or str(job_id) not in open(hist_path).read():
+            print(f"[kd] Adding missing history entry for recovered job {job_id}", flush=True)
+            _append_history(job_id, "(recovered)", "", request)
     if not job_id:
         # Show gpu_panel with resume input
         return ("GPU job ID lost. Please enter your Job ID below to resume.",
@@ -734,7 +902,7 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
 
     if status["failed"]:
         _save_job_id(None, request)
-        _update_history(job_id, "Failed", request=request)
+        _update_history(job_id, "Failed", elapsed=status.get("spend_time", ""), request=request)
         return (
             f"Job {job_id} failed: {status['status_text']}",
             None, None, gr.update(),
@@ -761,24 +929,20 @@ def _check_gpu_status_inner(job_id, browser_job_id, request):
     _save_job_id(None, request)
     try:
         result_data, save_dir = download_result(job_id, request)
+        print(f"[kd] GPU result keys: {list(result_data.keys())}", flush=True)
+        print(f"[kd] GPU result model={result_data.get('model')}, save_dir={save_dir}", flush=True)
         equation = result_data.get("equation", "(unknown)")
-        _update_history(job_id, "Finished", equation, request)
-
-        eq_fig = None
-        eq_img = os.path.join(save_dir, "equation.png")
-        if os.path.exists(eq_img):
-            import matplotlib.pyplot as plt
-            import matplotlib.image as mpimg
-            img = mpimg.imread(eq_img)
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.imshow(img)
-            ax.axis("off")
-            fig.tight_layout(pad=0)
-            eq_fig = fig
+        elapsed_s = result_data.get("elapsed_seconds", "")
+        elapsed_str = f"{elapsed_s}s" if elapsed_s else ""
+        _update_history(job_id, "Finished", equation, elapsed_str, request)
 
         # Build a proxy model object from result_data so viz adapters work
         proxy_model = _build_viz_proxy(result_data)
+
+        # Render equation figure on CPU using the same viz adapter as GPU
+        eq_fig = _render_equation_fig(proxy_model, equation)
         viz_choices = _get_model_capabilities(proxy_model) if proxy_model else []
+        print(f"[kd] proxy_model={proxy_model}, viz_choices={viz_choices}", flush=True)
         viz_update = gr.update(choices=viz_choices, value=viz_choices[0] if viz_choices else None)
 
         elapsed_s = result_data.get("elapsed_seconds", "?")
@@ -806,6 +970,10 @@ def run_viz(viz_type, model_state):
 
     if model_state is None:
         return None, "Please train a model first."
+    if not viz_type:
+        return None, "Please select a plot type."
+
+    print(f"[kd] run_viz(viz_type={viz_type!r}, model={type(model_state).__name__})", flush=True)
 
     # Use a temp dir so adapters that save-to-file still work
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1010,7 +1178,7 @@ def build_app():
                             )
                             gpu_timer = gr.Timer(30, active=False)
                             if hasattr(gr, "BrowserState"):
-                                browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id")
+                                browser_job_id = gr.BrowserState(None, storage_key="kd_gpu_job_id", secret="kd_browser_v1")
                             else:
                                 browser_job_id = gr.State(None)
                             with gr.Row(equal_height=True):
@@ -1038,6 +1206,7 @@ def build_app():
                     viz_dd = gr.Dropdown(
                         choices=[],
                         value=None,
+                        allow_custom_value=True,
                         label="Plot type (train a model first)",
                     )
                     viz_btn = gr.Button("Generate", variant="primary")
@@ -1067,7 +1236,7 @@ def build_app():
                     jid = find_active_job(request)
                     if jid:
                         print(f"[kd] Page load: recovered job_id={jid} from API", flush=True)
-                except Exception as e:
+                except (Exception, SystemExit) as e:
                     print(f"[kd] Page load: find_active_job failed: {e}", flush=True)
             if jid:
                 print(f"[kd] Page load: recovering job_id={jid}", flush=True)

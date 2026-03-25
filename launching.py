@@ -137,7 +137,7 @@ def entry_function(opts: Options) -> int:
         elapsed = time.time() - t0
 
         save_output(str(output_dir), model_name, dataset_name,
-                    equation, elapsed, params)
+                    equation, elapsed, params, model=model)
         save_viz(str(output_dir), model)
 
         print(f"\nDone in {elapsed:.1f}s")

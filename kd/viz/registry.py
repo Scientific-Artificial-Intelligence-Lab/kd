@@ -64,6 +64,13 @@ def get_adapter(target: Any) -> Optional[VizAdapter]:
         if adapter is not None:
             return adapter
 
+    # Name-based fallback: matches proxy/dynamic classes whose __name__
+    # equals a registered real class (e.g. GPU result proxy objects).
+    for registered_cls, registered_adapter in _ADAPTERS.items():
+        if registered_cls.__name__ == class_name:
+            _ADAPTERS[model_cls] = registered_adapter   # cache for next lookup
+            return registered_adapter
+
     for registered_cls, registered_adapter in _ADAPTERS.items():
         try:
             if issubclass(model_cls, registered_cls):
