@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kd"
+version = "0.1.0"
+description = "Symbolic regression platform for PDE discovery"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name = "Mao-Hao", email = "Mao-Hao@users.noreply.github.com"}]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.24",
+    "sympy>=1.12",
+    "scipy>=1.10",
+    "matplotlib>=3.10.8",
+    "jinja2>=3.1.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mao-Hao/KD"
+Source = "https://github.com/Mao-Hao/KD"
+Issues = "https://github.com/Mao-Hao/KD/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.4.0",
+    "hypothesis>=6.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+# Discover all `kd*` packages under src/.
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Bundle benchmark dataset files + report HTML template into the wheel so
+# loaders / VizEngine.render_all work after `pip install` (no source-tree
+# fallback needed).
+"kd" = ["_assets/data/*.npy", "_assets/data/*.mat"]
+"kd.viz.templates" = ["*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "smoke: quick sanity checks (run always)",
+    "unit: isolated function tests",
+    "integration: component interaction tests",
+    "equivalence: comparison with reference implementations",
+    "e2e: end-to-end pipeline tests",
+    "benchmark: performance tests",
+    "numerical: numerical stability tests",
+    "slow: tests that take >10s",
+    "validation: algorithm validation tests (fidelity + recovery)",
+    "golden: golden-baseline regression tests (discover subsystem, very slow)",
+    "mode2_aggregate: 3-seed STRICT MODE2 aggregate (discover §B.2 contract)",
+    "phase3_e2e: discover an internal milestone B1 plugin e2e (slow, requires GPU)",
+]
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# discover subsystem tests follow ML tensor-dim naming (B, L, N, T) and
+# math-notation test names (test_R_e_*, test_baseline_R_*); idiomatic for
+# this code class.
+"tests/discover/**/*.py" = ["N806", "N802"]

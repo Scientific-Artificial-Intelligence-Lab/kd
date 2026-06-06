@@ -1,0 +1,392 @@
+
+from __future__ import annotations
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pytest
+
+from kd.data.schema import PDEDataset
+from kd.search.result import ExperimentResult
+from kd.viz import VizEngine
+from kd.viz.report import ReportResult
+
+
+class TestVizEngineInit:
+
+    def test_creates_output_dir(self, tmp_path: Path) -> None:
+        out = tmp_path / "viz_output"
+        engine = VizEngine(output_dir=out)
+        assert out.exists()
+
+    def test_accepts_custom_style(self, tmp_path: Path) -> None:
+        engine = VizEngine(output_dir=tmp_path, style={"font.size": 20})
+        assert engine._style["font.size"] == 20
+
+
+class TestRenderUniversal:
+
+    def test_returns_report_result(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_universal(mock_experiment_result)
+        assert isinstance(report, ReportResult)
+
+    def test_creates_svg_files(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_universal(mock_experiment_result)
+
+        svg_files = list(tmp_path.glob("*.svg"))
+        assert len(svg_files) >= 4
+
+    def test_all_figures_closed(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        figs_before = plt.get_fignums()
+        engine = VizEngine(output_dir=tmp_path)
+        engine.render_universal(mock_experiment_result)
+        figs_after = plt.get_fignums()
+
+        assert len(figs_after) <= len(figs_before)
+
+    def test_figures_in_report(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_universal(mock_experiment_result)
+
+        for fig_path in report.figures:
+            assert fig_path.exists(), f"Missing: {fig_path}"
+
+    def test_report_has_no_unexpected_warnings(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_universal(mock_experiment_result)
+
+        assert len(report.warnings) == 0, f"Unexpected warnings: {report.warnings}"
+
+
+class TestRenderAll:
+
+    def test_without_dataset(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result)
+        assert isinstance(report, ReportResult)
+
+        field_files = [f for f in report.figures if "field" in str(f)]
+        assert len(field_files) == 0
+
+    def test_with_dataset_renders_field(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        import torch
+
+        from kd.data.schema import (
+            AxisInfo,
+            DataTopology,
+            FieldData,
+            PDEDataset,
+            TaskType,
+        )
+
+        nx, nt = 10, 5
+        x_vals = torch.linspace(0, 1, nx)
+        t_vals = torch.linspace(0, 1, nt)
+        u_field = torch.randn(nx, nt, dtype=torch.float64)
+
+        ds = PDEDataset(
+            name="test_1d",
+            task_type=TaskType.PDE,
+            topology=DataTopology.GRID,
+            axes={
+                "x": AxisInfo(name="x", values=x_vals, is_periodic=True),
+                "t": AxisInfo(name="t", values=t_vals),
+            },
+            axis_order=["x", "t"],
+            fields={"u": FieldData(name="u", values=u_field)},
+            lhs_field="u",
+            lhs_axis="t",
+        )
+
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds)
+        field_files = [f for f in report.figures if f.name == "field_comparison.svg"]
+        assert len(field_files) == 1
+
+    def test_dataset_without_proper_api_warns(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+
+        class _EmptyDataset:
+            pass
+
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=_EmptyDataset())
+
+        assert any("failed" in w.lower() for w in report.warnings)
+
+    def test_all_figures_closed(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        figs_before = plt.get_fignums()
+        engine = VizEngine(output_dir=tmp_path)
+        engine.render_all(mock_experiment_result)
+        figs_after = plt.get_fignums()
+        assert len(figs_after) <= len(figs_before)
+
+    def test_universal_plot_error_isolation(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        def _raise_on_equation(result: ExperimentResult, ax: object) -> list[str]:
+            raise RuntimeError("Simulated plot failure")
+
+        engine = VizEngine(output_dir=tmp_path)
+        with patch("kd.viz.engine.plot_equation", _raise_on_equation):
+            report = engine.render_all(mock_experiment_result)
+
+        assert len(report.figures) >= 2
+
+        assert any("failed" in w.lower() for w in report.warnings)
+
+
+
+
+
+
+
+def _make_pde_dataset_for_engine() -> PDEDataset:
+    import torch
+
+    from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
+
+    nx, nt = 10, 5
+    x = torch.linspace(0, 1, nx)
+    t = torch.linspace(0, 1, nt)
+    u_field = torch.randn(nx, nt, dtype=torch.float64)
+    return PDEDataset(
+        name="test_1d",
+        task_type=TaskType.PDE,
+        axes={
+            "x": AxisInfo(name="x", values=x, is_periodic=True),
+            "t": AxisInfo(name="t", values=t),
+        },
+        axis_order=["x", "t"],
+        fields={"u": FieldData(name="u", values=u_field)},
+        lhs_field="u",
+        lhs_axis="t",
+    )
+
+
+class TestRenderAllTier2Plots:
+
+    def test_coefficient_bar_in_render_all(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds)
+        coeff_files = [f for f in report.figures if "coefficient" in f.name.lower()]
+        assert len(coeff_files) >= 1, (
+            f"Expected coefficient plot in output, got: "
+            f"{[f.name for f in report.figures]}"
+        )
+
+    def test_time_slices_in_render_all(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds)
+        slice_files = [f for f in report.figures if "time_slice" in f.name.lower()]
+        assert len(slice_files) >= 1, (
+            f"Expected time_slices plot in output, got: "
+            f"{[f.name for f in report.figures]}"
+        )
+
+    def test_error_heatmap_in_render_all(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds)
+        heatmap_files = [f for f in report.figures if "error_heatmap" in f.name.lower()]
+        assert len(heatmap_files) >= 1, (
+            f"Expected error_heatmap plot in output, got: "
+            f"{[f.name for f in report.figures]}"
+        )
+
+    def test_pde_residual_passes_dataset(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+        calls: list[dict] = []
+        original = engine._render_pde_residual
+
+        def _spy(result, dataset, report):
+            calls.append({"dataset": dataset})
+            return original(result, dataset, report)
+
+        with patch.object(engine, "_render_pde_residual", _spy):
+            engine.render_all(mock_experiment_result, dataset=ds)
+
+        assert len(calls) >= 1, "Expected _render_pde_residual to be called"
+        assert calls[0]["dataset"] is ds
+
+    def test_new_plots_do_not_break_without_dataset(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result)
+        assert isinstance(report, ReportResult)
+
+        names = [f.name for f in report.figures]
+        assert not any("coefficient" in n.lower() for n in names)
+        assert not any("time_slice" in n.lower() for n in names)
+        assert not any("error_heatmap" in n.lower() for n in names)
+
+    def test_tier2_error_isolation(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        import matplotlib.pyplot as mpl_plt
+        from matplotlib.figure import Figure as MplFigure
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+        def _failing_plot(**kwargs):
+            raise RuntimeError("Simulated Tier 2 failure")
+
+        with patch("kd.viz.engine.plot_field_comparison", _failing_plot):
+            report = engine.render_all(mock_experiment_result, dataset=ds)
+
+        assert len(report.figures) >= 3
+
+        assert any("failed" in w.lower() for w in report.warnings)
+
+    def test_all_figures_closed_with_m3(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_pde_dataset_for_engine()
+        figs_before = plt.get_fignums()
+        engine = VizEngine(output_dir=tmp_path)
+        engine.render_all(mock_experiment_result, dataset=ds)
+        figs_after = plt.get_fignums()
+        assert len(figs_after) <= len(figs_before)
+
+
+
+
+
+
+
+class TestGetIntegrationResultTryExcept:
+
+    def test_integrate_pde_error_caught(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        from kd.core.integrator import IntegrationResult
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+
+
+        with patch(
+            "kd.core.integrator.integrate_pde",
+            side_effect=RuntimeError("Solver diverged"),
+        ):
+            result = engine._get_integration_result(mock_experiment_result, ds)
+
+        assert isinstance(result, IntegrationResult)
+        assert not result.success
+
+        assert result.warning is not None
+
+    def test_format_pde_bug_not_swallowed(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+
+        with (
+            patch(
+                "kd.core.expr.sympy_bridge.format_pde",
+                side_effect=TypeError("BUG: wrong argument type"),
+            ),
+            pytest.raises(TypeError, match="BUG"),
+        ):
+            engine._get_integration_result(mock_experiment_result, ds)
+
+    def test_attribute_access_bug_not_swallowed(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import PropertyMock, patch
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+
+        bad_result = mock_experiment_result
+        original_final_eval = bad_result.final_eval
+
+        class _BrokenEval:
+
+            @property
+            def terms(self):
+                raise AttributeError("BUG: terms property broken")
+
+            @property
+            def coefficients(self):
+                return original_final_eval.coefficients
+
+            @property
+            def selected_indices(self):
+                return original_final_eval.selected_indices
+
+        bad_result.final_eval = _BrokenEval()
+        try:
+            with pytest.raises(AttributeError, match="BUG"):
+                engine._get_integration_result(bad_result, ds)
+        finally:
+            bad_result.final_eval = original_final_eval
+
+    def test_missing_terms_still_handled(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from kd.core.integrator import IntegrationResult
+
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+
+
+        original_terms = mock_experiment_result.final_eval.terms
+        mock_experiment_result.final_eval.terms = None
+        try:
+            result = engine._get_integration_result(mock_experiment_result, ds)
+            assert isinstance(result, IntegrationResult)
+            assert not result.success
+        finally:
+            mock_experiment_result.final_eval.terms = original_terms

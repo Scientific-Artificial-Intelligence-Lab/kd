@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Tools cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Example run outputs
+examples/out/
+
+# Other
+*.log
+*.pkl

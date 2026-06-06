@@ -1,0 +1,677 @@
+
+from __future__ import annotations
+
+import inspect
+import json
+import logging
+import math
+from collections.abc import Iterator
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+from matplotlib.axes import Axes
+
+from kd.search.recorder import VizRecorder
+from kd.search.sga.config import SGAConfig
+from kd.search.sga.plugin import SGAPlugin
+from kd.viz.extension import PlotInfo, VizExtension
+
+
+
+
+
+
+EXPECTED_PLOT_NAMES: frozenset[str] = frozenset(
+    {"population_diversity", "complexity_evolution", "fitness_spread"},
+)
+
+
+
+
+PLOT_TO_METRIC: dict[str, str] = {
+    "population_diversity": "n_unique",
+    "complexity_evolution": "gen_mean_complexity",
+    "fitness_spread": "gen_mean_aic",
+}
+
+N_SYNTHETIC_GENS = 5
+
+
+_X_LABEL_PREFIX = "gen"
+
+
+
+
+
+
+
+def _populate_recorder(recorder: VizRecorder, n_gens: int = N_SYNTHETIC_GENS) -> None:
+    for i in range(n_gens):
+
+        recorder.log("gen_mean_aic", float(1000.0 - 50.0 * i))
+        recorder.log("n_unique", 90 - 5 * i)
+        recorder.log("gen_mean_complexity", float(1.0 + 0.5 * i))
+
+
+
+        recorder.log("gen_best_aic", float(900.0 - 50.0 * i))
+        recorder.log("gen_best_nmse", float(0.50 - 0.05 * i))
+        recorder.log("n_valid", 20 + i)
+
+
+def _populate_recorder_with_inf(recorder: VizRecorder) -> None:
+    mean_aic_vals = [float("inf"), float("inf"), 900.0, 850.0, 800.0]
+    for i, mean_aic in enumerate(mean_aic_vals):
+        recorder.log("gen_mean_aic", mean_aic)
+        recorder.log("n_unique", 90 - 5 * i)
+        recorder.log("gen_mean_complexity", float(1.0 + 0.5 * i))
+        recorder.log("gen_best_aic", float("inf") if i < 2 else 800.0 - 50.0 * i)
+        recorder.log("gen_best_nmse", float("inf") if i < 2 else 0.40 - 0.05 * i)
+        recorder.log("n_valid", 0 if i < 2 else 20 + i)
+
+
+def _plugin_with_recorder(recorder: VizRecorder) -> SGAPlugin:
+    plugin = SGAPlugin(SGAConfig())
+    plugin._recorder = recorder
+    return plugin
+
+
+def _plugin_populated() -> tuple[SGAPlugin, VizRecorder]:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder(recorder)
+    return _plugin_with_recorder(recorder), recorder
+
+
+def _plugin_empty_recorder() -> SGAPlugin:
+    return _plugin_with_recorder(VizRecorder(enabled=True))
+
+
+def _plugin_disabled_recorder() -> SGAPlugin:
+    return _plugin_with_recorder(VizRecorder(enabled=False))
+
+
+def _plugin_none_recorder() -> SGAPlugin:
+    plugin = SGAPlugin(SGAConfig())
+    plugin._recorder = None
+    return plugin
+
+
+
+
+
+
+
+@pytest.fixture
+def ax() -> Iterator[Axes]:
+    _fig, _ax = plt.subplots()
+    yield _ax
+    plt.close(_fig)
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_plugin_is_runtime_checkable_viz_extension() -> None:
+    plugin = SGAPlugin(SGAConfig())
+    assert isinstance(plugin, VizExtension), (
+        "SGAPlugin must satisfy the VizExtension Protocol structurally. "
+        "Required: list_plots(), render_plot(name, ax), get_plot_data(name)."
+    )
+
+
+    assert VizExtension not in SGAPlugin.__mro__, (
+        "SGAPlugin must NOT inherit VizExtension; "
+        f"got MRO {[c.__name__ for c in SGAPlugin.__mro__]}"
+    )
+
+    assert callable(plugin.list_plots)
+    assert callable(plugin.render_plot)
+    assert callable(plugin.get_plot_data)
+
+    list_params = list(inspect.signature(plugin.list_plots).parameters.keys())
+    render_params = list(inspect.signature(plugin.render_plot).parameters.keys())
+    get_params = list(inspect.signature(plugin.get_plot_data).parameters.keys())
+    assert list_params == [], (
+        f"list_plots() takes no params beyond self; got {list_params!r}"
+    )
+    assert render_params == ["name", "ax"], (
+        f"render_plot signature must be (name, ax); got {render_params!r}"
+    )
+    assert get_params == ["name"], (
+        f"get_plot_data signature must be (name,); got {get_params!r}"
+    )
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_list_plots_returns_three_plotinfo() -> None:
+    plugin = SGAPlugin(SGAConfig())
+    plots = plugin.list_plots()
+
+    assert isinstance(plots, list), (
+        f"list_plots() must return list, got {type(plots).__name__}"
+    )
+    assert len(plots) == 3, (
+        f"list_plots() must return exactly 3 PlotInfo; got {len(plots)}: "
+        f"{[getattr(p, 'name', '?') for p in plots]}"
+    )
+    for p in plots:
+        assert isinstance(p, PlotInfo), (
+            f"Every entry must be PlotInfo, got {type(p).__name__}"
+        )
+        assert isinstance(p.title, str) and p.title.strip(), (
+            f"PlotInfo({p.name!r}).title must be a non-empty str, got {p.title!r}"
+        )
+        assert isinstance(p.description, str)
+
+    names = {p.name for p in plots}
+    assert names == EXPECTED_PLOT_NAMES, (
+        f"list_plots() names must equal spec set.\n"
+        f" missing: {sorted(EXPECTED_PLOT_NAMES - names)}\n"
+        f" extra: {sorted(names - EXPECTED_PLOT_NAMES)}"
+    )
+
+
+@pytest.mark.unit
+def test_list_plots_returns_fresh_copies() -> None:
+    plugin = SGAPlugin(SGAConfig())
+    first = plugin.list_plots()
+    first[0].title = "MUTATED"
+    second = plugin.list_plots()
+    assert all(p.title != "MUTATED" for p in second), (
+        "list_plots() must rebuild descriptors each call so a caller mutating "
+        "the returned objects cannot poison the module-level table."
+    )
+
+
+
+
+
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
+    plugin, _ = _plugin_populated()
+    result = plugin.render_plot(plot_name, ax)
+    assert result is None, (
+        f"render_plot({plot_name!r}, ax) must return None; got {type(result).__name__}"
+    )
+
+
+
+
+
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+def test_render_binds_recorder_series(plot_name: str, ax: Axes) -> None:
+    plugin, recorder = _plugin_populated()
+    plugin.render_plot(plot_name, ax)
+
+    assert len(ax.lines) >= 1, f"{plot_name} must draw >=1 line; got 0 Line2D artists."
+
+    y_data = np.asarray(ax.lines[0].get_ydata()).tolist()
+    metric = PLOT_TO_METRIC[plot_name]
+    expected = recorder.get(metric)
+    assert y_data == pytest.approx(expected), (
+        f"{plot_name} must draw from recorder[{metric!r}]. "
+        f"Got ydata={y_data!r}, expected={expected!r}."
+    )
+    assert len(y_data) == N_SYNTHETIC_GENS, (
+        f"{plot_name} must plot all {N_SYNTHETIC_GENS} generations; got {len(y_data)}."
+    )
+    assert ax.get_ylabel() == metric, (
+        f"{plot_name} ylabel must be exactly {metric!r}, got {ax.get_ylabel()!r}"
+    )
+    xlabel = ax.get_xlabel().lower()
+    assert xlabel.startswith(_X_LABEL_PREFIX), (
+        f"{plot_name} xlabel must start with {_X_LABEL_PREFIX!r}; got "
+        f"{ax.get_xlabel()!r}"
+    )
+
+
+@pytest.mark.unit
+def test_fitness_spread_renders_mean_not_best(ax: Axes) -> None:
+    plugin, recorder = _plugin_populated()
+    plugin.render_plot("fitness_spread", ax)
+
+    y_data = np.asarray(ax.lines[0].get_ydata()).tolist()
+    mean_series = recorder.get("gen_mean_aic")
+    best_series = recorder.get("gen_best_aic")
+
+
+    assert mean_series != best_series, (
+        "fixture bug: gen_mean_aic and gen_best_aic must differ for this test "
+        "to discriminate mean-vs-best."
+    )
+    assert y_data == pytest.approx(mean_series), (
+        f"fitness_spread must plot gen_mean_aic (population MEAN), got "
+        f"ydata={y_data!r}, mean={mean_series!r}."
+    )
+    assert y_data[-1] == pytest.approx(mean_series[-1]), (
+        f"fitness_spread last point must equal gen_mean_aic[-1]="
+        f"{mean_series[-1]!r}, NOT gen_best_aic[-1]={best_series[-1]!r}. "
+        f"Got {y_data[-1]!r}."
+    )
+    assert y_data[-1] != pytest.approx(best_series[-1]), (
+        "fitness_spread must NOT plot gen_best_aic — its last point matches "
+        "the best series, meaning the renderer used best instead of mean."
+    )
+
+
+
+
+
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+def test_get_plot_data_returns_jsonable_dict(plot_name: str) -> None:
+    plugin, recorder = _plugin_populated()
+    data = plugin.get_plot_data(plot_name)
+
+    assert isinstance(data, dict), (
+        f"get_plot_data({plot_name!r}) must return dict, got {type(data).__name__}"
+    )
+    required = {"x", "y", "xlabel", "ylabel"}
+    missing = required - data.keys()
+    assert not missing, f"get_plot_data({plot_name!r}) missing keys: {sorted(missing)}"
+
+    json.dumps(data)
+
+    metric = PLOT_TO_METRIC[plot_name]
+    expected_y = recorder.get(metric)
+    assert list(data["y"]) == pytest.approx(expected_y), (
+        f"get_plot_data({plot_name!r})['y'] must equal recorder[{metric!r}]."
+    )
+    assert len(data["x"]) == N_SYNTHETIC_GENS
+    assert len(data["x"]) == len(data["y"])
+    assert data["ylabel"] == metric, (
+        f"{plot_name} ylabel must be {metric!r}, got {data['ylabel']!r}"
+    )
+
+
+@pytest.mark.unit
+def test_get_plot_data_fitness_spread_is_mean_series() -> None:
+    plugin, recorder = _plugin_populated()
+    data = plugin.get_plot_data("fitness_spread")
+
+    mean_series = recorder.get("gen_mean_aic")
+    best_series = recorder.get("gen_best_aic")
+    assert list(data["y"]) == pytest.approx(mean_series), (
+        f"fitness_spread y must equal gen_mean_aic; got {data['y']!r}, "
+        f"mean={mean_series!r}."
+    )
+    assert data["y"][-1] != pytest.approx(best_series[-1]), (
+        "fitness_spread y[-1] must not equal gen_best_aic[-1] (mean != best)."
+    )
+
+
+
+
+
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize(
+    "recorder_state",
+    ["empty", "none", "disabled"],
+    ids=["empty", "none", "disabled"],
+)
+def test_render_empty_recorder_warns_not_crash(
+    plot_name: str, recorder_state: str, ax: Axes
+) -> None:
+    plugin = {
+        "empty": _plugin_empty_recorder,
+        "disabled": _plugin_disabled_recorder,
+        "none": _plugin_none_recorder,
+    }[recorder_state]()
+
+    try:
+        plugin.render_plot(plot_name, ax)
+    except Exception as exc:
+        pytest.fail(
+            f"render_plot({plot_name!r}) with {recorder_state} recorder must not "
+            f"raise; got {type(exc).__name__}: {exc!r}"
+        )
+
+    text_strs = [t.get_text().lower() for t in ax.texts]
+    title = ax.get_title().lower()
+    signals = ("no data", "empty", "unavailable", "no recorder")
+    has_warning = any(any(sig in s for sig in signals) for s in [*text_strs, title])
+    assert has_warning, (
+        f"render_plot({plot_name!r}) with {recorder_state} recorder must surface "
+        f"a warning panel with one of {signals}. texts={text_strs!r}, "
+        f"title={title!r}"
+    )
+    assert len(ax.lines) == 0, (
+        f"{recorder_state} recorder warning panel must not draw a phantom line; "
+        f"got {len(ax.lines)} lines."
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize(
+    "recorder_state",
+    ["empty", "none", "disabled"],
+    ids=["empty", "none", "disabled"],
+)
+def test_get_plot_data_empty_recorder_jsonable(
+    plot_name: str, recorder_state: str
+) -> None:
+    plugin = {
+        "empty": _plugin_empty_recorder,
+        "disabled": _plugin_disabled_recorder,
+        "none": _plugin_none_recorder,
+    }[recorder_state]()
+
+    data = plugin.get_plot_data(plot_name)
+    assert isinstance(data, dict)
+    assert list(data["y"]) == [], (
+        f"{recorder_state}: y must be empty; got {data['y']!r}"
+    )
+    assert list(data["x"]) == [], (
+        f"{recorder_state}: x must be empty; got {data['x']!r}"
+    )
+    assert data["ylabel"] == PLOT_TO_METRIC[plot_name]
+    json.dumps(data)
+
+
+def _plugin_only_best_aic() -> SGAPlugin:
+    recorder = VizRecorder(enabled=True)
+    recorder.log("best_aic", 42.0)
+    recorder.log("best_aic", 41.0)
+    return _plugin_with_recorder(recorder)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+def test_render_missing_metric_series_warns_not_crash(plot_name: str, ax: Axes) -> None:
+    plugin = _plugin_only_best_aic()
+
+    try:
+        plugin.render_plot(plot_name, ax)
+    except Exception as exc:
+        pytest.fail(
+            f"render_plot({plot_name!r}) with a missing metric series must not "
+            f"raise; got {type(exc).__name__}: {exc!r}"
+        )
+
+    text_strs = [t.get_text().lower() for t in ax.texts]
+    title = ax.get_title().lower()
+    signals = ("no data", "empty", "unavailable", "no recorder")
+    has_warning = any(any(sig in s for sig in signals) for s in [*text_strs, title])
+    assert has_warning, (
+        f"render_plot({plot_name!r}) with a missing metric series must surface a "
+        f"warning panel with one of {signals}. texts={text_strs!r}, title={title!r}"
+    )
+    assert len(ax.lines) == 0, (
+        f"{plot_name}: a missing-metric warning panel must not draw a phantom "
+        f"line from the unrelated best_aic series; got {len(ax.lines)} lines."
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+def test_get_plot_data_missing_metric_series_empty(plot_name: str) -> None:
+    plugin = _plugin_only_best_aic()
+
+    data = plugin.get_plot_data(plot_name)
+    assert isinstance(data, dict)
+    assert list(data["y"]) == [], (
+        f"{plot_name}: y must be empty when the metric series is missing; got "
+        f"{data['y']!r} (must not leak the unrelated best_aic series)."
+    )
+    assert list(data["x"]) == []
+    assert data["ylabel"] == PLOT_TO_METRIC[plot_name]
+    json.dumps(data)
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_render_unknown_name_raises(ax: Axes) -> None:
+    plugin, _ = _plugin_populated()
+    with pytest.raises(ValueError) as exc_info:
+        plugin.render_plot("nonexistent", ax)
+    msg = str(exc_info.value)
+    for name in EXPECTED_PLOT_NAMES:
+        assert name in msg, f"ValueError must list available name {name!r}; got {msg!r}"
+
+
+@pytest.mark.unit
+def test_render_unknown_name_raises_with_none_recorder(ax: Axes) -> None:
+    plugin = _plugin_none_recorder()
+    with pytest.raises(ValueError) as exc_info:
+        plugin.render_plot("nonexistent", ax)
+    msg = str(exc_info.value)
+    for name in EXPECTED_PLOT_NAMES:
+        assert name in msg, (
+            f"recorder=None unknown-name ValueError must list {name!r}; got {msg!r}"
+        )
+
+
+@pytest.mark.unit
+def test_get_plot_data_unknown_name_raises() -> None:
+    plugin, _ = _plugin_populated()
+    with pytest.raises(ValueError):
+        plugin.get_plot_data("nonexistent")
+
+
+@pytest.mark.unit
+def test_get_plot_data_unknown_name_raises_with_none_recorder() -> None:
+    plugin = _plugin_none_recorder()
+    with pytest.raises(ValueError) as exc_info:
+        plugin.get_plot_data("nonexistent")
+    msg = str(exc_info.value)
+    for name in EXPECTED_PLOT_NAMES:
+        assert name in msg, (
+            f"recorder=None unknown-name ValueError must list {name!r}; got {msg!r}"
+        )
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_render_fitness_spread_masks_inf_no_autoscale_blowup(ax: Axes) -> None:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder_with_inf(recorder)
+    plugin = _plugin_with_recorder(recorder)
+
+    plugin.render_plot("fitness_spread", ax)
+
+    y_data = np.asarray(ax.lines[0].get_ydata(), dtype=float)
+    assert not np.isinf(y_data).any(), (
+        f"render must mask +inf to nan before plotting; raw inf in ydata={y_data!r}"
+    )
+    finite_vals = y_data[np.isfinite(y_data)]
+    assert finite_vals.tolist() == pytest.approx([900.0, 850.0, 800.0]), (
+        f"finite aic must be preserved in order; got {finite_vals.tolist()!r}"
+    )
+    ylim = ax.get_ylim()
+    assert all(math.isfinite(v) for v in ylim), (
+        f"y-axis limits must be finite; got {ylim!r}"
+    )
+    assert ylim[1] < 1e6, (
+        f"y-axis upper bound must not blow up from +inf sentinels; got {ylim[1]!r}"
+    )
+
+
+@pytest.mark.unit
+def test_render_fitness_spread_all_inf_no_crash(ax: Axes) -> None:
+    recorder = VizRecorder(enabled=True)
+    n_gens = 4
+    for _ in range(n_gens):
+        recorder.log("gen_mean_aic", float("inf"))
+    plugin = _plugin_with_recorder(recorder)
+
+    plugin.render_plot("fitness_spread", ax)
+
+    y_data = np.asarray(ax.lines[0].get_ydata(), dtype=float)
+    assert len(y_data) == n_gens
+    assert not np.isfinite(y_data).any(), (
+        f"all-inf series must mask to all-nan; got {y_data!r}"
+    )
+    ylim = ax.get_ylim()
+    assert all(math.isfinite(v) for v in ylim), (
+        f"y-axis limits must stay finite with all-nan data; got {ylim!r}"
+    )
+
+
+@pytest.mark.unit
+def test_get_plot_data_fitness_spread_inf_becomes_none() -> None:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder_with_inf(recorder)
+    plugin = _plugin_with_recorder(recorder)
+
+    data = plugin.get_plot_data("fitness_spread")
+
+    assert data["y"][0] is None, (
+        f"+inf gen0 must serialize to None; got {data['y'][0]!r}"
+    )
+    assert data["y"][1] is None, (
+        f"+inf gen1 must serialize to None; got {data['y'][1]!r}"
+    )
+    assert data["y"][2] == pytest.approx(900.0)
+    assert data["y"][3] == pytest.approx(850.0)
+    assert data["y"][4] == pytest.approx(800.0)
+
+    json.dumps(data, allow_nan=False)
+
+
+@pytest.mark.unit
+def test_render_fitness_spread_after_recorder_roundtrip(ax: Axes) -> None:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder_with_inf(recorder)
+    restored = VizRecorder.from_dict(recorder.to_dict())
+    plugin = _plugin_with_recorder(restored)
+
+    plugin.render_plot("fitness_spread", ax)
+
+    y_data = np.asarray(ax.lines[0].get_ydata(), dtype=float)
+    assert not np.isinf(y_data).any(), "no raw inf may reach matplotlib after roundtrip"
+    finite_vals = y_data[np.isfinite(y_data)]
+
+
+
+
+
+
+    mean_finite = [v for v in restored.get("gen_mean_aic") if v is not None]
+    best_finite = [v for v in restored.get("gen_best_aic") if v is not None]
+    assert mean_finite != best_finite, (
+        "fixture bug: finite gen_mean_aic and gen_best_aic must differ for the "
+        "round-trip mean-vs-best discriminator to bite."
+    )
+    assert finite_vals.tolist() == pytest.approx(mean_finite), (
+        f"after round-trip, fitness_spread must still plot gen_mean_aic's "
+        f"finite values {mean_finite!r} (NOT gen_best_aic's {best_finite!r}); "
+        f"got {finite_vals.tolist()!r}."
+    )
+
+
+_SGA_VIZ_LOGGER = "kd.search.sga.viz"
+
+
+@pytest.mark.unit
+def test_get_plot_data_fitness_spread_roundtrip_none_no_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder_with_inf(recorder)
+    restored = VizRecorder.from_dict(recorder.to_dict())
+    plugin = _plugin_with_recorder(restored)
+
+    caplog.set_level(logging.WARNING, logger=_SGA_VIZ_LOGGER)
+    data = plugin.get_plot_data("fitness_spread")
+
+    assert data["y"][0] is None
+    assert data["y"][1] is None
+    assert data["y"][2] == pytest.approx(900.0)
+    json.dumps(data, allow_nan=False)
+    assert len(caplog.records) == 0, (
+        f"None gaps from deserialization must not warn; got "
+        f"{[r.message for r in caplog.records]}"
+    )
+
+
+    finite_y = [v for v in data["y"] if v is not None]
+    mean_finite = [v for v in restored.get("gen_mean_aic") if v is not None]
+    best_finite = [v for v in restored.get("gen_best_aic") if v is not None]
+    assert mean_finite != best_finite, (
+        "fixture bug: finite gen_mean_aic/gen_best_aic must differ for the "
+        "round-trip mean-vs-best data discriminator to bite."
+    )
+    assert finite_y == pytest.approx(mean_finite), (
+        f"get_plot_data after round-trip must keep gen_mean_aic's finite values "
+        f"{mean_finite!r} (NOT gen_best_aic's {best_finite!r}); got {finite_y!r}."
+    )
+
+
+@pytest.mark.unit
+def test_sga_viz_logger_warns_on_exotic_payload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    recorder = VizRecorder(enabled=True)
+
+    recorder.log("gen_mean_aic", 100.0)
+    recorder.log("gen_mean_aic", "not-a-number")
+    recorder.log("gen_mean_aic", 80.0)
+    plugin = _plugin_with_recorder(recorder)
+
+    caplog.set_level(logging.WARNING, logger=_SGA_VIZ_LOGGER)
+    data = plugin.get_plot_data("fitness_spread")
+
+    scoped = [r for r in caplog.records if r.name == _SGA_VIZ_LOGGER]
+    assert scoped, (
+        f"an exotic str payload in a plotted series must emit >=1 warning on "
+        f"{_SGA_VIZ_LOGGER!r} (proves the no-warning test's logger scope is "
+        f"live, not vacuous). Records: {[(r.name, r.message) for r in caplog.records]}"
+    )
+
+    assert data["y"][1] is None, (
+        f"exotic str sample must be dropped to None; got {data['y'][1]!r}"
+    )
+    assert data["y"][0] == pytest.approx(100.0)
+    assert data["y"][2] == pytest.approx(80.0)
+    json.dumps(data, allow_nan=False)
+
+
+@pytest.mark.unit
+def test_render_all_plots_after_roundtrip_no_crash(ax: Axes) -> None:
+    recorder = VizRecorder(enabled=True)
+    _populate_recorder_with_inf(recorder)
+    restored = VizRecorder.from_dict(recorder.to_dict())
+    plugin = _plugin_with_recorder(restored)
+
+    for name in sorted(EXPECTED_PLOT_NAMES):
+        ax.clear()
+        try:
+            plugin.render_plot(name, ax)
+        except Exception as exc:
+            pytest.fail(
+                f"render_plot({name!r}) after recorder round-trip must not "
+                f"raise; got {type(exc).__name__}: {exc!r}"
+            )

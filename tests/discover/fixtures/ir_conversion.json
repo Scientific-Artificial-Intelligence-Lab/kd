@@ -1,0 +1,354 @@
+{
+  "legacy_vocab": {
+    "names": [
+      "x1",
+      "u1",
+      "add",
+      "mul",
+      "div",
+      "diff",
+      "diff2",
+      "diff3",
+      "n2",
+      "n3"
+    ],
+    "arities": [
+      0,
+      0,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "cases": {
+      "single_terminal": {
+        "tokens": [
+          1
+        ],
+        "expected_ir": "u1"
+      },
+      "coord_terminal": {
+        "tokens": [
+          0
+        ],
+        "expected_ir": "x1"
+      },
+      "unary_n2": {
+        "tokens": [
+          8,
+          1
+        ],
+        "expected_ir": "n2(u1)"
+      },
+      "unary_diff": {
+        "tokens": [
+          5,
+          1
+        ],
+        "expected_ir": "diff(u1)"
+      },
+      "binary_add": {
+        "tokens": [
+          2,
+          0,
+          1
+        ],
+        "expected_ir": "add(x1,u1)"
+      },
+      "binary_mul": {
+        "tokens": [
+          3,
+          0,
+          1
+        ],
+        "expected_ir": "mul(x1,u1)"
+      },
+      "binary_div": {
+        "tokens": [
+          4,
+          1,
+          0
+        ],
+        "expected_ir": "div(u1,x1)"
+      },
+      "burgers_gt": {
+        "tokens": [
+          2,
+          3,
+          1,
+          5,
+          1,
+          6,
+          1
+        ],
+        "expected_ir": "add(mul(u1,diff(u1)),diff2(u1))"
+      },
+      "deeply_nested": {
+        "tokens": [
+          3,
+          8,
+          5,
+          1,
+          7,
+          9,
+          1
+        ],
+        "expected_ir": "mul(n2(diff(u1)),diff3(n3(u1)))"
+      },
+      "nested_add": {
+        "tokens": [
+          2,
+          2,
+          0,
+          1,
+          1
+        ],
+        "expected_ir": "add(add(x1,u1),u1)"
+      },
+      "chain_unary": {
+        "tokens": [
+          8,
+          9,
+          5,
+          1
+        ],
+        "expected_ir": "n2(n3(diff(u1)))"
+      },
+      "div_nested": {
+        "tokens": [
+          4,
+          3,
+          1,
+          0,
+          6,
+          1
+        ],
+        "expected_ir": "div(mul(u1,x1),diff2(u1))"
+      },
+      "right_nested_add": {
+        "tokens": [
+          2,
+          1,
+          2,
+          0,
+          1
+        ],
+        "expected_ir": "add(u1,add(x1,u1))"
+      }
+    }
+  },
+  "kd_vocab": {
+    "names": [
+      "x",
+      "u",
+      "add",
+      "mul",
+      "div",
+      "diff_x",
+      "diff2_x",
+      "diff3_x",
+      "n2",
+      "n3",
+      "sub",
+      "sin",
+      "cos",
+      "neg"
+    ],
+    "arities": [
+      0,
+      0,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1
+    ],
+    "cases": {
+      "single_terminal": {
+        "tokens": [
+          1
+        ],
+        "expected_ir": "u"
+      },
+      "coord_terminal": {
+        "tokens": [
+          0
+        ],
+        "expected_ir": "x"
+      },
+      "unary_n2": {
+        "tokens": [
+          8,
+          1
+        ],
+        "expected_ir": "n2(u)"
+      },
+      "unary_diff": {
+        "tokens": [
+          5,
+          1
+        ],
+        "expected_ir": "diff_x(u)"
+      },
+      "binary_add": {
+        "tokens": [
+          2,
+          0,
+          1
+        ],
+        "expected_ir": "add(x,u)"
+      },
+      "binary_mul": {
+        "tokens": [
+          3,
+          0,
+          1
+        ],
+        "expected_ir": "mul(x,u)"
+      },
+      "binary_div": {
+        "tokens": [
+          4,
+          1,
+          0
+        ],
+        "expected_ir": "div(u,x)"
+      },
+      "burgers_gt": {
+        "tokens": [
+          2,
+          3,
+          1,
+          5,
+          1,
+          6,
+          1
+        ],
+        "expected_ir": "add(mul(u,diff_x(u)),diff2_x(u))"
+      },
+      "deeply_nested": {
+        "tokens": [
+          3,
+          8,
+          5,
+          1,
+          7,
+          9,
+          1
+        ],
+        "expected_ir": "mul(n2(diff_x(u)),diff3_x(n3(u)))"
+      },
+      "nested_add": {
+        "tokens": [
+          2,
+          2,
+          0,
+          1,
+          1
+        ],
+        "expected_ir": "add(add(x,u),u)"
+      },
+      "chain_unary": {
+        "tokens": [
+          8,
+          9,
+          5,
+          1
+        ],
+        "expected_ir": "n2(n3(diff_x(u)))"
+      },
+      "div_nested": {
+        "tokens": [
+          4,
+          3,
+          1,
+          0,
+          6,
+          1
+        ],
+        "expected_ir": "div(mul(u,x),diff2_x(u))"
+      },
+      "right_nested_add": {
+        "tokens": [
+          2,
+          1,
+          2,
+          0,
+          1
+        ],
+        "expected_ir": "add(u,add(x,u))"
+      },
+      "sub_simple": {
+        "tokens": [
+          10,
+          1,
+          0
+        ],
+        "expected_ir": "sub(u,x)"
+      },
+      "sin_u": {
+        "tokens": [
+          11,
+          1
+        ],
+        "expected_ir": "sin(u)"
+      },
+      "cos_x": {
+        "tokens": [
+          12,
+          0
+        ],
+        "expected_ir": "cos(x)"
+      },
+      "neg_mul": {
+        "tokens": [
+          13,
+          3,
+          1,
+          0
+        ],
+        "expected_ir": "neg(mul(u,x))"
+      },
+      "burgers_with_sub": {
+        "tokens": [
+          10,
+          13,
+          3,
+          1,
+          5,
+          1,
+          6,
+          1
+        ],
+        "expected_ir": "sub(neg(mul(u,diff_x(u))),diff2_x(u))"
+      }
+    }
+  },
+  "roundtrip_ir_strings": [
+    "u",
+    "x",
+    "add(u,x)",
+    "mul(u,x)",
+    "div(u,x)",
+    "sin(u)",
+    "n2(u)",
+    "diff_x(u)",
+    "diff2_x(u)",
+    "add(mul(u,diff_x(u)),diff2_x(u))",
+    "mul(n2(diff_x(u)),diff3_x(n3(u)))",
+    "sub(neg(mul(u,diff_x(u))),diff2_x(u))",
+    "add(add(u,x),mul(u,x))",
+    "div(mul(u,x),diff2_x(u))"
+  ]
+}
