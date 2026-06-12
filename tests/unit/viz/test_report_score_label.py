@@ -21,6 +21,13 @@ from kd.viz.report import generate_report
 
 
 
+def _declared_meta(algorithm: str) -> tuple[str, str]:
+    from kd.api import _PLUGIN_CLASS_BY_ALGORITHM
+
+    plugin_class = _PLUGIN_CLASS_BY_ALGORITHM[algorithm]
+    return plugin_class.score_kind, plugin_class.score_direction
+
+
 @pytest.fixture()
 def make_mock_result():
 
@@ -28,6 +35,8 @@ def make_mock_result():
         algorithm: str | None,
         scores: list[float] | None = None,
         algorithm_name: str = "TestPlugin",
+        score_kind: str = "Score",
+        score_direction: str = "min",
     ) -> ExperimentResult:
 
 
@@ -82,6 +91,8 @@ def make_mock_result():
 
             config=config,
             recorder=recorder,
+            score_kind=score_kind,
+            score_direction=score_direction,
         )
 
     return _make
@@ -153,7 +164,8 @@ def test_generate_report_renders_algorithm_specific_label(
     algorithm: str,
     expected_label: str,
 ) -> None:
-    result = make_mock_result(algorithm)
+    kind, direction = _declared_meta(algorithm)
+    result = make_mock_result(algorithm, score_kind=kind, score_direction=direction)
     output = tmp_path / "report.html"
     generate_report(result, [svg_file], output)
 
@@ -210,7 +222,13 @@ def test_plot_convergence_ylabel_is_algorithm_aware(
     algorithm: str,
     expected_ylabel: str,
 ) -> None:
-    result = make_mock_result(algorithm, scores=[0.1, 0.2, 0.3])
+    kind, direction = _declared_meta(algorithm)
+    result = make_mock_result(
+        algorithm,
+        scores=[0.1, 0.2, 0.3],
+        score_kind=kind,
+        score_direction=direction,
+    )
     fig, ax = plt.subplots()
     try:
         plot_convergence(result, ax)
@@ -249,7 +267,13 @@ def test_plot_convergence_empty_recorder_uses_algorithm_label(
     algorithm: str,
     expected_ylabel: str,
 ) -> None:
-    result = make_mock_result(algorithm, scores=[])
+    kind, direction = _declared_meta(algorithm)
+    result = make_mock_result(
+        algorithm,
+        scores=[],
+        score_kind=kind,
+        score_direction=direction,
+    )
 
 
     assert result.recorder.get("_best_score") == [], (
@@ -326,8 +350,13 @@ def test_render_overlaid_convergence_ylabel_uniform_algorithm(
 ) -> None:
     from kd.viz.plots.comparison import render_overlaid_convergence
 
-    r1 = make_mock_result(algorithm, scores=[0.1, 0.3, 0.5])
-    r2 = make_mock_result(algorithm, scores=[0.2, 0.4, 0.6])
+    kind, direction = _declared_meta(algorithm)
+    r1 = make_mock_result(
+        algorithm, scores=[0.1, 0.3, 0.5], score_kind=kind, score_direction=direction
+    )
+    r2 = make_mock_result(
+        algorithm, scores=[0.2, 0.4, 0.6], score_kind=kind, score_direction=direction
+    )
     fig, ax = plt.subplots()
     try:
         render_overlaid_convergence([r1, r2], ax)
@@ -346,8 +375,20 @@ def test_render_overlaid_convergence_ylabel_mixed_algorithms_falls_back(
 ) -> None:
     from kd.viz.plots.comparison import render_overlaid_convergence
 
-    r_sga = make_mock_result("sga", scores=[0.5, 0.3, 0.1])
-    r_discover = make_mock_result("discover", scores=[0.1, 0.3, 0.5])
+    sga_kind, sga_direction = _declared_meta("sga")
+    discover_kind, discover_direction = _declared_meta("discover")
+    r_sga = make_mock_result(
+        "sga",
+        scores=[0.5, 0.3, 0.1],
+        score_kind=sga_kind,
+        score_direction=sga_direction,
+    )
+    r_discover = make_mock_result(
+        "discover",
+        scores=[0.1, 0.3, 0.5],
+        score_kind=discover_kind,
+        score_direction=discover_direction,
+    )
     fig, ax = plt.subplots()
     try:
         render_overlaid_convergence([r_sga, r_discover], ax)
@@ -380,8 +421,20 @@ def test_render_overlaid_convergence_ylabel_sga_dlga_not_shared(
 ) -> None:
     from kd.viz.plots.comparison import render_overlaid_convergence
 
-    r_sga = make_mock_result("sga", scores=[0.5, 0.3, 0.1])
-    r_dlga = make_mock_result("dlga", scores=[0.4, 0.2, 0.05])
+    sga_kind, sga_direction = _declared_meta("sga")
+    dlga_kind, dlga_direction = _declared_meta("dlga")
+    r_sga = make_mock_result(
+        "sga",
+        scores=[0.5, 0.3, 0.1],
+        score_kind=sga_kind,
+        score_direction=sga_direction,
+    )
+    r_dlga = make_mock_result(
+        "dlga",
+        scores=[0.4, 0.2, 0.05],
+        score_kind=dlga_kind,
+        score_direction=dlga_direction,
+    )
     fig, ax = plt.subplots()
     try:
         render_overlaid_convergence([r_sga, r_dlga], ax)
@@ -398,21 +451,9 @@ def test_render_overlaid_convergence_ylabel_sga_dlga_not_shared(
 
 
 
-@pytest.mark.unit
-def test_score_label_covers_all_supported_algorithms() -> None:
-    from kd.api import _SUPPORTED_ALGORITHMS
-    from kd.viz._labels import score_label
 
-    fallback_label = "Score"
-    missing_labels: list[str] = []
-    for algo in _SUPPORTED_ALGORITHMS:
-        label = score_label(algo)
-        if label == fallback_label:
-            missing_labels.append(algo)
 
-    assert not missing_labels, (
-        f"Algorithms in _SUPPORTED_ALGORITHMS without an explicit "
-        f"score_label entry (falling back to 'Score'): {missing_labels}. "
-        f"Add their label to viz/_labels.py:score_label so HTML reports "
-        f"and stdout pick up the correct algorithm-aware metric name."
-    )
+
+
+
+

@@ -157,6 +157,7 @@ HARD_STEP_CASES = [
 ]
 
 SOFT_STEP_CASES = [
+    "soft_initial",
     "soft_early",
     "soft_at_loc",
     "soft_late",
@@ -198,7 +199,17 @@ class TestSoftLengthCrossValidation:
     def test_soft_step_matches_reference(
         self, lib: Library, prior_fixture: dict[str, np.ndarray], case: str
     ) -> None:
-        obs = prior_fixture[f"step_{case}_obs"]
+        obs_key = f"step_{case}_obs"
+        if obs_key not in prior_fixture:
+
+
+
+            pytest.fail(
+                f"fixture key {obs_key!r} missing -- regenerate the .npz: "
+                "`uv run python "
+                "tests/discover/fixtures/generate_prior_system.py`"
+            )
+        obs = prior_fixture[obs_key]
         step_idx = int(prior_fixture[f"step_{case}_step_idx"])
         expected = prior_fixture[f"step_{case}_mask"]
 
@@ -665,6 +676,10 @@ def _ref_soft_path_logprior(
 ) -> float:
     total = 0.0
     for step_idx, name in enumerate(token_names):
+        if step_idx == 0:
+
+
+            continue
         token_idx = library.name_to_index(name)
         arity = int(library.arities[token_idx])
         if step_idx < loc:
@@ -681,8 +696,17 @@ def _ref_soft_path_logprior(
 
 class TestSoftLengthPriorRefsAlignment:
 
+
+
+
+
+
+
+
+    _NONADD_PENALTY_BY_STEP = {1: -0.4, 2: -0.1}
+
     @pytest.mark.unit
-    @pytest.mark.parametrize("step_idx", [0, 1, 2])
+    @pytest.mark.parametrize("step_idx", list(_NONADD_PENALTY_BY_STEP))
     def test_t_less_than_3_penalizes_nonadd_tokens(
         self, lib: Library, step_idx: int,
     ) -> None:
@@ -695,9 +719,13 @@ class TestSoftLengthPriorRefsAlignment:
         add_like = _add_indices(lib)
         assert len(add_like) >= 1, "fixture must expose add or sub tokens"
 
-        expected_penalty = np.float32(
+
+
+
+        expected_penalty = np.float32(self._NONADD_PENALTY_BY_STEP[step_idx])
+        assert expected_penalty == pytest.approx(
             -((step_idx - SOFT_EARLY_CUTOFF) ** 2) / SOFT_EARLY_SCALE,
-        )
+        ), "hardcoded penalty table must agree with the refs quadratic"
         for t in nonadd:
             assert adjustment[0, t] == pytest.approx(expected_penalty), (
                 f"non-add token {lib.names[t]} at step={step_idx}: "
@@ -707,6 +735,22 @@ class TestSoftLengthPriorRefsAlignment:
             assert adjustment[0, t] == 0.0, (
                 f"add/sub token {lib.names[t]} at step={step_idx} must be 0"
             )
+
+    @pytest.mark.unit
+    def test_position_zero_contributes_zero(self, lib: Library) -> None:
+        prior = SoftLengthPrior(lib, loc=SOFT_LOC, scale=SOFT_SCALE)
+        ps = PriorSystem(lib, priors=[prior])
+        adjustment = ps.step(
+            _dummy_actions(1, 0), _initial_obs(lib), step_idx=0,
+        )
+        np.testing.assert_array_equal(
+            adjustment,
+            np.zeros_like(adjustment),
+            err_msg=(
+                "root-token SoftLength contribution must be all-zero "
+                "(refs initial_prior), not the t<3 nonadd penalty"
+            ),
+        )
 
     @pytest.mark.unit
     @pytest.mark.parametrize("step_idx", [3, 5])
@@ -773,11 +817,24 @@ class TestSoftLengthPriorRefsAlignment:
         )
 
     @pytest.mark.unit
-    def test_initial_adjustment_matches_step_zero(self, lib: Library) -> None:
+    def test_initial_adjustment_is_zero_and_matches_step_zero(
+        self, lib: Library,
+    ) -> None:
         prior = SoftLengthPrior(lib, loc=SOFT_LOC, scale=SOFT_SCALE)
         ps = PriorSystem(lib, priors=[prior])
-        step_zero = ps.step(_dummy_actions(1, 0), _initial_obs(lib), step_idx=0)
         direct = prior.initial_adjustment(batch_size=1)
+
+
+        np.testing.assert_array_equal(
+            direct,
+            np.zeros_like(direct),
+            err_msg=(
+                "initial_adjustment must be all-zero (refs initial_prior), "
+                "not the t<3 nonadd penalty"
+            ),
+        )
+
+        step_zero = ps.step(_dummy_actions(1, 0), _initial_obs(lib), step_idx=0)
         np.testing.assert_array_equal(step_zero, direct)
 
     @pytest.mark.unit
@@ -791,10 +848,16 @@ class TestSoftLengthPriorRefsAlignment:
         )
         prior = SoftLengthPrior(bare_lib, loc=SOFT_LOC, scale=SOFT_SCALE)
         ps = PriorSystem(bare_lib, priors=[prior])
+
+
+
+        step = 1
         adjustment = ps.step(
-            _dummy_actions(1, 0), _initial_obs(bare_lib), step_idx=0,
+            _dummy_actions(1, step), _initial_obs(bare_lib), step_idx=step,
         )
-        expected = np.float32(-((0 - SOFT_EARLY_CUTOFF) ** 2) / SOFT_EARLY_SCALE)
+        expected = np.float32(
+            -((step - SOFT_EARLY_CUTOFF) ** 2) / SOFT_EARLY_SCALE
+        )
 
         np.testing.assert_allclose(
             adjustment, np.full_like(adjustment, expected),
@@ -963,27 +1026,19 @@ class TestPriorSystem:
 
         for t in lib.terminal_tokens:
             assert adjustment[0, t] == _forbid_value(), (
-                f"terminal {lib.names[t]}: expected -inf (hard dominates), "
+                f"terminal {lib.names[t]}: expected -inf (hard forbids), "
                 f"got {adjustment[0, t]}"
             )
-        expected_nonadd_penalty = np.float32(-((0 - 3) ** 2) / 10.0)
 
 
-        add_names = {"add", "add_t", "sub", "sub_t"}
+
+
         for t in np.concatenate([lib.unary_tokens, lib.binary_tokens]):
             name = lib.names[t]
-            if name in add_names:
-                assert adjustment[0, t] == 0.0, (
-                    f"add-like token {name}: expected 0.0, got "
-                    f"{adjustment[0, t]}"
-                )
-            else:
-                assert adjustment[0, t] == pytest.approx(
-                    expected_nonadd_penalty,
-                ), (
-                    f"non-add token {name}: expected {expected_nonadd_penalty}, "
-                    f"got {adjustment[0, t]}"
-                )
+            assert adjustment[0, t] == 0.0, (
+                f"non-terminal {name}: expected 0.0 (soft contributes "
+                f"nothing at step 0), got {adjustment[0, t]}"
+            )
 
     @pytest.mark.unit
     def test_sum_combine_two_soft_priors(self, lib: Library) -> None:

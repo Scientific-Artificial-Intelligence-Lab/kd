@@ -265,6 +265,9 @@ def test_sga_accepts_early_stop_min_mode() -> None:
 
 
 
+
+
+
 @pytest.mark.unit
 def test_dlga_accepts_early_stop_min_mode() -> None:
     from kd.search.callbacks import EarlyStoppingCallback
@@ -336,14 +339,12 @@ def test_dlga_rejects_early_stop_max_mode() -> None:
     )
 
 
-@pytest.mark.unit
-def test_early_stop_mode_map_covers_all_supported_algorithms() -> None:
-    from kd.api import _EARLY_STOP_MODE_BY_ALGORITHM, _SUPPORTED_ALGORITHMS
 
-    missing = [
-        a for a in _SUPPORTED_ALGORITHMS if a not in _EARLY_STOP_MODE_BY_ALGORITHM
-    ]
-    assert not missing, f"algorithms without an early-stop mode: {missing}"
+
+
+
+
+
 
 
 
@@ -388,26 +389,39 @@ def test_discover_rejects_early_stop_min_mode_in_mixed_list() -> None:
     ],
 )
 def test_api_score_label_matches_viz_helper(algo: str, expected: str) -> None:
+    from typing import ClassVar
+
+    from kd.api import _PLUGIN_CLASS_BY_ALGORITHM
     from kd.api import _score_label as api_score_label
-    from kd.viz._labels import score_label as viz_score_label
 
+    plugin_class = _PLUGIN_CLASS_BY_ALGORITHM.get(algo)
 
-    class _Stub:
-        config = {"algorithm": algo}
+    if plugin_class is not None:
+        declared_kind = plugin_class.score_kind
+
+        class _Stub:
+            score_kind: ClassVar[str] = declared_kind
+            config = {"algorithm": algo}
+    else:
+
+        class _Stub:
+            config = {"algorithm": algo}
 
     api_result = api_score_label(_Stub())
-    viz_result = viz_score_label(algo)
 
     assert api_result == expected, (
         f"api._score_label({algo!r}) returned {api_result!r}, expected {expected!r}"
     )
-    assert viz_result == expected, (
-        f"viz.score_label({algo!r}) returned {viz_result!r}, expected {expected!r}"
-    )
-    assert api_result == viz_result, (
-        f"api and viz helpers diverged for algo={algo!r}: "
-        f"api={api_result!r}, viz={viz_result!r}"
-    )
+    if plugin_class is not None:
+        assert plugin_class.score_kind == expected, (
+            f"{plugin_class.__name__}.score_kind is "
+            f"{plugin_class.score_kind!r}, expected {expected!r}"
+        )
+        assert api_result == plugin_class.score_kind, (
+            f"api._score_label diverged from the plugin declaration for "
+            f"algo={algo!r}: api={api_result!r}, "
+            f"declared={plugin_class.score_kind!r}"
+        )
 
 
 
@@ -418,7 +432,7 @@ def test_api_score_label_matches_viz_helper(algo: str, expected: str) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "bad_name",
-    ["DISCOVER", "Discover", "SGA", "Sga", "DLGA", "Dlga", "pysr", ""],
+    ["DISCOVER", "Discover", "SGA", "Sga", "DLGA", "Dlga", "PySR", ""],
 )
 def test_model_rejects_unsupported_algorithm_at_init(bad_name: str) -> None:
     from kd import Model

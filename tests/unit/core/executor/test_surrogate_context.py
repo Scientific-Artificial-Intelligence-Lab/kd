@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -99,6 +100,55 @@ class TestSurrogateContext:
         )
 
 
+class TestTrainingResultParam:
+
+    def test_defaults_to_none(self) -> None:
+        model = _ScaledExactModel(scale=1.0)
+        dataset, provider = _dataset_and_provider(model)
+        context = SurrogateContext(dataset, provider, surrogate_field="u")
+        captured = getattr(context, "training_result", "MISSING_ATTR")
+        assert captured is None, (
+            "SurrogateContext.training_result must default to None (attribute "
+            f"must exist with value None). Got: {captured!r}"
+        )
+
+    def test_stores_passed_training_result_identity(self) -> None:
+        from kd.models.trainer import TrainingResult
+
+        model = _ScaledExactModel(scale=1.0)
+        dataset, provider = _dataset_and_provider(model)
+        tr = TrainingResult(
+            final_loss=0.01,
+            epochs_run=3,
+            early_stopped=False,
+            val_loss=None,
+        )
+
+        context = SurrogateContext(
+            dataset,
+            provider,
+            surrogate_field="u",
+            training_result=tr,
+        )
+        assert context.training_result is tr, (
+            "SurrogateContext must store the exact TrainingResult instance "
+            "passed via training_result=, not a copy."
+        )
+
+    def test_training_result_is_keyword_only(self) -> None:
+        from kd.models.trainer import TrainingResult
+
+        model = _ScaledExactModel(scale=1.0)
+        dataset, provider = _dataset_and_provider(model)
+        tr = TrainingResult(
+            final_loss=0.01, epochs_run=3, early_stopped=False, val_loss=None
+        )
+        with pytest.raises(TypeError):
+
+
+            SurrogateContext(dataset, provider, tr)
+
+
 class TestBackwardCompatAlias:
 
     def test_dlga_alias_resolves_to_surrogate_context(self) -> None:
@@ -106,7 +156,7 @@ class TestBackwardCompatAlias:
 
         assert DLGASurrogateContext is SurrogateContext, (
             "DLGASurrogateContext must be a literal alias for SurrogateContext, "
-            "not a separate class — promoted-and-aliased pattern (POT-5 Step 3)."
+            "not a separate class — promoted-and-aliased pattern."
         )
 
     def test_alias_constructs_same_instance_type(self) -> None:

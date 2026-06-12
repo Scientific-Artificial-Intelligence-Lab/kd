@@ -9,21 +9,14 @@ from collections.abc import Callable
 
 
 ScorerFn = Callable[[float, int], float]
-"""Unified scorer signature: (mse, k) -> score.
-
-``mse`` is mean squared error; ``k`` is model complexity (active term count).
-Lower scores indicate better models.
-"""
 
 
 
 
 
 _NMSE_EPS: float = 1e-15
-"""Default epsilon for NMSE target-variance guard."""
 
 _MSE_FLOOR: float = 1e-15
-"""MSE values at or below this threshold are treated as perfect fit."""
 
 
 

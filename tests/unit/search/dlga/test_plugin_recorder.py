@@ -268,6 +268,7 @@ def test_each_metric_value_is_correct(
 
 
 
+
         assert type(recorded) is int, (
             f"{field}: recorded value must be a built-in int, got "
             f"{type(recorded).__name__} ({recorded!r}). A numpy/tensor scalar "

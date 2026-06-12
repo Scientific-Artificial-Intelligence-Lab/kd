@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
@@ -23,6 +23,8 @@ class TrainingResult:
     best_val_loss: float | None = None
     best_epoch: int | None = None
     best_restored: bool = False
+    loss_history: list[float] = field(default_factory=list)
+    val_loss_history: list[float] | None = None
 
 
 class FieldModelTrainer:
@@ -143,17 +145,27 @@ class FieldModelTrainer:
         early_stopped = False
         epoch = 0
         track_best = restore_best and val_coords is not None
+        has_val = val_coords is not None and val_targets is not None
+
+
+
+
+        loss_history: list[float] = []
+        val_loss_history: list[float] | None = [] if has_val else None
 
         for epoch in range(1, max_epochs + 1):
             final_loss = _train_step(
                 self._model, optimizer, criterion, train_coords, train_targets
             )
+            loss_history.append(final_loss)
 
 
             if val_coords is not None and val_targets is not None:
                 final_val_loss = _eval_loss(
                     self._model, criterion, val_coords, val_targets
                 )
+                if val_loss_history is not None:
+                    val_loss_history.append(final_val_loss)
 
                 if final_val_loss < best_val_loss:
                     best_val_loss = final_val_loss
@@ -192,6 +204,8 @@ class FieldModelTrainer:
             best_val_loss=best_val_loss if best_epoch is not None else None,
             best_epoch=best_epoch,
             best_restored=best_restored,
+            loss_history=loss_history,
+            val_loss_history=val_loss_history,
         )
 
     def _set_normalization(

@@ -49,8 +49,7 @@ METRIC_REL_TOL: float = 1e-4
 
 _PROJECT_ROOT: Path = Path(__file__).parent.parent.parent
 _DATA_DIR: Path = (
-    _PROJECT_ROOT / "refs" / "discover" / "dso" / "dso" / "task" / "pde"
-    / "data_new"
+    _PROJECT_ROOT / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
 )
 _BURGERS_MAT: Path = _DATA_DIR / "burgers.mat"
 _CHAFEE_DIR: Path = _DATA_DIR
@@ -101,7 +100,9 @@ def test_d1_ill_conditioned_basin_shift_is_pinned() -> None:
     theta64[:, 3] *= 1e-3
     true = torch.tensor([0.1, -1.0, 0.5, 2.0], dtype=torch.float64)
     y64 = theta64 @ true + 1e-4 * torch.randn(
-        2000, generator=g, dtype=torch.float64,
+        2000,
+        generator=g,
+        dtype=torch.float64,
     )
     theta32, y32 = theta64.float(), y64.float()
 
@@ -154,7 +155,9 @@ def test_d1_reward_landscape_pinned_for_ill_conditioned_candidate() -> None:
     theta64[:, 3] *= 1e-3
     true = torch.tensor([0.1, -1.0, 0.5, 2.0], dtype=torch.float64)
     y64 = theta64 @ true + 1e-4 * torch.randn(
-        2000, generator=g, dtype=torch.float64,
+        2000,
+        generator=g,
+        dtype=torch.float64,
     )
     theta32, y32 = theta64.float(), y64.float()
     res = LeastSquaresSolver().solve(theta32, y32)
@@ -192,7 +195,7 @@ def test_d1_burgers_gt_expression_metrics_pinned() -> None:
 
     assert res.is_valid
     expected_mse = 7.631660410276517e-08
-    expected_nmse = 1.117810967530054e-05
+    expected_nmse = 1.117832691579564e-05
     expected_coefs = {
         "diff2_x(u)": 0.10018764586954026,
         "mul(u, diff_x(u))": -1.0000022081692412,
@@ -220,7 +223,7 @@ def test_d1_chafee_gt_expression_metrics_pinned() -> None:
 
     assert res.is_valid
     expected_mse = 0.008009744104737315
-    expected_nmse = 0.000252605296314628
+    expected_nmse = 0.0002526094924855995
     expected_coefs = {
         "diff2_x(u)": 0.9923814610979442,
         "u": -0.9791696135885406,
@@ -281,7 +284,9 @@ def test_d2_predicate_band_1e6_to_1e4_now_accepts() -> None:
     ],
 )
 def test_d2_new_hard_rejects_now_raise(
-    name: str, values: list[float], needle: str,
+    name: str,
+    values: list[float],
+    needle: str,
 ) -> None:
     arr = torch.tensor(values, dtype=torch.float64)
     with pytest.raises(ValueError, match=needle):
@@ -332,7 +337,8 @@ def test_d2_canonical_pde_grids_uniform_under_both_rtols() -> None:
     ],
 )
 def test_d3_strict_diff_arity_raises_on_grid(
-    code: str, needle: str,
+    code: str,
+    needle: str,
 ) -> None:
     from kd.search.discover.data.loader import load_burgers_mat
 
@@ -441,7 +447,9 @@ def _build_fd_evaluator(dataset: PDEDataset) -> Evaluator:
     context = ExecutionContext(dataset=dataset, derivative_provider=provider)
     registry = FunctionRegistry.create_default()
     u_t = provider.get_derivative(
-        dataset.lhs_field, dataset.lhs_axis, order=1,
+        dataset.lhs_field,
+        dataset.lhs_axis,
+        order=1,
     ).flatten()
     return Evaluator(
         executor=PythonExecutor(registry),

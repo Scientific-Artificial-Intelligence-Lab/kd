@@ -15,15 +15,12 @@ def canonicalize(
     max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> ast.expr:
     if _depth > max_depth:
-        raise RecursionError(
-            f"Expression depth {_depth} exceeds max_depth {max_depth}"
-        )
+        raise RecursionError(f"Expression depth {_depth} exceeds max_depth {max_depth}")
 
     if isinstance(node, ast.Call):
 
         new_args = [
-            canonicalize(arg, registry, _depth + 1, max_depth)
-            for arg in node.args
+            canonicalize(arg, registry, _depth + 1, max_depth) for arg in node.args
         ]
 
 

@@ -26,6 +26,8 @@ def _make_result(
     n_iterations: int = 5,
     has_recorder: bool = True,
     algorithm: str | None = None,
+    score_kind: str = "Score",
+    score_direction: str = "min",
 ) -> ExperimentResult:
     n_samples = 20
     recorder = VizRecorder()
@@ -63,6 +65,8 @@ def _make_result(
         algorithm_name=name,
         config=config,
         recorder=recorder,
+        score_kind=score_kind,
+        score_direction=score_direction,
     )
 
 
@@ -151,15 +155,20 @@ class TestOverlaidConvergenceBandGating:
         from kd.viz.plots.comparison import render_overlaid_convergence
 
         results = [
-            _make_result("s", algorithm="sga"),
-            _make_result("d", algorithm="dlga"),
+            _make_result("s", algorithm="sga", score_kind="AIC", score_direction="min"),
+            _make_result(
+                "d",
+                algorithm="dlga",
+                score_kind="DLGA fitness",
+                score_direction="min",
+            ),
         ]
         fig, ax = plt.subplots()
         try:
             warnings = render_overlaid_convergence(results, ax)
             assert not _has_mean_band(ax), (
                 "mixed-algorithm overlay must NOT average incommensurable "
-                "series into one mean±std band (AUDIT-01)"
+                "series into one mean±std band"
             )
             assert any(
                 "mixed" in w.lower() or "incommensurable" in w.lower() for w in warnings
@@ -172,8 +181,13 @@ class TestOverlaidConvergenceBandGating:
         from kd.viz.plots.comparison import render_overlaid_convergence
 
         results = [
-            _make_result("s", algorithm="sga"),
-            _make_result("d", algorithm="dlga"),
+            _make_result("s", algorithm="sga", score_kind="AIC", score_direction="min"),
+            _make_result(
+                "d",
+                algorithm="dlga",
+                score_kind="DLGA fitness",
+                score_direction="min",
+            ),
         ]
         fig, ax = plt.subplots()
         try:

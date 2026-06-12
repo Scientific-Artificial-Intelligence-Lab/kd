@@ -99,6 +99,34 @@ class TestSVDNullSpaceSolver:
         assert "denominator" in result.error_message
 
     @pytest.mark.unit
+    @pytest.mark.numerical
+    def test_denominator_guard_fires_on_real_degenerate_system(self) -> None:
+        c0 = torch.tensor([1.0, 0.0, 0.0, 1.0, 2.0], dtype=torch.float64)
+        c1 = torch.tensor([0.0, 1.0, 0.0, 1.0, -1.0], dtype=torch.float64)
+        theta = torch.column_stack([c0, c1, c1.clone()])
+
+
+        y = torch.tensor([1.0, 2.0, 5.0, 0.0, 3.0], dtype=torch.float64)
+
+
+
+
+        augmented = torch.column_stack([y, theta])
+        _u, s, vh = torch.linalg.svd(augmented, full_matrices=False)
+        assert float(s[-1].item()) < 1e-10, "system is not rank-deficient as set up"
+        assert abs(float(vh[-1, 0].item())) < 1e-12, "null vector v[0] is not ~0"
+
+        result = SVDNullSpaceSolver(eps=1e-8).solve(theta, y)
+
+        assert result.is_valid is False
+
+
+        assert "denominator" in result.error_message
+        assert "near zero" in result.error_message
+        assert result.residual == float("inf")
+        assert result.coefficients.shape == (theta.shape[1],)
+
+    @pytest.mark.unit
     def test_shape_validation_rejects_mismatched_rows(self) -> None:
         theta, y, _ = _exact_system()
         with pytest.raises(ValueError, match="dimension mismatch"):

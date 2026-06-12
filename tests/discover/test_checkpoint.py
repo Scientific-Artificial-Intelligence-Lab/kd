@@ -76,10 +76,13 @@ def lib() -> Library:
 
 @pytest.fixture
 def prior_system(lib: Library) -> PriorSystem:
-    return PriorSystem(lib, [
-        LengthConstraint(lib, min_=MIN_LENGTH, max_=MAX_LENGTH),
-        DiffChildConstraint(lib),
-    ])
+    return PriorSystem(
+        lib,
+        [
+            LengthConstraint(lib, min_=MIN_LENGTH, max_=MAX_LENGTH),
+            DiffChildConstraint(lib),
+        ],
+    )
 
 
 @pytest.fixture
@@ -160,6 +163,12 @@ def _run_one_iteration(engine: DiscoverEngine) -> None:
     engine.run_iteration(evaluator)
 
 
+def _adam_step_as_int(step: Any) -> int:
+    if isinstance(step, torch.Tensor):
+        return int(step.item())
+    return int(step)
+
+
 
 
 
@@ -169,13 +178,16 @@ class TestStrategyOptimizerState:
 
     @pytest.mark.unit
     def test_optimizer_state_none_before_train_step(
-        self, strategy: RSPGStrategy,
+        self,
+        strategy: RSPGStrategy,
     ) -> None:
         assert strategy.optimizer_state is None
 
     @pytest.mark.unit
     def test_optimizer_state_dict_after_train_step(
-        self, controller: LSTMController, strategy: RSPGStrategy,
+        self,
+        controller: LSTMController,
+        strategy: RSPGStrategy,
     ) -> None:
         torch.manual_seed(SEED)
         batch = controller.sample(BATCH_SIZE)
@@ -190,7 +202,9 @@ class TestStrategyOptimizerState:
 
     @pytest.mark.unit
     def test_set_optimizer_state_restores_adam_moments(
-        self, controller: LSTMController, strategy: RSPGStrategy,
+        self,
+        controller: LSTMController,
+        strategy: RSPGStrategy,
     ) -> None:
         torch.manual_seed(SEED)
         batch = controller.sample(BATCH_SIZE)
@@ -234,7 +248,8 @@ class TestStrategyOptimizerState:
 
     @pytest.mark.unit
     def test_set_optimizer_state_before_init_deferred(
-        self, controller: LSTMController,
+        self,
+        controller: LSTMController,
     ) -> None:
         strategy = RSPGStrategy(epsilon=0.5, baseline="R_e")
 
@@ -246,6 +261,9 @@ class TestStrategyOptimizerState:
         ref_strategy.train_step(controller, batch, rewards, BaselineState())
         ref_opt_state = ref_strategy.optimizer_state
         assert ref_opt_state is not None
+
+
+        assert ref_opt_state["state"], "reference optimizer state is empty"
 
 
         torch.manual_seed(SEED)
@@ -268,12 +286,18 @@ class TestStrategyOptimizerState:
 
         restored = strategy.optimizer_state
         assert restored is not None
+        assert restored["state"], "optimizer state empty after deferred restore"
+
+        assert set(restored["state"].keys()) == set(ref_opt_state["state"].keys())
 
 
-        if restored["state"]:
-            first_key = next(iter(restored["state"]))
-
-            assert restored["state"][first_key]["step"] > 0
+        for key, ref_entry in ref_opt_state["state"].items():
+            ref_step = _adam_step_as_int(ref_entry["step"])
+            got_step = _adam_step_as_int(restored["state"][key]["step"])
+            assert got_step == ref_step + 1, (
+                f"param {key}: step {got_step} != ref {ref_step} + 1 "
+                "(deferred optimizer_state restore was dropped)"
+            )
 
 
 
@@ -285,7 +309,8 @@ class TestEngineStateCheckpoint:
 
     @pytest.mark.unit
     def test_engine_state_includes_optimizer_state_after_iteration(
-        self, engine: DiscoverEngine,
+        self,
+        engine: DiscoverEngine,
     ) -> None:
         torch.manual_seed(SEED)
         _run_one_iteration(engine)
@@ -299,7 +324,8 @@ class TestEngineStateCheckpoint:
 
     @pytest.mark.unit
     def test_engine_state_optimizer_state_none_before_training(
-        self, engine: DiscoverEngine,
+        self,
+        engine: DiscoverEngine,
     ) -> None:
         state = engine.state
         assert state.optimizer_state is None
@@ -331,7 +357,8 @@ class TestEngineStateCheckpoint:
 
     @pytest.mark.unit
     def test_state_roundtrip_preserves_optimizer_state(
-        self, engine: DiscoverEngine,
+        self,
+        engine: DiscoverEngine,
     ) -> None:
         torch.manual_seed(SEED)
         _run_one_iteration(engine)
@@ -359,7 +386,8 @@ class TestEngineStateCheckpoint:
 
     @pytest.mark.unit
     def test_state_roundtrip_extras_preserved(
-        self, engine: DiscoverEngine,
+        self,
+        engine: DiscoverEngine,
     ) -> None:
         torch.manual_seed(SEED)
         _run_one_iteration(engine)
@@ -383,7 +411,8 @@ class TestEngineStateCheckpoint:
 
     @pytest.mark.unit
     def test_restore_state_without_optimizer_state(
-        self, engine: DiscoverEngine,
+        self,
+        engine: DiscoverEngine,
     ) -> None:
         torch.manual_seed(SEED)
         _run_one_iteration(engine)
@@ -411,7 +440,8 @@ class TestPluginCheckpointSerialization:
 
     @pytest.mark.unit
     def test_plugin_state_includes_optimizer_state(
-        self, plugin: DISCOVERPlugin,
+        self,
+        plugin: DISCOVERPlugin,
     ) -> None:
         torch.manual_seed(SEED)
         candidates = plugin.propose(BATCH_SIZE)
@@ -424,7 +454,8 @@ class TestPluginCheckpointSerialization:
 
     @pytest.mark.unit
     def test_plugin_state_restores_optimizer_state(
-        self, plugin: DISCOVERPlugin,
+        self,
+        plugin: DISCOVERPlugin,
     ) -> None:
         torch.manual_seed(SEED)
         candidates = plugin.propose(BATCH_SIZE)
@@ -445,7 +476,8 @@ class TestPluginCheckpointSerialization:
 
     @pytest.mark.unit
     def test_plugin_state_without_optimizer_state_backward_compat(
-        self, plugin: DISCOVERPlugin,
+        self,
+        plugin: DISCOVERPlugin,
     ) -> None:
         torch.manual_seed(SEED)
         candidates = plugin.propose(BATCH_SIZE)
@@ -473,7 +505,8 @@ class TestPluginCheckpointSerialization:
 
     @pytest.mark.unit
     def test_plugin_state_extras_roundtrip(
-        self, plugin: DISCOVERPlugin,
+        self,
+        plugin: DISCOVERPlugin,
     ) -> None:
         torch.manual_seed(SEED)
         candidates = plugin.propose(BATCH_SIZE)
@@ -492,7 +525,8 @@ class TestPluginCheckpointSerialization:
 
     @pytest.mark.unit
     def test_plugin_state_pickle_serializable_with_optimizer(
-        self, plugin: DISCOVERPlugin,
+        self,
+        plugin: DISCOVERPlugin,
     ) -> None:
         torch.manual_seed(SEED)
         candidates = plugin.propose(BATCH_SIZE)

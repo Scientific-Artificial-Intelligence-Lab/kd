@@ -19,7 +19,6 @@ compute_aic = aic_no_n
 
 
 _ZERO_COL_EPS = 1e-14
-"""Threshold for counting a coefficient as non-zero."""
 
 
 @dataclass

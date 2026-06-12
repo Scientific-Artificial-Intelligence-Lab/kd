@@ -9,7 +9,9 @@ from kd.core.evaluator import EvaluationResult
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.controller.lstm import LSTMController
 from kd.search.discover.engine import DiscoverEngine
+from kd.search.discover.engine_types import ResultFilter
 from kd.search.discover.evaluation.dedup import Deduplicator
+from kd.search.discover.evaluation.magnitude import apply_magnitude_filter
 from kd.search.discover.evaluation.reward import compute_reward
 from kd.search.discover.tokens.library import Library
 from kd.search.discover.tokens.prior import (
@@ -80,9 +82,7 @@ def build_prior_system(library: Library, config: DiscoverConfig) -> PriorSystem:
                 diffusion_tokens=list(config.diagnostic_scaffold_diffusion_tokens),
                 reaction_tokens=list(config.diagnostic_scaffold_reaction_tokens),
                 root_tokens=tuple(config.diagnostic_scaffold_root_tokens),
-                neutral_tokens=tuple(
-                    config.diagnostic_scaffold_neutral_tokens
-                ),
+                neutral_tokens=tuple(config.diagnostic_scaffold_neutral_tokens),
             )
         )
     if config.token_bias_weight != 0.0 and config.token_bias_tokens:
@@ -129,12 +129,20 @@ def build_strategy(config: DiscoverConfig) -> RSPGStrategy:
     )
 
 
-def _make_reward_adapter(alpha: float) -> Callable[[EvaluationResult], float]:
+def _make_reward_adapter(
+    alpha: float,
+) -> Callable[[EvaluationResult], float]:
 
     def adapter(result: EvaluationResult) -> float:
         return compute_reward(result, alpha=alpha)
 
     return adapter
+
+
+def _make_magnitude_filter(*, enabled: bool) -> ResultFilter | None:
+    if not enabled:
+        return None
+    return apply_magnitude_filter
 
 
 def build_engine(config: DiscoverConfig) -> DiscoverEngine:
@@ -153,13 +161,12 @@ def build_engine(config: DiscoverConfig) -> DiscoverEngine:
         generator=controller,
         strategy=strategy,
         reward_adapter=_make_reward_adapter(config.reward_alpha),
+        result_filter=_make_magnitude_filter(enabled=config.magnitude_filter),
         validator=validator,
         deduplicator=deduplicator,
         batch_size=config.batch_size,
         cycle_candidate_capacity=(
-            config.stability_queue_capacity
-            if config.stability_selection > 0
-            else 0
+            config.stability_queue_capacity if config.stability_selection > 0 else 0
         ),
     )
 
@@ -170,4 +177,6 @@ __all__ = [
     "build_controller",
     "build_strategy",
     "build_engine",
+    "_make_magnitude_filter",
+    "_make_reward_adapter",
 ]

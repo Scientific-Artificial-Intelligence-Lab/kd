@@ -19,29 +19,22 @@ logger = logging.getLogger(__name__)
 _JSON_INDENT_SPACES = 2
 
 
+
+
+
+
+DEFAULT_SCORE_KIND = "Score"
+DEFAULT_SCORE_DIRECTION = "min"
+
+
 def _serialize_evaluation_result(result: EvaluationResult) -> dict[str, Any]:
-    """Convert an ``EvaluationResult`` into a JSON-safe dictionary."""
-    return {
-        "mse": _sanitize_float(result.mse),
-        "nmse": _sanitize_float(result.nmse),
-        "r2": _sanitize_float(result.r2),
-        "aic": _sanitize_float(result.aic) if result.aic is not None else None,
-        "complexity": result.complexity,
-        "coefficients": _make_json_safe(
-            result.coefficients,
-            key="final_eval.coefficients",
-        ),
-        "is_valid": result.is_valid,
-        "error_message": result.error_message,
-        "selected_indices": result.selected_indices,
-        "residuals": _make_json_safe(
-            result.residuals,
-            key="final_eval.residuals",
-        ),
-        "terms": result.terms,
-        "expression": result.expression,
-        "lhs_name": result.lhs_name,
-    }
+    """Convert an ``EvaluationResult`` into a JSON-safe dictionary.
+
+    Thin delegate to ``EvaluationResult.to_dict``: the dataclass method is
+    now the single serialization source. Kept as a free function so existing
+    callers (``ResultBuilder`` / save path) keep importing it unchanged.
+    """
+    return result.to_dict()
 
 
 def _deserialize_tensor(value: Any) -> Tensor | None:
@@ -57,11 +50,10 @@ def _load_float(value: Any) -> float:
     ``save`` sanitizes non-finite floats to ``None`` (RFC 8259 has no inf/NaN
     representation); on load we coerce that ``None`` back to ``NaN`` so the
     ``float``-typed fields stay type-stable — mirroring the
-    ``RunResult.best_score`` F4 coercion. The mapping is lossy (inf and NaN
+    ``RunResult.best_score`` coercion. The mapping is lossy (inf and NaN
     both round-trip as NaN). Without this, downstream viz that does
     ``math.isfinite(r2)`` (parity / comparison plots) or ``f"{r2:.6f}"``
-    (report) crashes with ``TypeError: must be real number, not NoneType``
-    (AUDIT-02).
+    (report) crashes with ``TypeError: must be real number, not NoneType``.
     """
     return float("nan") if value is None else value
 
@@ -92,6 +84,39 @@ def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
     )
 
 
+def _infer_legacy_score_meta(data: dict[str, Any]) -> tuple[str, str]:
+    """Infer (score_kind, score_direction) for a legacy serialized payload.
+
+    Legacy result files predate the ``score_kind`` / ``score_direction``
+    fields. The algorithm id is looked up in the FROZEN fallback tables in
+    ``kd.viz._labels`` — frozen because new algorithms declare their metadata
+    on the plugin class (``ScoreContract``) and their files carry it inline.
+
+    The id comes from ``config["algorithm"]`` (lowercase, e.g. ``"sga"``, set
+    by each plugin's ``config`` property) — NOT from ``algorithm_name``, which
+    holds the plugin *class name* (e.g. ``"SGAPlugin"``, written by
+    ``runner._build_experiment_result`` via ``type(...).__name__``) and would
+    miss the tables, downgrading every real legacy file to "Score"/"min".
+
+    Imported lazily: ``kd.viz`` pulls matplotlib at package init, which the
+    search layer must not load eagerly (no circular import: viz modules import
+    the search layer — e.g. ``plots/comparison.py`` reads
+    ``DEFAULT_SCORE_KIND`` at runtime — while search→viz stays lazy
+    function-local, so the import graph is acyclic; precedent:
+    ``runner._build_manifest``).
+    """
+    from kd.viz._labels import score_direction as _legacy_score_direction
+    from kd.viz._labels import score_label as _legacy_score_label
+
+    config = data.get("config")
+    algorithm = ""
+    if isinstance(config, dict):
+        raw = config.get("algorithm", "")
+        if isinstance(raw, str):
+            algorithm = raw
+    return _legacy_score_label(algorithm), _legacy_score_direction(algorithm)
+
+
 @runtime_checkable
 class ResultBuilder(Protocol):
     """Optional protocol for algorithms that build a final result directly.
@@ -117,6 +142,71 @@ class ResultTargetProvider(Protocol):
 
 
 @dataclass
+class RunManifest:
+    """Minimal reproducibility facts captured for a completed search run.
+
+    Records exactly the facts needed to *reproduce* a run, with no
+    non-deterministic content (no timestamp, no object id / memory address):
+
+    - ``dataset_fingerprint``: content+meta fingerprint of the dataset.
+    - ``kd_version``: installed kd package version (e.g. ``"0.1.0"``).
+    - ``seed``: RNG seed for the run; ``None`` if the algorithm exposes none.
+      How faithfully a seed replays a run is algorithm-dependent -- e.g.
+      PySR under its default parallelism is only weakly deterministic (see
+      ``PySRConfig.seed``), so for such algorithms this field records
+      intent, not a bit-identical replay guarantee.
+    - ``terms``: term library (only term-library algorithms fill it); else
+      ``None``.
+    - ``artifacts``: reserved for artifact-bearing algorithms (weights / data)
+      to record ``{sha256, size, ...}`` per artifact; else ``None``.
+
+    The round-trip contract is ``RunManifest.from_dict(m.to_dict()) == m``.
+    """
+
+    dataset_fingerprint: str
+    kd_version: str
+    seed: int | None
+    terms: list[str] | None = None
+    artifacts: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation of this manifest.
+
+        The scalar fields (str / int / None / list of str) are JSON-native by
+        construction — unlike ``ExperimentResult`` which holds tensors and
+        non-finite floats. ``artifacts`` is the one open-typed field
+        (``dict[str, Any]``) and is emitted verbatim: today it is always
+        ``None`` (reserved for artifact-bearing algorithms, e.g. EqGPT), and
+        whichever code starts filling it owns its JSON safety — keep values
+        JSON-native or route them through ``_make_json_safe`` as
+        ``ExperimentResult`` does.
+        """
+        return {
+            "dataset_fingerprint": self.dataset_fingerprint,
+            "kd_version": self.kd_version,
+            "seed": self.seed,
+            "terms": self.terms,
+            "artifacts": self.artifacts,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RunManifest:
+        """Reconstruct a ``RunManifest`` from a JSON-safe dictionary.
+
+        ``terms`` / ``artifacts`` are read with ``.get`` so a manifest dict
+        predating those fields (or hand-built) decodes with them as ``None`` —
+        mirroring ``ExperimentResult.load``'s ``data.get`` backward-compat.
+        """
+        return cls(
+            dataset_fingerprint=data["dataset_fingerprint"],
+            kd_version=data["kd_version"],
+            seed=data["seed"],
+            terms=data.get("terms"),
+            artifacts=data.get("artifacts"),
+        )
+
+
+@dataclass
 class RunResult:
     """Backward-compatible summary of a completed experiment."""
 
@@ -128,7 +218,17 @@ class RunResult:
 
 @dataclass
 class ExperimentResult(RunResult):
-    """Serializable value object for a completed experiment."""
+    """Serializable value object for a completed experiment.
+
+    ``score_kind`` / ``score_direction`` carry the algorithm's
+    ``ScoreContract`` declaration (what quantity ``best_score`` is and which
+    direction is better) so viz consumers read the result instead of keeping
+    per-algorithm lookup tables. The defaults mirror the historical fallback
+    semantics ("Score" / "min") so existing direct construction sites keep
+    working; correctness for the built-in algorithms is enforced by the
+    facade contract tests, not by these defaults. Typed plain ``str`` (not
+    ``Literal``) because the values round-trip through JSON.
+    """
 
     final_eval: EvaluationResult
     actual: Tensor
@@ -138,6 +238,9 @@ class ExperimentResult(RunResult):
     config: dict[str, Any]
     recorder: VizRecorder
     lhs_label: str = "u_t"
+    manifest: RunManifest | None = None
+    score_kind: str = DEFAULT_SCORE_KIND
+    score_direction: str = DEFAULT_SCORE_DIRECTION
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe (RFC 8259) representation of the result."""
@@ -154,6 +257,11 @@ class ExperimentResult(RunResult):
             "config": _make_json_safe(self.config, key="config"),
             "recorder": self.recorder.to_dict(),
             "lhs_label": self.lhs_label,
+
+
+            "manifest": self.manifest.to_dict() if self.manifest is not None else None,
+            "score_kind": self.score_kind,
+            "score_direction": self.score_direction,
         }
 
     def save(self, path: Path | str) -> None:
@@ -194,6 +302,23 @@ class ExperimentResult(RunResult):
         best_score_raw = data["best_score"]
         best_score = float("nan") if best_score_raw is None else best_score_raw
 
+
+
+        manifest_data = data.get("manifest")
+        manifest = (
+            RunManifest.from_dict(manifest_data) if manifest_data is not None else None
+        )
+
+
+
+
+
+
+        score_kind = data.get("score_kind")
+        score_direction = data.get("score_direction")
+        if score_kind is None or score_direction is None:
+            score_kind, score_direction = _infer_legacy_score_meta(data)
+
         result = cls(
             best_expression=data["best_expression"],
             best_score=best_score,
@@ -207,6 +332,9 @@ class ExperimentResult(RunResult):
             config=data["config"],
             recorder=VizRecorder.from_dict(data["recorder"]),
             lhs_label=data.get("lhs_label", "u_t"),
+            manifest=manifest,
+            score_kind=score_kind,
+            score_direction=score_direction,
         )
         logger.debug("Loaded experiment result from %s", input_path)
         return result

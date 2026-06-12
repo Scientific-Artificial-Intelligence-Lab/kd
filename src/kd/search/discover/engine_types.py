@@ -31,6 +31,10 @@ class Evaluator(Protocol):
 
 
 RewardAdapter = Callable[[EvaluationResult], float]
+
+
+
+ResultFilter = Callable[[EvaluationResult], EvaluationResult]
 CycleCallback = Callable[[int, "DiscoverEngine"], None]
 SearchProgressCallback = Callable[[int, dict[str, float], "DiscoverEngine"], None]
 
@@ -82,6 +86,16 @@ class EngineState:
     best_result_coefficients: list[float] | None = None
 
 
+
+
+
+
+
+
+
+    best_result_is_valid: bool = True
+
+
 @dataclass(slots=True)
 class PendingState:
 
@@ -105,6 +119,7 @@ __all__ = [
     "Generator",
     "Int64Array",
     "PendingState",
+    "ResultFilter",
     "RewardAdapter",
     "SearchProgressCallback",
 ]

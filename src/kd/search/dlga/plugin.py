@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import asdict, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import torch
 import torch.nn as nn
@@ -22,6 +22,7 @@ from kd.core.linear_solve import (
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.schema import PDEDataset
+from kd.search.dlga import surrogate_log as _surrogate_log
 from kd.search.dlga import viz as _viz_helpers
 from kd.search.dlga.config import DLGAConfig
 from kd.search.dlga.genes import (
@@ -86,7 +87,21 @@ _LOGGED_METRICS: tuple[str, ...] = (
 )
 
 
+
+
+
+_SURROGATE_METRICS = _surrogate_log._SURROGATE_METRICS
+
+
 class DLGAPlugin:
+
+
+
+
+
+
+    score_kind: ClassVar[str] = "DLGA fitness"
+    score_direction: ClassVar[Literal["min", "max"]] = "min"
 
     def __init__(
         self,
@@ -115,9 +130,6 @@ class DLGAPlugin:
         self._best_lhs_name: str | None = None
         self._recorder: VizRecorder | None = None
         self._restore_pending: bool = False
-        """One-shot flag set by the ``state`` setter on a real checkpoint
-        restore. ``prepare()`` consumes it to PRESERVE the restored state
-        instead of resetting; a fresh reuse (flag False) resets (AUDIT-06)."""
         self._rng = torch.Generator()
         self._prepared = False
 
@@ -203,6 +215,13 @@ class DLGAPlugin:
                 genes_prob=self._config.genes_prob,
             )
         self._recorder = components.recorder
+
+
+
+        _surrogate_log.log_surrogate_training(
+            self._recorder,
+            getattr(components.context, "training_result", None),
+        )
         self._prepared = True
 
     def propose(self, n: int) -> list[str]:

@@ -107,6 +107,11 @@ class RSPGStrategy:
         valid_mask: BoolArray | None = None,
     ) -> tuple[dict[str, float], BaselineState]:
         self._validate_inputs(batch, rewards, baseline_state)
+
+
+
+
+
         filtered_batch = batch
         filtered_rewards = rewards
         if valid_mask is not None:

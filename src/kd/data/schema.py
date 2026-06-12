@@ -10,7 +10,7 @@ This module defines the core data structures:
 Design principles:
 - n-dimensional support: no hardcoded axis names ("x", "t")
 - torch.Tensor throughout, device-aware
-- Grid topology supported; Scattered topology in development
+- Grid topology supported today; Scattered reserved for NN-derivative sampling
 
 Note on axis naming:
 - Axis names can be arbitrary strings (e.g., "x", "time", "spatial")

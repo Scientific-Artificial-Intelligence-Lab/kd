@@ -787,8 +787,8 @@ class TestInitializer:
             for g in grads.values()
         )
         assert has_grad, (
-            "LSTM kernel parameters received zero gradient — the pre-Gemini "
-            " dead-gradient bug is back. Gradient summary: "
+            "LSTM kernel parameters received zero gradient — the historical "
+            "dead-gradient bug is back. Gradient summary: "
             + ", ".join(
                 f"{n}:{(g.abs().sum().item() if g is not None else 'None')}"
                 for n, g in grads.items()

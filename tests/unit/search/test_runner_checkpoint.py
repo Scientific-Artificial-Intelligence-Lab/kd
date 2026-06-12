@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import torch
 
+from kd.search.callbacks import CHECKPOINT_VERSION, build_checkpoint_payload
 from kd.search.protocol import PlatformComponents
 from kd.search.runner import ExperimentRunner
 from tests.unit.search._runner_mocks import (
@@ -466,3 +467,304 @@ class TestCheckpointVersion:
         runner.save_checkpoint(ckpt_path)
         data = torch.load(ckpt_path, weights_only=False)
         assert data["version"] == 1
+
+
+
+
+
+
+
+
+
+
+class _AnonymousAlgorithm(StatefulAlgorithm):
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {"mock": True}
+
+
+def _valid_payload(algorithm: StatefulAlgorithm, iteration: int = 3) -> dict[str, Any]:
+    return {
+        "version": CHECKPOINT_VERSION,
+        "iteration": iteration,
+        "algorithm_state": algorithm.state,
+        "best_score": algorithm.best_score,
+        "best_expression": algorithm.best_expression,
+    }
+
+
+def _run_stateful(
+    mock_components: PlatformComponents, iterations: int = 3
+) -> StatefulAlgorithm:
+    algo = StatefulAlgorithm()
+    ExperimentRunner(algorithm=algo, max_iterations=iterations).run(mock_components)
+    return algo
+
+
+class TestCheckpointPayloadAlgorithmKey:
+
+    @pytest.mark.unit
+    def test_i_build_payload_carries_algorithm_name(self) -> None:
+        payload = build_checkpoint_payload(2, StatefulAlgorithm())
+        assert payload["algorithm"] == "StatefulAlgorithm"
+        assert payload["version"] == CHECKPOINT_VERSION == 1
+
+    @pytest.mark.unit
+    def test_i_build_payload_algorithm_none_for_anonymous_plugin(self) -> None:
+        payload = build_checkpoint_payload(0, _AnonymousAlgorithm())
+        assert payload.get("algorithm") is None
+
+    @pytest.mark.unit
+    def test_i_save_checkpoint_payload_carries_algorithm_name(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        algo = _run_stateful(mock_components, iterations=1)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=1)
+        ckpt_path = tmp_path / "ckpt.pt"
+        runner.save_checkpoint(ckpt_path)
+
+        data = torch.load(ckpt_path, weights_only=False)
+        assert data["algorithm"] == "StatefulAlgorithm"
+
+
+class TestLoadCheckpointValidation:
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "garbage",
+        [[1, 2, 3], "not-a-payload", 42],
+        ids=["list", "string", "int"],
+    )
+    def test_i_load_rejects_non_dict_payload(
+        self, tmp_path: Path, garbage: Any
+    ) -> None:
+        path = tmp_path / "garbage.pt"
+        torch.save(garbage, path)
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        with pytest.raises(ValueError, match="not a kd checkpoint"):
+            runner.load_checkpoint(path)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "missing_key",
+        ["version", "iteration", "algorithm_state"],
+    )
+    def test_i_load_rejects_payload_missing_required_key(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+        missing_key: str,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        del payload[missing_key]
+        path = tmp_path / "incomplete.pt"
+        torch.save(payload, path)
+
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        with pytest.raises(ValueError, match="not a kd checkpoint"):
+            runner.load_checkpoint(path)
+
+    @pytest.mark.unit
+    def test_i_load_rejects_version_mismatch_naming_both(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        bad_version = CHECKPOINT_VERSION + 41
+        payload["version"] = bad_version
+        path = tmp_path / "wrong_version.pt"
+        torch.save(payload, path)
+
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        with pytest.raises(ValueError) as exc_info:
+            runner.load_checkpoint(path)
+        msg = str(exc_info.value)
+        assert str(bad_version) in msg
+        assert str(CHECKPOINT_VERSION) in msg
+
+    @pytest.mark.unit
+    def test_i_load_rejects_algorithm_mismatch_naming_both(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        payload["algorithm"] = "sga"
+        path = tmp_path / "mismatch.pt"
+        torch.save(payload, path)
+
+        fresh = StatefulAlgorithm()
+        runner = ExperimentRunner(algorithm=fresh, max_iterations=1)
+        with pytest.raises(ValueError) as exc_info:
+            runner.load_checkpoint(path)
+        msg = str(exc_info.value)
+        assert "sga" in msg
+        assert "StatefulAlgorithm" in msg
+        assert fresh.state["generation"] == 0, (
+            "a rejected load must not partially mutate the plugin state"
+        )
+
+    @pytest.mark.unit
+    def test_i_load_accepts_matching_algorithm(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        payload["algorithm"] = "StatefulAlgorithm"
+        path = tmp_path / "match.pt"
+        torch.save(payload, path)
+
+        fresh = StatefulAlgorithm()
+        runner = ExperimentRunner(algorithm=fresh, max_iterations=1)
+        runner.load_checkpoint(path)
+        assert fresh.state["generation"] == donor.state["generation"]
+
+    @pytest.mark.unit
+    def test_i_load_tolerates_payload_without_algorithm_key(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        assert "algorithm" not in payload
+        path = tmp_path / "legacy.pt"
+        torch.save(payload, path)
+
+        fresh = StatefulAlgorithm()
+        runner = ExperimentRunner(algorithm=fresh, max_iterations=1)
+        runner.load_checkpoint(path)
+        assert fresh.state["generation"] == donor.state["generation"]
+
+    @pytest.mark.unit
+    def test_i_load_tolerates_plugin_without_algorithm_in_config(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        payload["algorithm"] = "sga"
+        path = tmp_path / "anon.pt"
+        torch.save(payload, path)
+
+        fresh = _AnonymousAlgorithm()
+        runner = ExperimentRunner(algorithm=fresh, max_iterations=1)
+        runner.load_checkpoint(path)
+        assert fresh.state["generation"] == donor.state["generation"]
+
+    @pytest.mark.unit
+    def test_i_load_missing_file_raises_filenotfound_naming_path(
+        self, tmp_path: Path
+    ) -> None:
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        bogus = tmp_path / "missing_checkpoint.pt"
+        with pytest.raises(FileNotFoundError) as exc_info:
+            runner.load_checkpoint(bogus)
+        assert "missing_checkpoint.pt" in str(exc_info.value)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "bad_state",
+        [None, [], ""],
+        ids=["none", "empty-list", "empty-str"],
+    )
+    def test_fix2_load_rejects_nondict_algorithm_state(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+        bad_state: Any,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        payload["algorithm_state"] = bad_state
+        path = tmp_path / "falsy_state.pt"
+        torch.save(payload, path)
+
+        fresh = StatefulAlgorithm()
+        runner = ExperimentRunner(algorithm=fresh, max_iterations=1)
+        with pytest.raises(ValueError, match="not a kd checkpoint"):
+            runner.load_checkpoint(path)
+        assert fresh.state["generation"] == 0, (
+            "a rejected falsy-state load must not mutate the plugin"
+        )
+
+    @pytest.mark.unit
+    def test_fix2_load_accepts_empty_dict_algorithm_state(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        received: list[dict[str, Any]] = []
+
+        class _StatelessFake:
+
+            @property
+            def state(self) -> dict[str, Any]:
+                return {}
+
+            @state.setter
+            def state(self, value: dict[str, Any]) -> None:
+                received.append(value)
+
+            @property
+            def config(self) -> dict[str, Any]:
+                return {}
+
+        payload = {
+            "version": CHECKPOINT_VERSION,
+            "iteration": 3,
+            "algorithm_state": {},
+        }
+        path = tmp_path / "empty_state.pt"
+        torch.save(payload, path)
+
+        runner = ExperimentRunner(algorithm=_StatelessFake(), max_iterations=1)
+        runner.load_checkpoint(path)
+        assert received == [{}], (
+            "the empty state must REACH the plugin setter (protocol reset "
+            "semantics), not be rejected by the loader"
+        )
+
+    @pytest.mark.unit
+    def test_fix2_load_rejects_truthy_nondict_algorithm_state(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        payload = _valid_payload(donor)
+        payload["algorithm_state"] = [1, 2, 3]
+        path = tmp_path / "list_state.pt"
+        torch.save(payload, path)
+
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        with pytest.raises(ValueError, match="not a kd checkpoint"):
+            runner.load_checkpoint(path)
+
+    @pytest.mark.unit
+    def test_fix4a_load_rejects_truncated_file_naming_path(
+        self,
+        mock_components: PlatformComponents,
+        tmp_path: Path,
+    ) -> None:
+        donor = _run_stateful(mock_components)
+        good = tmp_path / "good.pt"
+        torch.save(_valid_payload(donor), good)
+        torn = tmp_path / "torn.pt"
+        raw = good.read_bytes()
+        torn.write_bytes(raw[: len(raw) // 2])
+
+        runner = ExperimentRunner(algorithm=StatefulAlgorithm(), max_iterations=1)
+        with pytest.raises(ValueError, match="not a kd checkpoint") as exc_info:
+            runner.load_checkpoint(torn)
+        assert "torn.pt" in str(exc_info.value)

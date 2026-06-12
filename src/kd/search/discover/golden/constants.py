@@ -27,21 +27,40 @@ EMBEDDING_DIM: Final[int] = 8
 CHAFEE_ENTROPY_GAMMA: Final[float] = 0.7
 
 BURGERS_OPERATORS: Final[tuple[str, ...]] = (
-    "add", "mul", "sub", "div", "diff_x", "diff2_x",
+    "add",
+    "mul",
+    "sub",
+    "div",
+    "diff_x",
+    "diff2_x",
 )
 CHAFEE_OPERATORS: Final[tuple[str, ...]] = (
-    "add", "mul", "sub", "div", "diff_x", "diff2_x", "n2", "n3",
+    "add",
+    "mul",
+    "sub",
+    "div",
+    "diff_x",
+    "diff2_x",
+    "n2",
+    "n3",
 )
 
-_PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+_PROJECT_ROOT: Final[Path] = (
+    Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+)
 DEFAULT_BURGERS_DATA: Final[Path] = (
     _PROJECT_ROOT
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
+    / "refs"
+    / "discover"
+    / "dso"
+    / "dso"
+    / "task"
+    / "pde"
+    / "data_new"
     / "burgers.mat"
 )
 DEFAULT_CHAFEE_DATA_DIR: Final[Path] = (
-    _PROJECT_ROOT
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
+    _PROJECT_ROOT / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
 )
 PROJECT_ROOT: Final[Path] = _PROJECT_ROOT
 

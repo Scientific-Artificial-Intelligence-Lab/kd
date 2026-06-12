@@ -53,6 +53,76 @@ def test_float32_coefficients_return_float32_but_match_float64_internal_solve(
 
 
 @pytest.mark.unit
+def test_r2_helpers_are_public_package_exports() -> None:
+    from kd.core.linear_solve import (
+        R2_EPS_RES,
+        R2_EPS_TOT,
+        compute_r2,
+        r2_score,
+    )
+
+    assert R2_EPS_TOT == 1e-15
+    assert R2_EPS_RES == 1e-10
+    assert callable(compute_r2)
+    assert callable(r2_score)
+
+
+@pytest.mark.unit
+def test_r2_score_matches_compute_r2_on_generic_system() -> None:
+    from kd.core.linear_solve import compute_r2, r2_score
+
+    theta, lhs = _ill_conditioned_float32_system()
+    coef = torch.tensor([0.9, 2.1, -2.5], dtype=torch.float32)
+    y_pred_64 = theta.to(torch.float64) @ coef.to(torch.float64)
+
+    assert r2_score(y_pred_64, lhs) == pytest.approx(
+        compute_r2(theta, coef, lhs), rel=1e-12
+    )
+
+
+@pytest.mark.unit
+def test_r2_score_float32_constant_target_perfect_fit() -> None:
+    from kd.core.linear_solve import r2_score
+
+    lhs = torch.full((50,), 1.7, dtype=torch.float32)
+    y_pred = lhs + 2e-7
+
+    assert r2_score(y_pred, lhs) == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_r2_score_accepts_column_vector_prediction() -> None:
+    from kd.core.linear_solve import compute_r2, r2_score
+
+    gen = torch.Generator().manual_seed(11)
+    lhs = torch.randn(30, dtype=torch.float64, generator=gen)
+    y_pred = lhs + 0.1 * torch.randn(30, dtype=torch.float64, generator=gen)
+    expected = r2_score(y_pred, lhs)
+
+    assert r2_score(y_pred.unsqueeze(-1), lhs) == pytest.approx(expected, rel=1e-12)
+    assert r2_score(y_pred.unsqueeze(-1), lhs.unsqueeze(-1)) == pytest.approx(
+        expected, rel=1e-12
+    )
+
+    theta, lhs32 = _ill_conditioned_float32_system()
+    coef = torch.tensor([0.9, 2.1, -2.5], dtype=torch.float32)
+    assert compute_r2(theta, coef.unsqueeze(-1), lhs32) == pytest.approx(
+        compute_r2(theta, coef, lhs32), rel=1e-12
+    )
+
+
+@pytest.mark.unit
+def test_r2_score_rejects_broadcastable_length_mismatch() -> None:
+    from kd.core.linear_solve import r2_score
+
+    with pytest.raises(ValueError, match="shape"):
+        r2_score(
+            torch.ones(1, dtype=torch.float64),
+            torch.ones(20, dtype=torch.float64),
+        )
+
+
+@pytest.mark.unit
 def test_r2_is_consistent_for_constant_target_perfect_fit() -> None:
     gen = torch.Generator().manual_seed(7)
     theta = torch.column_stack(

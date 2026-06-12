@@ -18,6 +18,7 @@ from kd.core.expr.naming import parse_compound_derivative
 from kd.data.derivatives.finite_diff import (
     DX_ZERO_FLOOR,
     UNIFORM_GRID_RTOL,
+    central_diff,
     is_uniform_grid,
 )
 from kd.data.schema import DataTopology, PDEDataset
@@ -93,86 +94,13 @@ def _classify_symbols(
     return parsed
 
 
-def _central_diff_1(
-    u: NDArray[np.floating[Any]],
-    dx: float,
-    periodic: bool,
-) -> NDArray[np.floating[Any]]:
-    if periodic:
-        padded = np.concatenate(([u[-1]], u, [u[0]]))
-        return (padded[2:] - padded[:-2]) / (2.0 * dx)
-    result = np.empty_like(u)
-    result[1:-1] = (u[2:] - u[:-2]) / (2.0 * dx)
-
-    result[0] = (-3.0 * u[0] + 4.0 * u[1] - u[2]) / (2.0 * dx)
-    result[-1] = (3.0 * u[-1] - 4.0 * u[-2] + u[-3]) / (2.0 * dx)
-    return result
-
-
-def _central_diff_2(
-    u: NDArray[np.floating[Any]],
-    dx: float,
-    periodic: bool,
-) -> NDArray[np.floating[Any]]:
-    if periodic:
-        padded = np.concatenate(([u[-1]], u, [u[0]]))
-        return (padded[2:] - 2.0 * padded[1:-1] + padded[:-2]) / (dx * dx)
-    result = np.empty_like(u)
-    result[1:-1] = (u[2:] - 2.0 * u[1:-1] + u[:-2]) / (dx * dx)
-
-    result[0] = result[1]
-    result[-1] = result[-2]
-    return result
-
-
-def _central_diff_3(
-    u: NDArray[np.floating[Any]],
-    dx: float,
-    periodic: bool,
-) -> NDArray[np.floating[Any]]:
-    dx3 = dx * dx * dx
-    if periodic:
-        padded = np.concatenate((u[-2:], u, u[:2]))
-        return (padded[4:] - 2.0 * padded[3:-1] + 2.0 * padded[1:-3] - padded[:-4]) / (
-            2.0 * dx3
-        )
-    result = np.empty_like(u)
-
-    result[2:-2] = (u[4:] - 2.0 * u[3:-1] + 2.0 * u[1:-3] - u[:-4]) / (2.0 * dx3)
-
-    result[0] = (-u[0] + 3.0 * u[1] - 3.0 * u[2] + u[3]) / dx3
-    result[1] = (-u[1] + 3.0 * u[2] - 3.0 * u[3] + u[4]) / dx3
-
-    result[-1] = (u[-1] - 3.0 * u[-2] + 3.0 * u[-3] - u[-4]) / dx3
-    result[-2] = (u[-2] - 3.0 * u[-3] + 3.0 * u[-4] - u[-5]) / dx3
-    return result
-
-
-
-
-
-
-_MIN_POINTS: dict[int, int] = {1: 3, 2: 3, 3: 5}
-
-
 def _finite_diff(
     u: NDArray[np.floating[Any]],
     dx: float,
     order: int,
     periodic: bool,
 ) -> NDArray[np.floating[Any]]:
-    min_pts = _MIN_POINTS.get(order)
-    if min_pts is not None and len(u) < min_pts:
-        raise ValueError(
-            f"Need at least {min_pts} points for order-{order} FD, got {len(u)}"
-        )
-    if order == 1:
-        return _central_diff_1(u, dx, periodic)
-    if order == 2:
-        return _central_diff_2(u, dx, periodic)
-    if order == 3:
-        return _central_diff_3(u, dx, periodic)
-    raise ValueError(f"Unsupported derivative order: {order}")
+    return _finite_diff_along_axis(u, 0, dx, order, periodic)
 
 
 @dataclass
@@ -262,15 +190,9 @@ def _finite_diff_along_axis(
     order: int,
     periodic: bool,
 ) -> NDArray[np.floating[Any]]:
-    moved = np.moveaxis(u, axis_index, 0)
-    result = np.empty_like(moved)
-    it = np.nditer(moved[0], flags=["multi_index"])
-    while not it.finished:
-        idx = it.multi_index
-        slc = (slice(None),) + idx
-        result[slc] = _finite_diff(moved[slc], dx, order, periodic)
-        it.iternext()
-    return np.moveaxis(result, 0, axis_index)
+    tensor = torch.from_numpy(np.ascontiguousarray(u))
+    deriv = central_diff(tensor, dx, axis=axis_index, order=order, is_periodic=periodic)
+    return np.asarray(deriv.numpy())
 
 
 def _mol_rhs(

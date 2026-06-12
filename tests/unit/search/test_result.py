@@ -9,7 +9,7 @@ from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
 from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult, ResultBuilder
+from kd.search.result import ExperimentResult, ResultBuilder, RunManifest
 
 
 
@@ -146,6 +146,9 @@ class TestExperimentResultSerialization:
             "actual",
             "predicted",
             "recorder",
+
+
+            "manifest",
         ]:
             assert key in d, f"Missing key: {key}"
 
@@ -440,3 +443,329 @@ class TestExperimentResultNegative:
         loaded = ExperimentResult.load(fpath)
         assert isinstance(loaded.best_score, float)
         assert math.isnan(loaded.best_score)
+
+
+
+
+
+
+
+@pytest.fixture
+def sample_manifest() -> RunManifest:
+    return RunManifest(
+        dataset_fingerprint="burgers_1d:grid:u:t:x,t_u(64, 32)_a1b2c3d4",
+        kd_version="0.1.0",
+        seed=42,
+        terms=["u", "u_x", "u_xx"],
+        artifacts={"weights.pt": {"sha256": "deadbeef", "size": 12345}},
+    )
+
+
+@pytest.fixture
+def minimal_manifest() -> RunManifest:
+    return RunManifest(
+        dataset_fingerprint="heat:grid:u:x:x_u(100,)_00000000",
+        kd_version="0.1.0",
+        seed=None,
+    )
+
+
+
+
+
+
+
+@pytest.mark.smoke
+class TestRunManifestSmoke:
+
+    def test_instantiate(self, sample_manifest: RunManifest) -> None:
+        assert isinstance(sample_manifest, RunManifest)
+
+    def test_field_values(self, sample_manifest: RunManifest) -> None:
+        m = sample_manifest
+        assert m.dataset_fingerprint.startswith("burgers_1d:")
+        assert m.kd_version == "0.1.0"
+        assert m.seed == 42
+        assert m.terms == ["u", "u_x", "u_xx"]
+        assert m.artifacts == {"weights.pt": {"sha256": "deadbeef", "size": 12345}}
+
+    def test_optional_fields_default_none(self) -> None:
+        m = RunManifest(dataset_fingerprint="fp", kd_version="0.1.0", seed=7)
+        assert m.terms is None
+        assert m.artifacts is None
+
+
+
+
+
+
+
+class TestRunManifestRoundTrip:
+
+    def test_full_manifest_round_trip(self, sample_manifest: RunManifest) -> None:
+        restored = RunManifest.from_dict(sample_manifest.to_dict())
+        assert restored == sample_manifest
+
+    def test_minimal_manifest_round_trip(self, minimal_manifest: RunManifest) -> None:
+        restored = RunManifest.from_dict(minimal_manifest.to_dict())
+        assert restored == minimal_manifest
+
+        assert restored.seed is None
+        assert restored.terms is None
+        assert restored.artifacts is None
+
+    @pytest.mark.parametrize("seed", [0, 1, 42, -1, 2**31])
+    def test_round_trip_preserves_seed_int(self, seed: int) -> None:
+        m = RunManifest(dataset_fingerprint="fp", kd_version="0.1.0", seed=seed)
+        restored = RunManifest.from_dict(m.to_dict())
+        assert restored.seed == seed
+        assert restored == m
+
+    def test_to_dict_is_plain_dict(self, sample_manifest: RunManifest) -> None:
+        d = sample_manifest.to_dict()
+        assert isinstance(d, dict)
+        for key in [
+            "dataset_fingerprint",
+            "kd_version",
+            "seed",
+            "terms",
+            "artifacts",
+        ]:
+            assert key in d, f"manifest dict missing key: {key}"
+
+    def test_to_dict_carries_field_values(self, sample_manifest: RunManifest) -> None:
+        d = sample_manifest.to_dict()
+        assert d["dataset_fingerprint"] == sample_manifest.dataset_fingerprint
+        assert d["kd_version"] == sample_manifest.kd_version
+        assert d["seed"] == sample_manifest.seed
+        assert d["terms"] == sample_manifest.terms
+
+
+        assert d["artifacts"] == sample_manifest.artifacts
+
+    def test_from_dict_tolerates_missing_optional_keys(self) -> None:
+        m = RunManifest.from_dict(
+            {"dataset_fingerprint": "fp", "kd_version": "0.1.0", "seed": 7}
+        )
+        assert m.dataset_fingerprint == "fp"
+        assert m.kd_version == "0.1.0"
+        assert m.seed == 7
+        assert m.terms is None
+        assert m.artifacts is None
+
+
+
+
+
+
+
+class TestRunManifestJsonSafe:
+
+    def test_full_manifest_json_dumps(self, sample_manifest: RunManifest) -> None:
+        import json
+
+        encoded = json.dumps(sample_manifest.to_dict(), allow_nan=False)
+
+        decoded = RunManifest.from_dict(json.loads(encoded))
+        assert decoded == sample_manifest
+
+    def test_minimal_manifest_json_dumps(self, minimal_manifest: RunManifest) -> None:
+        import json
+
+        encoded = json.dumps(minimal_manifest.to_dict(), allow_nan=False)
+        assert "null" in encoded
+        decoded = RunManifest.from_dict(json.loads(encoded))
+        assert decoded == minimal_manifest
+
+    def test_to_dict_values_are_json_native(self, sample_manifest: RunManifest) -> None:
+        d = sample_manifest.to_dict()
+        json_types = (str, int, float, bool, type(None), list, dict)
+        for key, value in d.items():
+            assert isinstance(value, json_types), (
+                f"manifest[{key!r}] is {type(value).__name__}, not JSON-native"
+            )
+
+
+
+
+
+
+
+class TestExperimentResultManifest:
+
+    def test_construct_without_manifest_defaults_none(
+        self, sample_experiment_result: ExperimentResult
+    ) -> None:
+        assert sample_experiment_result.manifest is None
+
+    def test_construct_with_manifest(
+        self,
+        sample_eval_result: EvaluationResult,
+        sample_manifest: RunManifest,
+    ) -> None:
+        r = ExperimentResult(
+            best_expression="u",
+            best_score=0.02,
+            iterations=10,
+            early_stopped=False,
+            final_eval=sample_eval_result,
+            actual=torch.randn(10),
+            predicted=torch.randn(10),
+            dataset_name="test",
+            algorithm_name="sga",
+            config={},
+            recorder=VizRecorder(),
+            manifest=sample_manifest,
+        )
+        assert r.manifest is sample_manifest
+
+    def test_to_dict_manifest_none_when_absent(
+        self, sample_experiment_result: ExperimentResult
+    ) -> None:
+        d = sample_experiment_result.to_dict()
+        assert d["manifest"] is None
+
+    def test_to_dict_includes_manifest_dict_when_present(
+        self,
+        sample_eval_result: EvaluationResult,
+        sample_manifest: RunManifest,
+    ) -> None:
+        r = ExperimentResult(
+            best_expression="u",
+            best_score=0.02,
+            iterations=10,
+            early_stopped=False,
+            final_eval=sample_eval_result,
+            actual=torch.randn(10),
+            predicted=torch.randn(10),
+            dataset_name="test",
+            algorithm_name="sga",
+            config={},
+            recorder=VizRecorder(),
+            manifest=sample_manifest,
+        )
+        d = r.to_dict()
+        assert d["manifest"] == sample_manifest.to_dict()
+
+    def test_to_dict_with_manifest_is_json_safe(
+        self,
+        sample_eval_result: EvaluationResult,
+        sample_manifest: RunManifest,
+    ) -> None:
+        import json
+
+        r = ExperimentResult(
+            best_expression="u",
+            best_score=0.02,
+            iterations=10,
+            early_stopped=False,
+            final_eval=sample_eval_result,
+            actual=torch.randn(10),
+            predicted=torch.randn(10),
+            dataset_name="test",
+            algorithm_name="sga",
+            config={},
+            recorder=VizRecorder(),
+            manifest=sample_manifest,
+        )
+        encoded = json.dumps(r.to_dict(), allow_nan=False)
+        assert isinstance(encoded, str)
+
+        reloaded = json.loads(encoded)
+        assert reloaded["manifest"]["dataset_fingerprint"] == (
+            sample_manifest.dataset_fingerprint
+        )
+
+    def test_save_load_preserves_manifest(
+        self,
+        sample_eval_result: EvaluationResult,
+        sample_manifest: RunManifest,
+        tmp_path: Path,
+    ) -> None:
+        r = ExperimentResult(
+            best_expression="u",
+            best_score=0.02,
+            iterations=10,
+            early_stopped=False,
+            final_eval=sample_eval_result,
+            actual=torch.randn(10),
+            predicted=torch.randn(10),
+            dataset_name="test",
+            algorithm_name="sga",
+            config={},
+            recorder=VizRecorder(),
+            manifest=sample_manifest,
+        )
+        fpath = tmp_path / "with_manifest.json"
+        r.save(fpath)
+        loaded = ExperimentResult.load(fpath)
+        assert loaded.manifest == sample_manifest
+
+    def test_save_load_preserves_minimal_manifest(
+        self,
+        sample_eval_result: EvaluationResult,
+        minimal_manifest: RunManifest,
+        tmp_path: Path,
+    ) -> None:
+        r = ExperimentResult(
+            best_expression="u",
+            best_score=0.02,
+            iterations=10,
+            early_stopped=False,
+            final_eval=sample_eval_result,
+            actual=torch.randn(10),
+            predicted=torch.randn(10),
+            dataset_name="test",
+            algorithm_name="sga",
+            config={},
+            recorder=VizRecorder(),
+            manifest=minimal_manifest,
+        )
+        fpath = tmp_path / "minimal_manifest.json"
+        r.save(fpath)
+        loaded = ExperimentResult.load(fpath)
+        assert loaded.manifest == minimal_manifest
+        assert loaded.manifest is not None
+        assert loaded.manifest.seed is None
+
+
+
+
+
+
+
+class TestExperimentResultManifestBackwardCompat:
+
+    def test_save_without_manifest_loads_as_none(
+        self, sample_experiment_result: ExperimentResult, tmp_path: Path
+    ) -> None:
+        fpath = tmp_path / "no_manifest.json"
+        sample_experiment_result.save(fpath)
+        loaded = ExperimentResult.load(fpath)
+        assert loaded.manifest is None
+
+    def test_load_legacy_dict_without_manifest_key(
+        self, sample_experiment_result: ExperimentResult, tmp_path: Path
+    ) -> None:
+        import json
+
+        fpath = tmp_path / "legacy.json"
+        sample_experiment_result.save(fpath)
+
+
+        with fpath.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+
+
+
+        assert "manifest" in data
+        data.pop("manifest", None)
+        with fpath.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle)
+
+
+        with fpath.open("r", encoding="utf-8") as handle:
+            assert "manifest" not in json.load(handle)
+
+        loaded = ExperimentResult.load(fpath)
+        assert loaded.manifest is None

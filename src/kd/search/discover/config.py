@@ -101,6 +101,12 @@ DEFAULT_STABILITY_QUEUE_CAPACITY = 10
 
 
 
+DEFAULT_MAGNITUDE_FILTER: bool = False
+
+
+
+
+
 DEFAULT_DIAGNOSTIC_SCAFFOLD: bool = False
 DEFAULT_DIAGNOSTIC_SCAFFOLD_DIFFUSION_TOKENS: tuple[str, ...] = ()
 DEFAULT_DIAGNOSTIC_SCAFFOLD_REACTION_TOKENS: tuple[str, ...] = ()
@@ -129,6 +135,8 @@ class PINNConfig:
     pretrain_epoch: int = 200_000
     pinn_epoch: int = 1_000
     lr: float = 0.001
+
+
 
 
 
@@ -219,6 +227,10 @@ def _default_library_config() -> LibraryConfig:
 class DiscoverConfig:
     """Configuration for a DISCOVER (RL + optional PINN) search run.
 
+    Default values are a smoke-test configuration; to reproduce paper
+    results use ``burgers_preset()`` / ``chafee_preset()``. Paper-comparison
+    experiments MUST go through presets.
+
     DISCOVER trains an LSTM controller with risk-seeking policy gradient to
     propose candidate equations, optionally backed by a PINN surrogate for
     derivatives. It has many knobs (controller, reward shaping, structural
@@ -290,6 +302,12 @@ class DiscoverConfig:
     stability_selection: int = DEFAULT_STABILITY_SELECTION
     stability_queue_capacity: int = DEFAULT_STABILITY_QUEUE_CAPACITY
 
+
+
+
+
+    magnitude_filter: bool = DEFAULT_MAGNITUDE_FILTER
+
     diagnostic_scaffold: bool = DEFAULT_DIAGNOSTIC_SCAFFOLD
 
 
@@ -348,9 +366,9 @@ class DiscoverConfig:
     def burgers_preset(cls, **overrides: Any) -> DiscoverConfig:
         """Config matching DISCOVER reference for the Burgers equation.
 
-        All hyperparameters are taken from the reference config:
-        ``refs/discover/dso/dso/config/MODE1/config_pde_Burgers.json``
-        layered on ``config_common.json``.
+        All hyperparameters are taken from the upstream DISCOVER
+        reference configuration (``config_pde_Burgers.json`` layered on
+        ``config_common.json``).
 
         Operator names use our unary-diff convention:
         ``diff`` -> ``diff_x``, ``diff2`` -> ``diff2_x``, etc.

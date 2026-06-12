@@ -12,7 +12,6 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup
 
 from kd.core.expr.sympy_bridge import format_pde, to_latex
-from kd.viz._labels import score_label as _score_label
 
 if TYPE_CHECKING:
     from kd.search.result import ExperimentResult
@@ -150,7 +149,9 @@ def generate_report(
         best_expression=result.best_expression,
         best_expression_latex=_best_expression_latex(result),
         best_score=f"{result.best_score:.2f}",
-        score_label=_score_label(result.config.get("algorithm", "")),
+
+
+        score_label=result.score_kind,
         r2=f"{result.final_eval.r2:.6f}",
         nmse=f"{result.final_eval.nmse:.4g}",
         iterations=result.iterations,

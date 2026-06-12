@@ -30,10 +30,16 @@ METRIC_REL_TOL: float = 1e-4
 
 
 
+
+
+
+
+
+
 _REQUIRED_HASHSEED: str = "0"
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(scope="module")
 def _enforce_pythonhashseed() -> None:
     actual = os.environ.get("PYTHONHASHSEED")
     if actual != _REQUIRED_HASHSEED:
@@ -185,13 +191,21 @@ def _id_for_fixture(path: Path) -> str:
 
 @pytest.mark.golden
 @pytest.mark.slow
+@pytest.mark.usefixtures("_enforce_pythonhashseed")
 @pytest.mark.parametrize(
     "fixture_path",
 
 
-    _FIXTURES if _FIXTURES else [pytest.param(None, marks=pytest.mark.skip(
-        reason="No golden fixtures present at refs/baseline/golden/",
-    ))],
+    _FIXTURES
+    if _FIXTURES
+    else [
+        pytest.param(
+            None,
+            marks=pytest.mark.skip(
+                reason="No golden fixtures present at refs/baseline/golden/",
+            ),
+        )
+    ],
     ids=[_id_for_fixture(p) for p in _FIXTURES] or ["no-fixtures"],
 )
 def test_golden_baseline_matches_hardcoded_oracle(fixture_path: Path) -> None:
@@ -218,10 +232,17 @@ def test_golden_baseline_matches_hardcoded_oracle(fixture_path: Path) -> None:
 
 
     _assert_result_matches(
-        actual_result, expected, fixture_path, canonicalize_terms=True,
+        actual_result,
+        expected,
+        fixture_path,
+        canonicalize_terms=True,
     )
 
 
+@pytest.mark.skipif(
+    not GOLDEN_DIR.exists(),
+    reason="requires refs/baseline/golden fixtures (not shipped in the public tree)",
+)
 def test_golden_fixture_set_matches_oracle_set() -> None:
     fixture_ids = {_id_for_fixture(path) for path in _FIXTURES}
     assert fixture_ids == set(EXPECTED_GOLDENS), (
@@ -236,7 +257,9 @@ def _assert_fixture_metadata(
 ) -> None:
     config = payload["config"]
     expected_id = fixture_id(
-        pde=expected.pde, mode=expected.mode, seed=expected.seed,
+        pde=expected.pde,
+        mode=expected.mode,
+        seed=expected.seed,
     )
     assert payload["fixture_id"] == expected_id
     ok, reason = _fixture_commit_is_current(str(payload["commit"]))
@@ -264,7 +287,10 @@ def _assert_serialized_result_matches(
         wall_time_seconds=float(serialized["wall_time_seconds"]),
     )
     _assert_result_matches(
-        artifact, expected, fixture_path, canonicalize_terms=False,
+        artifact,
+        expected,
+        fixture_path,
+        canonicalize_terms=False,
     )
 
 
@@ -296,9 +322,7 @@ def _assert_result_matches(
         terms_label = "term_set_sorted (raw)"
     if actual_terms_cmp != expected_terms_cmp:
         diffs.append(
-            f"{terms_label}: "
-            f"expected={expected_terms_cmp} "
-            f"got={actual_terms_cmp}",
+            f"{terms_label}: expected={expected_terms_cmp} got={actual_terms_cmp}",
         )
     if actual.n_iterations_to_best != expected.n_iterations_to_best:
         diffs.append(
@@ -341,9 +365,7 @@ def _check_coefs_by_term(
     diffs: list[str] = []
     if set(actual_cmp) != set(expected_cmp):
         diffs.append(
-            f"{keys_label}: "
-            f"expected={sorted(expected_cmp)} "
-            f"got={sorted(actual_cmp)}",
+            f"{keys_label}: expected={sorted(expected_cmp)} got={sorted(actual_cmp)}",
         )
         return diffs
     for term, exp_coef in expected_cmp.items():
@@ -374,7 +396,10 @@ def _check_scalar_metrics(
 
 
 def _check_relative(
-    name: str, actual: float, expected: float, rel_tol: float,
+    name: str,
+    actual: float,
+    expected: float,
+    rel_tol: float,
 ) -> list[str]:
     denom = abs(expected) if abs(expected) > 0 else 1.0
     rel = abs(actual - expected) / denom
@@ -413,12 +438,22 @@ def _fixture_commit_is_current(fixture_commit: str) -> tuple[bool, str]:
             f"fixture commit {fixture_commit[:12]} is not an ancestor of HEAD",
         )
     diff_args = [
-        "git", "diff", "--name-only", f"{fixture_commit}..HEAD", "--",
+        "git",
+        "diff",
+        "--name-only",
+        f"{fixture_commit}..HEAD",
+        "--",
         *_FIXTURE_DIFF_SCOPE,
     ]
-    diff = subprocess.check_output(
-        diff_args, cwd=PROJECT_ROOT, stderr=subprocess.DEVNULL,
-    ).decode().strip()
+    diff = (
+        subprocess.check_output(
+            diff_args,
+            cwd=PROJECT_ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+        .decode()
+        .strip()
+    )
     if diff:
         affected = diff.replace("\n", "\n ")
         return (

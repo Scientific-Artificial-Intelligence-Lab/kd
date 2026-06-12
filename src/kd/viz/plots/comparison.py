@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from kd.viz._labels import score_label
+from kd.search.result import DEFAULT_SCORE_KIND
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -29,10 +29,16 @@ def _safe_label(
 def _shared_score_ylabel(results: list[ExperimentResult]) -> str:
     if not results:
         return "Best Score"
-    labels = {score_label(r.config.get("algorithm", "")) for r in results}
-    if len(labels) == 1:
-        return f"Best {labels.pop()}"
+    kinds = {r.score_kind for r in results}
+    if len(kinds) == 1:
+        return f"Best {kinds.pop()}"
     return "Best Score"
+
+
+def _pooling_identity(result: ExperimentResult) -> tuple[str, str]:
+    if result.score_kind == DEFAULT_SCORE_KIND:
+        return ("__undeclared__", str(result.config.get("algorithm", "")))
+    return (result.score_kind, result.score_direction)
 
 
 def render_overlaid_convergence(
@@ -44,7 +50,7 @@ def render_overlaid_convergence(
     warnings: list[str] = []
     any_data = False
     all_scores: list[list[float]] = []
-    score_algorithms: list[str] = []
+    score_identities: list[tuple[str, str]] = []
 
     for i, result in enumerate(results):
         label = _safe_label(results, labels, i)
@@ -53,7 +59,10 @@ def render_overlaid_convergence(
             continue
         any_data = True
         all_scores.append([float(s) for s in scores])
-        score_algorithms.append(str(result.config.get("algorithm", "")))
+
+
+
+        score_identities.append(_pooling_identity(result))
         iterations = list(range(len(scores)))
         ax.plot(iterations, scores, label=label, marker=".", markersize=2, alpha=0.6)
 
@@ -64,13 +73,19 @@ def render_overlaid_convergence(
 
 
 
+
+
+
+
+
     if len(all_scores) >= 2:
-        if len(set(score_algorithms)) > 1:
+        if len(set(score_identities)) > 1:
             warnings.append(
-                "Overlaid runs use mixed algorithms with incommensurable score "
-                "metrics (e.g. SGA AIC vs DLGA fitness vs DISCOVER reward); "
-                "mean/std band suppressed. Compare final nmse/r2 across "
-                "algorithms instead of the internal search score."
+                "Overlaid runs carry incommensurable (or undeclared) score "
+                "metrics (mixed score kind/direction, e.g. SGA AIC vs DLGA "
+                "fitness vs DISCOVER reward); mean/std band suppressed. "
+                "Compare final nmse/r2 across runs instead of the internal "
+                "search score."
             )
         else:
             max_len = max(len(s) for s in all_scores)

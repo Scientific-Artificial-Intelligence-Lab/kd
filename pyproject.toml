@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.1.0"
+version = "0.2.0"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -30,9 +30,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Mao-Hao/KD"
-Source = "https://github.com/Mao-Hao/KD"
-Issues = "https://github.com/Mao-Hao/KD/issues"
+Homepage = "https://github.com/Scientific-Artificial-Intelligence-Lab/kd"
+Source = "https://github.com/Scientific-Artificial-Intelligence-Lab/kd"
+Issues = "https://github.com/Scientific-Artificial-Intelligence-Lab/kd/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -41,6 +41,14 @@ dev = [
     "hypothesis>=6.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
+]
+# Optional external symbolic-regression backend. PySR pulls in a Julia
+# runtime (juliacall), so it is NOT a default dependency — install with
+# ``pip install kd[pysr]`` only when using ``Model(algorithm="pysr")``.
+pysr = [
+    # API depends on PySR 1.5.x surface (equations_ columns complexity/loss/
+    # sympy_format, model.sympy()); the adapter asserts those columns at fit.
+    "pysr>=1.5,<2",
 ]
 
 [dependency-groups]
@@ -66,6 +74,12 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Default = fast tier: bare pytest must never trip the
+# slow/golden science-contract tests (multi-hour, golden also requires
+# PYTHONHASHSEED=0). An explicit -m on the CLI REPLACES this filter:
+# uv run pytest -m slow -> slow suite (nightly)
+# uv run pytest -m "" -> full run, no marker filter
+addopts = '-m "not slow"'
 markers = [
     "smoke: quick sanity checks (run always)",
     "unit: isolated function tests",
@@ -78,13 +92,27 @@ markers = [
     "validation: algorithm validation tests (fidelity + recovery)",
     "golden: golden-baseline regression tests (discover subsystem, very slow)",
     "mode2_aggregate: 3-seed STRICT MODE2 aggregate (discover §B.2 contract)",
-    "phase3_e2e: discover an internal milestone B1 plugin e2e (slow, requires GPU)",
+    "phase3_e2e: full discover plugin e2e (slow, requires GPU; research suite)",
+    "pysr: tests requiring the optional PySR/Julia backend (excluded from default smoke)",
 ]
 
 [tool.mypy]
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+# pysr is an optional extra (kd[pysr]); environments without it (CI) must
+# not fail on the lazy import. Paired override: missing pysr is fine, and
+# the import site's `type: ignore[import-untyped]` (used when pysr IS
+# installed locally, since pysr ships no py.typed) is allowed to sit
+# unused when pysr is absent.
+[[tool.mypy.overrides]]
+module = "pysr"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "kd.search.pysr.backend"
+warn_unused_ignores = false
 
 [tool.ruff]
 target-version = "py311"

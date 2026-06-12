@@ -433,9 +433,16 @@ class TestExecutePdeDivisionGuard:
         valid_terms, valid_indices = execute_pde(pde, data)
 
 
-        if len(valid_indices) > 0:
 
-            assert torch.isfinite(valid_terms).all()
+
+        if len(valid_indices) == 0:
+            pytest.fail(
+                "Premise not met: /(u, zeros) term was guard-filtered; "
+                "expected the safe_div path (term survives, finite). "
+                "If filtering is now intended, update this test."
+            )
+
+        assert torch.isfinite(valid_terms).all()
 
     def test_div_by_near_zero_result_is_finite(self) -> None:
         data = _make_data()

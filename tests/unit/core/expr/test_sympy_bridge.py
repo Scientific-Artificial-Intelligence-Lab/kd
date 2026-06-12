@@ -9,6 +9,7 @@ from kd.core.expr.sympy_bridge import (
     FormattedEquation,
     are_equivalent,
     format_pde,
+    from_sympy,
     symbolic_diff,
     to_latex,
     to_sympy,
@@ -684,3 +685,148 @@ class TestDerivativeSymbolNameNonSymbol:
 
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+
+
+
+
+
+class TestFromSympy:
+
+    @pytest.mark.smoke
+    def test_symbol(self) -> None:
+        assert from_sympy(sympy.Symbol("u")) == "u"
+
+    def test_integer(self) -> None:
+        assert from_sympy(sympy.Integer(1)) == "1"
+
+    def test_negative_integer(self) -> None:
+        result = from_sympy(sympy.Integer(-3))
+        assert to_sympy(result) == sympy.Integer(-3)
+
+    def test_float(self) -> None:
+        result = from_sympy(sympy.Float(0.1))
+        assert abs(float(to_sympy(result)) - 0.1) < 1e-12
+
+    def test_rational(self) -> None:
+        result = from_sympy(sympy.Rational(1, 2))
+        assert sympy.simplify(to_sympy(result) - sympy.Rational(1, 2)) == 0
+
+    def test_add(self) -> None:
+        u, u_x = sympy.symbols("u u_x")
+        result = from_sympy(u + u_x)
+        assert sympy.expand(to_sympy(result) - (u + u_x)) == 0
+
+    def test_mul(self) -> None:
+        u, u_x = sympy.symbols("u u_x")
+        result = from_sympy(u * u_x)
+        assert sympy.expand(to_sympy(result) - (u * u_x)) == 0
+
+    def test_integer_power(self) -> None:
+        u = sympy.Symbol("u")
+        result = from_sympy(u**2)
+        assert sympy.expand(to_sympy(result) - u**2) == 0
+
+    def test_sin_via_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        result = from_sympy(sympy.sin(u))
+        assert to_sympy(result) == sympy.sin(u)
+
+    def test_cos_via_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        result = from_sympy(sympy.cos(u))
+        assert to_sympy(result) == sympy.cos(u)
+
+    def test_exp_via_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        result = from_sympy(sympy.exp(u))
+        assert to_sympy(result) == sympy.exp(u)
+
+    def test_log_via_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        result = from_sympy(sympy.log(u))
+        assert to_sympy(result) == sympy.log(u)
+
+    def test_lap_via_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        lap = sympy.Function("lap")
+        result = from_sympy(lap(u))
+        assert to_sympy(result) == lap(u)
+
+    def test_diff_single_arg_round_trip(self) -> None:
+        u = sympy.Symbol("u")
+        diff_x = sympy.Function("diff_x")
+        result = from_sympy(diff_x(u))
+        assert to_sympy(result) == to_sympy("diff_x(u)")
+
+    def test_nested_compound_round_trip(self) -> None:
+        u, u_x, u_xx = sympy.symbols("u u_x u_xx")
+        result = from_sympy(u * u_x + u_xx)
+        assert sympy.expand(to_sympy(result) - (u * u_x + u_xx)) == 0
+
+
+class TestFromSympyRoundTripProperty:
+
+    @pytest.mark.parametrize(
+        "ir",
+        [
+            "u",
+            "1",
+            "add(u, u_x)",
+            "add(mul(u, u_x), u_xx)",
+            "mul(0.1, u_xx)",
+            "n2(u_x)",
+            "n3(u)",
+            "div(u, x)",
+            "sin(u)",
+            "cos(u)",
+            "exp(u)",
+            "log(u)",
+            "lap(u)",
+            "diff_x(u)",
+        ],
+    )
+    def test_round_trip_is_equivalent(self, ir: str) -> None:
+        assert are_equivalent(from_sympy(to_sympy(ir)), ir)
+
+
+class TestFromSympyHardFailures:
+
+    def test_sqrt_raises(self) -> None:
+        with pytest.raises(ValueError):
+            from_sympy(sympy.sqrt(sympy.Symbol("u")))
+
+    def test_rational_power_raises(self) -> None:
+        with pytest.raises(ValueError):
+            from_sympy(sympy.Symbol("c0") ** sympy.Rational(1, 2))
+
+    def test_abs_raises(self) -> None:
+        with pytest.raises(ValueError):
+            from_sympy(sympy.Abs(sympy.Symbol("u")))
+
+    def test_piecewise_raises(self) -> None:
+        u = sympy.Symbol("u")
+        pw = sympy.Piecewise((u, u > 0), (sympy.Integer(0), True))
+        with pytest.raises(ValueError):
+            from_sympy(pw)
+
+    def test_min_raises(self) -> None:
+        a, b = sympy.symbols("a b")
+        with pytest.raises(ValueError):
+            from_sympy(sympy.Min(a, b))
+
+    def test_max_raises(self) -> None:
+        a, b = sympy.symbols("a b")
+        with pytest.raises(ValueError):
+            from_sympy(sympy.Max(a, b))
+
+    def test_unknown_function_raises(self) -> None:
+        weird = sympy.Function("weird")
+        with pytest.raises(ValueError):
+            from_sympy(weird(sympy.Symbol("u")))
+
+    def test_symbol_power_symbol_raises(self) -> None:
+        x = sympy.Symbol("x")
+        with pytest.raises(ValueError):
+            from_sympy(x**x)

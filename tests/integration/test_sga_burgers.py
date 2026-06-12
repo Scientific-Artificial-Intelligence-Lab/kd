@@ -20,25 +20,18 @@ from kd.search.sga import SGAConfig, SGAPlugin
 
 
 _NX = 128
-"""Spatial grid points (smaller than default 256 for speed)."""
 
 _NT = 51
-"""Time grid points (smaller than default 101 for speed)."""
 
 _NU = 0.1
-"""Burgers viscosity coefficient."""
 
 _SEED = 42
-"""Fixed seed for reproducibility."""
 
 _SMOKE_GENERATIONS = 5
-"""Number of SGA generations for smoke test."""
 
 _SCIENCE_GENERATIONS = 20
-"""Number of SGA generations for scientific sanity test."""
 
 _POPULATION = 10
-"""Population size (smaller than default 20 for speed)."""
 
 
 

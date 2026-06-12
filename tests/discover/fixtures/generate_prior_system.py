@@ -99,6 +99,9 @@ def _ref_diff_child(parent: np.ndarray) -> np.ndarray:
 
 def _ref_soft_length(step_idx: int, batch_size: int) -> np.ndarray:
     prior = np.zeros((batch_size, L), dtype=np.float32)
+    if step_idx == 0:
+
+        return prior
     t = float(step_idx)
     if t < SOFT_LOC:
         if t < SOFT_EARLY_CUTOFF:
@@ -181,6 +184,19 @@ def _step_cases() -> dict[str, dict[str, Any]]:
 
 def _soft_length_cases() -> dict[str, dict[str, Any]]:
     cases = {}
+
+
+
+
+    obs_initial = np.array(
+        [[EMPTY_ACTION, EMPTY_PARENT, EMPTY_SIBLING, 1]], dtype=np.float32,
+    )
+    adjustment_initial = _ref_soft_length(0, batch_size=1)
+    cases["soft_initial"] = {
+        "step_idx": 0,
+        "obs": obs_initial,
+        "mask": adjustment_initial,
+    }
 
 
     obs_early = np.array(

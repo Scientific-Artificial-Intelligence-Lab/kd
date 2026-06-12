@@ -295,6 +295,20 @@ class TestScatterRewards:
         ]
         engine.receive_results(results)
         engine.update()
+        metrics = engine.last_metrics
+        assert metrics["pg_loss"] == 0.0
+        assert metrics["reward_max"] == 0.0
+        assert metrics["n_eval_valid"] == 0.0
+
+    @pytest.mark.unit
+    def test_all_valid_results_produce_nonzero_pg_loss(
+        self,
+        engine: DiscoverEngine,
+    ) -> None:
+        torch.manual_seed(SEED)
+        metrics = engine.run_iteration(RankedEvaluator())
+        assert metrics["pg_loss"] != 0.0
+        assert metrics["n_eval_valid"] > 0.0
 
     @pytest.mark.unit
     def test_best_expression_matches_best_evaluation(

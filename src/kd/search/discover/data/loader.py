@@ -2,13 +2,28 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import numpy as np
 import numpy.typing as npt
 import scipy.io as sio
 import torch
 
+
+
+
+from kd.data.noise import (
+    NOISE_SCALE_MAX as _NOISE_SCALE_MAX,
+)
+from kd.data.noise import (
+    NOISE_SCALE_STD as _NOISE_SCALE_STD,
+)
+from kd.data.noise import (
+    NoiseScale as NoiseScale,
+)
+from kd.data.noise import (
+    discover_unnormalized,
+)
 from kd.data.schema import (
     AxisInfo,
     DataTopology,
@@ -16,12 +31,6 @@ from kd.data.schema import (
     PDEDataset,
     TaskType,
 )
-
-
-
-_NOISE_SCALE_STD = "std"
-_NOISE_SCALE_MAX = "max"
-NoiseScale = Literal["std", "max"]
 
 
 _BURGERS_FIELD_U = "usol"
@@ -74,9 +83,7 @@ def load_chafee_infante_npy(directory: str | Path) -> PDEDataset:
     t_np = _load_npy(d / "chafee_infante_t.npy").flatten()
 
     if u_np.ndim != 2:
-        raise ValueError(
-            f"Expected CI to be 2D (N_x, N_t), got shape {u_np.shape}"
-        )
+        raise ValueError(f"Expected CI to be 2D (N_x, N_t), got shape {u_np.shape}")
 
     x_tensor = torch.from_numpy(x_np).to(torch.float64)
     t_tensor = torch.from_numpy(t_np).to(torch.float64)
@@ -116,9 +123,7 @@ def load_burgers_mat(path: str | Path) -> PDEDataset:
     t_np = data[_BURGERS_FIELD_T].flatten()
     u_np = data[_BURGERS_FIELD_U]
     if u_np.ndim != 2:
-        raise ValueError(
-            f"Expected usol to be 2D (N_x, N_t), got shape {u_np.shape}"
-        )
+        raise ValueError(f"Expected usol to be 2D (N_x, N_t), got shape {u_np.shape}")
     if np.iscomplexobj(u_np):
         u_np = np.real(u_np)
 
@@ -149,9 +154,7 @@ def load_fisher_linear_mat(path: str | Path) -> PDEDataset:
     data = sio.loadmat(str(resolved))
     u_raw = data[_FISHER_FIELD_U]
     if u_raw.ndim != 2:
-        raise ValueError(
-            f"Expected U to be 2D (N_t, N_x), got shape {u_raw.shape}"
-        )
+        raise ValueError(f"Expected U to be 2D (N_t, N_x), got shape {u_raw.shape}")
 
     u_np = u_raw[_FISHER_EDGE_TRIM, _FISHER_EDGE_TRIM].T
     x_np = data[_BURGERS_FIELD_X].flatten()[_FISHER_EDGE_TRIM]
@@ -183,9 +186,7 @@ def load_fisher_nonlinear_mat(path: str | Path) -> PDEDataset:
     data = sio.loadmat(str(resolved))
     u_raw = data[_FISHER_FIELD_U]
     if u_raw.ndim != 2:
-        raise ValueError(
-            f"Expected U to be 2D (N_t, N_x), got shape {u_raw.shape}"
-        )
+        raise ValueError(f"Expected U to be 2D (N_t, N_x), got shape {u_raw.shape}")
 
 
     u_np = u_raw[_FISHER_EDGE_TRIM, _FISHER_EDGE_TRIM].T
@@ -217,9 +218,7 @@ def load_pde_compound_npy(path: str | Path) -> PDEDataset:
 
     raw = _load_npy(resolved)
     if raw.ndim != 2:
-        raise ValueError(
-            f"Expected PDE_compound npy to be 2D, got shape {raw.shape}"
-        )
+        raise ValueError(f"Expected PDE_compound npy to be 2D, got shape {raw.shape}")
 
 
     u_full = raw.T
@@ -231,11 +230,15 @@ def load_pde_compound_npy(path: str | Path) -> PDEDataset:
         )
     u_np = np.ascontiguousarray(u_full[_PDE_COMPOUND_X_TRIM,:])
     x_full = np.linspace(
-        _PDE_COMPOUND_X_RANGE[0], _PDE_COMPOUND_X_RANGE[1], _PDE_COMPOUND_NX,
+        _PDE_COMPOUND_X_RANGE[0],
+        _PDE_COMPOUND_X_RANGE[1],
+        _PDE_COMPOUND_NX,
     )
     x_np = x_full[_PDE_COMPOUND_X_TRIM]
     t_np = np.linspace(
-        _PDE_COMPOUND_T_RANGE[0], _PDE_COMPOUND_T_RANGE[1], _PDE_COMPOUND_NT,
+        _PDE_COMPOUND_T_RANGE[0],
+        _PDE_COMPOUND_T_RANGE[1],
+        _PDE_COMPOUND_NT,
     )
 
     x_tensor = torch.from_numpy(x_np).to(torch.float64)
@@ -263,9 +266,7 @@ def load_pde_divide_npy(path: str | Path) -> PDEDataset:
 
     raw = _load_npy(resolved)
     if raw.ndim != 2:
-        raise ValueError(
-            f"Expected PDE_divide npy to be 2D, got shape {raw.shape}"
-        )
+        raise ValueError(f"Expected PDE_divide npy to be 2D, got shape {raw.shape}")
 
     u_full = raw.T
     if u_full.shape != (_PDE_DIVIDE_NX, _PDE_DIVIDE_NT):
@@ -275,10 +276,14 @@ def load_pde_divide_npy(path: str | Path) -> PDEDataset:
         )
     u_np = np.ascontiguousarray(u_full)
     x_np = np.linspace(
-        _PDE_DIVIDE_X_RANGE[0], _PDE_DIVIDE_X_RANGE[1], _PDE_DIVIDE_NX,
+        _PDE_DIVIDE_X_RANGE[0],
+        _PDE_DIVIDE_X_RANGE[1],
+        _PDE_DIVIDE_NX,
     )
     t_np = np.linspace(
-        _PDE_DIVIDE_T_RANGE[0], _PDE_DIVIDE_T_RANGE[1], _PDE_DIVIDE_NT,
+        _PDE_DIVIDE_T_RANGE[0],
+        _PDE_DIVIDE_T_RANGE[1],
+        _PDE_DIVIDE_NT,
     )
 
     x_tensor = torch.from_numpy(x_np).to(torch.float64)
@@ -307,9 +312,7 @@ def load_kdv_mat(path: str | Path) -> PDEDataset:
     data = sio.loadmat(str(resolved))
     u_raw = data[_KDV_FIELD_U]
     if u_raw.ndim != 2:
-        raise ValueError(
-            f"Expected uu to be 2D (N_x, N_t), got shape {u_raw.shape}"
-        )
+        raise ValueError(f"Expected uu to be 2D (N_x, N_t), got shape {u_raw.shape}")
 
     u_np = np.ascontiguousarray(u_raw)
     x_np = data[_BURGERS_FIELD_X].flatten()
@@ -344,8 +347,7 @@ def add_gaussian_noise(
         raise ValueError(f"noise level must be non-negative, got {level}")
     if scale not in (_NOISE_SCALE_STD, _NOISE_SCALE_MAX):
         raise ValueError(
-            f"scale must be {_NOISE_SCALE_STD!r} or {_NOISE_SCALE_MAX!r}, "
-            f"got {scale!r}"
+            f"scale must be {_NOISE_SCALE_STD!r} or {_NOISE_SCALE_MAX!r}, got {scale!r}"
         )
     if dataset.fields is None:
         raise ValueError("dataset.fields must be defined")
@@ -353,20 +355,13 @@ def add_gaussian_noise(
     generator = torch.Generator().manual_seed(seed)
     noisy_fields: dict[str, FieldData] = {}
     for name, field in dataset.fields.items():
-        values = field.values
-        noise = torch.randn(
-            values.shape,
+        noisy_values = discover_unnormalized(
+            field.values,
+            level,
             generator=generator,
-            dtype=values.dtype,
-            device=values.device,
+            scale=scale,
         )
-        if scale == _NOISE_SCALE_STD:
-
-
-            sigma = level * torch.std(values, unbiased=True)
-        else:
-            sigma = level * values.abs().max()
-        noisy_fields[name] = FieldData(name=name, values=values + sigma * noise)
+        noisy_fields[name] = FieldData(name=name, values=noisy_values)
 
     axis_order = list(dataset.axis_order) if dataset.axis_order is not None else None
     return PDEDataset(

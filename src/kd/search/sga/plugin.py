@@ -5,12 +5,13 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import torch
 from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
+from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
@@ -33,23 +34,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INVALID_AIC = float("inf")
-"""AIC penalty for invalid results."""
 
 _AIC_LOWER_BOUND = -100.0
-"""AIC values below this threshold are rejected as pathological (the predecessor alignment)."""
 
 _MAX_RESAMPLE_PER_INDIVIDUAL = 50
-"""Maximum resample attempts per pathological individual during init."""
-
-_R2_EPS = 1e-15
-"""Threshold for treating the target variance as zero in R² computation."""
 
 _FAILED_EVAL_ERROR_MESSAGE = "Candidate evaluation failed"
-"""Sentinel ``error_message`` set by ``_evaluation_failed_result`` to mark
-``_score_offspring`` exceptions. ``_dedup_and_score`` keys off this string to
-avoid polluting ``_pde_lib`` with raw (un-pruned) genotype keys when scoring
-itself raised — the failed candidate's ``result.expression`` is the raw input
-genotype, not the pruned phenotype that ``post_prune``/``dual`` modes expect."""
 
 
 @dataclass
@@ -124,6 +114,12 @@ def _safe_evaluate_aic(
 
 class SGAPlugin:
 
+
+
+
+    score_kind: ClassVar[str] = "AIC"
+    score_direction: ClassVar[Literal["min", "max"]] = "min"
+
     def __init__(self, config: SGAConfig | None = None) -> None:
         self._config = config or SGAConfig()
         self._population: list[PDE] | None = None
@@ -131,8 +127,6 @@ class SGAPlugin:
         self._best_score: float = float("inf")
         self._best_expression: str = ""
         self._best_formatted_cache: str | None = None
-        """Lazy-rendered ``best_expression`` (with coefficients). Reset on
-        every best-of-generation update so the next read recomputes."""
         self._vars: list[str] = []
         self._data_dict: dict[str, Tensor] = {}
         self._den: tuple[tuple[str, int], ...] = ()
@@ -143,41 +137,18 @@ class SGAPlugin:
         self._rng: torch.Generator = torch.Generator()
         self._prepared: bool = False
         self._restore_pending: bool = False
-        """One-shot flag set by the ``state`` setter on a real checkpoint
-        restore. ``prepare()`` consumes it to PRESERVE the restored state
-        instead of resetting; a fresh reuse (flag False) resets (AUDIT-06)."""
         self._offspring: list[PDE] | None = None
         self._offspring_results: list[EvaluationResult] | None = None
         self._pending_population: list[PDE] | None = None
         self._pending_scores: list[float] | None = None
         self._recorder: VizRecorder | None = None
         self._autograd_provider: AutogradProvider | None = None
-        """Internal AutogradProvider for Layer 2 terminals when use_autograd=True.
-        Does NOT replace components.context.derivative_provider"""
 
         self._pde_lib: set[str] = set()
-        """Deduplication set; key form depends on ``config.dedup_mode``
-
-        Tracks expressions already evaluated within this run. Prevents
-        duplicate offspring from flooding truncate (the predecessor + paper SGA-PDE
-        mechanism). Persists across generations within a run; reset on
-        fresh ``state`` restore.
-
-        Key semantics by mode:
-
-        - ``"none"`` — never written; always empty.
-        - ``"pre_prune"`` — raw genotype keys (``pde_to_kd_expr(child)``).
-        - ``"post_prune"`` — pruned phenotype keys
-          (``scored.result.expression`` from ``_score_offspring``).
-        - ``"dual"`` — mixed: both raw and pruned keys for accepted
-          offspring (so the next generation can short-circuit either form).
-        """
 
         self._repeat_cross: int = 0
-        """Per-generation counter: crossover offspring skipped as duplicates."""
 
         self._repeat_change: int = 0
-        """Per-generation counter: mutation offspring skipped as duplicates."""
 
     @property
     def _delta(self) -> dict[str, float]:
@@ -621,13 +592,7 @@ class SGAPlugin:
     def _compute_r2(self, predicted: Tensor) -> float:
         if self._y is None:
             return -float("inf")
-        ss_res = ((self._y - predicted) ** 2).sum().item()
-        if not math.isfinite(ss_res):
-            return -float("inf")
-        ss_tot = ((self._y - self._y.mean()) ** 2).sum().item()
-        if ss_tot < _R2_EPS:
-            return 1.0 if ss_res < _R2_EPS else 0.0
-        return 1.0 - ss_res / ss_tot
+        return r2_score(predicted, self._y)
 
     def _invalid_final_result(self, error_message: str) -> EvaluationResult:
         residuals = torch.zeros_like(self._y) if self._y is not None else torch.zeros(0)
@@ -1191,8 +1156,8 @@ class SGAPlugin:
         if not math.isfinite(mse):
             return -math.inf
         target_var = self._target_variance()
-        if target_var < _R2_EPS:
-            return 1.0 if mse < _R2_EPS else 0.0
+        if target_var < R2_EPS_TOT:
+            return 1.0 if mse < R2_EPS_RES else 0.0
         return 1.0 - mse / target_var
 
     def _to_eval_result(

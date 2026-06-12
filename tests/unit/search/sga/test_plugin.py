@@ -18,10 +18,8 @@ from kd.search.sga.config import SGAConfig
 
 
 _SMALL_GRID_SIZE = 10
-"""Number of spatial points in the synthetic test grid."""
 
 _SMALL_TIME_SIZE = 5
-"""Number of time points in the synthetic test grid."""
 
 
 
@@ -32,7 +30,8 @@ _SMALL_TIME_SIZE = 5
 def _make_synthetic_dataset() -> PDEDataset:
     x_vals = torch.linspace(0.0, 1.0, _SMALL_GRID_SIZE)
     t_vals = torch.linspace(0.0, 1.0, _SMALL_TIME_SIZE)
-    u_data = torch.randn(_SMALL_GRID_SIZE, _SMALL_TIME_SIZE)
+    data_gen = torch.Generator().manual_seed(20260611)
+    u_data = torch.randn(_SMALL_GRID_SIZE, _SMALL_TIME_SIZE, generator=data_gen)
 
     return PDEDataset(
         name="test_synthetic",
@@ -55,8 +54,12 @@ def _make_mock_derivative_provider() -> MagicMock:
 
     def get_derivative(field_name: str, axis: str, order: int) -> torch.Tensor:
 
-        torch.manual_seed(hash((field_name, axis, order)) % (2**31))
-        return torch.randn(_SMALL_GRID_SIZE, _SMALL_TIME_SIZE)
+
+
+        key = f"{field_name}|{axis}|{order}".encode()
+        seed = int.from_bytes(key, "little") % (2**31)
+        gen = torch.Generator().manual_seed(seed)
+        return torch.randn(_SMALL_GRID_SIZE, _SMALL_TIME_SIZE, generator=gen)
 
     provider.get_derivative = get_derivative
     return provider
@@ -691,8 +694,15 @@ class TestSGAPluginLifecycle:
             plugin.update(results)
 
 
-        if plugin.best_score < float("inf"):
-            assert len(plugin.best_expression) > 0
+
+
+        if plugin.best_score >= float("inf"):
+            pytest.fail(
+                "Premise not met: no valid evaluation in 3 seeded "
+                f"iterations (best_score={plugin.best_score}); "
+                "best_expression contract cannot be checked."
+            )
+        assert len(plugin.best_expression) > 0
 
 
 
@@ -2568,6 +2578,53 @@ class TestSGAPluginNmseSemantics:
             expression="u",
         )
         assert result.r2 == pytest.approx(1.0, abs=1e-9)
+
+    @pytest.mark.unit
+    def test_compute_r2_float32_constant_target_matches_platform(
+        self,
+        sga_config: SGAConfig,
+        mock_components: PlatformComponents,
+    ) -> None:
+        from kd.core.linear_solve import compute_r2
+        from kd.search.sga.plugin import SGAPlugin
+
+        plugin = SGAPlugin(config=sga_config)
+        plugin.prepare(mock_components)
+
+
+        y = torch.full((50,), 1.7, dtype=torch.float32)
+        plugin._y = y
+        predicted = y + 2e-7
+
+
+        theta = predicted.unsqueeze(-1)
+        coef = torch.ones(1, dtype=predicted.dtype)
+        platform_r2 = compute_r2(theta, coef, y)
+
+        assert platform_r2 == pytest.approx(1.0), (
+            "sanity: platform treats float32-rounding residual as perfect fit"
+        )
+        assert plugin._compute_r2(predicted) == pytest.approx(platform_r2), (
+            "SGA _compute_r2 must agree with platform compute_r2 on the "
+            "float32 + constant-target boundary case (J-1 drift)"
+        )
+
+    @pytest.mark.unit
+    def test_r2_from_mse_perfect_fit_eps_aligned_with_platform(
+        self,
+        sga_config: SGAConfig,
+        mock_components: PlatformComponents,
+    ) -> None:
+        from kd.search.sga.plugin import SGAPlugin
+
+        plugin = SGAPlugin(config=sga_config)
+        plugin.prepare(mock_components)
+        plugin._y = torch.full((50,), 1.7, dtype=torch.float64)
+
+        assert plugin._r2_from_mse(1e-12) == pytest.approx(1.0), (
+            "_r2_from_mse must treat rounding-scale mse on a constant "
+            "target as a perfect fit (platform R2_EPS_RES)"
+        )
 
 
 

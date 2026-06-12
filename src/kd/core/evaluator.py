@@ -4,11 +4,12 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
 
+from kd.core.jsonsafe import make_json_safe, sanitize_float
 from kd.core.metrics import ScorerFn, make_aic_scorer
 from kd.core.metrics import nmse as _metrics_nmse
 
@@ -37,6 +38,40 @@ class EvaluationResult:
     expression: str = ""
     lhs_name: str | None = None
 
+    def to_dict(self, *, include_residuals: bool = True) -> dict[str, Any]:
+        residuals: Any = None
+        if include_residuals:
+            residuals = make_json_safe(
+                self.residuals,
+                key=_RESIDUALS_JSON_KEY,
+            )
+        return {
+            "mse": sanitize_float(self.mse),
+            "nmse": sanitize_float(self.nmse),
+            "r2": sanitize_float(self.r2),
+            "aic": sanitize_float(self.aic) if self.aic is not None else None,
+            "complexity": self.complexity,
+            "coefficients": make_json_safe(
+                self.coefficients,
+                key=_COEFFICIENTS_JSON_KEY,
+            ),
+            "is_valid": self.is_valid,
+            "error_message": self.error_message,
+            "selected_indices": self.selected_indices,
+            "residuals": residuals,
+            "terms": self.terms,
+            "expression": self.expression,
+            "lhs_name": self.lhs_name,
+        }
+
+
+
+
+
+
+_COEFFICIENTS_JSON_KEY = "final_eval.coefficients"
+_RESIDUALS_JSON_KEY = "final_eval.residuals"
+
 
 class Evaluator:
 
@@ -60,7 +95,10 @@ class Evaluator:
         self._n_samples = self._lhs_flat.shape[0]
 
 
-        self._lhs_var = self._lhs_flat.var().item()
+
+
+
+        self._lhs_var = self._lhs_flat.var(correction=0).item()
 
 
         self._scorer = scorer or make_aic_scorer(self._n_samples)
@@ -266,6 +304,12 @@ class Evaluator:
         )
 
 
-def _release_cuda_memory() -> None:
+def release_cuda_memory() -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+
+
+
+
+_release_cuda_memory = release_cuda_memory

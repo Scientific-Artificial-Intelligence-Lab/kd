@@ -12,10 +12,9 @@ from kd.core.evaluator import (
 )
 from kd.core.metrics import make_aic_scorer
 from kd.core.metrics import nmse as kd_nmse
+from kd.search.discover.evaluation.magnitude import magnitude_reject_reason
 
 _RANK_CHECK_REL_TOL = 1e-8
-_MAGNITUDE_FILTER_MIN = 5e-5
-_MAGNITUDE_FILTER_MAX = 1e4
 
 
 class SampledEvaluator:
@@ -31,7 +30,9 @@ class SampledEvaluator:
         self._base = base
         self._sample_indices = sample_indices
         self._lhs = base.lhs_target.index_select(0, sample_indices).detach()
-        self._lhs_var = float(self._lhs.var().item())
+
+
+        self._lhs_var = float(self._lhs.var(correction=0).item())
         self._scorer = make_aic_scorer(self._lhs.shape[0])
         self._term_cache: dict[str, Tensor] = {}
         self._rank_check = rank_check
@@ -80,15 +81,11 @@ class SampledEvaluator:
 
         coefficients = solve_result.coefficients
         if self._magnitude_filter:
-            coef_abs = coefficients.abs()
-            min_abs = float(coef_abs.min().item())
-            max_abs = float(coef_abs.max().item())
-            if min_abs < _MAGNITUDE_FILTER_MIN or max_abs > _MAGNITUDE_FILTER_MAX:
-                return self._make_invalid_result(
-                    f"Coefficient magnitude out of range "
-                    f"[{_MAGNITUDE_FILTER_MIN:.0e}, {_MAGNITUDE_FILTER_MAX:.0e}]: "
-                    f"min|w|={min_abs:.3e}, max|w|={max_abs:.3e}"
-                )
+            reason = magnitude_reject_reason(
+                coefficients, solve_result.selected_indices
+            )
+            if reason is not None:
+                return self._make_invalid_result(reason)
         y_pred = theta @ coefficients
         mse = float(((self._lhs - y_pred) ** 2).mean().item())
         if not math.isfinite(mse):

@@ -109,19 +109,27 @@ def test_dlga_vizextension_renders_via_engine(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_dlga_recorder_has_eight_whitelist_fields(tmp_path: Path) -> None:
+def test_dlga_recorder_keys_are_within_allowed_whitelist(tmp_path: Path) -> None:
     del tmp_path
-    from kd.search.dlga.plugin import _LOGGED_METRICS
+    from kd.search.dlga.plugin import _LOGGED_METRICS, _SURROGATE_METRICS
 
     plugin = _populated_plugin()
-    recorder_keys = plugin._recorder.keys()
+    recorder_keys = set(plugin._recorder.keys())
 
-    assert set(_LOGGED_METRICS) == set(recorder_keys), (
-        f"recorder must carry exactly the 8 whitelist fields; "
-        f"symmetric-difference={set(_LOGGED_METRICS) ^ set(recorder_keys)}"
+    allowed = set(_LOGGED_METRICS) | set(_SURROGATE_METRICS)
+    stray = recorder_keys - allowed
+    assert not stray, (
+        f"recorder keys must be within the allowed whitelist "
+        f"(_LOGGED_METRICS | _SURROGATE_METRICS); stray={sorted(stray)}."
+    )
+
+
+    assert set(_LOGGED_METRICS) <= recorder_keys, (
+        f"the 8 generation metrics must be present; "
+        f"missing={sorted(set(_LOGGED_METRICS) - recorder_keys)}."
     )
     plotted = {"gen_mean_fitness", "n_unique", "gen_mean_complexity"}
-    assert plotted <= set(_LOGGED_METRICS), (
-        f"plotted metrics must be a subset of the whitelist; "
-        f"stray={plotted - set(_LOGGED_METRICS)}"
+    assert plotted <= allowed, (
+        f"plotted metrics must be a subset of the allowed whitelist; "
+        f"stray={plotted - allowed}"
     )

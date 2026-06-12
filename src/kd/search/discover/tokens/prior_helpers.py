@@ -151,8 +151,13 @@ class SoftLengthPrior(Prior):
             dtype=np.int32,
         )
 
-    def initial_adjustment(self, batch_size: int) -> Float32Array:
-        return self._adjustment_for_step(batch_size, float(_INITIAL_STEP))
+
+
+
+
+
+
+
 
     def __call__(self, ctx: PriorContext) -> Float32Array:
         _require_library(self, ctx.library)
@@ -272,8 +277,9 @@ class RelationalConstraint(Prior):
         if self.relationship == "descendant":
             return self._descendant(ctx)
         raise NotImplementedError(
-            f"Relationship '{self.relationship}' not implemented. "
-            "See refs/discover/dso/dso/prior.py:361 for reference."
+            f"Relationship '{self.relationship}' not implemented "
+            "(only 'child' and 'descendant' are supported; see the upstream "
+            "DSO RelationalConstraint for the full relationship set)."
         )
 
     def _child(self, ctx: PriorContext) -> Float32Array:

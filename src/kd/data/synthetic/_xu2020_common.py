@@ -5,6 +5,7 @@ import math
 
 import torch
 
+from kd.data.noise import xu2020_relative
 from kd.data.schema import AxisInfo, DataTopology, FieldData, PDEDataset, TaskType
 
 _FIELD_U = "u"
@@ -40,32 +41,7 @@ def add_relative_noise(
     *,
     seed: int | None,
 ) -> torch.Tensor:
-    if noise_level < 0.0 or not math.isfinite(noise_level):
-        raise ValueError(
-            f"noise_level must be finite and non-negative, got {noise_level}"
-        )
-    if noise_level == 0.0:
-        return u
-    generator = None
-    if seed is not None:
-        generator = torch.Generator(device=u.device).manual_seed(seed)
-    noise = torch.randn(
-        u.shape,
-        dtype=u.dtype,
-        device=u.device,
-        generator=generator,
-    )
-    signal_std = u.std(correction=0)
-    if float(signal_std.item()) == 0.0:
-        raise ValueError(
-            "signal has zero std; relative noise is undefined "
-            "(use absolute noise scale instead)"
-        )
-    noise_std = noise.std(correction=0)
-    if float(noise_std.item()) == 0.0:
-        return u
-    noise = noise / noise_std * (noise_level * signal_std)
-    return u + noise
+    return xu2020_relative(u, noise_level, seed=seed)
 
 
 def build_dataset(

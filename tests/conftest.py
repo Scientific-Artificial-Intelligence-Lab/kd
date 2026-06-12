@@ -1,6 +1,18 @@
 
+import os
+
 import pytest
 import torch
+from hypothesis import settings
+
+
+
+
+
+
+settings.register_profile("ci", deadline=None)
+if os.environ.get("CI"):
+    settings.load_profile("ci")
 
 
 @pytest.fixture

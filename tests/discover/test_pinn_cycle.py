@@ -66,7 +66,7 @@ _OPERATORS = ["add", "mul", "diff_x", "diff2_x"]
 
 
 def _heat_solution(x: Tensor, t: Tensor) -> Tensor:
-    return torch.exp(-torch.pi**2 * t) * torch.sin(torch.pi * x)
+    return torch.exp(-(torch.pi**2) * t) * torch.sin(torch.pi * x)
 
 
 def _make_heat_dataset() -> PDEDataset:
@@ -194,6 +194,21 @@ class _AlwaysInvalidEvaluator:
         )
 
 
+class _AlwaysValidHeatEvaluator:
+
+    def evaluate_expression(self, expr: str) -> EvaluationResult:
+        return EvaluationResult(
+            mse=0.01,
+            nmse=0.01,
+            r2=0.99,
+            complexity=1,
+            is_valid=True,
+            expression=expr,
+            terms=["diff2_x(u)"],
+            coefficients=torch.tensor([1.0]),
+        )
+
+
 class _SelectionEvaluator:
 
     def __init__(self, results: dict[str, EvaluationResult]) -> None:
@@ -284,17 +299,17 @@ class TestCycleRun:
             assert isinstance(m["best_reward"], float)
             assert math.isfinite(m["best_reward"])
 
-    def test_metrics_have_pinn_losses(self, heat_evaluator: Evaluator) -> None:
-        result = _build_runner(heat_evaluator, _fast_config(n_cycles=1)).run()
-
-
-        pinn_ran = any("data_loss" in m for m in result.cycle_metrics)
-        if pinn_ran:
-            for m in result.cycle_metrics:
-                if "data_loss" in m:
-                    assert math.isfinite(m["data_loss"])
-                    assert "physics_loss" in m
-                    assert math.isfinite(m["physics_loss"])
+    def test_metrics_have_pinn_losses(self) -> None:
+        result = _build_runner(
+            _AlwaysValidHeatEvaluator(),
+            _fast_config(n_cycles=1),
+        ).run()
+        assert len(result.cycle_metrics) == 1
+        for m in result.cycle_metrics:
+            assert "data_loss" in m, f"PINN training did not run: {m}"
+            assert math.isfinite(m["data_loss"])
+            assert "physics_loss" in m
+            assert math.isfinite(m["physics_loss"])
 
 
 
@@ -311,26 +326,23 @@ class TestNoValidExpression:
         assert any(
             "skip" in r.message.lower() or "no valid" in r.message.lower()
             for r in caplog.records
-        ), (
-            f"Expected skip/no-valid warning; got "
-            f"{[r.message for r in caplog.records]}"
-        )
+        ), f"Expected skip/no-valid warning; got {[r.message for r in caplog.records]}"
 
     def test_completes_with_metrics(self) -> None:
         result = _build_runner(
-            _AlwaysInvalidEvaluator(), _fast_config(n_cycles=2),
+            _AlwaysInvalidEvaluator(),
+            _fast_config(n_cycles=2),
         ).run()
         assert isinstance(result, PINNCycleResult)
         assert len(result.cycle_metrics) == 2
 
     def test_pinn_losses_absent_when_skipped(self) -> None:
         result = _build_runner(
-            _AlwaysInvalidEvaluator(), _fast_config(n_cycles=1),
+            _AlwaysInvalidEvaluator(),
+            _fast_config(n_cycles=1),
         ).run()
         for m in result.cycle_metrics:
-            assert "data_loss" not in m, (
-                "data_loss present despite no valid expression"
-            )
+            assert "data_loss" not in m, "data_loss present despite no valid expression"
 
 
 
@@ -360,9 +372,7 @@ class TestNoCycles:
 
 class TestPlannedSearchIterations:
 
-    def test_default_counts_the_final_search(
-        self, heat_evaluator: Evaluator
-    ) -> None:
+    def test_default_counts_the_final_search(self, heat_evaluator: Evaluator) -> None:
 
         runner = _build_runner(heat_evaluator, _fast_config(n_cycles=2))
 
@@ -504,7 +514,12 @@ class TestPretrainSplit:
             captured["targets"] = targets
             captured["val_targets"] = val_targets
             return original_pretrain(
-                self_model, coords, targets, val_coords, val_targets, config,
+                self_model,
+                coords,
+                targets,
+                val_coords,
+                val_targets,
+                config,
             )
 
         monkeypatch.setattr(model_module.PINNModel, "pretrain", spy_pretrain)
@@ -537,7 +552,9 @@ class TestPretrainSplit:
             return original_train_pinn(self_model, **kwargs)
 
         monkeypatch.setattr(
-            model_module.PINNModel, "train_pinn", spy_train_pinn,
+            model_module.PINNModel,
+            "train_pinn",
+            spy_train_pinn,
         )
         runner = _build_runner(heat_evaluator, _fast_config(n_cycles=1))
         runner.run()
@@ -567,7 +584,12 @@ class TestPretrainSplit:
             captured["train_n"] = coords["x"].shape[0]
             captured["val_n"] = val_coords["x"].shape[0]
             return original_pretrain(
-                self_model, coords, targets, val_coords, val_targets, config,
+                self_model,
+                coords,
+                targets,
+                val_coords,
+                val_targets,
+                config,
             )
 
         monkeypatch.setattr(model_module.PINNModel, "pretrain", spy_pretrain)
@@ -629,7 +651,10 @@ class TestPretrainSplitSeed:
             config: Any,
         ) -> Any:
             return PretrainResult(
-                train_loss=0.0, val_loss=0.0, epochs_run=1, stopped_early=False,
+                train_loss=0.0,
+                val_loss=0.0,
+                epochs_run=1,
+                stopped_early=False,
             )
 
         monkeypatch.setattr(model_module.PINNModel, "pretrain", fast_pretrain)
@@ -642,7 +667,9 @@ class TestPretrainSplitSeed:
 
 
         monkeypatch.setattr(
-            model_module.PINNModel, "pretrain", original_pretrain,
+            model_module.PINNModel,
+            "pretrain",
+            original_pretrain,
         )
         assert permutations, "spy never saw a randperm(N_OBS) call"
         return permutations[0]
@@ -653,10 +680,14 @@ class TestPretrainSplitSeed:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         default_perm = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=None,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=None,
         )
         explicit_zero = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=0,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=0,
         )
         assert torch.equal(default_perm, explicit_zero)
 
@@ -666,10 +697,14 @@ class TestPretrainSplitSeed:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         perm_zero = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=0,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=0,
         )
         perm_one = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=1,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=1,
         )
         assert not torch.equal(perm_zero, perm_one)
 
@@ -679,10 +714,14 @@ class TestPretrainSplitSeed:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         perm_a = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=42,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=42,
         )
         perm_b = self._capture_permutation(
-            heat_evaluator, monkeypatch, pretrain_split_seed=42,
+            heat_evaluator,
+            monkeypatch,
+            pretrain_split_seed=42,
         )
         assert torch.equal(perm_a, perm_b)
 
@@ -700,21 +739,27 @@ class TestDeriveCycleSeed:
         from kd.search.discover.pinn.cycle import _derive_cycle_seed
 
         assert _derive_cycle_seed(42, 0, b"local_sample") != _derive_cycle_seed(
-            42, 1, b"local_sample",
+            42,
+            1,
+            b"local_sample",
         )
 
     def test_domain_separation(self) -> None:
         from kd.search.discover.pinn.cycle import _derive_cycle_seed
 
         assert _derive_cycle_seed(42, 0, b"local_sample") != _derive_cycle_seed(
-            42, 0, b"other_sub_task",
+            42,
+            0,
+            b"other_sub_task",
         )
 
     def test_collision_avoided_vs_naive_add(self) -> None:
         from kd.search.discover.pinn.cycle import _derive_cycle_seed
 
         assert _derive_cycle_seed(42, 1, b"local_sample") != _derive_cycle_seed(
-            43, 0, b"local_sample",
+            43,
+            0,
+            b"local_sample",
         )
 
     def test_returns_nonnegative_32bit_int(self) -> None:
@@ -742,6 +787,7 @@ class TestLocalSampleSeed:
         captured_seeds: list[int | None] = []
 
 
+
         def fake_generate_local_samples(**kwargs: Any) -> dict[str, Tensor]:
             captured_seeds.append(kwargs.get("seed"))
             obs = kwargs["observation_coords"]
@@ -756,6 +802,7 @@ class TestLocalSampleSeed:
         )
 
         original_train_pinn = model_module.PINNModel.train_pinn
+
 
         def fast_train_pinn(self_model: Any, **kwargs: Any) -> Any:
             return original_train_pinn(self_model, **kwargs)
@@ -783,7 +830,9 @@ class TestLocalSampleSeed:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         seeds = self._capture_local_seeds(
-            heat_evaluator, monkeypatch, local_sample_seed=None,
+            heat_evaluator,
+            monkeypatch,
+            local_sample_seed=None,
         )
 
         assert seeds, "generate_local_samples was never invoked"
@@ -797,7 +846,10 @@ class TestLocalSampleSeed:
         from kd.search.discover.pinn.cycle import _derive_cycle_seed
 
         seeds = self._capture_local_seeds(
-            heat_evaluator, monkeypatch, local_sample_seed=7, n_cycles=2,
+            heat_evaluator,
+            monkeypatch,
+            local_sample_seed=7,
+            n_cycles=2,
         )
         expected = [
             _derive_cycle_seed(7, cycle_idx, b"local_sample")
@@ -816,13 +868,16 @@ class TestLocalSampleSeed:
         original_make = cycle_module.PINNCycleRunner._make_local_coords
 
         def spy_make(
-            self_runner: Any, cycle_idx: int,
+            self_runner: Any,
+            cycle_idx: int,
         ) -> dict[str, Tensor] | None:
             captured_cycle_idx.append(cycle_idx)
             return original_make(self_runner, cycle_idx)
 
         monkeypatch.setattr(
-            cycle_module.PINNCycleRunner, "_make_local_coords", spy_make,
+            cycle_module.PINNCycleRunner,
+            "_make_local_coords",
+            spy_make,
         )
 
         runner = _build_runner(
@@ -843,7 +898,8 @@ class TestLocalSampleSeed:
 class TestSeedPlanArtifact:
 
     def test_seed_plan_default_values_in_extras(
-        self, heat_evaluator: Evaluator,
+        self,
+        heat_evaluator: Evaluator,
     ) -> None:
         result = _build_runner(heat_evaluator, _fast_config(n_cycles=0)).run()
         extras = result.final_state.extras or {}
@@ -856,7 +912,8 @@ class TestSeedPlanArtifact:
         }
 
     def test_seed_plan_records_explicit_values(
-        self, heat_evaluator: Evaluator,
+        self,
+        heat_evaluator: Evaluator,
     ) -> None:
         runner = _build_runner(
             heat_evaluator,
@@ -874,7 +931,8 @@ class TestSeedPlanArtifact:
         }
 
     def test_seed_plan_preserves_existing_extras(
-        self, heat_evaluator: Evaluator,
+        self,
+        heat_evaluator: Evaluator,
     ) -> None:
 
 
@@ -931,7 +989,9 @@ class TestRebuildFromEvaluator:
         sentinel = object()
 
         def fake_rebuild(
-            regen_data: object, executor: object, solver: object,
+            regen_data: object,
+            executor: object,
+            solver: object,
         ) -> object:
             captured["executor"] = executor
             captured["solver"] = solver
@@ -1033,9 +1093,7 @@ class TestTrainPinnRollback:
         runner._engine._best_reward = 0.5
 
 
-        pre_weights = {
-            k: v.clone() for k, v in runner._pinn_model.state_dict().items()
-        }
+        pre_weights = {k: v.clone() for k, v in runner._pinn_model.state_dict().items()}
 
 
         def _corrupting_train_pinn(self_model: Any, **kwargs: Any) -> Any:
@@ -1046,7 +1104,9 @@ class TestTrainPinnRollback:
             raise _CorruptingTrainPinnError("simulated PINN failure")
 
         monkeypatch.setattr(
-            model_module.PINNModel, "train_pinn", _corrupting_train_pinn,
+            model_module.PINNModel,
+            "train_pinn",
+            _corrupting_train_pinn,
         )
 
 
@@ -1080,7 +1140,9 @@ class TestTrainPinnRollback:
             raise KeyError("unknown_symbol")
 
         monkeypatch.setattr(
-            model_module.PINNModel, "train_pinn", _raising_train_pinn,
+            model_module.PINNModel,
+            "train_pinn",
+            _raising_train_pinn,
         )
 
         evaluator = _build_evaluator(_make_heat_dataset())
@@ -1105,9 +1167,7 @@ class TestTrainPinnRollback:
         if not runner._engine.best_expression:
             pytest.skip("Engine found no valid expression in short run")
 
-        pre_weights = {
-            k: v.clone() for k, v in runner._pinn_model.state_dict().items()
-        }
+        pre_weights = {k: v.clone() for k, v in runner._pinn_model.state_dict().items()}
 
         _metrics, pinn_ok = runner._run_pinn_phase(0, evaluator)
 
@@ -1117,8 +1177,7 @@ class TestTrainPinnRollback:
 
         post_weights = runner._pinn_model.state_dict()
         any_changed = any(
-            not torch.equal(pre_weights[k], post_weights[k])
-            for k in pre_weights
+            not torch.equal(pre_weights[k], post_weights[k]) for k in pre_weights
         )
         assert any_changed, (
             "No weights changed after successful train_pinn — "
@@ -1190,7 +1249,8 @@ class TestTD060DomainBounds:
 
     @pytest.mark.unit
     def test_domain_bounds_none_falls_back(
-        self, heat_evaluator: Evaluator,
+        self,
+        heat_evaluator: Evaluator,
     ) -> None:
         config = _fast_config(n_cycles=1)
         runner = _build_runner(heat_evaluator, config)
@@ -1286,7 +1346,9 @@ class TestLhsFieldThreading:
 
     @pytest.mark.unit
     def test_compute_residual_receives_lhs_from_metadata(
-        self, heat_evaluator: Evaluator, monkeypatch: pytest.MonkeyPatch,
+        self,
+        heat_evaluator: Evaluator,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from kd.search.discover.pinn import model as model_mod
 
@@ -1312,12 +1374,8 @@ class TestLhsFieldThreading:
                 captured["lhs_axis"] = ds.lhs_axis
             return original_eval(*args, **kwargs)
 
-        monkeypatch.setattr(
-            model_mod, "_chunked_backward_residual_loss", _spy_back
-        )
-        monkeypatch.setattr(
-            model_mod, "_chunked_eval_residual_loss", _spy_eval
-        )
+        monkeypatch.setattr(model_mod, "_chunked_backward_residual_loss", _spy_back)
+        monkeypatch.setattr(model_mod, "_chunked_eval_residual_loss", _spy_eval)
         runner = _build_runner(heat_evaluator, _fast_config(n_cycles=1))
         runner.run()
         assert captured.get("lhs_field") == "u"
@@ -1326,22 +1384,28 @@ class TestLhsFieldThreading:
     @pytest.mark.unit
     def test_dataset_metadata_lhs_fields_accessible(self) -> None:
         meta = make_pinn_dataset(
-            axis_names=["x", "t"], field_names=["u"],
-            lhs_field="u", lhs_axis="t",
+            axis_names=["x", "t"],
+            field_names=["u"],
+            lhs_field="u",
+            lhs_axis="t",
         )
         assert meta.lhs_field == "u"
         assert meta.lhs_axis == "t"
 
         meta2 = make_pinn_dataset(
-            axis_names=["x", "t"], field_names=["v"],
-            lhs_field="v", lhs_axis="x",
+            axis_names=["x", "t"],
+            field_names=["v"],
+            lhs_field="v",
+            lhs_axis="x",
         )
         assert meta2.lhs_field == "v"
         assert meta2.lhs_axis == "x"
 
     @pytest.mark.unit
     def test_rebuild_passes_lhs_to_regenerate_metadata(
-        self, heat_evaluator: Evaluator, monkeypatch: pytest.MonkeyPatch,
+        self,
+        heat_evaluator: Evaluator,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from kd.search.discover.pinn import cycle as cycle_mod
 
@@ -1384,12 +1448,14 @@ class TestMetadataConsistency:
         source = make_pinn_dataset(
             axis_names=["x", "y", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
         pinn = make_pinn_dataset(
             axis_names=["x", "y", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
 
         _validate_metadata_consistency(source, pinn)
@@ -1401,7 +1467,8 @@ class TestMetadataConsistency:
         source = make_pinn_dataset(
             axis_names=["x", "y", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
         pinn = make_pinn_dataset(
             axis_names=["x", "y", "t"],
@@ -1419,7 +1486,8 @@ class TestMetadataConsistency:
         source = make_pinn_dataset(
             axis_names=["x", "y", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
         pinn = make_pinn_dataset(
             axis_names=["x", "y", "t"],
@@ -1437,12 +1505,14 @@ class TestMetadataConsistency:
         source = make_pinn_dataset(
             axis_names=["x", "y", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
         pinn = make_pinn_dataset(
             axis_names=["x", "t"],
             field_names=["omega", "u", "v"],
-            lhs_field="omega", lhs_axis="t",
+            lhs_field="omega",
+            lhs_axis="t",
         )
         with pytest.raises(ValueError, match="axis_order mismatch"):
             _validate_metadata_consistency(source, pinn)
@@ -1482,7 +1552,9 @@ class TestCycleIterationReduction:
 
     @pytest.mark.unit
     def test_none_preserves_current_behavior(
-        self, heat_evaluator: Evaluator, monkeypatch: pytest.MonkeyPatch,
+        self,
+        heat_evaluator: Evaluator,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from kd.search.discover.engine import DiscoverEngine
 
@@ -1497,7 +1569,10 @@ class TestCycleIterationReduction:
         ) -> Any:
             iter_counts.append(n_iterations)
             return original_run_cycle(
-                self_eng, evaluator, n_iterations, **kwargs,
+                self_eng,
+                evaluator,
+                n_iterations,
+                **kwargs,
             )
 
         monkeypatch.setattr(DiscoverEngine, "run_cycle", _spy)
@@ -1510,7 +1585,9 @@ class TestCycleIterationReduction:
 
     @pytest.mark.unit
     def test_reduced_iterations_for_cycle_2_plus(
-        self, heat_evaluator: Evaluator, monkeypatch: pytest.MonkeyPatch,
+        self,
+        heat_evaluator: Evaluator,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from kd.search.discover.engine import DiscoverEngine
 
@@ -1525,7 +1602,10 @@ class TestCycleIterationReduction:
         ) -> Any:
             iter_counts.append(n_iterations)
             return original_run_cycle(
-                self_eng, evaluator, n_iterations, **kwargs,
+                self_eng,
+                evaluator,
+                n_iterations,
+                **kwargs,
             )
 
         monkeypatch.setattr(DiscoverEngine, "run_cycle", _spy)
@@ -1534,12 +1614,17 @@ class TestCycleIterationReduction:
 
         config = DiscoverConfig(
             **{
-                **{f.name: getattr(config, f.name) for f in dataclass_fields(config)
-                   if f.name != "pinn"},
+                **{
+                    f.name: getattr(config, f.name)
+                    for f in dataclass_fields(config)
+                    if f.name != "pinn"
+                },
                 "pinn": PINNConfig(
                     **{
-                        **{f.name: getattr(config.pinn, f.name)
-                           for f in dataclass_fields(config.pinn)},
+                        **{
+                            f.name: getattr(config.pinn, f.name)
+                            for f in dataclass_fields(config.pinn)
+                        },
                         "cycle_n_iterations": 3,
                     },
                 ),
@@ -1961,13 +2046,18 @@ class TestChafeeAlignedStabilitySeedThreading:
 
         pipeline_path = (
             Path(__file__).resolve().parent.parent.parent
-            / "src" / "kd" / "search" / "discover" / "runners" / "mode2_pipeline.py"
+            / "src"
+            / "kd"
+            / "search"
+            / "discover"
+            / "runners"
+            / "mode2_pipeline.py"
         )
         source = pipeline_path.read_text(encoding="utf-8")
         assert "stability_seed=seed" in source, (
             "discover/runners/mode2_pipeline.py must pass stability_seed=seed "
             "to PINNCycleRunner so --seed N produces deterministic "
-            "stability_select tie-breaks (post-unification audit, 2026-04-26)."
+            "stability_select tie-breaks."
         )
 
     @pytest.mark.unit
@@ -1992,7 +2082,12 @@ class TestChafeeAlignedStabilitySeedThreading:
 
         pipeline_path = (
             Path(__file__).resolve().parent.parent.parent
-            / "src" / "kd" / "search" / "discover" / "runners" / "mode2_pipeline.py"
+            / "src"
+            / "kd"
+            / "search"
+            / "discover"
+            / "runners"
+            / "mode2_pipeline.py"
         )
         source = pipeline_path.read_text(encoding="utf-8")
         assert "local_sample_seed=seed" in source, (

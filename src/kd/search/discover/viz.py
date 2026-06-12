@@ -145,6 +145,12 @@ def _safe_get_series(
 
 
 def _sanitize_y(value: Any) -> float | None:
+    if value is None:
+
+
+
+
+        return None
     if isinstance(value, bool):
         return None
     if isinstance(value, float):

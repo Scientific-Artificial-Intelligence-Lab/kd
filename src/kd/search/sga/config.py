@@ -72,7 +72,7 @@ class SGAConfig:
 
     This config covers GA parameters and tree structure constraints.
     It does NOT contain ``generations`` or ``sga_run`` -- the Runner
-    is the sole loop owner
+    is the sole loop owner.
     """
 
 
@@ -133,12 +133,12 @@ class SGAConfig:
       genotype (current default; matches the predecessor / paper SGA-PDE behavior).
     - ``"post_prune"``: dedup using ``pde_to_kd_expr`` of the **pruned** PDE
       after ``evaluate_candidate``. Closes the pre-prune-key/post-prune-storage
-      gap (Codex HIGH finding ).
+      gap.
     - ``"dual"``: pre-prune cheap filter + post-prune strict check. Most
       expensive, strictest dedup.
 
     Default ``"pre_prune"`` is conservative; the optimal mode is decided by
-    the ablation in ``scripts/sga_dedup_ablation.py``.
+    a dedicated dedup-mode ablation experiment.
     """
 
 

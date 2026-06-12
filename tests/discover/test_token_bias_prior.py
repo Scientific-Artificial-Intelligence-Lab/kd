@@ -19,7 +19,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(
     TokenBiasPrior is None,
-    reason="TokenBiasPrior not yet implemented — W3 dev agent TODO",
+    reason="TokenBiasPrior not yet implemented",
 )
 
 

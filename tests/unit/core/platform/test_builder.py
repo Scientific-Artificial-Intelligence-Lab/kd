@@ -546,6 +546,105 @@ class TestAutogradTrainsDefaultModel:
 
 
 
+
+class TestContextCarriesTrainingResult:
+
+    @pytest.mark.unit
+    def test_default_train_attaches_populated_training_result(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        from kd.models.trainer import TrainingResult
+
+        reqs = DerivativeReqs(
+            provider_kind="autograd",
+            needs_surrogate=True,
+            surrogate_model=None,
+            surrogate_train_kwargs={
+                "max_epochs": 5,
+                "patience": None,
+                "val_ratio": 0.0,
+                "seed": 0,
+            },
+        )
+        components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
+
+        training_result = getattr(components.context, "training_result", "MISSING")
+        assert isinstance(training_result, TrainingResult), (
+            "build() with needs_surrogate=True and no pre-trained model must "
+            "attach the trainer's TrainingResult to context.training_result; "
+            f"got {training_result!r}."
+        )
+        assert training_result.loss_history, (
+            "context.training_result.loss_history must be non-empty after a "
+            "default surrogate train (the curve the viz layer plots)."
+        )
+        assert len(training_result.loss_history) == training_result.epochs_run
+
+    @pytest.mark.unit
+    def test_provided_model_leaves_training_result_none(
+        self,
+        small_dataset_with_lhs: PDEDataset,
+        pretrained_model: nn.Module,
+    ) -> None:
+        reqs = DerivativeReqs(
+            provider_kind="autograd",
+            needs_surrogate=True,
+            surrogate_model=pretrained_model,
+        )
+        components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
+        training_result = getattr(components.context, "training_result", "MISSING")
+        assert training_result is None, (
+            "A provided pre-trained surrogate must leave "
+            "context.training_result == None (nothing was trained); got "
+            f"{training_result!r}."
+        )
+
+    @pytest.mark.unit
+    def test_val_split_populates_val_loss_history_on_context(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        reqs = DerivativeReqs(
+            provider_kind="autograd",
+            needs_surrogate=True,
+            surrogate_model=None,
+            surrogate_train_kwargs={
+                "max_epochs": 5,
+                "patience": None,
+                "val_ratio": 0.2,
+                "seed": 0,
+            },
+        )
+        components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
+        training_result = getattr(components.context, "training_result", "MISSING")
+        assert training_result is not None and training_result != "MISSING"
+        assert training_result.val_loss_history is not None, (
+            "val_ratio>0 must thread a non-None val_loss_history through to the "
+            "context.training_result."
+        )
+        assert len(training_result.val_loss_history) == len(
+            training_result.loss_history
+        )
+
+    @pytest.mark.unit
+    def test_sga_optin_plain_context_training_result_none(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        reqs = DerivativeReqs(provider_kind="autograd", needs_surrogate=False)
+        components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
+
+        assert not isinstance(components.context, DLGASurrogateContext)
+        training_result = getattr(components.context, "training_result", None)
+        assert training_result is None, (
+            "SGA opt-in (needs_surrogate=False) must leave no surrogate "
+            f"training_result on the plain context; got {training_result!r}."
+        )
+
+
+
+
+
+
+
 class TestLHSResolveDefaults:
 
     @pytest.mark.unit
@@ -727,7 +826,7 @@ class TestLHSWriteback:
         assert components.dataset.lhs_field != "", (
             "Critical: post-build lhs_field must NEVER be empty — "
             "SGAPlugin.prepare reads this directly and ValueError-rejects "
-            "empty strings (Codex Medium #4)."
+            "empty strings."
         )
         assert isinstance(components.dataset.lhs_axis, str)
         assert components.dataset.lhs_axis != ""

@@ -407,7 +407,7 @@ class TestPrefixConversionExecution:
         execution_context_2d: ExecutionContext,
         default_registry: FunctionRegistry,
     ) -> None:
-        from kd.core.compat.prefix import prefix_to_python
+        from tests.helpers.prefix import prefix_to_python
 
 
         prefix_tokens = ["add", "u", "v"]
@@ -431,7 +431,7 @@ class TestPrefixConversionExecution:
         execution_context_2d: ExecutionContext,
         default_registry: FunctionRegistry,
     ) -> None:
-        from kd.core.compat.prefix import prefix_to_python
+        from tests.helpers.prefix import prefix_to_python
 
 
 
@@ -453,7 +453,7 @@ class TestPrefixConversionExecution:
         self,
         default_registry: FunctionRegistry,
     ) -> None:
-        from kd.core.compat.prefix import prefix_to_python, python_to_prefix
+        from tests.helpers.prefix import prefix_to_python, python_to_prefix
 
         original = "add(mul(u, v), sin(u))"
 
@@ -472,13 +472,13 @@ class TestPrefixConversionExecution:
         execution_context_2d: ExecutionContext,
         default_registry: FunctionRegistry,
     ) -> None:
-        from kd.core.compat.prefix import prefix_to_python
+        from tests.helpers.prefix import prefix_to_python
 
 
         direct_expr = "mul(sin(u), cos(v))"
 
 
-        from kd.core.compat.prefix import python_to_prefix
+        from tests.helpers.prefix import python_to_prefix
 
         prefix = python_to_prefix(direct_expr)
         converted_expr = prefix_to_python(prefix, default_registry)

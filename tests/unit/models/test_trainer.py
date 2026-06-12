@@ -484,3 +484,215 @@ class TestDtypeAutoMatch:
         )
         assert next(model.parameters()).dtype == torch.float32
         assert result.final_loss < 1.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class TestTrainingResultHistoryDefaults:
+
+    def test_construct_with_only_old_fields_still_works(self) -> None:
+        result = TrainingResult(
+            final_loss=0.5,
+            epochs_run=10,
+            early_stopped=False,
+            val_loss=None,
+        )
+
+        assert result.loss_history == [], (
+            "TrainingResult.loss_history must default to an empty list; "
+            f"got {result.loss_history!r}"
+        )
+        assert result.val_loss_history is None, (
+            "TrainingResult.val_loss_history must default to None; "
+            f"got {result.val_loss_history!r}"
+        )
+
+    def test_history_fields_are_independent_per_instance(self) -> None:
+        a = TrainingResult(
+            final_loss=0.1, epochs_run=1, early_stopped=False, val_loss=None
+        )
+        b = TrainingResult(
+            final_loss=0.2, epochs_run=1, early_stopped=False, val_loss=None
+        )
+        a.loss_history.append(1.0)
+        assert b.loss_history == [], (
+            "loss_history default must be a fresh list per instance (no shared "
+            f"mutable default); leaked into another instance: {b.loss_history!r}"
+        )
+
+
+class TestFitPopulatesLossHistory:
+
+    def test_loss_history_length_equals_epochs_run_no_val(self) -> None:
+        max_ep = 12
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(50)
+        result = trainer.fit(
+            coords, targets, max_epochs=max_ep, patience=None, val_ratio=0.0, seed=0
+        )
+        assert len(result.loss_history) == result.epochs_run, (
+            f"loss_history length ({len(result.loss_history)}) must equal "
+            f"epochs_run ({result.epochs_run})."
+        )
+        assert len(result.loss_history) == max_ep, (
+            "no early-stop run must record exactly max_epochs history entries"
+        )
+
+    def test_loss_history_last_equals_final_loss(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(50)
+        result = trainer.fit(
+            coords, targets, max_epochs=10, patience=None, val_ratio=0.0, seed=0
+        )
+        assert result.loss_history, "loss_history must be non-empty after fit()"
+
+        assert result.loss_history[-1] == result.final_loss, (
+            f"loss_history[-1]={result.loss_history[-1]!r} must equal "
+            f"final_loss={result.final_loss!r} (same source value)."
+        )
+
+    def test_loss_history_elements_are_plain_floats(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(50)
+        result = trainer.fit(
+            coords, targets, max_epochs=8, patience=None, val_ratio=0.0, seed=0
+        )
+        for i, value in enumerate(result.loss_history):
+            assert type(value) is float, (
+                f"loss_history[{i}] must be a built-in float, got "
+                f"{type(value).__name__} ({value!r}); a stored tensor keeps the "
+                "graph alive and breaks JSON serialization."
+            )
+
+    def test_loss_history_all_finite_and_nonneg(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(50)
+        result = trainer.fit(
+            coords, targets, max_epochs=10, patience=None, val_ratio=0.0, seed=0
+        )
+        for value in result.loss_history:
+            assert math.isfinite(value) and value >= 0.0, (
+                f"loss_history entry {value!r} must be finite and >= 0 (MSE)."
+            )
+
+
+class TestFitPopulatesValLossHistory:
+
+    def test_val_loss_history_present_and_aligned_when_split(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(60)
+        result = trainer.fit(
+            coords, targets, max_epochs=10, patience=None, val_ratio=0.2, seed=0
+        )
+        assert result.val_loss_history is not None, (
+            "val_ratio>0 must produce a val_loss_history (not None)."
+        )
+        assert len(result.val_loss_history) == len(result.loss_history), (
+            f"val_loss_history ({len(result.val_loss_history)}) must align 1:1 "
+            f"with loss_history ({len(result.loss_history)})."
+        )
+        assert len(result.val_loss_history) == result.epochs_run
+
+    def test_val_loss_history_last_equals_val_loss(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(60)
+        result = trainer.fit(
+            coords, targets, max_epochs=10, patience=None, val_ratio=0.2, seed=0
+        )
+        assert result.val_loss_history is not None
+        assert result.val_loss is not None
+        assert result.val_loss_history[-1] == result.val_loss, (
+            f"val_loss_history[-1]={result.val_loss_history[-1]!r} must equal "
+            f"val_loss={result.val_loss!r} (same source value)."
+        )
+
+    def test_val_loss_history_none_when_no_split(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(50)
+        result = trainer.fit(
+            coords, targets, max_epochs=10, patience=None, val_ratio=0.0, seed=0
+        )
+        assert result.val_loss_history is None, (
+            "val_ratio=0 must leave val_loss_history None (no validation curve)."
+        )
+
+        assert len(result.loss_history) == result.epochs_run
+
+    def test_val_loss_history_elements_are_plain_floats(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(60)
+        result = trainer.fit(
+            coords, targets, max_epochs=8, patience=None, val_ratio=0.2, seed=0
+        )
+        assert result.val_loss_history is not None
+        for i, value in enumerate(result.val_loss_history):
+            assert type(value) is float, (
+                f"val_loss_history[{i}] must be a built-in float, got "
+                f"{type(value).__name__} ({value!r})."
+            )
+
+
+class TestFitHistoryWithEarlyStopAndRestore:
+
+    def test_history_covers_actual_epochs_on_early_stop(self) -> None:
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[64, 64])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(100)
+        result = trainer.fit(
+            coords, targets, max_epochs=10000, patience=20, val_ratio=0.2, seed=42
+        )
+        if not result.early_stopped:
+            pytest.skip("did not early-stop in budget; covered by length test")
+        assert len(result.loss_history) == result.epochs_run, (
+            f"early-stopped run: loss_history length ({len(result.loss_history)}) "
+            f"must equal epochs_run ({result.epochs_run}), not max_epochs."
+        )
+        assert result.epochs_run < 10000
+        assert result.val_loss_history is not None
+        assert len(result.val_loss_history) == result.epochs_run
+
+    def test_restore_best_does_not_truncate_history(self) -> None:
+        max_ep = 15
+        model = FieldModel(coord_names=["x"], field_names=["u"], hidden_sizes=[16])
+        trainer = FieldModelTrainer(model, lr=1e-3)
+        coords, targets = _make_sin_data(60)
+        result = trainer.fit(
+            coords,
+            targets,
+            max_epochs=max_ep,
+            patience=None,
+            val_ratio=0.2,
+            seed=0,
+            restore_best=True,
+        )
+
+        assert len(result.loss_history) == result.epochs_run == max_ep, (
+            f"restore_best must not truncate history; got "
+            f"{len(result.loss_history)} entries for epochs_run="
+            f"{result.epochs_run} (max={max_ep})."
+        )
+        assert result.val_loss_history is not None
+        assert len(result.val_loss_history) == max_ep
+
+
+        if result.best_epoch is not None:
+            assert len(result.loss_history) >= result.best_epoch

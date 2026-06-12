@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult, Evaluator
@@ -22,6 +22,13 @@ class PlatformComponents:
     context: ExecutionContext
     registry: FunctionRegistry
     recorder: VizRecorder | None = None
+
+
+@runtime_checkable
+class ScoreContract(Protocol):
+
+    score_kind: ClassVar[str]
+    score_direction: ClassVar[Literal["min", "max"]]
 
 
 @runtime_checkable

@@ -144,6 +144,9 @@ class PINNModel(nn.Module):
             _log_memory("pretrain_end", logger)
             return result_zero
 
+        if not _has_validation_rows(eval_coords, eval_targets):
+            return _pretrain_no_val(self, train_coords, train_targets, config)
+
         optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
         best = _BestState.capture(
             self,
@@ -335,7 +338,11 @@ def _run_pretrain_loop(
         if epoch % _PRETRAIN_LOG_INTERVAL == 0 or epoch == 1:
             logger.info(
                 "pretrain %d/%d train=%.6f val=%.6f best_val=%.6f",
-                epoch, total, train_loss, val_loss, best.val_loss,
+                epoch,
+                total,
+                train_loss,
+                val_loss,
+                best.val_loss,
             )
         if _is_improved(val_loss, best.val_loss):
             best.state_dict = _clone_state_dict(model.state_dict())
@@ -350,10 +357,77 @@ def _run_pretrain_loop(
                 continue
             logger.info(
                 "pretrain early stop at epoch %d best_val=%.6f",
-                epoch, best.val_loss,
+                epoch,
+                best.val_loss,
             )
             return epoch, True
     return total, False
+
+
+def _has_validation_rows(
+    val_coords: dict[str, Tensor],
+    val_targets: dict[str, Tensor],
+) -> bool:
+    tensors = [*val_coords.values(), *val_targets.values()]
+    if not tensors:
+        return False
+    return all(int(tensor.shape[0]) > 0 for tensor in tensors)
+
+
+def _pretrain_no_val(
+    model: PINNModel,
+    train_coords: dict[str, Tensor],
+    train_targets: dict[str, Tensor],
+    config: PINNConfig,
+) -> PretrainResult:
+    logger.warning(
+        "Pretrain received an empty validation set: validation-based "
+        "early stopping and best-weight restoration are DISABLED; "
+        "training will run all %d epochs and keep the final-epoch "
+        "weights (val_loss reported as NaN).",
+        config.pretrain_epoch,
+    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    final_train_loss = _run_pretrain_loop_no_val(
+        model, optimizer, train_coords, train_targets, config
+    )
+    _log_memory("pretrain_end", logger)
+    return PretrainResult(
+        train_loss=final_train_loss,
+        val_loss=math.nan,
+        epochs_run=config.pretrain_epoch,
+        stopped_early=False,
+    )
+
+
+def _run_pretrain_loop_no_val(
+    model: PINNModel,
+    optimizer: torch.optim.Optimizer,
+    train_coords: dict[str, Tensor],
+    train_targets: dict[str, Tensor],
+    config: PINNConfig,
+) -> float:
+    total = config.pretrain_epoch
+    for epoch in range(1, total + 1):
+        _train_epoch(model, optimizer, train_coords, train_targets)
+        if epoch % _PRETRAIN_LOG_INTERVAL == 0 or epoch == 1:
+            logger.info(
+                "pretrain (no-val) %d/%d train=%.6f",
+                epoch,
+                total,
+                _evaluate_train_loss(model, train_coords, train_targets),
+            )
+    return _evaluate_train_loss(model, train_coords, train_targets)
+
+
+@torch.no_grad()
+def _evaluate_train_loss(
+    model: PINNModel,
+    train_coords: dict[str, Tensor],
+    train_targets: dict[str, Tensor],
+) -> float:
+    model.eval()
+    return _mse_loss(model(**train_coords), train_targets).item()
 
 
 def _train_epoch(
@@ -412,8 +486,11 @@ def _run_pinn_training(
         if epoch % _PINN_LOG_INTERVAL == 0 or epoch == 1:
             logger.info(
                 "pinn_train %d/%d data=%.6f phys=%.6f total=%.6f",
-                epoch, total,
-                best.data_loss, best.physics_loss, best.total_loss,
+                epoch,
+                total,
+                best.data_loss,
+                best.physics_loss,
+                best.total_loss,
             )
         best, epochs_without_improvement, result, nan_detected = _run_pinn_epoch(
             model,
@@ -681,7 +758,9 @@ def _resolve_effective_chunk_size(
     logger.info(
         "colloc_chunk_size=None but n_total=%d > %d; auto-chunking at %d to "
         "avoid OOM on deep expressions (E29).",
-        n_total, _LARGE_BATCH_AUTO_THRESHOLD, _LARGE_BATCH_AUTO_CHUNK,
+        n_total,
+        _LARGE_BATCH_AUTO_THRESHOLD,
+        _LARGE_BATCH_AUTO_CHUNK,
     )
     return _LARGE_BATCH_AUTO_CHUNK
 
@@ -742,8 +821,7 @@ def _chunked_backward_residual_loss(
     for chunk_idx, start in enumerate(range(0, n_total, effective_chunk_size)):
         end = min(start + effective_chunk_size, n_total)
         chunk_coords = {
-            k: v[start:end].detach().requires_grad_(True)
-            for k, v in coords.items()
+            k: v[start:end].detach().requires_grad_(True) for k, v in coords.items()
         }
         try:
             chunk_residual = pinn_executor.compute_residual(
@@ -765,7 +843,9 @@ def _chunked_backward_residual_loss(
             logger.error(
                 "Chunk OOM at start=%d, chunk_size=%d, n_total=%d. "
                 "Reduce colloc_chunk_size.",
-                start, effective_chunk_size, n_total,
+                start,
+                effective_chunk_size,
+                n_total,
             )
             raise
         del chunk_residual, chunk_sum_sq, chunk_loss, chunk_coords
@@ -807,8 +887,7 @@ def _chunked_eval_residual_loss(
     for chunk_idx, start in enumerate(range(0, n_total, effective_chunk_size)):
         end = min(start + effective_chunk_size, n_total)
         chunk_coords = {
-            k: v[start:end].detach().requires_grad_(True)
-            for k, v in coords.items()
+            k: v[start:end].detach().requires_grad_(True) for k, v in coords.items()
         }
         try:
             with torch.enable_grad():
@@ -828,7 +907,9 @@ def _chunked_eval_residual_loss(
             logger.error(
                 "Eval chunk OOM at start=%d, chunk_size=%d, n_total=%d. "
                 "Reduce colloc_chunk_size.",
-                start, effective_chunk_size, n_total,
+                start,
+                effective_chunk_size,
+                n_total,
             )
             raise
         total_sum_sq += chunk_sum_sq_value
@@ -921,7 +1002,8 @@ def _update_pinn_best(
     model.load_state_dict(best.state_dict)
     logger.info(
         "pinn_train early stop at epoch %d total=%.6f",
-        epoch, best.total_loss,
+        epoch,
+        best.total_loss,
     )
     return best, epochs_without_improvement, _make_train_result(best, epoch, True)
 
@@ -957,7 +1039,8 @@ def _update_pinn_best_from_values(
     model.load_state_dict(best.state_dict)
     logger.info(
         "pinn_train early stop at epoch %d total=%.6f",
-        epoch, best.total_loss,
+        epoch,
+        best.total_loss,
     )
     return best, epochs_without_improvement, _make_train_result(best, epoch, True)
 
@@ -1018,9 +1101,7 @@ def _evaluate_losses(
 
 
 def _mse_loss(predictions: dict[str, Tensor], targets: dict[str, Tensor]) -> Tensor:
-    losses = [
-        functional.mse_loss(predictions[name], targets[name]) for name in targets
-    ]
+    losses = [functional.mse_loss(predictions[name], targets[name]) for name in targets]
     return torch.stack(losses).mean()
 
 

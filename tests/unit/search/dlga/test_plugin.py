@@ -107,8 +107,9 @@ class TestDLGAPluginLifecycle:
         assert result.coefficients is not None
         assert result.coefficients.numel() == 1
 
+
         assert float(result.coefficients[0].item()) == pytest.approx(1.260, abs=5e-3)
-        assert result.nmse == pytest.approx(1.107, abs=5e-3)
+        assert result.nmse == pytest.approx(1.145, abs=5e-3)
 
     @pytest.mark.unit
     def test_update_and_between_iterations_preserve_population_size(self) -> None:
@@ -233,9 +234,10 @@ class TestDLGAPluginLifecycle:
 
 
 
-        assert final.nmse == pytest.approx(1.107, abs=5e-3)
 
-        assert final.aic == pytest.approx(1.107, abs=5e-3)
+        assert final.nmse == pytest.approx(1.145, abs=5e-3)
+
+        assert final.aic == pytest.approx(1.145, abs=5e-3)
         assert final.complexity == 1
         assert final.coefficients is not None
         assert final.coefficients.numel() == 1

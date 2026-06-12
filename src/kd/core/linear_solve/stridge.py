@@ -177,6 +177,12 @@ def _normalize_columns(
 
     mreg = torch.zeros(d, 1, dtype=x0.dtype, device=x0.device)
     x_norm = torch.zeros_like(x0)
+
+
+
+
+
+
     for i in range(d):
         col_norm = torch.linalg.norm(x0[:, i], ord=normalize).item()
         mreg[i, 0] = 1.0 / col_norm

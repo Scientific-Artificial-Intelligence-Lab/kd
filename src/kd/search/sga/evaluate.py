@@ -161,10 +161,8 @@ def _finite_diff_torch(
 
 
 ZERO_COLUMN_EPS = 1e-10
-"""Threshold for filtering near-zero columns in execute_pde."""
 
 _DERIVATIVE_OPS = {"d", "d^2"}
-"""Binary derivative operators handled outside the arithmetic dispatch table."""
 
 
 

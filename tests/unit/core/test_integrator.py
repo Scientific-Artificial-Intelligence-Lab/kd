@@ -737,18 +737,28 @@ class TestFDMinimumPoints:
             _finite_diff(u, 0.1, order=3, periodic=False)
 
     def test_order1_minimum_points_accepted(self) -> None:
-        u = np.array([0.0, 1.0, 4.0])
+        u = np.array([0.0, 1.0, 4.0, 9.0, 16.0])
         result = _finite_diff(u, 1.0, order=1, periodic=False)
         assert isinstance(result, np.ndarray)
         assert result.shape == u.shape
         assert np.all(np.isfinite(result))
 
+    def test_order1_below_platform_minimum_rejected(self) -> None:
+        u = np.array([0.0, 1.0, 4.0, 9.0])
+        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
+            _finite_diff(u, 1.0, order=1, periodic=False)
+
     def test_order2_minimum_points_accepted(self) -> None:
-        u = np.array([0.0, 1.0, 4.0])
+        u = np.array([0.0, 1.0, 4.0, 9.0, 16.0])
         result = _finite_diff(u, 1.0, order=2, periodic=False)
         assert isinstance(result, np.ndarray)
         assert result.shape == u.shape
         assert np.all(np.isfinite(result))
+
+    def test_order2_below_platform_minimum_rejected(self) -> None:
+        u = np.array([0.0, 1.0, 4.0, 9.0])
+        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
+            _finite_diff(u, 1.0, order=2, periodic=False)
 
     def test_order3_minimum_points_accepted(self) -> None:
         u = np.array([0.0, 1.0, 8.0, 27.0, 64.0])
@@ -771,6 +781,95 @@ class TestFDMinimumPoints:
         u = np.array([1.0, 2.0, 3.0, 4.0])
         with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
             _finite_diff(u, 1.0, order=3, periodic=True)
+
+
+
+
+
+
+
+class TestFDPlatformStencilAlignment:
+
+
+
+    _INTERIOR_TOL = 1e-4
+
+
+    _BOUNDARY_TOL = 1e-2
+
+    def test_order1_interior_is_fourth_order(self) -> None:
+        n = 64
+        x = np.linspace(0.0, 2 * np.pi, n)
+        dx = float(x[1] - x[0])
+        d1 = _finite_diff(np.sin(x), dx, order=1, periodic=False)
+        err = np.abs(d1[2:-2] - np.cos(x[2:-2])).max()
+        assert err < self._INTERIOR_TOL, (
+            f"order-1 interior error {err:.3e} is at the old 2nd-order "
+            f"level; expected 4th-order (< {self._INTERIOR_TOL})"
+        )
+
+    def test_order2_interior_is_fourth_order(self) -> None:
+        n = 64
+        x = np.linspace(0.0, 2 * np.pi, n)
+        dx = float(x[1] - x[0])
+        d2 = _finite_diff(np.sin(x), dx, order=2, periodic=False)
+        err = np.abs(d2[2:-2] - (-np.sin(x[2:-2]))).max()
+        assert err < self._INTERIOR_TOL, (
+            f"order-2 interior error {err:.3e} is at the old 2nd-order "
+            f"level; expected 4th-order (< {self._INTERIOR_TOL})"
+        )
+
+    def test_order2_boundary_uses_one_sided_stencil_not_copy(self) -> None:
+        x = 0.5 + np.arange(64) * 0.05
+        d2 = _finite_diff(np.sin(x), 0.05, order=2, periodic=False)
+        exact = -np.sin(x)
+
+        assert d2[0] != d2[1], "left boundary must not copy its neighbour"
+        assert d2[-1] != d2[-2], "right boundary must not copy its neighbour"
+        assert abs(d2[0] - exact[0]) < self._BOUNDARY_TOL
+        assert abs(d2[-1] - exact[-1]) < self._BOUNDARY_TOL
+
+    def test_order1_periodic_all_points_fourth_order(self) -> None:
+        n = 64
+        x = np.arange(n) * (2 * np.pi / n)
+        d1 = _finite_diff(np.sin(x), 2 * np.pi / n, order=1, periodic=True)
+        err = np.abs(d1 - np.cos(x)).max()
+        assert err < self._INTERIOR_TOL, (
+            f"periodic order-1 max error {err:.3e} exceeds 4th-order level"
+        )
+
+    def test_order2_periodic_all_points_fourth_order(self) -> None:
+        n = 64
+        x = np.arange(n) * (2 * np.pi / n)
+        d2 = _finite_diff(np.sin(x), 2 * np.pi / n, order=2, periodic=True)
+        err = np.abs(d2 - (-np.sin(x))).max()
+        assert err < self._INTERIOR_TOL, (
+            f"periodic order-2 max error {err:.3e} exceeds 4th-order level"
+        )
+
+    def test_matches_platform_central_diff_exactly(self) -> None:
+        from kd.data.derivatives.finite_diff import central_diff
+
+        n = 32
+        x = np.linspace(0.0, 1.0, n)
+        dx = float(x[1] - x[0])
+        u = np.exp(-((x - 0.5) ** 2) * 10.0)
+
+        for order in (1, 2, 3):
+            for periodic in (False, True):
+                got = _finite_diff(u, dx, order=order, periodic=periodic)
+                want = central_diff(
+                    torch.from_numpy(u),
+                    dx,
+                    axis=0,
+                    order=order,
+                    is_periodic=periodic,
+                ).numpy()
+                np.testing.assert_array_equal(
+                    got,
+                    want,
+                    err_msg=f"order={order}, periodic={periodic}",
+                )
 
 
 

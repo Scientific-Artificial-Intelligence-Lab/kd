@@ -1,11 +1,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import torch
 
 from kd.core.executor.context import ExecutionContext
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.schema import PDEDataset
+
+if TYPE_CHECKING:
+    from kd.models.trainer import TrainingResult
 
 
 class SurrogateContext(ExecutionContext):
@@ -18,6 +23,7 @@ class SurrogateContext(ExecutionContext):
         surrogate_field: str | None = None,
         constants: dict[str, float] | None = None,
         device: torch.device | None = None,
+        training_result: TrainingResult | None = None,
     ) -> None:
         if device is None:
             device = self._resolve_default_device(autograd_provider, dataset)
@@ -29,6 +35,11 @@ class SurrogateContext(ExecutionContext):
         )
         self._surrogate_field = surrogate_field or dataset.lhs_field
         self._cache: dict[str, torch.Tensor] = {}
+
+
+
+
+        self.training_result: TrainingResult | None = training_result
 
     @staticmethod
     def _resolve_default_device(

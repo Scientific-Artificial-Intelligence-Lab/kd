@@ -19,6 +19,7 @@ from kd.data.derivatives.autograd import (
     AutogradProvider,
 )
 from kd.data.schema import PDEDataset
+from kd.search.discover.builder import _make_magnitude_filter
 from kd.search.discover.engine import extract_active_terms
 from kd.search.discover.pinn._memory_log import _log_memory
 from kd.search.discover.stability import stability_select
@@ -52,9 +53,24 @@ LOCAL_SAMPLE_DOMAIN: bytes = b"local_sample"
 def _derive_cycle_seed(base: int, cycle_idx: int, domain: bytes) -> int:
     payload = f"{base}:{cycle_idx}".encode() + b":" + domain
     digest = hashlib.blake2b(
-        payload, digest_size=8, person=_BLAKE2B_PERSON,
+        payload,
+        digest_size=8,
+        person=_BLAKE2B_PERSON,
     ).digest()
     return int.from_bytes(digest, "big") & _SEED_MASK_32
+
+
+def _honest_best_terms(
+    final_state: EngineState,
+) -> tuple[list[str] | None, list[float] | None]:
+    if final_state.best_result_is_valid:
+        return final_state.best_result_terms, final_state.best_result_coefficients
+    logger.warning(
+        "Champion '%s' is gate-invalid (coefficients out of magnitude bounds); "
+        "dropping it from the final equation report",
+        final_state.best_expression,
+    )
+    return None, None
 
 
 def _split_obs_data(
@@ -243,8 +259,7 @@ class PINNCycleRunner:
 
 
         self._local_bounds = (
-            domain_bounds if domain_bounds is not None
-            else _infer_bounds(colloc_coords)
+            domain_bounds if domain_bounds is not None else _infer_bounds(colloc_coords)
         )
 
     def _cycle_iterations(self, cycle_idx: int) -> int:
@@ -288,7 +303,8 @@ class PINNCycleRunner:
         n_cycles = self._pinn_config.n_cycles
         _log_memory(f"cycle_{n_cycles}_search_start", logger)
         final_state = self._engine.run_cycle(
-            evaluator, self._cycle_iterations(n_cycles),
+            evaluator,
+            self._cycle_iterations(n_cycles),
             cycle_idx=n_cycles,
         )
         _log_memory(f"cycle_{n_cycles}_search_end", logger)
@@ -330,7 +346,9 @@ class PINNCycleRunner:
         )
 
     def _run_pinn_phase(
-        self, cycle_idx: int, evaluator: EvaluatorProtocol,
+        self,
+        cycle_idx: int,
+        evaluator: EvaluatorProtocol,
     ) -> tuple[dict[str, float], bool]:
         skip = {"best_reward": self._engine.best_reward}
         best_expr = self._engine.best_expression
@@ -344,7 +362,37 @@ class PINNCycleRunner:
 
 
 
+
+
+
+
+
+
+
+        gated_best = self._engine.best_result
+        if gated_best is None or not gated_best.is_valid:
+            logger.warning(
+                "Champion expression '%s' is gate-invalid on current evaluator "
+                "at cycle %d; skipping PINN training",
+                best_expr,
+                cycle_idx,
+            )
+            return skip, False
+
+
+
+
+
+
+
+
+
+
+
         fresh_result = evaluator.evaluate_expression(best_expr)
+        result_filter = _make_magnitude_filter(enabled=self._config.magnitude_filter)
+        if result_filter is not None:
+            fresh_result = result_filter(fresh_result)
         if not fresh_result.is_valid:
             logger.warning(
                 "Best expression invalid on current evaluator at cycle %d; "
@@ -361,9 +409,7 @@ class PINNCycleRunner:
             )
             return skip, False
 
-        saved_state = {
-            k: v.clone() for k, v in self._pinn_model.state_dict().items()
-        }
+        saved_state = {k: v.clone() for k, v in self._pinn_model.state_dict().items()}
         try:
             train_result = self._pinn_model.train_pinn(
                 terms=terms,
@@ -405,18 +451,23 @@ class PINNCycleRunner:
         final_state: EngineState,
         evaluator: Evaluator,
     ) -> EngineState:
+
+        honest_terms, honest_coefficients = _honest_best_terms(final_state)
         if self._config.stability_selection <= 0:
-            return final_state
+            return replace(
+                final_state,
+                best_result_terms=honest_terms,
+                best_result_coefficients=honest_coefficients,
+                best_result_is_valid=True,
+            )
         extras = dict(final_state.extras or {})
         selected_expression = final_state.best_expression
         selected_reward = final_state.best_reward
         vote_counts: list[int] = []
         ran = False
         error: str | None = None
-        selected_terms: list[str] | None = final_state.best_result_terms
-        selected_coefficients: list[float] | None = (
-            final_state.best_result_coefficients
-        )
+        selected_terms: list[str] | None = honest_terms
+        selected_coefficients: list[float] | None = honest_coefficients
         candidates = self._engine.cycle_top_candidates
         if len(candidates) > 1:
             try:
@@ -447,8 +498,8 @@ class PINNCycleRunner:
                 )
                 selected_expression = final_state.best_expression
                 selected_reward = final_state.best_reward
-                selected_terms = final_state.best_result_terms
-                selected_coefficients = final_state.best_result_coefficients
+                selected_terms = honest_terms
+                selected_coefficients = honest_coefficients
                 vote_counts = []
                 error = str(exc)
         extras["stability_selection"] = {
@@ -471,6 +522,10 @@ class PINNCycleRunner:
             best_reward=selected_reward,
             best_result_terms=selected_terms,
             best_result_coefficients=selected_coefficients,
+
+
+
+            best_result_is_valid=True,
             extras=extras,
         )
 
@@ -486,9 +541,7 @@ class PINNCycleRunner:
     def _finalize_run(
         self, final_state: EngineState, evaluator: Evaluator
     ) -> EngineState:
-        final_state = self._finalize_with_stability_selection(
-            final_state, evaluator
-        )
+        final_state = self._finalize_with_stability_selection(final_state, evaluator)
         final_state = self._attach_seed_plan(final_state)
         return final_state
 
@@ -498,19 +551,21 @@ class PINNCycleRunner:
         expression: str,
     ) -> tuple[list[str], list[float]]:
         result = evaluator.evaluate_expression(expression)
+        result_filter = _make_magnitude_filter(enabled=self._config.magnitude_filter)
+        if result_filter is not None:
+            result = result_filter(result)
         if not result.is_valid:
             raise ValueError(
                 "Selected stability candidate became invalid on final evaluator."
             )
         terms, coefficients = extract_active_terms(result)
         if not terms:
-            raise ValueError(
-                "Selected stability candidate produced no active terms."
-            )
+            raise ValueError("Selected stability candidate produced no active terms.")
         return terms, coefficients
 
     def _make_local_coords(
-        self, cycle_idx: int,
+        self,
+        cycle_idx: int,
     ) -> dict[str, Tensor] | None:
         if not self._pinn_config.local_sample:
             return None
@@ -519,7 +574,9 @@ class PINNCycleRunner:
         seed: int | None = None
         if self._local_sample_seed is not None:
             seed = _derive_cycle_seed(
-                self._local_sample_seed, cycle_idx, LOCAL_SAMPLE_DOMAIN,
+                self._local_sample_seed,
+                cycle_idx,
+                LOCAL_SAMPLE_DOMAIN,
             )
 
         return generate_local_samples(
@@ -538,7 +595,8 @@ class PINNCycleRunner:
             lhs_axis=self._dataset_metadata.lhs_axis,
         )
         if not hasattr(self._evaluator, "executor") or not hasattr(
-            self._evaluator, "solver",
+            self._evaluator,
+            "solver",
         ):
             return cast(Evaluator, self._evaluator)
         source = cast(Evaluator, self._evaluator)

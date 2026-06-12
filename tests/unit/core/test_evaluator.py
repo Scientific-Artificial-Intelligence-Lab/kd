@@ -490,8 +490,8 @@ class TestEvaluateTermsBasic:
         assert isinstance(result.mse, float)
         assert isinstance(result.nmse, float)
         assert isinstance(result.r2, float)
-        assert result.mse >= 0.0
-        assert result.nmse >= 0.0
+        assert 0.0 <= result.mse < 1e-2
+        assert 0.0 <= result.nmse < 1e-2
 
     def test_evaluate_terms_with_complex_expression(self, evaluator: Evaluator) -> None:
         result = evaluator.evaluate_terms(["mul(u, u_x)", "u_xx"])
@@ -541,13 +541,13 @@ class TestEvaluateExpression:
 @pytest.mark.unit
 class TestMetricsComputation:
 
-    def test_mse_is_positive(self, evaluator: Evaluator) -> None:
+    def test_mse_is_small_for_exact_relation(self, evaluator: Evaluator) -> None:
         result = evaluator.evaluate_terms(["u"])
-        assert result.mse >= 0.0
+        assert 0.0 <= result.mse < 1e-2
 
-    def test_nmse_is_positive(self, evaluator: Evaluator) -> None:
+    def test_nmse_is_small_for_exact_relation(self, evaluator: Evaluator) -> None:
         result = evaluator.evaluate_terms(["u"])
-        assert result.nmse >= 0.0
+        assert 0.0 <= result.nmse < 1e-2
 
     def test_r2_bounded(self, evaluator: Evaluator) -> None:
         result = evaluator.evaluate_terms(["u", "u_x", "u_xx"])
@@ -575,6 +575,22 @@ class TestMetricsComputation:
 
         assert result.coefficients is not None
         assert abs(result.coefficients[0].item() + 1.0) < 0.1
+
+    def test_lhs_var_is_population_variance(
+        self, evaluator: Evaluator, lhs_tensor: Tensor
+    ) -> None:
+        expected = lhs_tensor.flatten().var(correction=0).item()
+        assert evaluator._lhs_var == pytest.approx(
+            expected, rel=1e-12
+        )
+
+    def test_nmse_equals_one_minus_r2(self, evaluator: Evaluator) -> None:
+        for terms in (["u"], ["u_x"], ["u", "u_x", "u_xx"]):
+            result = evaluator.evaluate_terms(terms)
+            assert result.is_valid, f"fit failed for {terms}"
+            assert result.nmse == pytest.approx(1.0 - result.r2, rel=1e-5, abs=1e-9), (
+                f"nmse != 1 - r2 for {terms}"
+            )
 
     def test_aic_with_complexity(self, evaluator: Evaluator) -> None:
         result = evaluator.evaluate_terms(["u", "u_xx"])
@@ -981,10 +997,15 @@ class TestAICComplexityKFix:
         assert result.complexity == len(terms)
 
 
-        if result.mse > 1e-15:
-            n_samples = evaluator._lhs_flat.shape[0]
-            expected_aic = n_samples * math.log(result.mse) + 2 * len(terms)
-            assert result.aic == pytest.approx(expected_aic, rel=1e-10)
+
+
+
+
+        assert result.mse > 1e-15, f"MSE too small ({result.mse}), AIC would be -inf"
+
+        n_samples = evaluator._lhs_flat.shape[0]
+        expected_aic = n_samples * math.log(result.mse) + 2 * len(terms)
+        assert result.aic == pytest.approx(expected_aic, rel=1e-10)
 
 
 

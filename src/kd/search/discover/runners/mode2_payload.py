@@ -26,9 +26,13 @@ def _collocation_count(colloc: dict[str, torch.Tensor]) -> int:
 
 
 def _build_burgers_config_payload(
-    *, settings: TierSettings, config: DiscoverConfig,
-    pinn_config: PINNConfig, colloc: dict[str, torch.Tensor],
-    seed: int, scaffold_kwargs: dict[str, Any],
+    *,
+    settings: TierSettings,
+    config: DiscoverConfig,
+    pinn_config: PINNConfig,
+    colloc: dict[str, torch.Tensor],
+    seed: int,
+    scaffold_kwargs: dict[str, Any],
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "data_path": str(settings.data_path),
@@ -55,8 +59,11 @@ def _build_burgers_config_payload(
 
 
 def _build_chafee_config_payload(
-    *, settings: TierSettings, config: DiscoverConfig,
-    pinn_config: PINNConfig, scaffold_kwargs: dict[str, Any],
+    *,
+    settings: TierSettings,
+    config: DiscoverConfig,
+    pinn_config: PINNConfig,
+    scaffold_kwargs: dict[str, Any],
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "n_iterations": config.n_iterations,
@@ -93,8 +100,11 @@ def _serialize_candidates(candidates: list[Any]) -> list[dict[str, Any]]:
 
 
 def _build_burgers_diagnostics(
-    *, final_state: Any, candidates: list[Any],
-    global_best_expression: str | None, global_best_reward: float | None,
+    *,
+    final_state: Any,
+    candidates: list[Any],
+    global_best_expression: str | None,
+    global_best_reward: float | None,
 ) -> dict[str, Any]:
     extras = final_state.extras or {}
     return {
@@ -126,6 +136,15 @@ def _build_result_block(result: Any) -> dict[str, Any]:
     }
 
 
+
+
+
+
+
+
+SUPPORTED_PAYLOAD_PDES: frozenset[str] = frozenset({"burgers", "chafee"})
+
+
 def assemble_payload(
     *,
     spec: PDESpec,
@@ -142,20 +161,33 @@ def assemble_payload(
 ) -> dict[str, Any]:
     if spec.pde_name == "burgers":
         return _assemble_burgers(
-            spec=spec, settings=settings, config=config,
-            pinn_config=pinn_config, colloc=colloc, seed=seed,
-            noise_level=noise_level, scaffold_kwargs=scaffold_kwargs,
-            result=result, engine=engine, tier_name=tier_name,
+            spec=spec,
+            settings=settings,
+            config=config,
+            pinn_config=pinn_config,
+            colloc=colloc,
+            seed=seed,
+            noise_level=noise_level,
+            scaffold_kwargs=scaffold_kwargs,
+            result=result,
+            engine=engine,
+            tier_name=tier_name,
         )
     if spec.pde_name == "chafee":
         return _assemble_chafee(
-            spec=spec, settings=settings, config=config,
-            pinn_config=pinn_config, seed=seed,
-            noise_level=noise_level, scaffold_kwargs=scaffold_kwargs,
-            result=result, tier_name=tier_name,
+            spec=spec,
+            settings=settings,
+            config=config,
+            pinn_config=pinn_config,
+            seed=seed,
+            noise_level=noise_level,
+            scaffold_kwargs=scaffold_kwargs,
+            result=result,
+            tier_name=tier_name,
         )
     raise ValueError(
-        f"No payload schema registered for PDE {spec.pde_name!r}"
+        f"No payload schema registered for PDE {spec.pde_name!r}; "
+        f"supported: {sorted(SUPPORTED_PAYLOAD_PDES)}"
     )
 
 
@@ -175,8 +207,12 @@ def _assemble_burgers(
 ) -> dict[str, Any]:
     _ = spec
     config_payload = _build_burgers_config_payload(
-        settings=settings, config=config, pinn_config=pinn_config,
-        colloc=colloc, seed=seed, scaffold_kwargs=scaffold_kwargs,
+        settings=settings,
+        config=config,
+        pinn_config=pinn_config,
+        colloc=colloc,
+        seed=seed,
+        scaffold_kwargs=scaffold_kwargs,
     )
     diagnostics = _build_burgers_diagnostics(
         final_state=result.final_state,
@@ -185,7 +221,9 @@ def _assemble_burgers(
         global_best_reward=engine.best_reward,
     )
     return {
-        "tier": tier_name, "seed": seed, "noise_level": noise_level,
+        "tier": tier_name,
+        "seed": seed,
+        "noise_level": noise_level,
         "config": config_payload,
         "result": _build_result_block(result),
         "diagnostics": diagnostics,
@@ -207,13 +245,17 @@ def _assemble_chafee(
     tier_name: str,
 ) -> dict[str, Any]:
     config_payload = _build_chafee_config_payload(
-        settings=settings, config=config, pinn_config=pinn_config,
+        settings=settings,
+        config=config,
+        pinn_config=pinn_config,
         scaffold_kwargs=scaffold_kwargs,
     )
     return {
         "pde": "chafee_infante",
         "ground_truth": spec.ground_truth,
-        "tier": tier_name, "seed": seed, "noise_level": noise_level,
+        "tier": tier_name,
+        "seed": seed,
+        "noise_level": noise_level,
         "config": config_payload,
         "result": _build_result_block(result),
         "pretrain": build_pretrain_block(result),
@@ -222,6 +264,7 @@ def _assemble_chafee(
 
 
 __all__ = [
+    "SUPPORTED_PAYLOAD_PDES",
     "assemble_payload",
     "build_pretrain_block",
 ]

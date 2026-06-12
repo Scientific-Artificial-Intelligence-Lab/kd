@@ -22,6 +22,7 @@ from kd.search.protocol import PlatformComponents
 if TYPE_CHECKING:
     from kd.data.derivatives.base import DerivativeProvider
     from kd.data.schema import PDEDataset
+    from kd.models.trainer import TrainingResult
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,18 @@ class PlatformBuilder:
         self._dataset = dataset
         self._reqs = reqs
 
+
+
+
+
+
+
+        self._surrogate_training: TrainingResult | None = None
+
     def build(self) -> PlatformComponents:
+
+
+        self._surrogate_training = None
         dataset = self._resolve_lhs(self._dataset)
         provider = self._build_provider(dataset)
         context = self._build_context(dataset, provider)
@@ -142,10 +154,14 @@ class PlatformBuilder:
 
 
 
+
+
+
             return SurrogateContext(
                 dataset,
                 provider,
                 surrogate_field=dataset.lhs_field,
+                training_result=self._surrogate_training,
             )
         return ExecutionContext(dataset=dataset, derivative_provider=provider)
 
@@ -230,7 +246,11 @@ class PlatformBuilder:
         any_coord = next(iter(coords.values()))
         if target.device != any_coord.device:
             target = target.to(device=any_coord.device)
-        trainer.fit(
+
+
+
+
+        self._surrogate_training = trainer.fit(
             coords,
             {dataset.lhs_field: target},
             **all_kwargs,

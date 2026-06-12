@@ -2,23 +2,37 @@
 from __future__ import annotations
 
 import logging
+import pickle
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
-from kd.search.callbacks import RunnerCallback, VizDataCollector
+from kd.data.schema import PDEDataset, compute_dataset_fingerprint
+from kd.search.callbacks import (
+    CHECKPOINT_VERSION,
+    RunnerCallback,
+    VizDataCollector,
+    _algorithm_name,
+    atomic_torch_save,
+    build_checkpoint_payload,
+)
 from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
+    ScoreContract,
     SearchAlgorithm,
 )
 from kd.search.recorder import VizRecorder
 from kd.search.result import (
+    DEFAULT_SCORE_DIRECTION,
+    DEFAULT_SCORE_KIND,
     ExperimentResult,
     ResultBuilder,
     ResultTargetProvider,
+    RunManifest,
     RunResult,
 )
 
@@ -28,8 +42,15 @@ logger = logging.getLogger(__name__)
 
 
 
-_CHECKPOINT_VERSION = 1
 _DEFAULT_LHS_LABEL = "u_t"
+
+
+
+_NON_PDE_DATASET_FINGERPRINT = "<non-pde-dataset>"
+
+
+
+_CHECKPOINT_REQUIRED_KEYS = ("version", "iteration", "algorithm_state")
 
 
 class ExperimentRunner:
@@ -162,6 +183,11 @@ class ExperimentRunner:
         final_eval = self._final_eval(components)
         actual = self._actual(components, final_eval)
         predicted = self._predicted(actual, final_eval)
+        score_kind = DEFAULT_SCORE_KIND
+        score_direction: str = DEFAULT_SCORE_DIRECTION
+        if isinstance(self._algorithm, ScoreContract):
+            score_kind = self._algorithm.score_kind
+            score_direction = self._algorithm.score_direction
         return ExperimentResult(
             best_expression=self._algorithm.best_expression,
             best_score=self._algorithm.best_score,
@@ -175,6 +201,27 @@ class ExperimentRunner:
             config=dict(self._algorithm.config),
             recorder=recorder,
             lhs_label=self._lhs_label(components, final_eval),
+            manifest=self._build_manifest(components),
+            score_kind=score_kind,
+            score_direction=score_direction,
+        )
+
+    def _build_manifest(self, components: PlatformComponents) -> RunManifest:
+        from kd import __version__ as kd_version
+
+        dataset = components.dataset
+        if isinstance(dataset, PDEDataset):
+            fingerprint = compute_dataset_fingerprint(dataset)
+        else:
+            fingerprint = _NON_PDE_DATASET_FINGERPRINT
+        return RunManifest(
+            dataset_fingerprint=fingerprint,
+            kd_version=kd_version,
+            seed=self._algorithm.config.get("seed"),
+
+
+
+            terms=getattr(self._algorithm, "terms", None),
         )
 
     def _final_eval(self, components: PlatformComponents) -> EvaluationResult:
@@ -271,25 +318,84 @@ class ExperimentRunner:
     def save_checkpoint(self, path: Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(
-            {
-                "version": _CHECKPOINT_VERSION,
-                "iteration": self._current_iteration,
-                "algorithm_state": self._algorithm.state,
-                "best_score": self._algorithm.best_score,
-                "best_expression": self._algorithm.best_expression,
-            },
+        atomic_torch_save(
+            build_checkpoint_payload(self._current_iteration, self._algorithm),
             path,
         )
         logger.debug("Saved checkpoint to %s", path)
 
     def load_checkpoint(self, path: Path) -> None:
-        data = torch.load(Path(path), weights_only=False)
+        raw = self._torch_load_checkpoint(Path(path))
+        data = self._validate_checkpoint_payload(raw)
         self._algorithm.state = data["algorithm_state"]
         self._current_iteration = data["iteration"]
         logger.debug(
             "Loaded checkpoint from %s (iteration=%d)", path, self._current_iteration
         )
+
+    @staticmethod
+    def _torch_load_checkpoint(path: Path) -> object:
+        try:
+            return torch.load(path, weights_only=False)
+        except FileNotFoundError:
+            raise
+        except (OSError, RuntimeError, EOFError, pickle.UnpicklingError) as exc:
+            raise ValueError(
+                f"not a kd checkpoint payload (corrupt or truncated file): {path}"
+            ) from exc
+
+    def _validate_checkpoint_payload(self, data: object) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"not a kd checkpoint payload: expected a dict, "
+                f"got {type(data).__name__}"
+            )
+        missing = [key for key in _CHECKPOINT_REQUIRED_KEYS if key not in data]
+        if missing:
+            raise ValueError(
+                f"not a kd checkpoint payload: missing required keys {missing}"
+            )
+
+
+
+        version = data["version"]
+        if version != CHECKPOINT_VERSION:
+            raise ValueError(
+                f"checkpoint version mismatch: payload has version "
+                f"{version!r}, this kd build expects {CHECKPOINT_VERSION}"
+            )
+        algorithm_state = data["algorithm_state"]
+
+
+
+
+
+
+
+
+
+
+        if not isinstance(algorithm_state, dict):
+            raise ValueError(
+                "not a kd checkpoint payload: 'algorithm_state' must be a "
+                f"dict, got {type(algorithm_state).__name__}"
+            )
+        payload_algorithm = data.get("algorithm")
+
+
+
+        plugin_algorithm = _algorithm_name(self._algorithm)
+        if (
+            payload_algorithm is not None
+            and plugin_algorithm is not None
+            and payload_algorithm != plugin_algorithm
+        ):
+            raise ValueError(
+                f"checkpoint algorithm mismatch: payload was written by "
+                f"algorithm {payload_algorithm!r} but this runner drives "
+                f"{plugin_algorithm!r}"
+            )
+        return data
 
 
 __all__ = [

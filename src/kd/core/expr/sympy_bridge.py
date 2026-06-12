@@ -319,10 +319,15 @@ def symbolic_diff(code: str, var: str) -> str:
     return _sympy_to_ir(derivative)
 
 
+def from_sympy(expr: Expr) -> str:
+    return _sympy_to_ir(expr)
+
+
 __all__ = [
     "FormattedEquation",
     "are_equivalent",
     "format_pde",
+    "from_sympy",
     "symbolic_diff",
     "to_latex",
     "to_sympy",

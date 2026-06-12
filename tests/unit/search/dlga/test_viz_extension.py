@@ -24,9 +24,22 @@ from kd.viz.extension import PlotInfo, VizExtension
 
 
 
-EXPECTED_PLOT_NAMES: frozenset[str] = frozenset(
+
+
+
+GA_PLOT_NAMES: frozenset[str] = frozenset(
     {"fitness_spread", "population_diversity", "complexity_evolution"},
 )
+
+
+SURROGATE_PLOT_NAME = "surrogate_training"
+
+
+
+
+EXPECTED_PLOT_NAMES: frozenset[str] = GA_PLOT_NAMES | {SURROGATE_PLOT_NAME}
+
+
 
 
 
@@ -155,17 +168,18 @@ def test_plugin_is_runtime_checkable_viz_extension() -> None:
 
 
 
+
 @pytest.mark.unit
-def test_list_plots_returns_three_plotinfo() -> None:
+def test_list_plots_returns_four_plotinfo() -> None:
     plugin = DLGAPlugin(DLGAConfig())
     plots = plugin.list_plots()
 
     assert isinstance(plots, list), (
         f"list_plots() must return list, got {type(plots).__name__}"
     )
-    assert len(plots) == 3, (
-        f"list_plots() must return exactly 3 PlotInfo; got {len(plots)}: "
-        f"{[getattr(p, 'name', '?') for p in plots]}"
+    assert len(plots) == 4, (
+        f"list_plots() must return exactly 4 PlotInfo (3 GA + surrogate); got "
+        f"{len(plots)}: {[getattr(p, 'name', '?') for p in plots]}"
     )
     for p in plots:
         assert isinstance(p, PlotInfo), (
@@ -202,7 +216,7 @@ def test_list_plots_returns_fresh_copies() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
 def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
     plugin, _ = _plugin_populated()
     result = plugin.render_plot(plot_name, ax)
@@ -217,7 +231,7 @@ def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
 def test_render_binds_recorder_series(plot_name: str, ax: Axes) -> None:
     plugin, recorder = _plugin_populated()
     plugin.render_plot(plot_name, ax)
@@ -249,7 +263,7 @@ def test_render_binds_recorder_series(plot_name: str, ax: Axes) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
 def test_get_plot_data_returns_jsonable_dict(plot_name: str) -> None:
     plugin, recorder = _plugin_populated()
     data = plugin.get_plot_data(plot_name)
@@ -281,7 +295,7 @@ def test_get_plot_data_returns_jsonable_dict(plot_name: str) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
 @pytest.mark.parametrize(
     "recorder_state",
     ["empty", "none", "disabled"],
@@ -319,7 +333,7 @@ def test_render_empty_recorder_warns_not_crash(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
+@pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
 @pytest.mark.parametrize(
     "recorder_state",
     ["empty", "none", "disabled"],

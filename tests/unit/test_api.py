@@ -151,8 +151,8 @@ def test_model_verbose_silent(
 
 def test_model_unsupported_algorithm(small_burgers_dataset) -> None:
     with pytest.raises(NotImplementedError) as exc_info:
-        Model(algorithm="pysr", verbose=False)
-    assert "pysr" in str(exc_info.value)
+        Model(algorithm="gplearn", verbose=False)
+    assert "gplearn" in str(exc_info.value)
 
 
 

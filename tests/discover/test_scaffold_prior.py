@@ -481,6 +481,10 @@ class TestCrossTaskNoRegressionBurgers:
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(
+    not _SCRIPT_PATH.exists(),
+    reason="requires scripts/discover research CLI (not shipped in the public tree)",
+)
 class TestCLIFlagExists:
 
     def test_scaffold_flag_registered(self, parity_runner: ModuleType) -> None:

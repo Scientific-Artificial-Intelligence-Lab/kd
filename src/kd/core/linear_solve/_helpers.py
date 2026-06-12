@@ -19,14 +19,18 @@ def upcast_for_solve(t: torch.Tensor) -> torch.Tensor:
     return t.to(dtype=SOLVE_DTYPE)
 
 
-def compute_r2(theta: torch.Tensor, coef: torch.Tensor, lhs: torch.Tensor) -> float:
+def r2_score(y_pred: torch.Tensor, lhs: torch.Tensor) -> float:
+    y_pred_1d = y_pred.squeeze(-1) if y_pred.dim() == 2 else y_pred
     lhs_1d = lhs.squeeze(-1) if lhs.dim() == 2 else lhs
-    theta_64 = upcast_for_solve(theta)
-    coef_64 = upcast_for_solve(coef)
+    if y_pred_1d.shape != lhs_1d.shape:
+        raise ValueError(
+            "r2_score shape mismatch: y_pred "
+            f"{tuple(y_pred.shape)} vs lhs {tuple(lhs.shape)}"
+        )
+    y_pred_64 = upcast_for_solve(y_pred_1d)
     lhs_64 = upcast_for_solve(lhs_1d)
 
-    y_pred = theta_64 @ coef_64
-    ss_res = float(((lhs_64 - y_pred) ** 2).sum().item())
+    ss_res = float(((lhs_64 - y_pred_64) ** 2).sum().item())
     if not math.isfinite(ss_res):
         return -float("inf")
 
@@ -34,6 +38,12 @@ def compute_r2(theta: torch.Tensor, coef: torch.Tensor, lhs: torch.Tensor) -> fl
     if ss_tot < R2_EPS_TOT:
         return 1.0 if ss_res < R2_EPS_RES else 0.0
     return 1.0 - ss_res / ss_tot
+
+
+def compute_r2(theta: torch.Tensor, coef: torch.Tensor, lhs: torch.Tensor) -> float:
+    theta_64 = upcast_for_solve(theta)
+    coef_64 = upcast_for_solve(coef)
+    return r2_score(theta_64 @ coef_64, lhs)
 
 
 def squared_residual(

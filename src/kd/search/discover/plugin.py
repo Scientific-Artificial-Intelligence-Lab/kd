@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 
 import torch
 from torch import Tensor
@@ -11,7 +11,7 @@ from torch import Tensor
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.search.discover import viz as _viz_helpers
-from kd.search.discover.builder import build_engine
+from kd.search.discover.builder import _make_magnitude_filter, build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.engine import DiscoverEngine, EngineState
 from kd.search.discover.training.strategy import BaselineState
@@ -38,6 +38,7 @@ OPTIMIZER_STATE_KEY = "optimizer_state"
 EXTRAS_KEY = "extras"
 BEST_RESULT_TERMS_KEY = "best_result_terms"
 BEST_RESULT_COEFFICIENTS_KEY = "best_result_coefficients"
+BEST_RESULT_IS_VALID_KEY = "best_result_is_valid"
 EWMA_REWARD_KEY = "ewma_reward"
 N_UPDATES_KEY = "n_updates"
 
@@ -123,20 +124,61 @@ def _deserialize_baseline_state(raw: object) -> BaselineState:
     return BaselineState(ewma_reward=ewma_reward, n_updates=n_updates)
 
 
+def _parse_state_payload(value: Mapping[str, Any]) -> EngineState:
+    raw_engine_state = value.get(ENGINE_STATE_KEY)
+    if not isinstance(raw_engine_state, Mapping):
+        raise TypeError("state must contain an engine_state mapping.")
+    return EngineState(
+        controller_state_dict=_deserialize_controller_state(
+            raw_engine_state.get(CONTROLLER_STATE_KEY)
+        ),
+        baseline_state=_deserialize_baseline_state(
+            raw_engine_state.get(BASELINE_STATE_KEY)
+        ),
+        best_reward=float(raw_engine_state.get(BEST_REWARD_KEY, 0.0)),
+        best_expression=str(raw_engine_state.get(BEST_EXPRESSION_KEY, "")),
+        optimizer_state=raw_engine_state.get(OPTIMIZER_STATE_KEY),
+        extras=raw_engine_state.get(EXTRAS_KEY),
+        best_result_terms=raw_engine_state.get(BEST_RESULT_TERMS_KEY),
+        best_result_coefficients=raw_engine_state.get(BEST_RESULT_COEFFICIENTS_KEY),
+
+
+        best_result_is_valid=bool(raw_engine_state.get(BEST_RESULT_IS_VALID_KEY, True)),
+    )
+
+
 class DISCOVERPlugin(IterativeSearchAlgorithm):
+
+
+
+
+    score_kind: ClassVar[str] = "reward"
+    score_direction: ClassVar[Literal["min", "max"]] = "max"
 
     def __init__(self, config: DiscoverConfig | None = None) -> None:
         self._config = config or DiscoverConfig()
         self._evaluator: _ExpressionEvaluator | None = None
         self._engine: DiscoverEngine | None = None
         self._recorder: VizRecorder | None = None
+        self._restore_pending: bool = False
+        self._pending_state: EngineState | None = None
         torch.manual_seed(self._config.seed)
 
     def prepare(self, components: PlatformComponents) -> None:
+        restore_state = self._pending_state
+        if self._restore_pending and self._engine is not None:
+            restore_state = self._engine.state
         torch.manual_seed(self._config.seed)
         self._evaluator = self._coerce_evaluator(components.evaluator)
         self._engine = build_engine(self._config)
         self._recorder = components.recorder
+        if self._restore_pending and restore_state is not None:
+            self._engine.state = restore_state
+
+
+            self._engine.rebase_best(self._evaluator)
+        self._restore_pending = False
+        self._pending_state = None
 
     def propose(self, n: int) -> list[str]:
         if n < MIN_PROPOSAL_COUNT:
@@ -193,7 +235,11 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         )
 
     def build_final_result(self) -> EvaluationResult:
-        return self._require_evaluator().evaluate_expression(self.best_expression)
+        result = self._require_evaluator().evaluate_expression(self.best_expression)
+        result_filter = _make_magnitude_filter(enabled=self._config.magnitude_filter)
+        if result_filter is not None:
+            result = result_filter(result)
+        return result
 
     def build_result_target(self) -> Tensor:
         target = self._require_evaluator().lhs_target
@@ -206,7 +252,12 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     @property
     def state(self) -> dict[str, Any]:
-        engine_state = self._require_engine().state
+        if self._engine is not None:
+            engine_state = self._engine.state
+        elif self._pending_state is not None:
+            engine_state = self._pending_state
+        else:
+            raise RuntimeError("prepare() must be called before using the plugin.")
         payload: dict[str, Any] = {
             CONTROLLER_STATE_KEY: _serialize_controller_state(
                 cast(Mapping[str, Tensor], engine_state.controller_state_dict)
@@ -221,6 +272,10 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             payload[EXTRAS_KEY] = engine_state.extras
         if engine_state.best_result_terms is not None:
             payload[BEST_RESULT_TERMS_KEY] = list(engine_state.best_result_terms)
+
+
+
+            payload[BEST_RESULT_IS_VALID_KEY] = bool(engine_state.best_result_is_valid)
         if engine_state.best_result_coefficients is not None:
             payload[BEST_RESULT_COEFFICIENTS_KEY] = list(
                 engine_state.best_result_coefficients,
@@ -232,28 +287,18 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     @state.setter
     def state(self, value: dict[str, Any]) -> None:
-        engine = self._require_engine()
-        raw_engine_state = value.get(ENGINE_STATE_KEY)
-        if not isinstance(raw_engine_state, Mapping):
-            raise TypeError("state must contain an engine_state mapping.")
-        optimizer_state = raw_engine_state.get(OPTIMIZER_STATE_KEY)
-        extras = raw_engine_state.get(EXTRAS_KEY)
-        best_result_terms = raw_engine_state.get(BEST_RESULT_TERMS_KEY)
-        best_result_coefficients = raw_engine_state.get(BEST_RESULT_COEFFICIENTS_KEY)
-        engine.state = EngineState(
-            controller_state_dict=_deserialize_controller_state(
-                raw_engine_state.get(CONTROLLER_STATE_KEY)
-            ),
-            baseline_state=_deserialize_baseline_state(
-                raw_engine_state.get(BASELINE_STATE_KEY)
-            ),
-            best_reward=float(raw_engine_state.get(BEST_REWARD_KEY, 0.0)),
-            best_expression=str(raw_engine_state.get(BEST_EXPRESSION_KEY, "")),
-            optimizer_state=optimizer_state,
-            extras=extras,
-            best_result_terms=best_result_terms,
-            best_result_coefficients=best_result_coefficients,
-        )
+        if not value:
+            self._pending_state = None
+            self._restore_pending = False
+            if self._engine is not None:
+                torch.manual_seed(self._config.seed)
+                self._engine = build_engine(self._config)
+            return
+        parsed = _parse_state_payload(value)
+        self._pending_state = parsed
+        self._restore_pending = True
+        if self._engine is not None:
+            self._engine.state = parsed
 
 
 

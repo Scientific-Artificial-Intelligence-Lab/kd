@@ -7,6 +7,7 @@ from typing import Protocol, cast, runtime_checkable
 
 import numpy as np
 import numpy.typing as npt
+import torch
 from torch import Tensor
 
 from kd.search.discover.engine import CandidateSnapshot
@@ -187,8 +188,19 @@ def _solve_lstsq(
     theta: npt.NDArray[np.float64],
     lhs: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
-    coefficients, *_ = np.linalg.lstsq(theta, lhs, rcond=None)
-    return np.asarray(coefficients, dtype=np.float64)
+
+
+
+
+
+    rcond = max(theta.shape) * float(np.finfo(np.float64).eps)
+    solution = torch.linalg.lstsq(
+        torch.from_numpy(theta),
+        torch.from_numpy(lhs).unsqueeze(1),
+        rcond=rcond,
+        driver="gelsd",
+    ).solution
+    return np.asarray(solution.squeeze(-1).numpy(), dtype=np.float64)
 
 
 def _bootstrap_sample_size(n_rows: int) -> int:

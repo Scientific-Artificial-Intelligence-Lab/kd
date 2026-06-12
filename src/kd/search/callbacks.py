@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
@@ -234,9 +236,45 @@ class EarlyStoppingCallback:
 
 
 
-_CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 1
 _CHECKPOINT_PATTERN = "checkpoint_{iteration:06d}.pt"
 _CHECKPOINT_FINAL = "checkpoint_final.pt"
+
+
+
+_CHECKPOINT_TMP_SUFFIX = ".tmp"
+
+
+def atomic_torch_save(payload: dict[str, Any], path: Path) -> None:
+    tmp_path = path.with_name(path.name + _CHECKPOINT_TMP_SUFFIX)
+    try:
+        torch.save(payload, tmp_path)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            logger.debug("Failed to clean up staging file %s", tmp_path)
+        raise
+
+
+def build_checkpoint_payload(iteration: int, algorithm: Any) -> dict[str, Any]:
+    return {
+        "version": CHECKPOINT_VERSION,
+        "iteration": iteration,
+        "algorithm_state": algorithm.state,
+        "best_score": algorithm.best_score,
+        "best_expression": algorithm.best_expression,
+        "algorithm": _algorithm_name(algorithm),
+    }
+
+
+def _algorithm_name(algorithm: Any) -> str | None:
+    config = getattr(algorithm, "config", None)
+    if not isinstance(config, Mapping):
+        return None
+    name = config.get("algorithm")
+    return name if isinstance(name, str) else None
 
 
 class CheckpointCallback:
@@ -269,29 +307,11 @@ class CheckpointCallback:
         self._last_iteration = iteration
         if iteration % self._every_n == 0:
             path = self._directory / _CHECKPOINT_PATTERN.format(iteration=iteration)
-            torch.save(
-                {
-                    "version": _CHECKPOINT_VERSION,
-                    "iteration": iteration,
-                    "algorithm_state": algorithm.state,
-                    "best_score": algorithm.best_score,
-                    "best_expression": algorithm.best_expression,
-                },
-                path,
-            )
+            atomic_torch_save(build_checkpoint_payload(iteration, algorithm), path)
             logger.debug("Saved checkpoint to %s", path)
 
     def on_experiment_end(self, algorithm: Any) -> None:
         path = self._directory / _CHECKPOINT_FINAL
         iteration = max(self._last_iteration, 0)
-        torch.save(
-            {
-                "version": _CHECKPOINT_VERSION,
-                "iteration": iteration,
-                "algorithm_state": algorithm.state,
-                "best_score": algorithm.best_score,
-                "best_expression": algorithm.best_expression,
-            },
-            path,
-        )
+        atomic_torch_save(build_checkpoint_payload(iteration, algorithm), path)
         logger.debug("Saved final checkpoint to %s", path)

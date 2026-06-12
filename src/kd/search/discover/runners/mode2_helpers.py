@@ -13,16 +13,11 @@ from torch import Tensor
 
 from kd.core.evaluator import (
     EvaluationResult,
-    Evaluator,
 )
-from kd.core.executor.context import ExecutionContext
 from kd.core.expr import (
     FunctionRegistry,
-    PythonExecutor,
 )
-from kd.core.linear_solve.least_squares import (
-    LeastSquaresSolver,
-)
+from kd.core.safety import safe_div
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
 )
@@ -35,10 +30,11 @@ from kd.search.discover.runners.multiseed import (
     GROUND_TRUTH_TERMS,
     MAX_DIFF_ORDER,
     TERM_LABELS,
+    _build_base_evaluator,
+    _sample_indices,
 )
 from kd.search.discover.runners.sampled_evaluator import SampledEvaluator
 from kd.search.discover.tokens.library import LibraryConfig
-from kd.search.discover.utils.math import safe_div
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -260,9 +256,7 @@ def _is_call(node: ast.expr, name: str, arity: int) -> bool:
 
 def _is_numeric_scalar(node: ast.expr) -> bool:
     if isinstance(node, ast.Constant):
-        return isinstance(node.value, int | float) and not isinstance(
-            node.value, bool
-        )
+        return isinstance(node.value, int | float) and not isinstance(node.value, bool)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
         return _is_numeric_scalar(node.operand)
     return False
@@ -281,25 +275,8 @@ def _validate_mode1_args(
         raise ValueError(f"n_iterations must be positive, got {n_iterations}")
 
 
-def _build_base_evaluator(dataset: PDEDataset, provider: Any) -> Evaluator:
-    context = ExecutionContext(dataset=dataset, derivative_provider=provider)
-    registry = FunctionRegistry.create_default()
-    lhs = provider.get_derivative(dataset.lhs_field, dataset.lhs_axis, order=1)
-    return Evaluator(
-        executor=PythonExecutor(registry),
-        solver=LeastSquaresSolver(),
-        context=context,
-        lhs=lhs.flatten(),
-    )
 
 
-def _sample_indices(seed: int, total_points: int, n_points: int) -> Tensor:
-    if n_points > total_points:
-        raise ValueError(
-            f"n_points={n_points} exceeds total points={total_points}"
-        )
-    generator = torch.Generator().manual_seed(seed)
-    return torch.randperm(total_points, generator=generator)[:n_points]
 
 
 def _mode1_config(n_iterations: int, batch_size: int) -> DiscoverConfig:

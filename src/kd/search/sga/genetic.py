@@ -198,7 +198,6 @@ def mutate(
 
 
 _MAX_MUTATE_RETRIES: int = 10
-"""Max retries to avoid same-name mutation (the predecessor uses while loop)."""
 
 
 def _mutate_subtree(

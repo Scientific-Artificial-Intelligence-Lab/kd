@@ -11,7 +11,10 @@ import torch
 
 from kd.search.discover.config import DiscoverConfig, PINNConfig
 from kd.search.discover.runners.mode2_helpers import resolve_device
-from kd.search.discover.runners.mode2_payload import assemble_payload
+from kd.search.discover.runners.mode2_payload import (
+    SUPPORTED_PAYLOAD_PDES,
+    assemble_payload,
+)
 from kd.search.discover.runners.pde_registry import (
     PDE_REGISTRY,
     PROJECT_ROOT,
@@ -45,17 +48,15 @@ _FD_MAX_ORDER = 2
 
 
 def _resolve_spec_and_settings(
-    pde: str, tier: str,
+    pde: str,
+    tier: str,
 ) -> tuple[PDESpec, TierSettings]:
     if pde not in PDE_REGISTRY:
-        raise KeyError(
-            f"Unknown PDE {pde!r}; known: {sorted(PDE_REGISTRY)}"
-        )
+        raise KeyError(f"Unknown PDE {pde!r}; known: {sorted(PDE_REGISTRY)}")
     spec = PDE_REGISTRY[pde]
     if tier not in spec.presets:
         raise KeyError(
-            f"Unknown tier {tier!r} for PDE {pde!r}; "
-            f"known: {sorted(spec.presets)}"
+            f"Unknown tier {tier!r} for PDE {pde!r}; known: {sorted(spec.presets)}"
         )
     return spec, spec.presets[tier]
 
@@ -135,7 +136,10 @@ def make_observation_data(
     }
     pct = 100 * n_obs / n_total
     logger.info(
-        "Observations: %d / %d points (%.1f%%)", n_obs, n_total, pct,
+        "Observations: %d / %d points (%.1f%%)",
+        n_obs,
+        n_total,
+        pct,
     )
     return obs_coords, obs_targets
 
@@ -163,6 +167,16 @@ def _format_mode2_start(
     )
 
 
+def ensure_payload_schema(spec: PDESpec) -> None:
+    if spec.pde_name in SUPPORTED_PAYLOAD_PDES:
+        return
+    raise ValueError(
+        f"No MODE2 payload schema registered for PDE {spec.pde_name!r}; "
+        f"supported: {sorted(SUPPORTED_PAYLOAD_PDES)}. Failing fast: the "
+        "run would complete but results could not be assembled/saved."
+    )
+
+
 def run_pipeline(
     pde: str,
     tier: str,
@@ -175,9 +189,9 @@ def run_pipeline(
     diagnostic_scaffold_on: bool = False,
 ) -> dict[str, Any]:
     spec, settings = _resolve_spec_and_settings(pde, tier)
+    ensure_payload_schema(spec)
     effective_noise = (
-        spec.default_noise_level if noise_level is None
-        else float(noise_level)
+        spec.default_noise_level if noise_level is None else float(noise_level)
     )
     scaffold_kwargs = scaffold_kwargs or {}
     resolved_device = resolve_device(device)
@@ -185,19 +199,26 @@ def run_pipeline(
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     logger.info(
         "PDE=%s tier=%s seed=%d device=%s noise=%.2f",
-        pde, tier, seed, resolved_device, effective_noise,
+        pde,
+        tier,
+        seed,
+        resolved_device,
+        effective_noise,
     )
     logger.info("Diagnostic scaffold: %s", diagnostic_scaffold_on)
 
     if not settings.data_path.exists():
-        raise FileNotFoundError(
-            f"{pde} data not found at {settings.data_path}"
-        )
+        raise FileNotFoundError(f"{pde} data not found at {settings.data_path}")
 
     payload, elapsed = _execute_pipeline(
-        spec=spec, settings=settings, tier_name=tier, seed=seed,
-        noise_level=effective_noise, noise_scale=noise_scale,
-        scaffold_kwargs=scaffold_kwargs, device=resolved_device,
+        spec=spec,
+        settings=settings,
+        tier_name=tier,
+        seed=seed,
+        noise_level=effective_noise,
+        noise_scale=noise_scale,
+        scaffold_kwargs=scaffold_kwargs,
+        device=resolved_device,
     )
     payload["elapsed_seconds"] = elapsed
     return payload
@@ -217,39 +238,61 @@ def _execute_pipeline(
     deps = _import_pipeline_deps()
     clean_dataset = spec.load_data(tier_name)
     noisy_dataset = deps["add_gaussian_noise"](
-        clean_dataset, noise_level, seed, scale=noise_scale,
+        clean_dataset,
+        noise_level,
+        seed,
+        scale=noise_scale,
     )
     evaluator, registry = _build_initial_evaluator(noisy_dataset, deps)
 
     config, pinn_config = build_configs(
-        pde=spec.pde_name, tier=tier_name, seed=seed,
+        pde=spec.pde_name,
+        tier=tier_name,
+        seed=seed,
         scaffold_kwargs=scaffold_kwargs,
     )
 
     torch.manual_seed(seed)
     engine = deps["build_engine"](config)
     model = deps["PINNModel"](
-        list(spec.coord_vars), list(spec.state_vars), pinn_config,
+        list(spec.coord_vars),
+        list(spec.state_vars),
+        pinn_config,
         device=device,
     )
     pinn_executor = deps["PINNExecutor"](registry)
     dataset_meta = deps["make_pinn_dataset"](
-        list(spec.coord_vars), list(spec.state_vars),
-        lhs_field="u", lhs_axis="t",
+        list(spec.coord_vars),
+        list(spec.state_vars),
+        lhs_field="u",
+        lhs_axis="t",
     )
     obs_coords, obs_targets = make_observation_data(
-        noisy_dataset, seed, device=device,
+        noisy_dataset,
+        seed,
+        device=device,
     )
     colloc, x_range, t_range = _build_collocation(
-        noisy_dataset, settings, pinn_config, seed, device, deps,
+        noisy_dataset,
+        settings,
+        pinn_config,
+        seed,
+        device,
+        deps,
     )
 
     runner = deps["PINNCycleRunner"](
-        engine=engine, pinn_model=model, pinn_executor=pinn_executor,
-        initial_evaluator=evaluator, observation_coords=obs_coords,
-        observation_targets=obs_targets, colloc_coords=colloc,
-        dataset_metadata=dataset_meta, config=config,
-        stability_seed=seed, local_sample_seed=seed,
+        engine=engine,
+        pinn_model=model,
+        pinn_executor=pinn_executor,
+        initial_evaluator=evaluator,
+        observation_coords=obs_coords,
+        observation_targets=obs_targets,
+        colloc_coords=colloc,
+        dataset_metadata=dataset_meta,
+        config=config,
+        stability_seed=seed,
+        local_sample_seed=seed,
         domain_bounds={"x": x_range, "t": t_range},
     )
     logger.info(
@@ -266,10 +309,17 @@ def _execute_pipeline(
     result = runner.run()
     elapsed = time.time() - start
     payload = assemble_payload(
-        spec=spec, settings=settings, config=config,
-        pinn_config=pinn_config, colloc=colloc, seed=seed,
-        noise_level=noise_level, scaffold_kwargs=scaffold_kwargs,
-        result=result, engine=engine, tier_name=tier_name,
+        spec=spec,
+        settings=settings,
+        config=config,
+        pinn_config=pinn_config,
+        colloc=colloc,
+        seed=seed,
+        noise_level=noise_level,
+        scaffold_kwargs=scaffold_kwargs,
+        result=result,
+        engine=engine,
+        tier_name=tier_name,
     )
     return payload, elapsed
 
@@ -314,26 +364,35 @@ def _import_pipeline_deps() -> dict[str, Any]:
 
 
 def _build_initial_evaluator(
-    noisy_dataset: Any, deps: dict[str, Any],
+    noisy_dataset: Any,
+    deps: dict[str, Any],
 ) -> tuple[Any, Any]:
     provider = deps["FiniteDiffProvider"](
-        noisy_dataset, max_order=_FD_MAX_ORDER,
+        noisy_dataset,
+        max_order=_FD_MAX_ORDER,
     )
     context = deps["ExecutionContext"](
-        dataset=noisy_dataset, derivative_provider=provider,
+        dataset=noisy_dataset,
+        derivative_provider=provider,
     )
     registry = deps["FunctionRegistry"].create_default()
     u_t = provider.get_derivative("u", "t", order=1).flatten()
     evaluator = deps["Evaluator"](
         deps["PythonExecutor"](registry),
-        deps["LeastSquaresSolver"](), context, lhs=u_t,
+        deps["LeastSquaresSolver"](),
+        context,
+        lhs=u_t,
     )
     return evaluator, registry
 
 
 def _build_collocation(
-    noisy_dataset: Any, settings: TierSettings, pinn_config: PINNConfig,
-    seed: int, device: torch.device, deps: dict[str, Any],
+    noisy_dataset: Any,
+    settings: TierSettings,
+    pinn_config: PINNConfig,
+    seed: int,
+    device: torch.device,
+    deps: dict[str, Any],
 ) -> tuple[dict[str, torch.Tensor], tuple[float, float], tuple[float, float]]:
     x_vals = noisy_dataset.axes["x"].values
     t_vals = noisy_dataset.axes["t"].values
@@ -343,19 +402,27 @@ def _build_collocation(
         bounds={"x": x_range, "t": t_range},
         n_points=pinn_config.n_collocation,
         cut_ratio=settings.collocation_cut_ratio,
-        seed=seed, device=device,
+        seed=seed,
+        device=device,
     )
     logger.info(
         "Collocation: %d / %d in x=[%.1f,%.1f] t=[%.1f,%.1f] cut=%.2f",
-        _collocation_count(colloc), pinn_config.n_collocation,
-        *x_range, *t_range, settings.collocation_cut_ratio,
+        _collocation_count(colloc),
+        pinn_config.n_collocation,
+        *x_range,
+        *t_range,
+        settings.collocation_cut_ratio,
     )
     return colloc, x_range, t_range
 
 
 def save_payload(
-    spec: PDESpec, tier: str, seed: int, payload: dict[str, Any],
-    *, output_dir: Path | None = None,
+    spec: PDESpec,
+    tier: str,
+    seed: int,
+    payload: dict[str, Any],
+    *,
+    output_dir: Path | None = None,
 ) -> Path:
     out_dir = output_dir if output_dir is not None else OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -370,6 +437,7 @@ __all__ = [
     "OBS_RATIO",
     "OUTPUT_DIR",
     "build_configs",
+    "ensure_payload_schema",
     "make_observation_data",
     "run_pipeline",
     "save_payload",

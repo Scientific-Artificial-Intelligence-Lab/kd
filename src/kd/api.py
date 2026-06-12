@@ -17,11 +17,16 @@ from __future__ import annotations
 import copy
 import dataclasses
 import warnings
-from typing import TYPE_CHECKING, Any, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import torch
 
-from kd.search.callbacks import EarlyStoppingCallback, RunnerCallback
+from kd.search.callbacks import (
+    CheckpointCallback,
+    EarlyStoppingCallback,
+    RunnerCallback,
+)
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
     DEFAULT_N_ITERATIONS,
@@ -29,10 +34,12 @@ from kd.search.discover.config import (
     DEFAULT_STABILITY_SELECTION,
 )
 from kd.search.dlga import DLGAConfig, DLGAPlugin
-from kd.search.protocol import PlatformComponents
+from kd.search.protocol import PlatformComponents, ScoreContract
+from kd.search.pysr.config import PySRConfig
+from kd.search.pysr.plugin import PySRPlugin
+from kd.search.result import DEFAULT_SCORE_KIND
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
-from kd.viz._labels import score_label as _viz_score_label
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
@@ -46,15 +53,23 @@ __all__ = ["Model"]
 
 
 
-_SUPPORTED_ALGORITHMS = ("sga", "dlga", "discover")
 
 
 
-_EARLY_STOP_MODE_BY_ALGORITHM: dict[str, Literal["min", "max"]] = {
-    "sga": "min",
-    "dlga": "min",
-    "discover": "max",
+
+
+
+
+
+
+
+_PLUGIN_CLASS_BY_ALGORITHM: dict[str, type[ScoreContract]] = {
+    "sga": SGAPlugin,
+    "dlga": DLGAPlugin,
+    "discover": DISCOVERPlugin,
+    "pysr": PySRPlugin,
 }
+_SUPPORTED_ALGORITHMS = tuple(_PLUGIN_CLASS_BY_ALGORITHM)
 _DEFAULT_LHS_FIELD = "u"
 _DEFAULT_LHS_AXIS = "t"
 
@@ -82,6 +97,7 @@ _DEFAULT_WIDTH = 5
 _DEFAULT_AIC_RATIO = 1.0
 _DEFAULT_DERIVATIVES = "finite_diff"
 _DEFAULT_SEED = 0
+_DEFAULT_CHECKPOINT_EVERY = 10
 
 _VALID_DERIVATIVES = frozenset({"finite_diff", "autograd"})
 
@@ -138,6 +154,8 @@ class _ProgressPrinter:
         gen = iteration + 1
 
 
+
+
         label = _score_label(algorithm)
         print(
             f"{_PROGRESS_PREFIX} Generation {gen:>3}/{self._total} | "
@@ -157,12 +175,14 @@ class _ProgressPrinter:
 def _score_label(algorithm: SearchAlgorithm) -> str:
     """Pick the user-facing score label for an algorithm.
 
-    SGA + DLGA minimize AIC; discover maximizes a reward. The plugin
-    config carries the algorithm name in the ``"algorithm"`` key (set by
-    each plugin's ``config`` property). Unknown algorithms fall back to
+    Reads the instance's ``ScoreContract`` ``score_kind`` declaration — the
+    single source of truth, declared once on each plugin class: SGA -> "AIC";
+    DLGA -> "DLGA fitness" (``nmse + epsilon*length`` — it is NOT an AIC,
+    labeling it so would mislead); discover -> "reward"; pysr -> "NMSE".
+    Algorithms without a declaration (external / fake plugins) fall back to
     ``"Score"`` for consistency with HTML reports.
     """
-    return _viz_score_label(algorithm.config.get("algorithm", ""))
+    return getattr(algorithm, "score_kind", DEFAULT_SCORE_KIND)
 
 
 
@@ -189,10 +209,12 @@ class Model:
     Args:
         algorithm: Search algorithm name. Supported: ``"sga"`` (default,
             full facade-parameter coverage), ``"dlga"`` (driven through
-            ``config=DLGAConfig(...)`` + ``surrogate_model=`` only), or
+            ``config=DLGAConfig(...)`` + ``surrogate_model=`` only),
             ``"discover"`` (driven through ``config=DiscoverConfig(...)``
-            only). For DLGA and discover the individual facade parameters
-            below (population/depth/width/aic_ratio/derivatives) are SGA-only.
+            only), or ``"pysr"`` (driven through ``config=PySRConfig(...)``;
+            ``generations`` maps to PySR's internal GP ``niterations``).
+            For non-SGA algorithms the individual facade parameters below
+            (population/depth/width/aic_ratio/derivatives) are SGA-only.
         generations: Maximum number of search iterations (all algorithms).
         population: SGA population size (number of PDE candidates). SGA-only.
         depth: Maximum tree depth per term. SGA-only.
@@ -209,15 +231,18 @@ class Model:
             discover it is forwarded through the plugin config when
             ``config=`` is unset, otherwise the config's own seed wins).
         verbose: When True, print per-iteration progress to stdout. The label
-            is algorithm-aware (``AIC`` for SGA/DLGA, ``reward`` for discover).
-        config: Optional pre-built ``SGAConfig``, ``DLGAConfig``, or
-            ``DiscoverConfig``. When provided, it is the single source of
+            is algorithm-aware (``AIC`` for SGA, ``DLGA fitness`` for DLGA,
+            ``reward`` for discover, ``NMSE`` for pysr).
+        config: Optional pre-built ``SGAConfig``, ``DLGAConfig``,
+            ``DiscoverConfig``, or ``PySRConfig``. When provided, it is the
+            single source of
             plugin settings; passing any non-default SGA-related facade
             parameters (``population``, ``depth``, ``width``, ``aic_ratio``,
             ``derivatives``, ``seed``) or extra ``kwargs`` raises
             ``ValueError`` (SGA path) / ``TypeError`` (DLGA + discover paths).
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
-            and (for DLGA) ``surrogate_model`` remain effective on the facade.
+            ``checkpoint_dir``/``checkpoint_every``, and (for DLGA)
+            ``surrogate_model`` remain effective on the facade.
             Type must match ``algorithm`` (e.g. ``algorithm='dlga' +
             config=SGAConfig(...)`` raises). The config is deep-copied to
             prevent aliasing.
@@ -239,6 +264,21 @@ class Model:
             trains a fresh ``FieldModel`` per the DLGAConfig surrogate
             settings (``surrogate_hidden_sizes``, ``surrogate_activation``,
             etc.).
+        checkpoint_dir: Optional directory for periodic checkpoints (all
+            algorithms). When set, every ``fit`` attaches a fresh
+            ``CheckpointCallback`` writing ``checkpoint_{iteration:06d}.pt``
+            every ``checkpoint_every`` iterations plus a
+            ``checkpoint_final.pt`` at experiment end. ``None`` (default)
+            disables checkpointing entirely. A user-supplied
+            ``CheckpointCallback`` in ``callbacks=`` coexists with this
+            (two streams to different directories is legitimate), but
+            pointing both at the SAME directory interleaves/overwrites
+            files.
+        checkpoint_every: Save a per-iteration checkpoint every N
+            iterations (0-indexed: saves at 0, N, 2N, ...; default 10).
+            Requires ``checkpoint_dir`` — passing ``checkpoint_every``
+            without it raises ``ValueError`` at construction (a silent
+            no-op would be a bug-attractor), as does any value < 1.
         **kwargs: Forwarded to ``SGAConfig`` if the field name matches an
             allowed (non-explicitly-mapped) field. Unknown or colliding
             kwargs raise ``TypeError``. SGA-only — DLGA and discover paths
@@ -257,9 +297,11 @@ class Model:
         derivatives: str = _UNSET,
         seed: int = _UNSET,
         verbose: bool = True,
-        config: SGAConfig | DLGAConfig | DiscoverConfig | None = None,
+        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None = None,
         callbacks: list[RunnerCallback] | None = None,
         surrogate_model: torch.nn.Module | None = None,
+        checkpoint_dir: str | Path | None = None,
+        checkpoint_every: int = _UNSET,
         **kwargs: Any,
     ) -> None:
 
@@ -276,7 +318,13 @@ class Model:
             _DEFAULT_DERIVATIVES if derivatives is _UNSET else derivatives
         )
         seed_resolved = _DEFAULT_SEED if seed is _UNSET else seed
+        checkpoint_every_resolved = (
+            _DEFAULT_CHECKPOINT_EVERY
+            if checkpoint_every is _UNSET
+            else checkpoint_every
+        )
 
+        self._validate_checkpoint_params(checkpoint_dir, checkpoint_every)
         self._validate_derivatives(derivatives_resolved)
         self._validate_kwargs(kwargs)
         self._validate_field_model(kwargs, derivatives_resolved)
@@ -319,6 +367,10 @@ class Model:
         self.derivatives = derivatives_resolved
         self.seed = seed_resolved
         self.verbose = verbose
+        self.checkpoint_dir: Path | None = (
+            Path(checkpoint_dir) if checkpoint_dir is not None else None
+        )
+        self.checkpoint_every = checkpoint_every_resolved
 
 
 
@@ -344,6 +396,44 @@ class Model:
         self._algorithm: SearchAlgorithm | None = None
 
 
+
+    @staticmethod
+    def _validate_checkpoint_params(
+        checkpoint_dir: str | Path | None,
+        checkpoint_every: Any,
+    ) -> None:
+        """Validate the checkpoint parameters at construction.
+
+        Receives the SENTINEL-bearing ``checkpoint_every`` so an explicit
+        ``checkpoint_every=10`` (the literal default) without
+        ``checkpoint_dir`` is also rejected — a silent no-op would be a
+        bug-attractor. The ``>= 1`` range check fails here, at
+        construction, rather than waiting for ``CheckpointCallback`` to
+        re-validate at fit time.
+
+        An empty-string ``checkpoint_dir`` is also rejected: ``""``
+        is a common "disabled" sentinel in agent-generated configs, but
+        ``Path("") == Path(".")`` would silently checkpoint into the CWD —
+        the same silent-attractor the ``checkpoint_every`` orphan check
+        guards against.
+        """
+        if isinstance(checkpoint_dir, str) and checkpoint_dir == "":
+            raise ValueError(
+                "checkpoint_dir='' is not a valid directory (it would resolve "
+                "to the current working directory). Pass a real path, or None "
+                "to disable checkpointing."
+            )
+        if checkpoint_every is _UNSET:
+            return
+        if checkpoint_dir is None:
+            raise ValueError(
+                "checkpoint_every was passed without checkpoint_dir; "
+                "checkpointing is enabled by checkpoint_dir=..., so "
+                "checkpoint_every alone would be a silent no-op. "
+                "Pass checkpoint_dir as well (or drop checkpoint_every)."
+            )
+        if checkpoint_every < 1:
+            raise ValueError(f"checkpoint_every must be >= 1, got {checkpoint_every}")
 
     @staticmethod
     def _validate_derivatives(derivatives: str) -> None:
@@ -386,7 +476,7 @@ class Model:
 
     @staticmethod
     def _validate_config_exclusivity(
-        config: SGAConfig | DLGAConfig | DiscoverConfig | None,
+        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None,
         population: Any,
         depth: Any,
         width: Any,
@@ -424,8 +514,9 @@ class Model:
                 f"Cannot pass both 'config=' and algorithm-specific "
                 f"parameters: {overrides}. When 'config' is provided, use "
                 f"it as the single source of plugin settings; only "
-                f"'generations', 'verbose', 'callbacks' (and "
-                f"'surrogate_model' for DLGA) remain effective on the facade."
+                f"'generations', 'verbose', 'callbacks', "
+                f"'checkpoint_dir'/'checkpoint_every' (and 'surrogate_model' "
+                f"for DLGA) remain effective on the facade."
             )
 
     @staticmethod
@@ -450,7 +541,9 @@ class Model:
           ``depth``, ``width``, ``aic_ratio``, ``derivatives``) or extra
           kwargs (``lam``, ``p_var``, ``autograd_train_*``, ...) would
           also silently drop. Raise — DLGA users must drive non-default
-          settings through ``DLGAConfig`` via ``config=``.
+          settings through ``DLGAConfig`` via ``config=``. The same applies
+          to ``discover`` (drive via ``DiscoverConfig``) and ``pysr`` (drive
+          via ``PySRConfig``).
         """
         if algorithm != "dlga" and surrogate_model is not None:
             raise TypeError(
@@ -459,56 +552,74 @@ class Model:
                 "``algorithm='dlga'``; for SGA opt-in autograd derivatives use "
                 "``derivatives='autograd'`` instead."
             )
-        if algorithm == "dlga":
-            sga_only_set = []
-            if population is not _UNSET:
-                sga_only_set.append("population")
-            if depth is not _UNSET:
-                sga_only_set.append("depth")
-            if width is not _UNSET:
-                sga_only_set.append("width")
-            if aic_ratio is not _UNSET:
-                sga_only_set.append("aic_ratio")
-            if derivatives is not _UNSET:
-                sga_only_set.append("derivatives")
-            if kwargs:
-                sga_only_set.extend(sorted(kwargs))
-            if sga_only_set:
-                raise TypeError(
-                    f"Model(algorithm='dlga', ...): the following SGA-only "
-                    f"parameters cannot be passed alongside DLGA: "
-                    f"{sorted(set(sga_only_set))}. Drive DLGA via "
-                    "``config=DLGAConfig(...)`` instead — the facade does not "
-                    "expose individual DLGA fields as ``Model(...)`` parameters."
-                )
-        if algorithm == "discover":
-            sga_only_set = []
-            if population is not _UNSET:
-                sga_only_set.append("population")
-            if depth is not _UNSET:
-                sga_only_set.append("depth")
-            if width is not _UNSET:
-                sga_only_set.append("width")
-            if aic_ratio is not _UNSET:
-                sga_only_set.append("aic_ratio")
-            if derivatives is not _UNSET:
-                sga_only_set.append("derivatives")
-            if kwargs:
-                sga_only_set.extend(sorted(kwargs))
-            if sga_only_set:
-                raise TypeError(
-                    f"Model(algorithm='discover', ...): the following SGA-only "
-                    f"parameters cannot be passed alongside discover: "
-                    f"{sorted(set(sga_only_set))}. Drive discover via "
-                    "``config=DiscoverConfig(...)`` instead — the facade does "
-                    "not expose individual DISCOVER fields as ``Model(...)`` "
-                    "parameters."
-                )
+        Model._reject_sga_only_params_for_non_sga(
+            algorithm,
+            kwargs=kwargs,
+            population=population,
+            depth=depth,
+            width=width,
+            aic_ratio=aic_ratio,
+            derivatives=derivatives,
+        )
+
+
+    _CONFIG_CLASS_BY_ALGORITHM = {
+        "dlga": "DLGAConfig",
+        "discover": "DiscoverConfig",
+        "pysr": "PySRConfig",
+    }
+
+    @staticmethod
+    def _reject_sga_only_params_for_non_sga(
+        algorithm: str,
+        *,
+        kwargs: dict[str, Any],
+        population: Any,
+        depth: Any,
+        width: Any,
+        aic_ratio: Any,
+        derivatives: Any,
+    ) -> None:
+        """Raise if SGA-only facade params ride a non-SGA algorithm path.
+
+        DLGA / DISCOVER / PySR are driven exclusively via their own
+        ``config=`` object; the individual SGA facade knobs
+        (``population``/``depth``/``width``/``aic_ratio``/``derivatives``) and
+        any extra ``kwargs`` are not exposed for them and would otherwise be
+        silently dropped (a classic bug-attractor). The error names the offending
+        params and the config class to use instead. No-op for ``sga`` (whose
+        knobs are first-class) and any algorithm not in the rejection map.
+        """
+        config_class = Model._CONFIG_CLASS_BY_ALGORITHM.get(algorithm)
+        if config_class is None:
+            return
+        sga_only_set: list[str] = []
+        if population is not _UNSET:
+            sga_only_set.append("population")
+        if depth is not _UNSET:
+            sga_only_set.append("depth")
+        if width is not _UNSET:
+            sga_only_set.append("width")
+        if aic_ratio is not _UNSET:
+            sga_only_set.append("aic_ratio")
+        if derivatives is not _UNSET:
+            sga_only_set.append("derivatives")
+        if kwargs:
+            sga_only_set.extend(sorted(kwargs))
+        if sga_only_set:
+            raise TypeError(
+                f"Model(algorithm={algorithm!r}, ...): the following SGA-only "
+                f"parameters cannot be passed alongside {algorithm}: "
+                f"{sorted(set(sga_only_set))}. Drive {algorithm} via "
+                f"``config={config_class}(...)`` instead — the facade does not "
+                f"expose individual {algorithm} fields as ``Model(...)`` "
+                "parameters."
+            )
 
     @staticmethod
     def _validate_discover_config_facade_compat(
         algorithm: str,
-        config: SGAConfig | DLGAConfig | DiscoverConfig | None,
+        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None,
     ) -> None:
         """Guard DiscoverConfig fields that have no effect under the facade.
 
@@ -526,7 +637,7 @@ class Model:
 
         No-op unless ``algorithm == "discover"`` with a ``DiscoverConfig``.
         These fields apply on the standalone / MODE2 entry points
-        (``scripts/run_discover.py``); the check belongs in the facade layer,
+        (the standalone research runner); the check belongs in the facade layer,
         not ``DiscoverConfig.__post_init__`` (the config is shared by all paths).
 
         Reads the caller's ``config`` *before* ``__init__`` deep-copies it —
@@ -542,7 +653,8 @@ class Model:
                 "Model(algorithm='discover', config=DiscoverConfig(pinn=...)): "
                 "MODE2 PINN is unreachable via the facade and would be silently "
                 "ignored (the run falls back to MODE1 finite-diff). Use the "
-                "standalone MODE2 entry in scripts/run_discover.py, or drop pinn."
+                "standalone MODE2 research entry point (not part of the packaged "
+                "API), or drop pinn."
             )
 
 
@@ -614,13 +726,20 @@ class Model:
         mode makes the patience counter treat real improvements as
         regressions, so early stopping fires prematurely (or never resets).
         The original guard only rejected discover+min, letting sga/dlga+max
-        pass silently (AUDIT-05); this checks both directions symmetrically.
+        pass silently; this checks both directions symmetrically.
+
+        The required mode is the plugin class's ``ScoreContract``
+        ``score_direction`` declaration (read from
+        ``_PLUGIN_CLASS_BY_ALGORITHM`` — no plugin instance exists yet at
+        construction time), replacing the old hand-maintained
+        ``_EARLY_STOP_MODE_BY_ALGORITHM`` table.
         """
         if callbacks is None:
             return
-        required = _EARLY_STOP_MODE_BY_ALGORITHM.get(algorithm)
-        if required is None:
+        plugin_class = _PLUGIN_CLASS_BY_ALGORITHM.get(algorithm)
+        if plugin_class is None:
             return
+        required = plugin_class.score_direction
         direction = "minimizes" if required == "min" else "maximizes"
         for cb in callbacks:
             if isinstance(cb, EarlyStoppingCallback) and cb.mode != required:
@@ -634,11 +753,37 @@ class Model:
 
 
 
-    def fit(self, dataset: PDEDataset) -> Model:
+    def fit(
+        self,
+        dataset: PDEDataset,
+        resume_from: str | Path | None = None,
+    ) -> Model:
         """Run the search and populate post-fit attributes.
 
         Args:
             dataset: The PDE dataset to discover an equation for.
+            resume_from: Optional path to a checkpoint file written by a
+                previous run (``checkpoint_*.pt``). The checkpoint restores
+                **search state** (population / controller weights / best),
+                NOT config — generations, algorithm settings, seed etc. come
+                from THIS Model, so "resume with more generations" works.
+                The checkpoint's algorithm must match this Model's (legacy
+                checkpoints without the recorded name load unchecked).
+                Iteration numbering restarts at 0: resuming into the same
+                ``checkpoint_dir`` progressively overwrites
+                ``checkpoint_{i:06d}.pt`` and ``checkpoint_final.pt`` — note
+                ``checkpoint_final.pt`` is also written when a run CRASHES
+                (the runner's finally-block), so a failed resume can overwrite
+                a pristine final and its ``iteration`` field can regress;
+                per-iteration files from a longer prior run also linger.
+                Resume restores SEARCH STATE only, so *structural* config
+                changes that alter that state's shape (e.g. a DISCOVER
+                controller ``num_layers`` / hidden size differing from the
+                checkpoint) raise ``RuntimeError`` from the state_dict load;
+                value-only changes (e.g. SGA ``population`` 5 -> 10) resume
+                fine. Cross-DATA resume re-prices the best-score gate onto the
+                new data for DISCOVER only; SGA/DLGA keep the restored best
+                as their ratchet baseline.
 
         Returns:
             ``self`` for sklearn-style chaining.
@@ -646,7 +791,13 @@ class Model:
         Raises:
             NotImplementedError: If ``algorithm`` is not supported.
             ValueError: If the dataset is missing the required LHS field
-                or axis.
+                or axis; or if ``resume_from`` is not a kd checkpoint payload
+                / has a mismatched version or algorithm / is a corrupt or
+                truncated file.
+            FileNotFoundError: If ``resume_from`` does not exist.
+            IsADirectoryError: If ``resume_from`` points at a directory.
+            RuntimeError: If ``resume_from`` was written by a structurally
+                different config (state_dict shape mismatch on restore).
         """
 
 
@@ -665,14 +816,35 @@ class Model:
 
         plugin, batch_size = self._build_plugin()
         self._algorithm = plugin
-        components = self._build_components(dataset)
 
+
+
+
+
+
+
+
+        max_iterations = 1 if self.algorithm == "pysr" else self.generations
         runner = ExperimentRunner(
             algorithm=plugin,
-            max_iterations=self.generations,
+            max_iterations=max_iterations,
             batch_size=batch_size,
             callbacks=self._build_callbacks(),
         )
+
+
+
+
+
+
+
+
+
+
+
+        if resume_from is not None:
+            runner.load_checkpoint(Path(resume_from))
+        components = self._build_components(dataset)
         self._result = runner.run(components)
         self._fitted = True
         return self
@@ -697,6 +869,11 @@ class Model:
         if self.algorithm == "discover":
             discover_cfg = self._build_discover_config()
             return DISCOVERPlugin(discover_cfg), discover_cfg.batch_size
+        if self.algorithm == "pysr":
+
+
+
+            return PySRPlugin(self._build_pysr_config()), 1
 
         raise NotImplementedError(
             f"Algorithm '{self.algorithm}' has no plugin builder."
@@ -742,6 +919,30 @@ class Model:
             )
         return DiscoverConfig(seed=self.seed)
 
+    def _build_pysr_config(self) -> PySRConfig:
+        """Resolve the PySRConfig: user override (deep-copied) or facade default.
+
+        Same pattern as ``_build_discover_config``. With a user
+        ``config=PySRConfig(...)`` the config is the single source of truth and
+        is deep-copied verbatim (its ``niterations`` is preserved). Without one,
+        the facade ``generations`` knob maps to PySR's *internal* GP loop length
+        via ``PySRConfig(niterations=self.generations)`` — note this is the GP
+        loop, not the kd runner loop (which is pinned to 1 for the one-shot
+        plugin; see ``fit``) — and the facade ``seed=`` parameter threads
+        through as ``PySRConfig(seed=self.seed)`` (PySR's ``random_state``;
+        mirrors SGA/DLGA/DISCOVER builders, and keeps the RunManifest seed
+        truthful). A non-PySRConfig override raises so
+        ``Model(algorithm='pysr', config=SGAConfig(...))`` fails fast.
+        """
+        if isinstance(self._config_override, PySRConfig):
+            return copy.deepcopy(self._config_override)
+        if self._config_override is not None:
+            raise TypeError(
+                f"Model(algorithm='pysr', config=...) requires a PySRConfig; "
+                f"got {type(self._config_override).__name__}."
+            )
+        return PySRConfig(niterations=self.generations, seed=self.seed)
+
     @property
     def best_expr_(self) -> str:
         """Best discovered expression string (post-fit only)."""
@@ -753,8 +954,12 @@ class Model:
 
         Algorithm-specific direction:
 
-        - ``"sga"`` / ``"dlga"``: AIC, **lower is better**.
+        - ``"sga"``: AIC, **lower is better**.
+        - ``"dlga"``: GA fitness (``nmse + epsilon*length``; not an AIC),
+          **lower is better**.
         - ``"discover"``: reward in roughly ``[0, 1]``, **higher is better**.
+        - ``"pysr"``: kd re-fit NMSE of the best expression, **lower is better**
+          (PySR's own loss is discarded; kd re-scores on the term library).
 
         ``EarlyStoppingCallback(mode="min"|"max")`` should be set accordingly.
         """
@@ -847,7 +1052,7 @@ class Model:
         )
 
     def _build_components(self, dataset: PDEDataset) -> PlatformComponents:
-        """Wire up the platform stack for the given dataset (POT-5 declarative).
+        """Wire up the platform stack for the given dataset (declarative).
 
         Resolves plugin-declared ``DerivativeReqs`` (via
         ``_resolve_derivative_requirements`` helper — Protocol does not
@@ -860,7 +1065,7 @@ class Model:
 
         Backward compat: a plugin without a ``derivative_requirements``
         property (or with one returning ``None``) gets the SGA-aligned
-        default — the facade behavior is identical to the pre-POT-5 wiring.
+        default — identical to the facade's original hard-coded wiring.
         """
         from kd.core.platform.builder import (
             PlatformBuilder,
@@ -873,10 +1078,19 @@ class Model:
     def _build_callbacks(self) -> list[RunnerCallback]:
         """Return the runner callback list.
 
-        Always starts with any user-provided callbacks (in order). Appends
+        Always starts with any user-provided callbacks (in order). Appends a
+        FRESH ``CheckpointCallback`` when ``checkpoint_dir`` is set (fresh
+        per fit so ``_last_iteration`` cannot leak across fits), then
         ``_ProgressPrinter`` when ``verbose=True``.
         """
         cbs: list[RunnerCallback] = list(self._user_callbacks or [])
+        if self.checkpoint_dir is not None:
+            cbs.append(
+                CheckpointCallback(
+                    directory=self.checkpoint_dir,
+                    every_n=self.checkpoint_every,
+                )
+            )
         if self.verbose:
             cbs.append(_ProgressPrinter(total_generations=self.generations))
         return cbs

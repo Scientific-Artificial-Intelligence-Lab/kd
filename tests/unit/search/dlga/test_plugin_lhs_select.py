@@ -438,7 +438,7 @@ class TestSchemaInvariants:
         assert hasattr(evaluator, "_lhs_var"), (
             "Evaluator must cache _lhs_var for NMSE normalisation"
         )
-        expected_var = lhs.flatten().var().item()
+        expected_var = lhs.flatten().var(correction=0).item()
         assert evaluator._lhs_var == pytest.approx(expected_var, rel=1e-12), (
             f"Expected _lhs_var={expected_var}, got {evaluator._lhs_var}"
         )

@@ -108,7 +108,9 @@ def _run_1d_pde(
     seed_all(seed)
     engine = _build_1d_engine(config=config, entropy_gamma=entropy_gamma)
     result = run_engine_and_summarise(
-        engine=engine, evaluator=evaluator, n_iterations=config.n_iterations,
+        engine=engine,
+        evaluator=evaluator,
+        n_iterations=config.n_iterations,
     )
     config_dict = _build_1d_config_dict(
         pde=pde,
@@ -150,9 +152,12 @@ def _build_1d_evaluator(dataset: Any) -> Any:
 
 
 def _build_1d_engine(*, config: Any, entropy_gamma: float) -> Any:
+    from kd.search.discover.builder import (
+        _make_magnitude_filter,
+        _make_reward_adapter,
+    )
     from kd.search.discover.engine import DiscoverEngine
     from kd.search.discover.evaluation.dedup import Deduplicator
-    from kd.search.discover.evaluation.reward import compute_reward
     from kd.search.discover.tokens.library import Library
     from kd.search.discover.tokens.validator import CandidateValidator
 
@@ -168,9 +173,8 @@ def _build_1d_engine(*, config: Any, entropy_gamma: float) -> Any:
     return DiscoverEngine(
         generator=controller,
         strategy=strategy,
-        reward_adapter=lambda result: compute_reward(
-            result, alpha=config.reward_alpha,
-        ),
+        reward_adapter=_make_reward_adapter(config.reward_alpha),
+        result_filter=_make_magnitude_filter(enabled=config.magnitude_filter),
         validator=validator,
         deduplicator=Deduplicator(library),
         batch_size=config.batch_size,
@@ -184,10 +188,13 @@ def _build_1d_prior(library: Any, config: Any) -> Any:
         PriorSystem,
     )
 
-    return PriorSystem(library, [
-        LengthConstraint(library, min_=config.min_length, max_=config.max_length),
-        DiffChildConstraint(library),
-    ])
+    return PriorSystem(
+        library,
+        [
+            LengthConstraint(library, min_=config.min_length, max_=config.max_length),
+            DiffChildConstraint(library),
+        ],
+    )
 
 
 def _build_1d_controller(library: Any, prior_system: Any, config: Any) -> Any:

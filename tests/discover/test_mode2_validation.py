@@ -44,17 +44,37 @@ NOISE_LEVEL = 0.5
 
 _DATA_ROOT = (
     Path(__file__).parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
+    / "refs"
+    / "discover"
+    / "dso"
+    / "dso"
+    / "task"
+    / "pde"
+    / "data_new"
 )
 BURGERS_MAT = _DATA_ROOT / "burgers.mat"
 CHAFEE_DIR = _DATA_ROOT
 
 
 BURGERS_OPERATORS = [
-    "add", "mul", "sub", "div", "sin", "cos", "diff_x", "diff2_x",
+    "add",
+    "mul",
+    "sub",
+    "div",
+    "sin",
+    "cos",
+    "diff_x",
+    "diff2_x",
 ]
 CHAFEE_OPERATORS = [
-    "add", "mul", "sub", "div", "n2", "n3", "diff_x", "diff2_x",
+    "add",
+    "mul",
+    "sub",
+    "div",
+    "n2",
+    "n3",
+    "diff_x",
+    "diff2_x",
 ]
 
 
@@ -102,18 +122,22 @@ _TERM_ALIASES: dict[str, str] = {
 }
 
 
-GT_TERM_SET_BURGERS: frozenset[str] = frozenset({
-    "diff2_x(u)",
-    "mul(diff_x(u), u)",
-})
+GT_TERM_SET_BURGERS: frozenset[str] = frozenset(
+    {
+        "diff2_x(u)",
+        "mul(diff_x(u), u)",
+    }
+)
 
 
 
-GT_TERM_SET_CHAFEE: frozenset[str] = frozenset({
-    "diff2_x(u)",
-    "u",
-    "n3(u)",
-})
+GT_TERM_SET_CHAFEE: frozenset[str] = frozenset(
+    {
+        "diff2_x(u)",
+        "u",
+        "n3(u)",
+    }
+)
 
 
 
@@ -136,8 +160,8 @@ BURGERS_GT_HIT_FLOOR: int = 2
 
 
 CHAFEE_SKIP_REASON: str = (
-    "No valid v1ship Chafee MODE2 baseline (see "
-    "'CPU budget insufficient', v1ship Chafee MODE2 structurally nonsense). "
+    "No valid reference Chafee MODE2 baseline (see "
+    "'CPU budget insufficient', reference Chafee MODE2 structurally nonsense). "
     "Re-enable when a defensible Chafee aggregate oracle exists."
 )
 
@@ -151,8 +175,11 @@ _REQUIRED_HASHSEED: str = "0"
 
 
 
+
 def _add_gaussian_noise(
-    dataset: PDEDataset, level: float, seed: int,
+    dataset: PDEDataset,
+    level: float,
+    seed: int,
 ) -> PDEDataset:
     return add_noise_dataset(dataset, level, seed)
 
@@ -162,10 +189,15 @@ def _make_evaluator(dataset: PDEDataset) -> tuple[Evaluator, FunctionRegistry]:
     context = ExecutionContext(dataset=dataset, derivative_provider=provider)
     registry = FunctionRegistry.create_default()
     u_t = provider.get_derivative(
-        dataset.lhs_field, dataset.lhs_axis, order=1,
+        dataset.lhs_field,
+        dataset.lhs_axis,
+        order=1,
     ).flatten()
     evaluator = Evaluator(
-        PythonExecutor(registry), LeastSquaresSolver(), context, lhs=u_t,
+        PythonExecutor(registry),
+        LeastSquaresSolver(),
+        context,
+        lhs=u_t,
     )
     return evaluator, registry
 
@@ -240,17 +272,16 @@ def _build_mode2_runner(
     rng = torch.Generator().manual_seed(seed)
     idx = torch.randperm(n_total, generator=rng)[:n_obs]
 
-    obs_coords = {
-        c: grids[i].flatten()[idx].float() for i, c in enumerate(coord_vars)
-    }
+    obs_coords = {c: grids[i].flatten()[idx].float() for i, c in enumerate(coord_vars)}
     obs_targets = {
-        name: fd.values.flatten()[idx].float()
-        for name, fd in dataset.fields.items()
+        name: fd.values.flatten()[idx].float() for name, fd in dataset.fields.items()
     }
 
     bounds = _domain_bounds(dataset)
     colloc = generate_collocation_points(
-        bounds=bounds, n_points=pinn_config.n_collocation, seed=seed,
+        bounds=bounds,
+        n_points=pinn_config.n_collocation,
+        seed=seed,
     )
 
     runner = PINNCycleRunner(
@@ -276,7 +307,7 @@ def _build_mode2_runner(
 def _canonicalize_term(term: str) -> tuple[str, int]:
     sign = 1
     while term.startswith(_NEG_PREFIX) and term.endswith(_NEG_SUFFIX):
-        term = term[len(_NEG_PREFIX):-len(_NEG_SUFFIX)]
+        term = term[len(_NEG_PREFIX): -len(_NEG_SUFFIX)]
         sign = -sign
     return _TERM_ALIASES.get(term, term), sign
 
@@ -350,6 +381,7 @@ def _run_mode1_noisy(
 
 
 
+
 @pytest.fixture(scope="module")
 def burgers_data_path() -> Path:
     if not BURGERS_MAT.exists():
@@ -398,6 +430,7 @@ def burgers_mode1_noisy_reward(noisy_burgers: PDEDataset) -> float:
 
 
 
+
 @pytest.mark.unit
 class TestMode2ValidationSeedPlumbing:
 
@@ -415,7 +448,8 @@ class TestMode2Burgers:
 
     @pytest.mark.slow
     def test_reward_above_threshold(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         reward = burgers_mode2_result.final_state.best_reward
         assert reward >= BURGERS_REWARD_FLOOR, (
@@ -432,18 +466,18 @@ class TestMode2Burgers:
 
     @pytest.mark.slow
     def test_discovers_advection_term(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         expr = burgers_mode2_result.final_state.best_expression
         assert expr, "MODE2 produced no valid expression"
         has_advection = "mul" in expr and "diff_x" in expr
-        assert has_advection, (
-            f"Missing advection term (mul + diff_x) in: '{expr}'"
-        )
+        assert has_advection, f"Missing advection term (mul + diff_x) in: '{expr}'"
 
     @pytest.mark.slow
     def test_pretrain_converges(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         pr = burgers_mode2_result.pretrain_result
         assert pr.train_loss < PRETRAIN_LOSS_CEILING, (
@@ -455,7 +489,8 @@ class TestMode2Burgers:
 
     @pytest.mark.slow
     def test_cycle_metrics_complete(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         metrics = burgers_mode2_result.cycle_metrics
         assert len(metrics) == VALIDATION_N_CYCLES, (
@@ -466,14 +501,25 @@ class TestMode2Burgers:
 
     @pytest.mark.slow
     def test_pinn_losses_finite(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
-        for i, m in enumerate(burgers_mode2_result.cycle_metrics):
+        ran = [
+            (i, m)
+            for i, m in enumerate(burgers_mode2_result.cycle_metrics)
+            if "data_loss" in m
+        ]
+        if not ran:
+            pytest.fail(
+                "PINN training never ran in any MODE2 cycle (no cycle "
+                "metrics contain 'data_loss'); the finiteness premise is "
+                "unsatisfiable and MODE2 degenerated to plain search."
+            )
+        for i, m in ran:
             for key in ("data_loss", "physics_loss", "total_loss"):
-                if key in m:
-                    assert math.isfinite(m[key]), (
-                        f"cycle {i}: {key}={m[key]} is not finite"
-                    )
+                assert key in m, f"cycle {i}: PINN ran but {key} missing"
+                assert math.isfinite(m[key]), f"cycle {i}: {key}={m[key]} is not finite"
+
 
 
 
@@ -484,7 +530,8 @@ class TestMode2Chafee:
 
     @pytest.mark.slow
     def test_reward_above_threshold(
-        self, chafee_mode2_result: PINNCycleResult,
+        self,
+        chafee_mode2_result: PINNCycleResult,
     ) -> None:
         reward = chafee_mode2_result.final_state.best_reward
         assert reward >= CHAFEE_REWARD_FLOOR, (
@@ -499,18 +546,18 @@ class TestMode2Chafee:
 
     @pytest.mark.slow
     def test_discovers_nonlinear_term(
-        self, chafee_mode2_result: PINNCycleResult,
+        self,
+        chafee_mode2_result: PINNCycleResult,
     ) -> None:
         expr = chafee_mode2_result.final_state.best_expression
         assert expr, "MODE2 produced no valid expression"
         has_cubic = "n3" in expr or (expr.count("mul") >= 2 and "u" in expr)
-        assert has_cubic, (
-            f"Missing cubic nonlinear term in: '{expr}'"
-        )
+        assert has_cubic, f"Missing cubic nonlinear term in: '{expr}'"
 
     @pytest.mark.slow
     def test_pretrain_converges(
-        self, chafee_mode2_result: PINNCycleResult,
+        self,
+        chafee_mode2_result: PINNCycleResult,
     ) -> None:
         pr = chafee_mode2_result.pretrain_result
         assert pr.train_loss < PRETRAIN_LOSS_CEILING, (
@@ -522,7 +569,8 @@ class TestMode2Chafee:
 
     @pytest.mark.slow
     def test_cycle_metrics_complete(
-        self, chafee_mode2_result: PINNCycleResult,
+        self,
+        chafee_mode2_result: PINNCycleResult,
     ) -> None:
         metrics = chafee_mode2_result.cycle_metrics
         assert len(metrics) == VALIDATION_N_CYCLES, (
@@ -533,14 +581,25 @@ class TestMode2Chafee:
 
     @pytest.mark.slow
     def test_pinn_losses_finite(
-        self, chafee_mode2_result: PINNCycleResult,
+        self,
+        chafee_mode2_result: PINNCycleResult,
     ) -> None:
-        for i, m in enumerate(chafee_mode2_result.cycle_metrics):
+        ran = [
+            (i, m)
+            for i, m in enumerate(chafee_mode2_result.cycle_metrics)
+            if "data_loss" in m
+        ]
+        if not ran:
+            pytest.fail(
+                "PINN training never ran in any MODE2 cycle (no cycle "
+                "metrics contain 'data_loss'); the finiteness premise is "
+                "unsatisfiable and MODE2 degenerated to plain search."
+            )
+        for i, m in ran:
             for key in ("data_loss", "physics_loss", "total_loss"):
-                if key in m:
-                    assert math.isfinite(m[key]), (
-                        f"cycle {i}: {key}={m[key]} is not finite"
-                    )
+                assert key in m, f"cycle {i}: PINN ran but {key} missing"
+                assert math.isfinite(m[key]), f"cycle {i}: {key}={m[key]} is not finite"
+
 
 
 
@@ -564,7 +623,8 @@ class TestMode2PINNEffectiveness:
 
     @pytest.mark.slow
     def test_reward_nondecreasing_across_cycles(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         metrics = burgers_mode2_result.cycle_metrics
         if len(metrics) < 2:
@@ -573,13 +633,14 @@ class TestMode2PINNEffectiveness:
             prev = metrics[i - 1]["best_reward"]
             curr = metrics[i]["best_reward"]
             assert curr >= prev * 0.95, (
-                f"Reward regressed: cycle {i-1}={prev:.4f} -> "
+                f"Reward regressed: cycle {i - 1}={prev:.4f} -> "
                 f"cycle {i}={curr:.4f} (>{5}% drop)"
             )
 
     @pytest.mark.slow
     def test_pretrain_loss_below_noise_level(
-        self, burgers_mode2_result: PINNCycleResult,
+        self,
+        burgers_mode2_result: PINNCycleResult,
     ) -> None:
         pr = burgers_mode2_result.pretrain_result
         assert pr.train_loss < NOISE_LEVEL, (
@@ -633,14 +694,12 @@ class TestMode2AggregateBurgers:
     @pytest.mark.xfail(
         strict=False,
         reason=(
-            "an internal milestone (b-cleared): Track-1 2026-05-19 evidence is mean 0.8295 "
-            f"/ STRICT GT-hit 1/3 (seed777 only), vs v1ship-anchored floor "
+            "Known regression: the latest 3-seed evidence is mean 0.8295 "
+            f"/ STRICT GT-hit 1/3, vs the reference-anchored floor "
             f"mean>={BURGERS_MEAN_FLOOR} / hits>={BURGERS_GT_HIT_FLOOR}. "
-            "A/B cleared kd-bump; root cause is discover-side "
-            "lineage (commits a05c92a -> 7bba223, top suspect 81c722b "
-            "pde_registry refactor). Bisect filed as independent debt "
-            "(Task #8); this xfail clears when the upstream commit is "
-            "Amendment 2026-05-20."
+            "A/B testing cleared the platform side; the root cause is an "
+            "upstream search-engine regression under bisection. This xfail "
+            "clears when the upstream fix lands."
         ),
     )
     def test_strict_gt_hit_aggregate(
@@ -650,8 +709,7 @@ class TestMode2AggregateBurgers:
         results = burgers_mode2_aggregate_results
         seeds_seen = [r.seed for r in results]
         assert seeds_seen == list(GATE1_SEEDS), (
-            f"Aggregate must cover exactly Gate-1 seeds {GATE1_SEEDS}, "
-            f"got {seeds_seen}"
+            f"Aggregate must cover exactly Gate-1 seeds {GATE1_SEEDS}, got {seeds_seen}"
         )
 
         rewards = [r.best_reward for r in results]
@@ -669,7 +727,7 @@ class TestMode2AggregateBurgers:
         if mean_reward < BURGERS_MEAN_FLOOR:
             failures.append(
                 f"3-seed mean reward {mean_reward:.4f} < floor "
-                f"{BURGERS_MEAN_FLOOR:.4f} (v1ship-anchored)"
+                f"{BURGERS_MEAN_FLOOR:.4f} (reference-anchored)"
             )
         if gt_hits < BURGERS_GT_HIT_FLOOR:
             failures.append(
@@ -681,7 +739,7 @@ class TestMode2AggregateBurgers:
 
         if failures:
             raise AssertionError(
-                "Burgers MODE2 aggregate failed STRICT v1ship-anchored "
+                "Burgers MODE2 aggregate failed STRICT reference-anchored "
                 "oracle:\n"
                 + "\n".join(f" - {f}" for f in failures)
                 + f"\nPer-seed:\n{per_seed_summary}"
@@ -695,8 +753,7 @@ class TestMode2AggregateChafee:
     @pytest.mark.skip(reason=CHAFEE_SKIP_REASON)
     def test_strict_gt_hit_aggregate(self) -> None:
 
-        _ = (CHAFEE_DIR, load_chafee_infante_npy, CHAFEE_OPERATORS,
-             GT_TERM_SET_CHAFEE)
+        _ = (CHAFEE_DIR, load_chafee_infante_npy, CHAFEE_OPERATORS, GT_TERM_SET_CHAFEE)
 
 
 
@@ -711,16 +768,18 @@ class TestMode2AggregateGuards:
     def test_floor_constants_are_python_literals(self) -> None:
         src = Path(__file__).resolve().read_text(encoding="utf-8")
         forbidden_substrings = (
-            "json.load", "json.loads", "open(", "Path(",
+            "audit_summary.json",
+            "json.load",
+            "json.loads",
+            "open(",
+            "Path(",
         )
         for const_name in ("BURGERS_MEAN_FLOOR", "BURGERS_GT_HIT_FLOOR"):
             line = next(
                 (ln for ln in src.splitlines() if ln.startswith(const_name)),
                 None,
             )
-            assert line is not None, (
-                f"{const_name} not found as a top-level definition"
-            )
+            assert line is not None, f"{const_name} not found as a top-level definition"
             for bad in forbidden_substrings:
                 assert bad not in line, (
                     f"{const_name} appears to read from {bad!r}: "
@@ -729,50 +788,26 @@ class TestMode2AggregateGuards:
                 )
 
     @pytest.mark.unit
-    def test_gt_term_sets_match_v1ship_audit_oracle(self) -> None:
-        import importlib.util
-
-        audit_path = (
-            Path(__file__).resolve().parent.parent.parent
-            / "scripts" / "v1ship_audit.py"
-        )
-        if not audit_path.exists():
-            pytest.skip(f"scripts/v1ship_audit.py not found at {audit_path}")
-        spec = importlib.util.spec_from_file_location(
-            "_v1ship_audit_drift_guard", audit_path,
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        gt_burgers = frozenset(module.GROUND_TRUTH["burgers"].keys())
-        gt_chafee = frozenset(module.GROUND_TRUTH["chafee"].keys())
-
-        assert gt_burgers == GT_TERM_SET_BURGERS, (
-            f"v1ship_audit Burgers GT drifted: "
-            f"audit={sorted(gt_burgers)} test={sorted(GT_TERM_SET_BURGERS)}"
-        )
-        assert gt_chafee == GT_TERM_SET_CHAFEE, (
-            f"v1ship_audit Chafee GT drifted: "
-            f"audit={sorted(gt_chafee)} test={sorted(GT_TERM_SET_CHAFEE)}"
-        )
-
-    @pytest.mark.unit
     def test_canonical_term_set_handles_neg_and_sibling_aliases(self) -> None:
 
         assert _canonicalize_term("mul(u, diff_x(u))") == (
-            "mul(diff_x(u), u)", 1,
+            "mul(diff_x(u), u)",
+            1,
         )
         assert _canonicalize_term("mul(diff_x(u), u)") == (
-            "mul(diff_x(u), u)", 1,
+            "mul(diff_x(u), u)",
+            1,
         )
 
         assert _canonicalize_term("neg(u)") == ("u", -1)
         assert _canonicalize_term("neg(neg(u))") == ("u", 1)
 
-        assert _canonical_term_set(
-            ["diff2_x(u)", "neg(mul(u, diff_x(u)))"],
-        ) == GT_TERM_SET_BURGERS
+        assert (
+            _canonical_term_set(
+                ["diff2_x(u)", "neg(mul(u, diff_x(u)))"],
+            )
+            == GT_TERM_SET_BURGERS
+        )
 
         assert _canonical_term_set(None) == frozenset()
         assert _canonical_term_set([]) == frozenset()

@@ -36,9 +36,7 @@ def rebuild_batch(
     if action_matrix.dtype != np.int32:
         raise ValueError("actions must have dtype int32.")
     if prior_system.library is not library:
-        raise ValueError(
-            "library must be the exact prior system library instance."
-        )
+        raise ValueError("library must be the exact prior system library instance.")
     _validate_token_index_range(action_matrix, library)
 
     obs = BatchTracker(library).compute_obs(action_matrix)

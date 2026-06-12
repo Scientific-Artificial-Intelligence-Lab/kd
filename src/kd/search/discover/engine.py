@@ -26,6 +26,7 @@ from kd.search.discover.engine_types import (
     Generator,
     Int64Array,
     PendingState,
+    ResultFilter,
     RewardAdapter,
     SearchProgressCallback,
 )
@@ -41,6 +42,18 @@ ZERO_REWARD = 0.0
 _RESTORED_PLACEHOLDER_ERROR_MESSAGE = "restored from checkpoint without metric replay"
 
 
+
+
+
+
+
+
+_RESTORED_GATE_INVALID_ERROR_MESSAGE = (
+    "restored from checkpoint; magnitude-gate rejected (coefficients out of bounds)"
+)
+_NONFINITE_REWARD_ERROR_MESSAGE = "reward_adapter must return finite rewards."
+
+
 class DiscoverEngine:
 
     def __init__(
@@ -52,6 +65,7 @@ class DiscoverEngine:
         deduplicator: Deduplicator | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
         cycle_candidate_capacity: int = 0,
+        result_filter: ResultFilter | None = None,
         **kwargs: Any,
     ) -> None:
         self._generator = self._resolve_generator(generator, kwargs)
@@ -63,6 +77,7 @@ class DiscoverEngine:
             raise TypeError("validator is required.")
         self._strategy = strategy
         self._reward_adapter = reward_adapter
+        self._result_filter = result_filter
         self._validator = validator
         self._deduplicator = deduplicator
         self._batch_size = DEFAULT_BATCH_SIZE
@@ -126,6 +141,7 @@ class DiscoverEngine:
     def receive_results(self, results: list[EvaluationResult]) -> None:
         pending = self._require_proposed()
         self._validate_result_count(results, pending.unique_irs)
+        results = self._apply_result_filter(results)
         pending.unique_results = list(results)
         unique_rewards = self._to_unique_rewards(results)
         unique_eval_valid_mask = self._to_unique_eval_valid_mask(results)
@@ -197,6 +213,7 @@ class DiscoverEngine:
                     f"cycle_idx must be non-negative, got {int(cycle_idx)}",
                 )
             self._notify_priors_cycle_start(int(cycle_idx))
+        self.rebase_best(evaluator)
         self._reset_cycle_candidates()
         for iteration_idx in range(n_iterations):
             metrics = self.run_iteration(evaluator)
@@ -238,11 +255,13 @@ class DiscoverEngine:
     def state(self) -> EngineState:
         terms: list[str] | None = None
         coefficients: list[float] | None = None
+        best_result_is_valid = True
         if self._best_result is not None:
             terms, coefficients = extract_active_terms(self._best_result)
             if not terms:
                 terms = None
                 coefficients = None
+            best_result_is_valid = self._best_result_is_trustworthy()
         return EngineState(
             controller_state_dict=deepcopy(self._generator.state_dict()),
             baseline_state=self._baseline_state,
@@ -252,6 +271,7 @@ class DiscoverEngine:
             extras=deepcopy(self._extras) if self._extras is not None else None,
             best_result_terms=terms,
             best_result_coefficients=coefficients,
+            best_result_is_valid=best_result_is_valid,
         )
 
     @state.setter
@@ -269,6 +289,12 @@ class DiscoverEngine:
         self._reset_cycle_candidates()
         self._pending = None
         self._last_metrics = {}
+
+    def _best_result_is_trustworthy(self) -> bool:
+        best = self._best_result
+        if best is None or best.is_valid:
+            return True
+        return best.error_message == _RESTORED_PLACEHOLDER_ERROR_MESSAGE
 
     @property
     def best_reward(self) -> float:
@@ -319,6 +345,11 @@ class DiscoverEngine:
     def _rebuild_best_result(state: EngineState) -> EvaluationResult | None:
         if not state.best_result_terms or not state.best_result_coefficients:
             return None
+        error_message = (
+            _RESTORED_PLACEHOLDER_ERROR_MESSAGE
+            if state.best_result_is_valid
+            else _RESTORED_GATE_INVALID_ERROR_MESSAGE
+        )
         return EvaluationResult(
             mse=math.inf,
             nmse=math.inf,
@@ -326,7 +357,7 @@ class DiscoverEngine:
             aic=math.inf,
             complexity=0,
             is_valid=False,
-            error_message=_RESTORED_PLACEHOLDER_ERROR_MESSAGE,
+            error_message=error_message,
             expression=state.best_expression,
             terms=list(state.best_result_terms),
             coefficients=torch.tensor(
@@ -387,13 +418,21 @@ class DiscoverEngine:
                 "results length must match the number of proposed IR strings."
             )
 
+    def _apply_result_filter(
+        self,
+        results: Sequence[EvaluationResult],
+    ) -> list[EvaluationResult]:
+        if self._result_filter is None:
+            return list(results)
+        return [self._result_filter(result) for result in results]
+
     def _to_unique_rewards(self, results: Sequence[EvaluationResult]) -> FloatArray:
         rewards = np.asarray(
             [self._reward_adapter(result) for result in results],
             dtype=np.float32,
         )
         if not np.isfinite(rewards).all():
-            raise ValueError("reward_adapter must return finite rewards.")
+            raise ValueError(_NONFINITE_REWARD_ERROR_MESSAGE)
         return rewards
 
     @staticmethod
@@ -450,6 +489,26 @@ class DiscoverEngine:
                 self._best_result = self._strip_result(
                     unique_results[best_idx],
                 )
+
+    def rebase_best(self, evaluator: Evaluator) -> None:
+        if not self._best_expression:
+            return
+        result = evaluator.evaluate_expression(self._best_expression)
+        if self._result_filter is not None:
+            result = self._result_filter(result)
+        if result.is_valid:
+
+            reward = float(np.float32(self._reward_adapter(result)))
+            if not math.isfinite(reward):
+                raise ValueError(_NONFINITE_REWARD_ERROR_MESSAGE)
+            self._best_reward = reward
+        else:
+            self._best_reward = INITIAL_BEST_REWARD
+        self._best_result = self._strip_result(result)
+
+
+
+    _rebase_best = rebase_best
 
     def _reset_cycle_candidates(self) -> None:
         self._cycle_candidates.reset()

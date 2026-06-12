@@ -315,10 +315,18 @@ def test_metrics_namespace_disjoint() -> None:
 @pytest.mark.unit
 def test_n_valid_semantic_documented() -> None:
     import inspect
+    import io
+    import tokenize
 
     from kd.search.discover import plugin as discover_plugin
 
     source = inspect.getsource(discover_plugin)
+    has_comments = any(
+        tok.type == tokenize.COMMENT
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline)
+    )
+    if not has_comments:
+        pytest.skip("plugin source ships without comments (public export tree)")
 
     assert "_LOGGED_METRICS" in source, "module must define _LOGGED_METRICS tuple"
 

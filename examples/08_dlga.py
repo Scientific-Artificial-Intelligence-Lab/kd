@@ -34,6 +34,7 @@ print(f"Best fitness: {model.best_score_:.4f}")
 
 
 
+
 out_dir = Path(__file__).parent / "out" / "08_dlga"
 report = kd.VizEngine(output_dir=out_dir).render_all(
     model.result_, algorithm=model.algorithm_, dataset=dataset

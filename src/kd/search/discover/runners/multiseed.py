@@ -26,6 +26,7 @@ from kd.core.linear_solve.least_squares import (
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
 )
+from kd.data.schema import PDEDataset
 from kd.search.discover.builder import build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.data.allen_cahn_2d import load_allen_cahn_2d
@@ -149,9 +150,7 @@ def compute_release_decision(
     strict: bool = True,
 ) -> tuple[bool, int, int]:
     if strict:
-        n_pass, n_total = compute_combined_pass_rate(
-            per_seed_results, threshold
-        )
+        n_pass, n_total = compute_combined_pass_rate(per_seed_results, threshold)
     else:
         n_pass, n_total = compute_pass_rate(per_seed_results, threshold)
     if n_total == 0:
@@ -178,8 +177,7 @@ def aggregate_metrics(per_seed_results: list[dict[str, Any]]) -> dict[str, Any]:
     if not per_seed_results:
         raise ValueError("per_seed_results cannot be empty")
     max_rels = [
-        float(r["ground_truth_fit"]["max_rel_coef_error"])
-        for r in per_seed_results
+        float(r["ground_truth_fit"]["max_rel_coef_error"]) for r in per_seed_results
     ]
     l1_ratios = [
         float(r["ground_truth_fit"]["l1_ratio_error"]) for r in per_seed_results
@@ -215,9 +213,7 @@ def _resolve_t_keep(time_slice: str, nt: int) -> list[int]:
         lo, hi = TIME_SLICE_INTERIOR_MARGIN, nt - (TIME_SLICE_INTERIOR_MARGIN + 1)
         if hi - lo + 1 < TIME_SLICE_N_SHORT:
             min_nt = 2 * TIME_SLICE_INTERIOR_MARGIN + TIME_SLICE_N_SHORT
-            raise ValueError(
-                f"interior-3 requires nt >= {min_nt}; got nt={nt}"
-            )
+            raise ValueError(f"interior-3 requires nt >= {min_nt}; got nt={nt}")
 
 
 
@@ -244,9 +240,7 @@ def time_slice_indices(
 
     for t in t_keep:
         if t < 0 or t >= nt:
-            raise ValueError(
-                f"time_slice {time_slice!r} requests t={t} but nt={nt}"
-            )
+            raise ValueError(f"time_slice {time_slice!r} requests t={t} but nt={nt}")
 
 
     x_range = torch.arange(nx, dtype=torch.int64)
@@ -283,17 +277,13 @@ def run_single_seed(
     provider = FiniteDiffProvider(dataset, max_order=MAX_DIFF_ORDER)
     evaluator = _build_base_evaluator(dataset, provider)
     sample_indices = _sample_indices(seed, evaluator.lhs_target.shape[0], n_points)
-    sampled_evaluator = SampledEvaluator(
-        evaluator, sample_indices, rank_check=True
-    )
+    sampled_evaluator = SampledEvaluator(evaluator, sample_indices, rank_check=True)
     config = _multiseed_config(n_iterations, batch_size)
 
     engine_result = _run_mode1(seed, config, sampled_evaluator)
     fit_result = sampled_evaluator.evaluate_terms(list(GROUND_TRUTH_TERMS))
     if not fit_result.is_valid or fit_result.coefficients is None:
-        raise RuntimeError(
-            f"Ground-truth fit failed: {fit_result.error_message}"
-        )
+        raise RuntimeError(f"Ground-truth fit failed: {fit_result.error_message}")
 
     return {
         "seed": seed,
@@ -327,20 +317,14 @@ def run_single_seed_time_sliced(
 
     provider = FiniteDiffProvider(dataset, max_order=MAX_DIFF_ORDER)
     evaluator = _build_base_evaluator(dataset, provider)
-    sample_indices = time_slice_indices(
-        time_slice, nx=nx, ny=ny, nt=nt
-    )
-    sampled_evaluator = SampledEvaluator(
-        evaluator, sample_indices, rank_check=True
-    )
+    sample_indices = time_slice_indices(time_slice, nx=nx, ny=ny, nt=nt)
+    sampled_evaluator = SampledEvaluator(evaluator, sample_indices, rank_check=True)
     config = _multiseed_config(n_iterations, batch_size)
 
     engine_result = _run_mode1(seed, config, sampled_evaluator)
     fit_result = sampled_evaluator.evaluate_terms(list(GROUND_TRUTH_TERMS))
     if not fit_result.is_valid or fit_result.coefficients is None:
-        raise RuntimeError(
-            f"Ground-truth fit failed: {fit_result.error_message}"
-        )
+        raise RuntimeError(f"Ground-truth fit failed: {fit_result.error_message}")
 
     return {
         "seed": seed,
@@ -353,7 +337,12 @@ def run_single_seed_time_sliced(
     }
 
 
-def _build_base_evaluator(dataset: Any, provider: Any) -> Evaluator:
+
+
+
+
+
+def _build_base_evaluator(dataset: PDEDataset, provider: Any) -> Evaluator:
     context = ExecutionContext(dataset=dataset, derivative_provider=provider)
     registry = FunctionRegistry.create_default()
     lhs = provider.get_derivative(
@@ -369,9 +358,7 @@ def _build_base_evaluator(dataset: Any, provider: Any) -> Evaluator:
 
 def _sample_indices(seed: int, total_points: int, n_points: int) -> Tensor:
     if n_points > total_points:
-        raise ValueError(
-            f"n_points={n_points} exceeds total points={total_points}"
-        )
+        raise ValueError(f"n_points={n_points} exceeds total points={total_points}")
     generator = torch.Generator().manual_seed(seed)
     return torch.randperm(total_points, generator=generator)[:n_points]
 

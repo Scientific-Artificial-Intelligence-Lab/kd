@@ -1069,6 +1069,7 @@ class TestCheckpointDesign:
             "algorithm_state",
             "best_score",
             "best_expression",
+            "algorithm",
         }
 
     @pytest.mark.unit
@@ -1481,3 +1482,49 @@ class TestVizDataCollectorEdgeCases:
         scores = recorder.get("_best_score")
         assert len(scores) == 1
         assert math.isnan(scores[0])
+
+
+
+
+
+
+
+class TestAtomicTorchSave:
+
+    @pytest.mark.unit
+    def test_roundtrips_and_leaves_no_tmp_residue(self, tmp_path: Path) -> None:
+        from kd.search.callbacks import atomic_torch_save
+
+        target = tmp_path / "ckpt.pt"
+        payload = {"version": 1, "iteration": 3, "algorithm_state": {"x": 1}}
+        atomic_torch_save(payload, target)
+
+        assert target.exists()
+        assert torch.load(target, weights_only=False) == payload
+        assert list(tmp_path.glob("*.tmp")) == [], "staging file must be cleaned up"
+
+    @pytest.mark.unit
+    def test_overwrite_replaces_existing_target_atomically(
+        self, tmp_path: Path
+    ) -> None:
+        from kd.search.callbacks import atomic_torch_save
+
+        target = tmp_path / "ckpt.pt"
+        atomic_torch_save({"iteration": 1}, target)
+        atomic_torch_save({"iteration": 2}, target)
+
+        assert torch.load(target, weights_only=False) == {"iteration": 2}
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    @pytest.mark.unit
+    def test_callback_writes_are_atomic_no_residue(self, tmp_path: Path) -> None:
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        algo = _MockAlgorithm(best_score=1.0, best_expression="u_x")
+        algo.state = {"gen": 0}
+        cb.on_experiment_start(algo)
+        cb.on_iteration_end(0, algo, ["u_x"], [_make_eval_result()])
+        cb.on_experiment_end(algo)
+
+        assert (tmp_path / "checkpoint_000000.pt").exists()
+        assert (tmp_path / "checkpoint_final.pt").exists()
+        assert list(tmp_path.glob("*.tmp")) == []

@@ -4,8 +4,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from kd.viz._labels import score_label
-
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
@@ -20,7 +18,9 @@ def plot_convergence(
 ) -> list[str]:
     warnings: list[str] = []
     scores = result.recorder.get("_best_score")
-    ylabel = f"Best {score_label(result.config.get('algorithm', ''))}"
+
+
+    ylabel = f"Best {result.score_kind}"
 
     if not scores:
         warnings.append("No _best_score data in recorder; skipping convergence plot")
