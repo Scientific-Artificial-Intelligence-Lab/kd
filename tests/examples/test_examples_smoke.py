@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,15 @@ _FAST_TIMEOUT_SEC = 120
 
 
 _SLOW_TIMEOUT_SEC = 300
+
+
+_DLGA_TIMEOUT_SEC = 600
+
+
+
+
+
+_COMPARE_TIMEOUT_SEC = 1800
 
 
 _SENTINELS = ("Discovered", "[kd] Done.")
@@ -65,6 +75,13 @@ def test_example_03_visualize() -> None:
         "Example 03 did not report an HTML report path.\n"
         f"--- stdout ---\n{result.stdout}"
     )
+    report_html = _EXAMPLES_DIR / "out" / "chafee_infante" / "report.html"
+    assert report_html.is_file(), f"Example 03 did not write {report_html}"
+    html = report_html.read_text()
+    assert "Equation Tree" in html, (
+        "tutorial report is missing the universal equation tree"
+    )
+    assert "Genome Tree" in html, "tutorial report is missing the SGA genome tree"
 
 
 @pytest.mark.smoke
@@ -80,4 +97,77 @@ def test_example_05_save_load() -> None:
     _assert_sentinel(result.stdout)
     assert "Round-trip OK" in result.stdout, (
         f"Example 05 did not report round-trip status.\n--- stdout ---\n{result.stdout}"
+    )
+
+
+@pytest.mark.smoke
+def test_example_07_discover() -> None:
+    result = _run_example("07_discover.py", _FAST_TIMEOUT_SEC)
+    _assert_sentinel(result.stdout)
+    assert "Report" in result.stdout, (
+        f"Example 07 did not report an HTML report path.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+
+
+@pytest.mark.smoke
+@pytest.mark.slow
+def test_example_08_dlga() -> None:
+    result = _run_example("08_dlga.py", _DLGA_TIMEOUT_SEC)
+    _assert_sentinel(result.stdout)
+    assert "Report" in result.stdout, (
+        f"Example 08 did not report an HTML report path.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+
+
+@pytest.mark.smoke
+@pytest.mark.slow
+@pytest.mark.pysr
+@pytest.mark.skipif(
+    importlib.util.find_spec("pysr") is None,
+    reason="example 09 needs the optional pysr extra (uv sync --extra pysr)",
+)
+def test_example_09_compare_algorithms() -> None:
+    result = _run_example("09_compare_algorithms.py", _COMPARE_TIMEOUT_SEC)
+
+    assert "Unified platform evaluation" in result.stdout, (
+        f"Example 09 did not print the unified evaluation table.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "Comparison sheet:" in result.stdout, (
+        f"Example 09 did not report the comparison sheet path.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+
+
+@pytest.mark.smoke
+def test_example_10_checkpoint_resume() -> None:
+    result = _run_example("10_checkpoint_resume.py", _FAST_TIMEOUT_SEC)
+    _assert_sentinel(result.stdout)
+    assert "checkpoint_final.pt" in result.stdout, (
+        f"Example 10 did not list the final checkpoint file.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "resume kept the search progress" in result.stdout, (
+        f"Example 10 did not confirm the resume-progress invariant.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+
+
+@pytest.mark.smoke
+def test_example_11_evaluate_terms() -> None:
+    result = _run_example("11_evaluate_terms.py", _FAST_TIMEOUT_SEC)
+    _assert_sentinel(result.stdout)
+    assert "[rejected]" in result.stdout, (
+        f"Example 11 did not print per-term rejections.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "NMSE" in result.stdout, (
+        f"Example 11 did not print the unified fit scores.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "InvalidTermsError" in result.stdout, (
+        f"Example 11 did not demonstrate the strict fail-loud mode.\n"
+        f"--- stdout ---\n{result.stdout}"
     )

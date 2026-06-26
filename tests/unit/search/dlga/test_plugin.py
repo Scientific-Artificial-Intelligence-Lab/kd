@@ -95,9 +95,7 @@ class TestDLGAPluginLifecycle:
         result = plugin.evaluate(["div(u, u)"])[0]
 
         assert result.is_valid is True
-        assert result.lhs_name == "u_t", (
-            "var(u_tt)=0 should trigger H2 guard, forcing selection of u_t"
-        )
+        assert result.lhs_name == "u_t", "var(u_tt)=0 should force selection of u_t"
 
 
 
@@ -226,9 +224,7 @@ class TestDLGAPluginLifecycle:
         assert final.is_valid is True
         assert final.error_message == ""
         assert final.expression == "div(u, u)"
-        assert final.lhs_name == "u_t", (
-            "var(u_tt)=0 should trigger H2 guard, forcing selection of u_t"
-        )
+        assert final.lhs_name == "u_t", "var(u_tt)=0 should force selection of u_t"
 
 
 

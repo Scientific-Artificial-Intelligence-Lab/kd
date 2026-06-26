@@ -273,16 +273,15 @@ def test_strip_result_preserves_aic_error_message_lhs_name() -> None:
 
 
     assert stripped.aic == 12.5, (
-        "aic must survive _strip_result; live↔restored schema parity "
-        "requires this. Stage 5 M4."
+        "aic must survive _strip_result; live↔restored schema parity requires this."
     )
     assert stripped.error_message == "diagnostic note from evaluator", (
         "error_message must survive _strip_result; live↔restored schema "
-        "parity requires this. Stage 5 M4."
+        "parity requires this."
     )
     assert stripped.lhs_name == "u_t", (
         "lhs_name must survive _strip_result; live↔restored schema parity "
-        "requires this. Stage 5 M4."
+        "requires this."
     )
 
 

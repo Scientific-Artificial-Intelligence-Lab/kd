@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ from kd.viz.plots.comparison import (
 )
 from kd.viz.plots.convergence import plot_convergence
 from kd.viz.plots.equation import plot_equation
+from kd.viz.plots.equation_tree import plot_equation_tree
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 from kd.viz.plots.field import plot_field_comparison
 from kd.viz.plots.parity import plot_parity
@@ -27,6 +29,8 @@ from kd.viz.report import ReportResult, generate_report
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
     from kd.search.result import ExperimentResult
@@ -58,6 +62,66 @@ _SGA_AUTOGRAD_DOMAIN_NOTE = (
     "different things and may disagree on noisy data. This is expected, "
     "not a discovery error."
 )
+
+
+
+
+
+
+
+
+
+_INTEGRATION_PRUNE_RTOL = 1e-12
+
+
+
+
+
+_INTEGRATION_DEGRADED_NOTE = (
+    "Integration-dependent plots (field comparison, time slices, error "
+    "heatmap) are rendered in degraded form; other plots and metrics are "
+    "unaffected."
+)
+
+
+def _prune_near_zero_terms(
+    terms: Sequence[str],
+    coefficients: Sequence[float],
+    active: list[int],
+) -> tuple[list[int], list[str]]:
+    """Drop active terms whose coefficient is numerically zero.
+
+    A term is pruned when ``|c| < _INTEGRATION_PRUNE_RTOL * max|c|`` over
+    the active, finite coefficients. Non-finite coefficients are never
+    pruned (format_pde rejects them loudly — fail-loud beats silent drop).
+    The largest-|c| term always survives, so a non-empty selection stays
+    non-empty.
+
+    Returns:
+        Tuple of (surviving indices, disclosure notes — one summary line
+        when anything was pruned, empty otherwise).
+    """
+    finite_magnitudes = [
+        abs(coefficients[i]) for i in active if math.isfinite(coefficients[i])
+    ]
+    if not finite_magnitudes:
+        return active, []
+    threshold = _INTEGRATION_PRUNE_RTOL * max(finite_magnitudes)
+    dropped = [
+        i
+        for i in active
+        if math.isfinite(coefficients[i]) and abs(coefficients[i]) < threshold
+    ]
+    if not dropped:
+        return active, []
+    keep = [i for i in active if i not in set(dropped)]
+    detail = ", ".join(f"'{terms[i]}' (coeff {coefficients[i]:.3g})" for i in dropped)
+    note = (
+        f"Near-zero term(s) excluded from time integration: {detail} "
+        f"(|coeff| < {_INTEGRATION_PRUNE_RTOL:g} * max|coeff|); "
+        "reported equation and metrics keep the full term list."
+    )
+    return keep, [note]
 
 
 class VizEngine:
@@ -170,6 +234,7 @@ class VizEngine:
             ("convergence", plot_convergence, _UNIVERSAL_FIGSIZE),
             ("parity", plot_parity, _UNIVERSAL_FIGSIZE),
             ("equation", plot_equation, _UNIVERSAL_FIGSIZE),
+            ("equation_tree", plot_equation_tree, _UNIVERSAL_FIGSIZE),
         ]
 
         for name, plot_fn, figsize in tier1_specs:
@@ -315,18 +380,32 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
 
-        integration_result = self._get_integration_result(result, dataset)
+        integration_result, prune_notes = self._get_integration_result(result, dataset)
+        self._merge_warnings(report, prune_notes)
+
+
+
+
+
+        if not integration_result.success:
+            self._merge_warnings(
+                report,
+                [
+                    integration_result.warning or "Integration failed",
+                    _INTEGRATION_DEGRADED_NOTE,
+                ],
+            )
 
 
 
 
 
         autograd_note = self._maybe_autograd_domain_note(result)
-        if autograd_note and autograd_note not in report.warnings:
-            report.warnings.append(autograd_note)
+        if autograd_note:
+            self._merge_warnings(report, [autograd_note])
 
         path, warnings = self._render_tier2(
             "field_comparison",
@@ -337,7 +416,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
 
         self._render_pde_residual(result, dataset, report)
@@ -352,7 +431,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
 
         path, warnings = self._render_tier2(
@@ -364,14 +443,32 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
+
+    @staticmethod
+    def _merge_warnings(report: ReportResult, warnings: Iterable[str]) -> None:
+        """Append warnings to the report, skipping exact duplicates.
+
+        Several Tier 2 plots consume the same IntegrationResult and each
+        forwards its warning — correct for standalone plot calls, but at
+        report level a shared failure is a single fact and is reported
+        once. Identical strings carry no extra information when repeated.
+        """
+        for msg in warnings:
+            if msg not in report.warnings:
+                report.warnings.append(msg)
 
     def _get_integration_result(
         self,
         result: ExperimentResult,
         dataset: PDEDataset,
-    ) -> IntegrationResult:
+    ) -> tuple[IntegrationResult, list[str]]:
         """Compute integration result for field_comparison/time_slices/error_heatmap.
+
+        Near-zero coefficients are pruned from the integrable RHS first
+        (see ``_prune_near_zero_terms``); the returned notes disclose what
+        was pruned and must reach the report exactly once
+        (``_render_field_comparison`` owns that).
 
         Only ``integrate_pde()`` is wrapped in try/except (it may fail for
         legitimate scientific reasons). Attribute access and ``format_pde``
@@ -382,6 +479,9 @@ class VizEngine:
         (see the dedup check around ``autograd_note``). Mutating
         ``IntegrationResult.warning`` would let Tier 2 plots forward the
         annotated note 4x (one per plot), bypassing the dedup guard.
+
+        Returns:
+            Tuple of (integration result, disclosure notes).
         """
         from kd.core.expr.sympy_bridge import format_pde
         from kd.core.integrator import IntegrationResult, integrate_pde
@@ -389,22 +489,32 @@ class VizEngine:
         terms = result.final_eval.terms
         coeffs = result.final_eval.coefficients
         if terms is None or coeffs is None:
-            return IntegrationResult(
-                success=False,
-                warning="Missing terms or coefficients in final_eval",
+            return (
+                IntegrationResult(
+                    success=False,
+                    warning="Missing terms or coefficients in final_eval",
+                ),
+                [],
             )
+        coeff_values = [float(c) for c in coeffs]
+        selected = result.final_eval.selected_indices
+        active = list(selected) if selected is not None else list(range(len(terms)))
+        keep, notes = _prune_near_zero_terms(terms, coeff_values, active)
         formatted = format_pde(
             terms,
-            coeffs,
+            coeff_values,
             lhs=result.lhs_label,
-            selected_indices=result.final_eval.selected_indices,
+            selected_indices=keep,
         )
         try:
-            return integrate_pde(formatted.rhs, dataset)
+            return integrate_pde(formatted.rhs, dataset), notes
         except Exception as exc:
-            return IntegrationResult(
-                success=False,
-                warning=f"Integration failed: {exc}",
+            return (
+                IntegrationResult(
+                    success=False,
+                    warning=f"Integration failed: {exc}",
+                ),
+                notes,
             )
 
     @staticmethod

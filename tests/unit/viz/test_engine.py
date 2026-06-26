@@ -315,7 +315,7 @@ class TestGetIntegrationResultTryExcept:
             "kd.core.integrator.integrate_pde",
             side_effect=RuntimeError("Solver diverged"),
         ):
-            result = engine._get_integration_result(mock_experiment_result, ds)
+            result, _notes = engine._get_integration_result(mock_experiment_result, ds)
 
         assert isinstance(result, IntegrationResult)
         assert not result.success
@@ -385,8 +385,169 @@ class TestGetIntegrationResultTryExcept:
         original_terms = mock_experiment_result.final_eval.terms
         mock_experiment_result.final_eval.terms = None
         try:
-            result = engine._get_integration_result(mock_experiment_result, ds)
+            result, notes = engine._get_integration_result(mock_experiment_result, ds)
             assert isinstance(result, IntegrationResult)
             assert not result.success
+            assert notes == []
         finally:
             mock_experiment_result.final_eval.terms = original_terms
+
+
+
+
+
+
+
+def _make_smooth_dataset() -> PDEDataset:
+    import torch
+
+    from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
+
+    nx, nt = 16, 8
+    x = torch.linspace(0.0, 1.0, nx)
+    t = torch.linspace(0.0, 0.2, nt)
+    u = (torch.sin(2 * torch.pi * x)[:, None] * torch.exp(-t)[None,:]).to(
+        torch.float64
+    )
+    return PDEDataset(
+        name="smooth_1d",
+        task_type=TaskType.PDE,
+        axes={
+            "x": AxisInfo(name="x", values=x, is_periodic=True),
+            "t": AxisInfo(name="t", values=t),
+        },
+        axis_order=["x", "t"],
+        fields={"u": FieldData(name="u", values=u)},
+        lhs_field="u",
+        lhs_axis="t",
+    )
+
+
+def _with_terms(
+    base: ExperimentResult,
+    terms: list[str],
+    coefficients: list[float],
+    selected_indices: list[int] | None,
+) -> ExperimentResult:
+    from dataclasses import replace
+
+    import torch
+
+    final_eval = replace(
+        base.final_eval,
+        terms=terms,
+        coefficients=torch.tensor(coefficients, dtype=torch.float64),
+        selected_indices=selected_indices,
+    )
+    return replace(base, final_eval=final_eval)
+
+
+class TestNearZeroTermPruning:
+
+    def test_near_zero_term_pruned_and_disclosed(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(
+            mock_experiment_result, ["u_xx", "t"], [0.1, -9.5e-16], None
+        )
+
+        integration, notes = engine._get_integration_result(result, ds)
+
+        assert integration.success is True, integration.warning
+        assert len(notes) == 1
+        assert "'t'" in notes[0]
+        assert "9.5e-16" in notes[0]
+
+    def test_genuine_small_coefficient_not_pruned(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(mock_experiment_result, ["u_xx", "t"], [1.0, 1e-4], None)
+
+        integration, notes = engine._get_integration_result(result, ds)
+
+        assert notes == []
+        assert integration.success is False
+        assert "t" in integration.warning
+
+    def test_prune_threshold_ignores_inactive_terms(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(
+            mock_experiment_result,
+            ["u_xx", "t", "v"],
+            [0.1, 1e-16, 1e12],
+            [0, 1],
+        )
+
+        integration, notes = engine._get_integration_result(result, ds)
+
+        assert integration.success is True, integration.warning
+        assert len(notes) == 1
+        assert "'t'" in notes[0]
+        assert "u_xx" not in notes[0]
+
+    def test_all_zero_coefficients_left_alone(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(mock_experiment_result, ["u_xx", "t"], [0.0, 0.0], None)
+
+        integration, notes = engine._get_integration_result(result, ds)
+
+        assert notes == []
+        assert integration.success is True, integration.warning
+
+
+class TestIntegrationWarningReportedOnce:
+
+    def test_failure_warning_appears_exactly_once(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+
+        result = _with_terms(mock_experiment_result, ["u", "t"], [1.0, 0.5], None)
+
+        report = engine.render_all(result, dataset=ds)
+
+        integration_warnings = [
+            w for w in report.warnings if "unrecognised symbols" in w
+        ]
+        assert len(integration_warnings) == 1, report.warnings
+
+    def test_engine_owns_consequence_framing(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(mock_experiment_result, ["u", "t"], [1.0, 0.5], None)
+
+        report = engine.render_all(result, dataset=ds)
+
+        consequence = [w for w in report.warnings if "degraded" in w]
+        assert len(consequence) == 1, report.warnings
+        assert "other plots and metrics" in consequence[0]
+
+    def test_pruned_run_reports_note_not_warning(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_smooth_dataset()
+        engine = VizEngine(output_dir=tmp_path)
+        result = _with_terms(
+            mock_experiment_result, ["u_xx", "t"], [0.1, -9.5e-16], None
+        )
+
+        report = engine.render_all(result, dataset=ds)
+
+        assert not any("unrecognised symbols" in w for w in report.warnings)
+        prune_notes = [
+            w for w in report.warnings if "excluded from time integration" in w
+        ]
+        assert len(prune_notes) == 1, report.warnings

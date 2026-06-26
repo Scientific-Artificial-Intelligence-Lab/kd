@@ -71,6 +71,24 @@ def _invalid_result(n_terms: int, device: torch.device) -> TrainResult:
     )
 
 
+def _result_or_invalid(
+    w: Tensor,
+    aic_score: float,
+    mse: float,
+    best_tol: float,
+    device: torch.device,
+) -> TrainResult:
+    if not _selected_indices(w):
+        return _invalid_result(w.shape[0], device)
+    return TrainResult(
+        coefficients=w.clone(),
+        selected_indices=_selected_indices(w),
+        aic_score=aic_score,
+        mse=mse,
+        best_tol=best_tol,
+    )
+
+
 def _active_mask(w: Tensor) -> Tensor:
     return w.abs() > _ZERO_COL_EPS
 
@@ -243,13 +261,8 @@ def _train_sweep_impl(
     mse = _compute_mse(theta, y_1d, w_baseline, n_samples)
     k = _count_active(w_baseline)
     best_aic = aic_no_n(mse, k, config.aic_ratio)
-    best = TrainResult(
-        coefficients=w_baseline.clone(),
-        selected_indices=_selected_indices(w_baseline),
-        aic_score=best_aic,
-        mse=mse,
-        best_tol=0.0,
-    )
+    best = _result_or_invalid(w_baseline, best_aic, mse, 0.0, device)
+    best_aic = best.aic_score
 
 
     tol = config.d_tol
@@ -268,16 +281,16 @@ def _train_sweep_impl(
         k = _count_active(w)
         aic = aic_no_n(mse, k, config.aic_ratio)
 
+
+
+
+        candidate = _result_or_invalid(w, aic, mse, tol, device)
+        aic = candidate.aic_score
+
         if aic <= best_aic:
 
             best_aic = aic
-            best = TrainResult(
-                coefficients=w.clone(),
-                selected_indices=_selected_indices(w),
-                aic_score=aic,
-                mse=mse,
-                best_tol=tol,
-            )
+            best = candidate
             tol += d_tol
         else:
 

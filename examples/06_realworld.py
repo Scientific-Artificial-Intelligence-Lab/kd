@@ -20,6 +20,9 @@ GENERATIONS = 80
 POPULATION = 20
 DEPTH = 4
 WIDTH = 5
+
+
+
 AUTOGRAD_TRAIN_EPOCHS = 15_000
 
 results: list[
@@ -35,6 +38,7 @@ for loader in DATASETS:
 
     for mode_label, derivatives in [("fd", "finite_diff"), ("nn", "autograd")]:
         print(f"\n--- {dataset.name} / {mode_label} ---")
+        out_dir = OUT_BASE / dataset.name.replace("-", "_") / mode_label
         model = kd.Model(
             algorithm="sga",
             generations=GENERATIONS,
@@ -45,13 +49,16 @@ for loader in DATASETS:
             autograd_train_epochs=AUTOGRAD_TRAIN_EPOCHS,
             seed=0,
             verbose=False,
+
+
+
+            checkpoint_dir=out_dir / "checkpoints",
         )
         model.fit(dataset)
 
         print(f"Discovered: {model.best_expr_}")
         print(f"Best AIC: {model.best_score_:.4f}")
 
-        out_dir = OUT_BASE / dataset.name.replace("-", "_") / mode_label
         viz = kd.VizEngine(output_dir=out_dir)
         report = viz.render_all(
             model.result_,

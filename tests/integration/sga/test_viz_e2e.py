@@ -23,6 +23,10 @@ _EXPECTED_PLUGIN_PLOTS = (
 _N_GENS = 5
 
 
+
+_MIN_RENDERED_SVG_BYTES = 2000
+
+
 def _populated_plugin() -> SGAPlugin:
     recorder = VizRecorder(enabled=True)
     for i in range(_N_GENS):
@@ -109,6 +113,58 @@ def test_sga_vizextension_renders_via_engine(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
+def test_sga_tree_plots_render_via_engine(tmp_path: Path) -> None:
+    from kd.search.sga.pde import PDE
+    from kd.search.sga.tree import Node, Tree
+
+    plugin = _populated_plugin()
+
+
+    plugin._population = [
+        PDE(
+            [
+                Tree(
+                    Node(
+                        "*",
+                        2,
+                        [Node("u", 0), Node("d", 2, [Node("u", 0), Node("x", 0)])],
+                    )
+                )
+            ]
+        )
+    ]
+    result = _minimal_result(plugin._recorder)
+
+    out_dir = tmp_path / "sga_tree_viz"
+    engine = kd.VizEngine(output_dir=out_dir)
+    report = engine.render_all(result, algorithm=plugin)
+
+    files = {p.name for p in out_dir.iterdir() if p.is_file()}
+    assert "equation_tree.svg" in files, (
+        f"universal equation tree must render; got {sorted(files)}"
+    )
+    assert "plugin_genome_tree.svg" in files, (
+        f"SGA genome tree must render via the plugin; got {sorted(files)}"
+    )
+
+
+
+    assert (out_dir / "equation_tree.svg").stat().st_size > _MIN_RENDERED_SVG_BYTES
+    assert (out_dir / "plugin_genome_tree.svg").stat().st_size > _MIN_RENDERED_SVG_BYTES
+
+
+
+    assert report.report is not None, "render_all must produce an HTML report"
+    html = report.report.read_text()
+    assert "Equation Tree" in html, "equation tree heading missing from HTML report"
+    assert "Genome Tree" in html, "genome tree heading missing from HTML report"
+
+
+    tree_warnings = [w for w in report.warnings if "tree" in w.lower()]
+    assert not tree_warnings, f"unexpected tree-plot warnings: {tree_warnings}"
+
+
+@pytest.mark.integration
 def test_sga_recorder_whitelist_covers_plotted_metrics() -> None:
     from kd.search.sga.plugin import _LOGGED_METRICS
 
@@ -121,13 +177,22 @@ def test_sga_recorder_whitelist_covers_plotted_metrics() -> None:
 
 @pytest.mark.integration
 def test_sga_recorder_has_whitelist_fields() -> None:
-    from kd.search.sga.plugin import _LOGGED_METRICS
+    from kd.search.sga.plugin import _LOGGED_METRICS, _SURROGATE_METRICS
 
     plugin = _populated_plugin()
-    recorder_keys = plugin._recorder.keys()
-    expected = set(_LOGGED_METRICS) | {"best_aic"}
-    assert expected == set(recorder_keys), (
-        f"recorder must carry exactly the 6 whitelist fields + legacy "
-        f"'best_aic' (7 keys); symmetric-difference="
-        f"{expected ^ set(recorder_keys)}"
+    recorder_keys = set(plugin._recorder.keys())
+    per_gen_expected = set(_LOGGED_METRICS) | {"best_aic"}
+
+
+
+
+
+    assert recorder_keys == per_gen_expected, (
+        f"a GA-only recorder must carry exactly the 6 whitelist fields + legacy "
+        f"'best_aic' (7 keys; surrogate keys are absent without training); "
+        f"symmetric-difference={per_gen_expected ^ recorder_keys}"
+    )
+    assert recorder_keys.isdisjoint(_SURROGATE_METRICS), (
+        f"a GA-only recorder must not carry any surrogate key; leaked "
+        f"{sorted(recorder_keys & set(_SURROGATE_METRICS))}."
     )

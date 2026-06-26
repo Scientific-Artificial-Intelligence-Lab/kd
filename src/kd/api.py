@@ -284,6 +284,33 @@ class Model:
             kwargs raise ``TypeError``. SGA-only — DLGA and discover paths
             raise if any kwargs are supplied (drive those algorithms via
             ``config=DLGAConfig(...)`` / ``config=DiscoverConfig(...)``).
+            Three such fields are agent-tunable training-budget knobs for the
+            ``derivatives='autograd'`` surrogate (they only take effect in
+            autograd mode, but their validation runs for every SGA config —
+            an orphan ``autograd_train_patience`` raises even under
+            finite-diff):
+
+            - ``autograd_train_epochs`` (default ``1000``): the HONEST
+              fixed-step training budget — the surrogate trains exactly this
+              many epochs (no silent early stop), so the value directly trades
+              runtime for derivative quality.
+            - ``autograd_train_patience`` (default ``None``): early-stopping
+              patience (epochs without validation improvement). ``None`` keeps
+              the full fixed-step budget (the v1 / paper reference semantics).
+              Requires ``autograd_train_val_ratio > 0``; otherwise
+              ``ValueError`` is raised when ``fit()`` assembles the
+              ``SGAConfig`` (a patience knob with no validation signal would
+              silently do nothing).
+            - ``autograd_train_val_ratio`` (default ``0.0``): fraction of data
+              held out for validation. ``0.0`` trains on ALL data (reference
+              semantics); set ``> 0`` only when using
+              ``autograd_train_patience``. Must be in ``[0, 1)``.
+
+            Honest-failure note: with weak surrogate features SGA now FAILS
+            LOUD — degenerate candidates whose STRidge support is empty are
+            invalid, so a hopeless search raises ``RuntimeError`` (init
+            resample exhaustion) instead of returning a garbage equation.
+            Raise ``autograd_train_epochs`` when that happens.
     """
 
     def __init__(

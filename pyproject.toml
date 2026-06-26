@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.2.0"
+version = "0.2.1"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -94,6 +94,7 @@ markers = [
     "mode2_aggregate: 3-seed STRICT MODE2 aggregate (discover §B.2 contract)",
     "phase3_e2e: full discover plugin e2e (slow, requires GPU; research suite)",
     "pysr: tests requiring the optional PySR/Julia backend (excluded from default smoke)",
+    "exploration: open-question probes that are NOT quality gates — never run by default or nightly; run on demand with -m exploration",
 ]
 
 [tool.mypy]

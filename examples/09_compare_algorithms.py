@@ -19,8 +19,6 @@ import matplotlib.pyplot as plt
 
 import kd
 from kd.core.expr.sympy_bridge import format_pde
-from kd.core.platform.builder import PlatformBuilder
-from kd.core.platform.requirements import DerivativeReqs
 from kd.search.dlga import DLGAConfig
 from kd.search.pysr.config import PySRConfig
 
@@ -90,6 +88,9 @@ results = {name: m.result_ for name, m in MODELS.items()}
 
 
 
+
+
+
 def discovered_structure(result: kd.ExperimentResult) -> list[str]:
     ev = result.final_eval
     if ev.terms is None:
@@ -99,37 +100,45 @@ def discovered_structure(result: kd.ExperimentResult) -> list[str]:
     return list(ev.terms)
 
 
-
-
-components = PlatformBuilder(dataset, DerivativeReqs(max_atomic_order=3)).build()
 UNIFIED_LHS = "u_t"
 
 structures = {name: discovered_structure(m.result_) for name, m in MODELS.items()}
 lhs_names = {
     name: (m.result_.final_eval.lhs_name or UNIFIED_LHS) for name, m in MODELS.items()
 }
-unified = {
-    name: (
-        components.evaluator.evaluate_terms(structures[name])
-        if lhs_names[name] == UNIFIED_LHS
-        else None
-    )
-    for name in MODELS
-}
 
-print("\n=== Unified platform evaluation (same Evaluator, same NMSE) ===")
+
+
+unified: dict[str, kd.EvaluationResult | None] = {}
+exclusions: dict[str, str] = {}
+for name in MODELS:
+    if lhs_names[name] != UNIFIED_LHS:
+        unified[name] = None
+        exclusions[name] = f"LHS={lhs_names[name]} != {UNIFIED_LHS} -- not comparable"
+        continue
+    if not structures[name]:
+
+
+
+        unified[name] = None
+        exclusions[name] = "engine reported no valid structure"
+        continue
+    try:
+
+
+        unified[name] = kd.evaluate_terms(dataset, structures[name], max_order=3)
+    except (kd.InvalidTermsError, kd.EvaluationFailedError) as err:
+        unified[name] = None
+        exclusions[name] = f"unified re-fit refused: {err}"
+
+print("\n=== Unified platform evaluation (kd.evaluate_terms, same NMSE) ===")
 print(f"{'Algorithm':<10} {'unified NMSE':>14} {'R^2':>9} discovered structure")
 for name, ev in unified.items():
-    structure = " + ".join(structures[name])
     if ev is None:
-        print(
-            f"{name:<10} {'(excluded)':>14} {'-':>9} "
-            f"LHS={lhs_names[name]} != {UNIFIED_LHS} -- not comparable"
-        )
-    elif ev.is_valid:
-        print(f"{name:<10} {ev.nmse:>14.4g} {ev.r2:>9.4f} {structure}")
+        print(f"{name:<10} {'(excluded)':>14} {'-':>9} {exclusions[name]}")
     else:
-        print(f"{name:<10} {'INVALID':>14} {'-':>9} {ev.error_message}")
+        structure = " + ".join(structures[name])
+        print(f"{name:<10} {ev.nmse:>14.4g} {ev.r2:>9.4f} {structure}")
 
 
 
@@ -139,9 +148,8 @@ warnings: list[str] = []
 def equation_cell(name: str) -> str:
     ev = unified[name]
     if ev is None:
-        return f"LHS={lhs_names[name]} (excluded from the {UNIFIED_LHS} ruler)"
-    if not ev.is_valid:
-        return "invalid under the unified ruler"
+        reason = exclusions[name]
+        return reason if len(reason) <= 90 else reason[:87] + "..."
     eq = format_pde(structures[name], ev.coefficients, lhs=UNIFIED_LHS, sig_figs=3)
     return f"${eq.latex}$"
 
@@ -164,7 +172,7 @@ col_labels = [
 rows = []
 for name, result in results.items():
     ev = unified[name]
-    ok = ev is not None and ev.is_valid
+    ok = ev is not None
     rows.append(
         [
             name,
@@ -189,8 +197,8 @@ for (row, _col), cell in table.get_celld().items():
         cell.set_text_props(weight="bold")
         cell.set_facecolor("#eef2f7")
 ax_t.set_title(
-    "One dataset, one ruler: every structure re-fit by the same platform "
-    "Evaluator (ground truth: $u_t = -1.0\\,u u_x + 0.1\\,u_{xx}$)",
+    "One dataset, one ruler: every structure re-fit via kd.evaluate_terms "
+    "(ground truth: $u_t = -1.0\\,u u_x + 0.1\\,u_{xx}$)",
     fontsize=12,
     pad=14,
 )
@@ -222,9 +230,7 @@ ax_b = fig.add_subplot(gs[1, 1])
 shown: dict[str, float] = {}
 for n, e in unified.items():
     if e is None:
-        warnings.append(f"{n}: LHS={lhs_names[n]} != {UNIFIED_LHS}, off the ruler")
-    elif not e.is_valid:
-        warnings.append(f"{n}: unified evaluation invalid -- {e.error_message}")
+        warnings.append(f"{n}: off the ruler -- {exclusions[n]}")
     else:
         shown[n] = e.nmse
 bars = ax_b.bar(
@@ -246,7 +252,8 @@ for bar, value in zip(bars, shown.values(), strict=True):
     )
 
 fig.suptitle(
-    "kd: four engines, one Burgers dataset (nx=64, nt=32, nu=0.1, seed=0)",
+    "kd: three in-house engines + PySR baseline, "
+    "one Burgers dataset (nx=64, nt=32, nu=0.1, seed=0)",
     fontsize=13,
 )
 fig.tight_layout()

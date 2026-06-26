@@ -217,16 +217,30 @@ def test_commit_logs_exactly_the_whitelist_plus_best_aic(
     plugin: SGAPlugin,
     recorder: VizRecorder,
 ) -> None:
+    from kd.search.sga.plugin import _SURROGATE_METRICS
+
     _commit_generation(plugin, _distinct_batch())
 
     logged = _non_underscore_keys(recorder)
-    expected = EXPECTED_METRICS | {_LEGACY_SGA_KEY}
-    assert logged == expected, (
-        f"commit must log exactly the 6-field whitelist + the legacy "
-        f"{_LEGACY_SGA_KEY!r} series (no more, no less).\n"
-        f" missing: {sorted(expected - logged)}\n"
-        f" extra: {sorted(logged - expected)}\n"
+    per_gen_expected = EXPECTED_METRICS | {_LEGACY_SGA_KEY}
+
+
+
+
+
+
+
+    assert logged == per_gen_expected, (
+        f"a commit with no surrogate training must log exactly the 6-field "
+        f"whitelist + the legacy {_LEGACY_SGA_KEY!r} series (surrogate keys "
+        f"are logged in prepare, not per-generation).\n"
+        f" missing: {sorted(per_gen_expected - logged)}\n"
+        f" extra: {sorted(logged - per_gen_expected)}\n"
         f" got: {sorted(logged)}"
+    )
+    assert logged.isdisjoint(_SURROGATE_METRICS), (
+        f"the per-generation commit must NOT log any surrogate key; leaked "
+        f"{sorted(logged & set(_SURROGATE_METRICS))}."
     )
 
 

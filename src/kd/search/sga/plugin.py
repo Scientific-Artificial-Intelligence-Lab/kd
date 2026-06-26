@@ -17,9 +17,11 @@ from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import DX_ZERO_FLOOR, UNIFORM_GRID_RTOL
 from kd.models.field_model import FieldModel
-from kd.models.trainer import FieldModelTrainer
+from kd.models.trainer import FieldModelTrainer, TrainingResult
+from kd.search.dlga import surrogate_log as _surrogate_log
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder
+from kd.search.sga import tree_render as _tree_render
 from kd.search.sga import viz as _viz_helpers
 from kd.search.sga.config import OPS, ROOT, SGAConfig, build_den
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
@@ -72,6 +74,16 @@ _LOGGED_METRICS: tuple[str, ...] = (
     "n_unique",
     "gen_mean_complexity",
 )
+
+
+
+
+
+
+
+
+
+_SURROGATE_METRICS = _surrogate_log._SURROGATE_METRICS
 
 
 def _product(shape: tuple[int, ...]) -> int:
@@ -143,6 +155,8 @@ class SGAPlugin:
         self._pending_scores: list[float] | None = None
         self._recorder: VizRecorder | None = None
         self._autograd_provider: AutogradProvider | None = None
+
+        self._surrogate_training_result: TrainingResult | None = None
 
         self._pde_lib: set[str] = set()
 
@@ -249,6 +263,7 @@ class SGAPlugin:
 
 
         self._autograd_provider = None
+        self._surrogate_training_result = None
         if self._config.use_autograd:
             if field_shape is None:
                 raise ValueError(
@@ -256,6 +271,19 @@ class SGAPlugin:
                 )
             self._autograd_provider = self._build_autograd_provider(
                 dataset, field_shape
+            )
+
+
+
+
+
+
+
+
+
+            _surrogate_log.log_surrogate_training(
+                self._recorder,
+                self._surrogate_training_result,
             )
 
         self._add_derivatives(dataset, context, data_dict)
@@ -387,12 +415,17 @@ class SGAPlugin:
 
 
     def list_plots(self) -> list[PlotInfo]:
-        return _viz_helpers.list_plot_infos()
+        return [*_viz_helpers.list_plot_infos(), _tree_render.genome_tree_info()]
 
     def render_plot(self, name: str, ax: Axes) -> None:
+        if name == _tree_render.GENOME_TREE_INFO.name:
+            _tree_render.render_genome_tree(ax, self._best_pde())
+            return
         _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
+        if name == _tree_render.GENOME_TREE_INFO.name:
+            return _tree_render.genome_tree_data(self._best_pde())
         return _viz_helpers.get_data(name, self._recorder)
 
     @property
@@ -746,10 +779,19 @@ class SGAPlugin:
                 field_names=field_names,
             )
             trainer = FieldModelTrainer(field_model, lr=self._config.autograd_train_lr)
-            trainer.fit(
+
+
+
+
+
+
+
+            self._surrogate_training_result = trainer.fit(
                 coords=flat_coords,
                 targets=flat_targets,
                 max_epochs=self._config.autograd_train_epochs,
+                patience=self._config.autograd_train_patience,
+                val_ratio=self._config.autograd_train_val_ratio,
                 seed=self._config.seed,
             )
 

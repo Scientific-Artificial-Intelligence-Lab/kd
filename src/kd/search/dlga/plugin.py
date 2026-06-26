@@ -358,8 +358,8 @@ class DLGAPlugin:
             logger.warning(
                 "DLGA recovered expression has nmse=%.3g and length=%d "
                 "tokens. The default epsilon=%.0e was tuned for raw-MSE-era "
-                "fitness magnitudes; under the NMSE-era selector "
-                "(TD-DLGA-LHS-NMSE) the length penalty contribution is "
+                "fitness magnitudes; under the NMSE-era selector the "
+                "length penalty contribution is "
                 "smaller, so the GA may include small-coefficient noise "
                 "terms. Truth structure is still recovered (see "
                 "is_recovery_success superset match). To get a cleaner "

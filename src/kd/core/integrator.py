@@ -412,6 +412,8 @@ def integrate_pde(
 
 
 
+
+
     if parsed.unknown_symbols:
         unknowns = sorted(parsed.unknown_symbols)
         placeholders = [n for n in unknowns if _is_derivative_placeholder(n)]
@@ -424,8 +426,8 @@ def integrate_pde(
             success=False,
             warning=(
                 f"integrate_pde skipped: RHS contains {detail} "
-                "Field-comparison and pde-residual plots skipped; "
-                "other plots and metrics unaffected."
+                "Time integration supports field, spatial-coordinate, and "
+                "explicit-derivative symbols only."
             ),
         )
 

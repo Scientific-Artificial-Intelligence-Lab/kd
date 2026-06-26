@@ -18,8 +18,13 @@ from matplotlib.axes import Axes
 
 from kd.search.recorder import VizRecorder
 from kd.search.sga.config import SGAConfig
+from kd.search.sga.pde import PDE
 from kd.search.sga.plugin import SGAPlugin
+from kd.search.sga.tree import Node, Tree
 from kd.viz.extension import PlotInfo, VizExtension
+
+
+
 
 
 
@@ -29,6 +34,17 @@ from kd.viz.extension import PlotInfo, VizExtension
 EXPECTED_PLOT_NAMES: frozenset[str] = frozenset(
     {"population_diversity", "complexity_evolution", "fitness_spread"},
 )
+
+
+EXPECTED_RECORDER_PLOT_NAMES: frozenset[str] = EXPECTED_PLOT_NAMES | {
+    "surrogate_training"
+}
+
+
+
+
+
+EXPECTED_ALL_PLOT_NAMES: frozenset[str] = EXPECTED_RECORDER_PLOT_NAMES | {"genome_tree"}
 
 
 
@@ -156,15 +172,15 @@ def test_plugin_is_runtime_checkable_viz_extension() -> None:
 
 
 @pytest.mark.unit
-def test_list_plots_returns_three_plotinfo() -> None:
+def test_list_plots_returns_five_plotinfo() -> None:
     plugin = SGAPlugin(SGAConfig())
     plots = plugin.list_plots()
 
     assert isinstance(plots, list), (
         f"list_plots() must return list, got {type(plots).__name__}"
     )
-    assert len(plots) == 3, (
-        f"list_plots() must return exactly 3 PlotInfo; got {len(plots)}: "
+    assert len(plots) == 5, (
+        f"list_plots() must return exactly 5 PlotInfo; got {len(plots)}: "
         f"{[getattr(p, 'name', '?') for p in plots]}"
     )
     for p in plots:
@@ -177,10 +193,10 @@ def test_list_plots_returns_three_plotinfo() -> None:
         assert isinstance(p.description, str)
 
     names = {p.name for p in plots}
-    assert names == EXPECTED_PLOT_NAMES, (
+    assert names == EXPECTED_ALL_PLOT_NAMES, (
         f"list_plots() names must equal spec set.\n"
-        f" missing: {sorted(EXPECTED_PLOT_NAMES - names)}\n"
-        f" extra: {sorted(names - EXPECTED_PLOT_NAMES)}"
+        f" missing: {sorted(EXPECTED_ALL_PLOT_NAMES - names)}\n"
+        f" extra: {sorted(names - EXPECTED_ALL_PLOT_NAMES)}"
     )
 
 
@@ -189,11 +205,62 @@ def test_list_plots_returns_fresh_copies() -> None:
     plugin = SGAPlugin(SGAConfig())
     first = plugin.list_plots()
     first[0].title = "MUTATED"
+    first[-1].title = "MUTATED"
     second = plugin.list_plots()
     assert all(p.title != "MUTATED" for p in second), (
         "list_plots() must rebuild descriptors each call so a caller mutating "
-        "the returned objects cannot poison the module-level table."
+        "the returned objects cannot poison the module-level table — including "
+        "the genome_tree descriptor appended by the plugin."
     )
+
+
+
+
+
+
+
+def _plugin_with_population() -> SGAPlugin:
+    plugin = SGAPlugin(SGAConfig())
+    plugin._population = [
+        PDE(
+            [
+                Tree(
+                    Node(
+                        "*",
+                        2,
+                        [Node("u", 0), Node("d", 2, [Node("u", 0), Node("x", 0)])],
+                    )
+                )
+            ]
+        )
+    ]
+    return plugin
+
+
+@pytest.mark.unit
+def test_genome_tree_render_uses_live_population(ax: Axes) -> None:
+    plugin = _plugin_with_population()
+    plugin.render_plot("genome_tree", ax)
+    labels = {t.get_text() for t in ax.texts}
+    assert {"*", "u", "d", "x"} <= labels
+    assert "unavailable" not in " ".join(labels).lower()
+
+
+@pytest.mark.unit
+def test_genome_tree_get_plot_data_live_population() -> None:
+    plugin = _plugin_with_population()
+    data = plugin.get_plot_data("genome_tree")
+    assert data["available"] is True
+    assert data["tree"]["label"] == "*"
+
+
+@pytest.mark.unit
+def test_genome_tree_degrades_without_population(ax: Axes) -> None:
+    plugin = SGAPlugin(SGAConfig())
+    plugin.render_plot("genome_tree", ax)
+    text = " ".join(t.get_text() for t in ax.texts).lower()
+    assert "unavailable" in text
+    assert plugin.get_plot_data("genome_tree")["available"] is False
 
 
 

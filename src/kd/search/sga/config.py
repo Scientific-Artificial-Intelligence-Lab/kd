@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -164,3 +165,63 @@ class SGAConfig:
     autograd_train_lr: float = 1e-3
     """Learning rate for the auto-trained FieldModel. Only used when
     ``use_autograd=True`` and ``field_model is None``."""
+
+    autograd_train_patience: int | None = None
+    """Early-stopping patience for the auto-trained FieldModel (epochs without
+    validation improvement). ``None`` (default) disables early stopping, so the
+    surrogate trains the full ``autograd_train_epochs`` budget — the v1 / paper
+    reference semantics (``sgapde/metann.py`` fixed-step training, no early stop).
+    Requires ``autograd_train_val_ratio > 0`` (there is no validation signal to
+    monitor otherwise). Only used when ``use_autograd=True`` and
+    ``field_model is None``; ignored in finite-diff mode (same handling as
+    ``autograd_train_epochs``)."""
+
+    autograd_train_val_ratio: float = 0.0
+    """Fraction of data held out for validation while auto-training the
+    FieldModel. ``0.0`` (default) trains on ALL data — the v1 / paper reference
+    semantics (full-data training, no val split). Set ``> 0`` only when using
+    ``autograd_train_patience`` for early stopping. Only used when
+    ``use_autograd=True`` and ``field_model is None``; ignored in finite-diff
+    mode (same handling as ``autograd_train_epochs``)."""
+
+    def __post_init__(self) -> None:
+        """Validate the autograd training-budget fields (fail-loud).
+
+        Deliberate style exception: ``SGAConfig`` is otherwise a plain dataclass
+        with no ``__post_init__``, but the autograd budget fields gate a silent
+        failure mode (a patience-with-no-val-signal config that quietly does
+        nothing) — so this mirrors ``DLGAConfig``'s runtime validation. The
+        config layer is intentionally STRICTER than the trainer (which only
+        *warns* on patience+val_ratio=0); a misconfigured budget must not reach
+        training. ``use_autograd=False`` paths ignore these fields, but the
+        validation still runs (cheap, and keeps the constraint honest if the
+        config is later switched to autograd).
+        """
+        if (
+            self.autograd_train_patience is not None
+            and self.autograd_train_val_ratio == 0.0
+        ):
+            raise ValueError(
+                "autograd_train_patience requires autograd_train_val_ratio > 0 "
+                "(early stopping needs a validation signal); got patience="
+                f"{self.autograd_train_patience}, val_ratio="
+                f"{self.autograd_train_val_ratio}."
+            )
+        if (
+            self.autograd_train_patience is not None
+            and self.autograd_train_patience < 1
+        ):
+            raise ValueError(
+                "autograd_train_patience must be None or >= 1, got "
+                f"{self.autograd_train_patience}."
+            )
+
+
+
+        if math.isnan(self.autograd_train_val_ratio) or not (
+            0.0 <= self.autograd_train_val_ratio < 1.0
+        ):
+            raise ValueError(
+                "autograd_train_val_ratio must be in [0, 1), got "
+                f"{self.autograd_train_val_ratio}."
+            )

@@ -36,6 +36,11 @@ print(f"Discovered: {fd.best_expr_}")
 print(f"Best AIC: {fd.best_score_:.4f}")
 
 print("\n--- Autograd (NN surrogate) derivatives ---")
+
+
+
+
+
 ag = kd.Model(
     algorithm="sga",
     generations=40,

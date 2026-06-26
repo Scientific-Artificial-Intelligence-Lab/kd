@@ -333,12 +333,12 @@ def test_n_valid_semantic_documented() -> None:
 
     assert "_n_candidates" in source and "n_valid" in source, (
         "plugin.py must document the n_valid vs _n_candidates semantic "
-        "distinction next to _LOGGED_METRICS (Stage 5 M6)."
+        "distinction next to _LOGGED_METRICS."
     )
     assert "syntactic-valid" in source, (
         "plugin.py docstring must explain that n_valid is the "
         "syntactic-valid IR count, distinct from the platform's "
-        "total-proposed-batch counter (Stage 5 M6)."
+        "total-proposed-batch counter."
     )
 
 

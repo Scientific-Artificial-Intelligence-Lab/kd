@@ -46,7 +46,7 @@ _DEGENERATE_BOUNDS_REL_EPS = 1e-6
 
 
 _SEED_MASK_32 = 0xFFFFFFFF
-_BLAKE2B_PERSON = b"td-075"
+_BLAKE2B_PERSON = b"kd-pinn-cycle"
 LOCAL_SAMPLE_DOMAIN: bytes = b"local_sample"
 
 

@@ -48,8 +48,8 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
         description=(
             "Scalar reward baseline used by the RSPG policy-gradient "
             "estimator. NOTE: the trailing ``_ewma`` in the plot name is a "
-            "legacy artifact retained for backward compatibility with the "
-            "Stage 3 spec — the actual series semantics depend on "
+            "legacy artifact retained for backward compatibility with an "
+            "earlier plot-naming scheme — the actual series semantics depend on "
             "``RSPGStrategy.baseline``: ``'R_e'`` (default) is a "
             "risk-seeking quantile, ``'ewma_R'`` is an exponential moving "
             "average, ``'combined'`` sums both. Read the configured "

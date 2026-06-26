@@ -161,6 +161,20 @@ print(report.report)         # path to report.html
 print(len(report.figures))   # number of figure files
 ```
 
+The report renders the discovered equation as a structure-only **expression
+tree**, and — for the SGA engine — the raw **genome tree** of the best evolved
+individual, so you can see what the search actually produced versus the sparse
+equation it was distilled into:
+
+<div align="center">
+<img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree vs discovered expression tree"><br>
+<em>Example — SGA on the built-in Chafee-Infante benchmark (recovers the ground truth
+<code>u_t = u_xx - u + u^3</code>). Left: the raw GP genome of the best
+individual, still carrying evolved bloat (redundant / zeroed terms). Right: the
+discovered equation after sparse selection — operators and derivatives only,
+coefficients dropped (they stay in the LaTeX equation figure).</em>
+</div>
+
 Every result also carries a `manifest` (dataset fingerprint, seed, KD
 version) so a run can be identified and reproduced later.
 

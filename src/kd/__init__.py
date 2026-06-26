@@ -32,7 +32,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "AxisInfo",

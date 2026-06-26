@@ -5,6 +5,14 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+
+
+
+
+from kd.search.dlga.viz import (
+    _render_surrogate,
+    _surrogate_data,
+)
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -64,7 +72,26 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
             "(their +inf sentinel is masked)."
         ),
     ),
+    PlotInfo(
+        name="surrogate_training",
+        title="Surrogate Training Curve",
+        description=(
+            "FieldModel surrogate training loss "
+            "vs epoch (log-y): train and — when a validation split exists — "
+            "validation MSE, with the best-validation epoch marked. The autograd "
+            "derivatives (u_x, u_t) the GA reads from come from this network. "
+            "Absent (No data panel) for finite-diff mode or when the surrogate "
+            "was pre-trained (user-supplied field_model), not trained by the "
+            "platform builder."
+        ),
+    ),
 )
+
+
+
+
+
+_SURROGATE_PLOT_NAME = "surrogate_training"
 
 
 
@@ -86,6 +113,13 @@ def list_plot_infos() -> list[PlotInfo]:
 
 def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
     _check_known_name(name)
+
+
+
+
+    if name == _SURROGATE_PLOT_NAME:
+        _render_surrogate(ax, recorder)
+        return
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     title = _plot_title(name)
@@ -128,6 +162,8 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
     _check_known_name(name)
+    if name == _SURROGATE_PLOT_NAME:
+        return _surrogate_data(recorder)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     return {
@@ -142,8 +178,11 @@ def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
 
 
 
+_KNOWN_PLOT_NAMES: frozenset[str] = frozenset(info.name for info in _PLOT_INFOS)
+
+
 def _check_known_name(name: str) -> None:
-    if name not in _PLOT_METRIC:
+    if name not in _KNOWN_PLOT_NAMES:
         available = ", ".join(info.name for info in _PLOT_INFOS)
         raise ValueError(f"Unknown plot name: {name!r}. Available: {available}")
 

@@ -275,6 +275,18 @@ class TestEdgeCases:
         assert "" in result.warning
         assert "foobar" in result.warning
 
+    def test_unknown_symbol_message_states_facts_not_consumers(
+        self, simple_grid_dataset: PDEDataset
+    ) -> None:
+        rhs = sympy.Symbol("u") + sympy.Symbol("t")
+        result = integrate_pde(rhs, simple_grid_dataset)
+
+        assert result.success is False
+        assert "" in result.warning
+        assert "'t'" in result.warning
+        for consumer_text in ("Field-comparison", "pde-residual", "plots"):
+            assert consumer_text not in result.warning
+
     def test_linear_nested_diff_integrates_as_compound_derivative(
         self, simple_grid_dataset: PDEDataset
     ) -> None:

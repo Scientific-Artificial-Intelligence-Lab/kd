@@ -225,7 +225,7 @@ def test_list_plots_returns_three_plotinfo() -> None:
 
     names = {p.name for p in plots}
     assert names == EXPECTED_PLOT_NAMES, (
-        f"list_plots() names must equal Stage 3 spec set.\n"
+        f"list_plots() names must equal the expected plot set.\n"
         f" missing: {sorted(EXPECTED_PLOT_NAMES - names)}\n"
         f" extra: {sorted(names - EXPECTED_PLOT_NAMES)}"
     )
