@@ -10,7 +10,11 @@ import numpy as np
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
-from kd.viz.plots._dim_utils import _pick_time_steps, _slice_nd_to_2d
+from kd.viz.plots._dim_utils import (
+    _imshow_extent_for_spatial_axes,
+    _pick_time_steps,
+    _slice_nd_to_2d,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -174,14 +178,41 @@ def _render_1d_spatial(
         true_2d = true_field
         pred_2d = pred_field
 
-    _pcolormesh_panel(axes[0], t_coords, s_coords, true_2d, "True")
+    _pcolormesh_panel(
+        axes[0],
+        t_coords,
+        s_coords,
+        true_2d,
+        "True",
+        time_axis=time_axis,
+        spatial_axis=s_name,
+    )
 
     if pred_2d is not None:
-        pred_title = _predicted_title(diverged, integration_result)
-        _pcolormesh_panel(axes[1], t_coords, s_coords, pred_2d, pred_title)
+        pred_title = _predicted_title(
+            diverged,
+            integration_result,
+            time_axis=time_axis,
+        )
+        _pcolormesh_panel(
+            axes[1],
+            t_coords,
+            s_coords,
+            pred_2d,
+            pred_title,
+            time_axis=time_axis,
+            spatial_axis=s_name,
+        )
         residual = true_2d - pred_2d
         _pcolormesh_panel(
-            axes[2], t_coords, s_coords, residual, "Residual", residual=True
+            axes[2],
+            t_coords,
+            s_coords,
+            residual,
+            "Residual",
+            time_axis=time_axis,
+            spatial_axis=s_name,
+            residual=True,
         )
     else:
         _warning_panel(axes[1], integration_result)
@@ -221,6 +252,7 @@ def _render_2d_spatial(
     )
 
     t_coords = dataset.get_coords(time_axis).detach().cpu().numpy()
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
     for col, t_idx in enumerate(time_indices):
 
@@ -231,22 +263,44 @@ def _render_2d_spatial(
         if true_slice.ndim > 2:
             true_slice = _slice_nd_to_2d(true_slice, (0, 1))
 
-        _heatmap_panel(axes_arr[0, col], true_slice, f"True (t={t_val:.3g})")
+        _heatmap_panel(
+            axes_arr[0, col],
+            true_slice,
+            f"True ({time_axis}={t_val:.3g})",
+            extent=extent,
+            xlabel=xlabel,
+            ylabel=ylabel,
+        )
 
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
             if pred_slice.ndim > 2:
                 pred_slice = _slice_nd_to_2d(pred_slice, (0, 1))
 
-            pred_title = _predicted_title(diverged, integration_result, t_val=t_val)
-            _heatmap_panel(axes_arr[1, col], pred_slice, pred_title)
+            pred_title = _predicted_title(
+                diverged,
+                integration_result,
+                time_axis=time_axis,
+                t_val=t_val,
+            )
+            _heatmap_panel(
+                axes_arr[1, col],
+                pred_slice,
+                pred_title,
+                extent=extent,
+                xlabel=xlabel,
+                ylabel=ylabel,
+            )
 
             residual_slice = true_slice - pred_slice
             _heatmap_panel(
                 axes_arr[2, col],
                 residual_slice,
-                f"Residual (t={t_val:.3g})",
+                f"Residual ({time_axis}={t_val:.3g})",
                 residual=True,
+                extent=extent,
+                xlabel=xlabel,
+                ylabel=ylabel,
             )
         else:
             _warning_panel(axes_arr[1, col], integration_result)
@@ -260,18 +314,23 @@ def _predicted_title(
     diverged: bool,
     integration_result: IntegrationResult,
     *,
+    time_axis: str = "t",
     t_val: float | None = None,
 ) -> str:
     if not diverged:
         if t_val is not None:
-            return f"Predicted (t={t_val:.3g})"
+            return f"Predicted ({time_axis}={t_val:.3g})"
         return "Predicted"
 
     div_t = integration_result.diverged_at_t
-    tag = f"DIVERGED at t={div_t:.3g}" if div_t is not None else "DIVERGED"
+    tag = (
+        f"DIVERGED at {time_axis}={div_t:.3g}"
+        if div_t is not None
+        else "DIVERGED"
+    )
 
     if t_val is not None:
-        return f"Predicted ({tag}, t={t_val:.3g})"
+        return f"Predicted ({tag}, {time_axis}={t_val:.3g})"
     return f"Predicted ({tag})"
 
 
@@ -282,6 +341,8 @@ def _pcolormesh_panel(
     data: NDArray[np.floating],
     title: str,
     *,
+    time_axis: str,
+    spatial_axis: str,
     residual: bool = False,
 ) -> None:
     display = np.where(np.isfinite(data), data, np.nan)
@@ -300,8 +361,8 @@ def _pcolormesh_panel(
         ax.figure.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04)
     else:
         ax.pcolormesh(t_coords, s_coords, display, shading="auto", rasterized=True)
-    ax.set_xlabel("t")
-    ax.set_ylabel("x")
+    ax.set_xlabel(time_axis)
+    ax.set_ylabel(spatial_axis)
     ax.set_title(title)
 
 
@@ -311,6 +372,9 @@ def _heatmap_panel(
     title: str,
     *,
     residual: bool = False,
+    extent: tuple[float, float, float, float] | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
 ) -> None:
     display = np.where(np.isfinite(data), data, np.nan)
     if residual:
@@ -319,6 +383,7 @@ def _heatmap_panel(
             display,
             aspect="auto",
             origin="lower",
+            extent=extent,
             rasterized=True,
             cmap="RdBu_r",
             vmin=-vmax,
@@ -326,7 +391,17 @@ def _heatmap_panel(
         )
         ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     else:
-        ax.imshow(display, aspect="auto", origin="lower", rasterized=True)
+        ax.imshow(
+            display,
+            aspect="auto",
+            origin="lower",
+            extent=extent,
+            rasterized=True,
+        )
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
     ax.set_title(title)
 
 

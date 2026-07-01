@@ -804,3 +804,32 @@ def test_top_level_byod_exports_present() -> None:
     for symbol in expected:
         assert hasattr(kd, symbol), f"kd.{symbol} is missing"
         assert symbol in kd.__all__, f"kd.__all__ missing '{symbol}'"
+
+
+
+
+
+
+
+def _make_tiny_order2_dataset() -> PDEDataset:
+    nx, nt = 6, 5
+    x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+    t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+    u = torch.randn(nx, nt, dtype=torch.float64)
+    return PDEDataset.from_arrays(coords={"x": x, "t": t}, fields={"u": u}, lhs="u_tt")
+
+
+@pytest.mark.parametrize("algorithm", ["sga", "dlga", "discover", "pysr"])
+def test_facade_rejects_second_order_lhs_fail_loud(algorithm: str) -> None:
+    ds = _make_tiny_order2_dataset()
+    assert ds.lhs_order == 2
+    m = Model(algorithm=algorithm, generations=1, verbose=False)
+    with pytest.raises(NotImplementedError, match="lhs_order"):
+        m.fit(ds)
+
+
+def test_facade_accepts_first_order_lhs_passes_gate(small_burgers_dataset) -> None:
+    assert small_burgers_dataset.lhs_order == 1
+    m = Model(algorithm="sga", generations=2, population=4, verbose=False)
+    m.fit(small_burgers_dataset)
+    assert m.best_expr_ is not None

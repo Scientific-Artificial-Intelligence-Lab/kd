@@ -9,7 +9,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from kd.viz.plots._dim_utils import _pick_time_steps, _slice_nd_to_2d
+from kd.viz.plots._dim_utils import (
+    _imshow_extent_for_spatial_axes,
+    _pick_time_steps,
+    _slice_nd_to_2d,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -119,6 +123,9 @@ def plot_time_slices(
             fig = _render_2d_slices(
                 true_field,
                 pred_field,
+                dataset,
+                time_axis,
+                spatial_axes,
                 time_dim,
                 time_indices,
                 t_coords,
@@ -183,7 +190,7 @@ def _render_1d_slices(
     s_name = spatial_axes[0]
     s_coords = dataset.get_coords(s_name).detach().cpu().numpy()
 
-    div_tag = _diverged_tag(diverged, integration_result)
+    div_tag = _diverged_tag(diverged, integration_result, time_axis)
 
     for col, t_idx in enumerate(time_indices):
         ax: Axes = axes_arr[0, col]
@@ -202,7 +209,11 @@ def _render_1d_slices(
         else:
             _add_warning_text(ax, "No prediction")
 
-        title = f"t = {t_val:.3g}{div_tag}" if div_tag else f"t = {t_val:.3g}"
+        title = (
+            f"{time_axis} = {t_val:.3g}{div_tag}"
+            if div_tag
+            else f"{time_axis} = {t_val:.3g}"
+        )
         ax.set_title(title)
         ax.set_xlabel(s_name)
         if col == 0:
@@ -216,6 +227,9 @@ def _render_1d_slices(
 def _render_2d_slices(
     true_field: np.ndarray,
     pred_field: np.ndarray | None,
+    dataset: PDEDataset,
+    time_axis: str,
+    spatial_axes: list[str],
     time_dim: int,
     time_indices: list[int],
     t_coords: np.ndarray,
@@ -234,7 +248,8 @@ def _render_2d_slices(
         squeeze=False,
     )
 
-    div_tag = _diverged_tag(diverged, integration_result)
+    div_tag = _diverged_tag(diverged, integration_result, time_axis)
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
     for col, t_idx in enumerate(time_indices):
         t_val = float(t_coords[t_idx])
@@ -244,9 +259,15 @@ def _render_2d_slices(
             true_slice = _slice_nd_to_2d(true_slice, (0, 1))
         true_display = np.where(np.isfinite(true_slice), true_slice, np.nan)
         axes_arr[0, col].imshow(
-            true_display, aspect="auto", origin="lower", rasterized=True
+            true_display,
+            aspect="auto",
+            origin="lower",
+            extent=extent,
+            rasterized=True,
         )
-        axes_arr[0, col].set_title(f"True (t={t_val:.3g})")
+        axes_arr[0, col].set_title(f"True ({time_axis}={t_val:.3g})")
+        axes_arr[0, col].set_xlabel(xlabel)
+        axes_arr[0, col].set_ylabel(ylabel)
 
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
@@ -254,9 +275,17 @@ def _render_2d_slices(
                 pred_slice = _slice_nd_to_2d(pred_slice, (0, 1))
             pred_display = np.where(np.isfinite(pred_slice), pred_slice, np.nan)
             axes_arr[1, col].imshow(
-                pred_display, aspect="auto", origin="lower", rasterized=True
+                pred_display,
+                aspect="auto",
+                origin="lower",
+                extent=extent,
+                rasterized=True,
             )
-            axes_arr[1, col].set_title(f"Predicted{div_tag} (t={t_val:.3g})")
+            axes_arr[1, col].set_title(
+                f"Predicted{div_tag} ({time_axis}={t_val:.3g})"
+            )
+            axes_arr[1, col].set_xlabel(xlabel)
+            axes_arr[1, col].set_ylabel(ylabel)
         else:
             _warning_panel(axes_arr[1, col])
 
@@ -267,11 +296,12 @@ def _render_2d_slices(
 def _diverged_tag(
     diverged: bool,
     integration_result: IntegrationResult | None,
+    time_axis: str,
 ) -> str:
     if not diverged:
         return ""
     if integration_result is not None and integration_result.diverged_at_t is not None:
-        return f" (DIVERGED at t={integration_result.diverged_at_t:.3g})"
+        return f" (DIVERGED at {time_axis}={integration_result.diverged_at_t:.3g})"
     return " (DIVERGED)"
 
 

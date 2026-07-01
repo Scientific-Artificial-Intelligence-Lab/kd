@@ -142,7 +142,7 @@ class DLGAPlugin:
         return DerivativeReqs(
             provider_kind="autograd",
             max_atomic_order=3,
-            lhs_order=1,
+            lhs_order=self._config.target_lhs_order,
             needs_surrogate=True,
             surrogate_model=self._provided_model,
             surrogate_arch_kwargs={

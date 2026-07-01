@@ -3,7 +3,9 @@
 from kd.api import Model
 from kd.core.evaluator import EvaluationResult
 from kd.data import (
+    DATASET_CATALOG,
     AxisInfo,
+    DatasetSpec,
     DataTopology,
     FieldData,
     PDEDataset,
@@ -11,11 +13,24 @@ from kd.data import (
     generate_advection_data,
     generate_burgers_data,
     generate_diffusion_data,
+    get_dataset,
+    list_datasets,
+    list_remote_datasets,
+    load_allen_cahn,
     load_burgers,
+    load_burgers_2d,
     load_chafee_infante,
+    load_convection_diffusion,
+    load_eq_6_2_12,
+    load_from_hub,
     load_kdv,
+    load_klein_gordon,
+    load_llm4ed_fisher,
+    load_llm4ed_fisher_nonlinear,
+    load_llm4ed_heat,
     load_pde_compound,
     load_pde_divide,
+    load_wave,
 )
 from kd.evaluate import (
     EvaluationFailedError,
@@ -32,12 +47,14 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 __all__ = [
     "AxisInfo",
+    "DATASET_CATALOG",
     "DLGAConfig",
     "DataTopology",
+    "DatasetSpec",
     "DiscoverConfig",
     "EvaluationFailedError",
     "EvaluationResult",
@@ -56,11 +73,24 @@ __all__ = [
     "generate_advection_data",
     "generate_burgers_data",
     "generate_diffusion_data",
+    "get_dataset",
+    "list_datasets",
+    "list_remote_datasets",
+    "load_allen_cahn",
     "load_burgers",
+    "load_burgers_2d",
     "load_chafee_infante",
+    "load_convection_diffusion",
+    "load_eq_6_2_12",
+    "load_from_hub",
     "load_kdv",
+    "load_klein_gordon",
+    "load_llm4ed_fisher",
+    "load_llm4ed_fisher_nonlinear",
+    "load_llm4ed_heat",
     "load_pde_compound",
     "load_pde_divide",
+    "load_wave",
     "preview",
     "validate_terms",
 ]

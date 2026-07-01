@@ -1,8 +1,16 @@
 """Data loaders for benchmark PDE datasets.
 
-Loads pre-computed data from .npy and .mat files for:
+Loads pre-computed data from .npy and .mat files. Bundled/reference datasets
+(work out of the box from packaged or ``data`` data):
 - Chafee-Infante equation: u_t = u_xx - u + u^3
 - KdV equation: u_t = -u * u_x - 0.0025 * u_xxx
+- Burgers / PDE_divide / PDE_compound (SGA-PDE reference)
+
+EqGPT-derived loaders (``load_allen_cahn`` / ``load_convection_diffusion`` /
+``load_wave`` / ``load_klein_gordon``) resolve via :func:`_resolve_eqgpt_file`.
+Their upstream ``.mat`` files are bundled under flat ``_assets/data/eqgpt_*``
+filenames; pass an explicit ``data_dir`` to load an external copy.
+``load_wave`` / ``load_klein_gordon`` are second-order (u_tt) datasets.
 """
 
 from __future__ import annotations
@@ -34,9 +42,48 @@ _AXIS_T = "t"
 _DEFAULT_DATA_DIR = "data"
 
 
+_ALLEN_CAHN_FILE = "eqgpt_allen_cahn.mat"
+_ALLEN_CAHN_SUBDIR = ""
+_ALLEN_CAHN_NAME = "allen-cahn"
+_ALLEN_CAHN_X_KEY = "x"
+_ALLEN_CAHN_T_KEY = "t"
+_ALLEN_CAHN_U_KEY = "usol"
+_ALLEN_CAHN_GROUND_TRUTH = "u_t = 0.003 * u_xx + u - u^3"
+
+
+_WAVE_FILE = "eqgpt_wave.mat"
+_WAVE_SUBDIR = ""
+_WAVE_NAME = "wave"
+_WAVE_X_KEY = "x"
+_WAVE_T_KEY = "t"
+_WAVE_U_KEY = "u"
+_WAVE_GROUND_TRUTH = "u_tt = u_xx"
+
+
+_KG_FILE = "eqgpt_klein_gordon.mat"
+_KG_SUBDIR = ""
+_KG_NAME = "klein-gordon"
+_KG_X_KEY = "x"
+_KG_T_KEY = "t"
+_KG_U_KEY = "usol"
+_KG_GROUND_TRUTH = "u_tt = 0.5 * u_xx - 5 * u"
+
+
+_LHS_ORDER_SECOND = 2
+
+
 _CI_U_FILE = "chafee_infante_CI.npy"
 _CI_X_FILE = "chafee_infante_x.npy"
 _CI_T_FILE = "chafee_infante_t.npy"
+
+
+_CONVECTION_DIFFUSION_FILE = "eqgpt_convection_diffusion.mat"
+_CONVECTION_DIFFUSION_SUBDIR = ""
+_CONVECTION_DIFFUSION_NAME = "convection-diffusion"
+_CONVECTION_DIFFUSION_X_KEY = "x"
+_CONVECTION_DIFFUSION_T_KEY = "t"
+_CONVECTION_DIFFUSION_U_KEY = "u"
+_CONVECTION_DIFFUSION_GROUND_TRUTH = "u_t = -u_x + 0.25 * u_xx"
 
 
 _KDV_FILE = "KdV_equation.mat"
@@ -102,6 +149,199 @@ def _resolve_data_dir(data_dir: Path | str | None) -> Path:
         return pkg_data
 
     return _find_project_root() / _DEFAULT_DATA_DIR
+
+
+def _resolve_eqgpt_file(
+    filename: str,
+    subdir: str,
+    data_dir: Path | str | None,
+) -> Path:
+    """Resolve an EqGPT data file.
+
+    If ``data_dir`` is provided, it is authoritative: only
+    ``Path(data_dir) / filename`` is considered (raises if absent there, with
+    no fall-through). Otherwise, try the first existing of these
+    ``<subdir>``-scoped candidates: bundled package data, source
+    ``data``, then local EqGPT data under
+    ``a reference library
+
+    Every no-arg candidate is namespaced by ``subdir`` (not just the ref_libs
+    one) so a generic filename like ``data.mat`` cannot collide with a
+    different equation's file dropped into a shared flat directory. A loader
+    whose filename is already unambiguous and intentionally lives flat in the
+    data dir may opt out of namespacing by passing ``subdir=""``; use that only
+    when the filename cannot collide.
+    """
+    if data_dir is not None:
+        explicit_path = Path(data_dir) / filename
+        if explicit_path.exists():
+            return explicit_path
+        raise FileNotFoundError(f"EqGPT data file not found: {explicit_path}")
+
+    project_root = _find_project_root()
+    candidates = [
+        Path(__file__).resolve().parents[2] / "_assets" / "data" / subdir / filename,
+        project_root / _DEFAULT_DATA_DIR / subdir / filename,
+        project_root / "ref_libs" / "EqGPT" / "data" / subdir / filename,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+
+    tried = "\n".join(f"- {path}" for path in candidates)
+    raise FileNotFoundError(f"EqGPT data file not found. Tried:\n{tried}")
+
+
+def _orient_u_field(
+    u_np: np.ndarray,
+    x_np: np.ndarray,
+    t_np: np.ndarray,
+    *,
+    dataset_name: str,
+    u_key: str,
+    assume_axis_order: list[str] | None,
+) -> np.ndarray:
+    """Orient u to (nx, nt), failing loud on a mismatched shape.
+
+    With ``assume_axis_order`` unset (default), use a shape heuristic:
+    transpose a (nt, nx) layout, accept (nx, nt) as-is, else raise. This
+    heuristic is ambiguous on a square grid (nx == nt), so callers with a
+    known layout pin it explicitly via ``assume_axis_order``:
+    ``["x", "t"]`` means u is already (nx, nt) (no transpose);
+    ``["t", "x"]`` means u is (nt, nx) and is transposed.
+    """
+    nx, nt = len(x_np), len(t_np)
+    if assume_axis_order is not None:
+        if assume_axis_order == [_AXIS_X, _AXIS_T]:
+            expected, transpose = (nx, nt), False
+        elif assume_axis_order == [_AXIS_T, _AXIS_X]:
+            expected, transpose = (nt, nx), True
+        else:
+            raise ValueError(
+                f"{dataset_name} assume_axis_order must be a permutation of "
+                f"['{_AXIS_X}', '{_AXIS_T}'], got {assume_axis_order}"
+            )
+        if u_np.shape != expected:
+            raise ValueError(
+                f"{dataset_name} field '{u_key}' has shape {u_np.shape}; "
+                f"expected {expected} for axis_order {assume_axis_order}"
+            )
+        return u_np.T if transpose else u_np
+
+
+    if u_np.shape == (nt, nx):
+        return u_np.T
+    if u_np.shape == (nx, nt):
+        return u_np
+    raise ValueError(
+        f"{dataset_name} field '{u_key}' has shape {u_np.shape}; "
+        f"expected (nx, nt)=({nx}, {nt}) or its transpose"
+    )
+
+
+def _load_eqgpt_mat_dataset(
+    *,
+    filename: str,
+    subdir: str,
+    dataset_name: str,
+    x_key: str,
+    t_key: str,
+    u_key: str,
+    ground_truth: str,
+    x_is_periodic: bool,
+    data_dir: Path | str | None,
+    lhs_order: int = 1,
+    assume_axis_order: list[str] | None = None,
+) -> PDEDataset:
+    """Load an EqGPT .mat benchmark with axes ordered as (x, t).
+
+    ``lhs_order`` selects the LHS time-derivative order (1 -> u_t, 2 -> u_tt).
+    ``assume_axis_order`` pins the raw field's axis layout when the (nx, nt)
+    vs (nt, nx) shape heuristic is ambiguous (square grids); see
+    :func:`_orient_u_field`.
+    """
+    mat_path = _resolve_eqgpt_file(filename, subdir, data_dir)
+    mat_data = _load_mat(mat_path)
+
+    x_np = np.asarray(mat_data[x_key], dtype=np.float64).flatten()
+    t_np = np.asarray(mat_data[t_key], dtype=np.float64).flatten()
+    u_np = np.asarray(mat_data[u_key], dtype=np.float64)
+
+
+
+
+    u_np = _orient_u_field(
+        u_np,
+        x_np,
+        t_np,
+        dataset_name=dataset_name,
+        u_key=u_key,
+        assume_axis_order=assume_axis_order,
+    )
+
+    logger.info(
+        "Loaded %s data: u=%s, x=%s, t=%s",
+        dataset_name,
+        u_np.shape,
+        x_np.shape,
+        t_np.shape,
+    )
+
+    u = torch.from_numpy(u_np)
+    x = torch.from_numpy(x_np)
+    t = torch.from_numpy(t_np)
+
+    return PDEDataset(
+        name=dataset_name,
+        task_type=TaskType.PDE,
+        topology=DataTopology.GRID,
+        axes={
+            _AXIS_X: AxisInfo(name=_AXIS_X, values=x, is_periodic=x_is_periodic),
+            _AXIS_T: AxisInfo(name=_AXIS_T, values=t, is_periodic=False),
+        },
+        axis_order=[_AXIS_X, _AXIS_T],
+        fields={_FIELD_U: FieldData(name=_FIELD_U, values=u)},
+        lhs_field=_FIELD_U,
+        lhs_axis=_AXIS_T,
+        lhs_order=lhs_order,
+        ground_truth=ground_truth,
+    )
+
+
+def load_allen_cahn(
+    data_dir: Path | str | None = None,
+) -> PDEDataset:
+    """Load the Allen-Cahn reaction-diffusion benchmark (EqGPT).
+
+    Equation: u_t = 0.003 * u_xx + u - u^3
+    Data shape: (256, 201) — 256 spatial points, 201 time points.
+    x in [-1, 1) is a periodic grid (excludes +1), t in [0, 10].
+
+    Loads ``eqgpt_allen_cahn.mat`` (key ``usol`` already (nx, nt)). Pass an
+    explicit ``data_dir`` to load a different local copy.
+
+    Args:
+        data_dir: Directory holding ``eqgpt_allen_cahn.mat``. If None, falls
+            back to bundled / ``data`` / ``a reference library
+            locations.
+
+    Returns:
+        PDEDataset with Allen-Cahn data.
+
+    Raises:
+        FileNotFoundError: If the data file cannot be resolved.
+    """
+    return _load_eqgpt_mat_dataset(
+        filename=_ALLEN_CAHN_FILE,
+        subdir=_ALLEN_CAHN_SUBDIR,
+        dataset_name=_ALLEN_CAHN_NAME,
+        x_key=_ALLEN_CAHN_X_KEY,
+        t_key=_ALLEN_CAHN_T_KEY,
+        u_key=_ALLEN_CAHN_U_KEY,
+        ground_truth=_ALLEN_CAHN_GROUND_TRUTH,
+        x_is_periodic=True,
+        data_dir=data_dir,
+    )
 
 
 def load_chafee_infante(
@@ -173,6 +413,125 @@ def load_chafee_infante(
         lhs_field=_FIELD_U,
         lhs_axis=_AXIS_T,
         ground_truth="u_t = u_xx - u + u^3",
+    )
+
+
+def load_convection_diffusion(
+    data_dir: Path | str | None = None,
+) -> PDEDataset:
+    """Load the convection-diffusion benchmark (EqGPT).
+
+    Equation: u_t = -u_x + 0.25 * u_xx
+    Data shape: (256, 100) — 256 spatial points, 100 time points.
+    x in [0, 2] (closed, non-periodic), t in [0, 1].
+
+    Loads ``eqgpt_convection_diffusion.mat`` (key ``u``, raw (nt, nx) —
+    transposed to (nx, nt)).
+    Like :func:`load_allen_cahn`, the EqGPT copy is bundled under
+    flat ``_assets/data/eqgpt_convection_diffusion.mat``; pass an explicit
+    ``data_dir`` to load a different local copy.
+
+    Args:
+        data_dir: Directory holding ``eqgpt_convection_diffusion.mat``. If
+            None, falls back to bundled / ``data`` /
+            ``a reference library locations.
+
+    Returns:
+        PDEDataset with convection-diffusion data.
+
+    Raises:
+        FileNotFoundError: If the data file cannot be resolved.
+    """
+    return _load_eqgpt_mat_dataset(
+        filename=_CONVECTION_DIFFUSION_FILE,
+        subdir=_CONVECTION_DIFFUSION_SUBDIR,
+        dataset_name=_CONVECTION_DIFFUSION_NAME,
+        x_key=_CONVECTION_DIFFUSION_X_KEY,
+        t_key=_CONVECTION_DIFFUSION_T_KEY,
+        u_key=_CONVECTION_DIFFUSION_U_KEY,
+        ground_truth=_CONVECTION_DIFFUSION_GROUND_TRUTH,
+        x_is_periodic=False,
+        data_dir=data_dir,
+    )
+
+
+def load_wave(
+    data_dir: Path | str | None = None,
+) -> PDEDataset:
+    """Load the wave equation benchmark (EqGPT), a second-order LHS dataset.
+
+    Equation: u_tt = u_xx
+    Data shape: (161, 321) — 161 spatial points, 321 time points.
+    x in [0, pi], t in [0, 2*pi]; both axes non-periodic.
+
+    Loads ``eqgpt_wave.mat`` (key ``u``, already (nx, nt)). The returned
+    dataset has ``lhs_order=2`` (u_tt). Pass an explicit ``data_dir`` to load a
+    different local copy.
+
+    Args:
+        data_dir: Directory holding ``eqgpt_wave.mat``. If None, falls back to
+            bundled / ``data`` / ``a reference library locations.
+
+    Returns:
+        PDEDataset with wave data (lhs_order=2).
+
+    Raises:
+        FileNotFoundError: If the data file cannot be resolved.
+    """
+    return _load_eqgpt_mat_dataset(
+        filename=_WAVE_FILE,
+        subdir=_WAVE_SUBDIR,
+        dataset_name=_WAVE_NAME,
+        x_key=_WAVE_X_KEY,
+        t_key=_WAVE_T_KEY,
+        u_key=_WAVE_U_KEY,
+        ground_truth=_WAVE_GROUND_TRUTH,
+        x_is_periodic=False,
+        data_dir=data_dir,
+        lhs_order=_LHS_ORDER_SECOND,
+        assume_axis_order=[_AXIS_X, _AXIS_T],
+    )
+
+
+def load_klein_gordon(
+    data_dir: Path | str | None = None,
+) -> PDEDataset:
+    """Load the Klein-Gordon benchmark (EqGPT), a second-order LHS dataset.
+
+    Equation: u_tt = 0.5 * u_xx - 5 * u
+    Data shape: (201, 201) — 201 spatial points, 201 time points (square grid).
+    x in [-1, 1], t in [0, 3]; both axes non-periodic.
+
+    Loads ``eqgpt_klein_gordon.mat`` (key ``usol``, already (nx, nt)). Because
+    the grid is square the (nx, nt) vs (nt, nx) shape heuristic is ambiguous,
+    so the layout is pinned explicitly to ``["x", "t"]`` (no transpose);
+    transposing would flip x and t and corrupt the recovered coefficients. The
+    returned dataset has ``lhs_order=2`` (u_tt). Pass an explicit ``data_dir``
+    to load a different local copy.
+
+    Args:
+        data_dir: Directory holding ``eqgpt_klein_gordon.mat``. If None, falls
+            back to bundled / ``data`` / ``a reference library
+            locations.
+
+    Returns:
+        PDEDataset with Klein-Gordon data (lhs_order=2).
+
+    Raises:
+        FileNotFoundError: If the data file cannot be resolved.
+    """
+    return _load_eqgpt_mat_dataset(
+        filename=_KG_FILE,
+        subdir=_KG_SUBDIR,
+        dataset_name=_KG_NAME,
+        x_key=_KG_X_KEY,
+        t_key=_KG_T_KEY,
+        u_key=_KG_U_KEY,
+        ground_truth=_KG_GROUND_TRUTH,
+        x_is_periodic=False,
+        data_dir=data_dir,
+        lhs_order=_LHS_ORDER_SECOND,
+        assume_axis_order=[_AXIS_X, _AXIS_T],
     )
 
 

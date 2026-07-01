@@ -483,3 +483,90 @@ class TestManifestTermsFromPlugin:
 
         assert manifest is not None
         assert manifest.terms is None
+
+
+
+
+
+
+
+def _order_dataset(lhs: str) -> PDEDataset:
+    nx, nt = 6, 5
+    x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+    t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+    u = torch.randn(nx, nt, dtype=torch.float64)
+    return PDEDataset.from_arrays(coords={"x": x, "t": t}, fields={"u": u}, lhs=lhs)
+
+
+class TestRunnerLhsLabelHonorsOrder:
+
+    def test_fallback_label_encodes_second_order(self) -> None:
+        runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
+        components = MagicMock()
+        components.dataset = _order_dataset("u_tt")
+        final_eval = MagicMock()
+        final_eval.lhs_name = ""
+        assert runner._lhs_label(components, final_eval) == "u_tt"
+
+    def test_fallback_label_first_order_unchanged(self) -> None:
+        runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
+        components = MagicMock()
+        components.dataset = _order_dataset("u_t")
+        final_eval = MagicMock()
+        final_eval.lhs_name = ""
+        assert runner._lhs_label(components, final_eval) == "u_t"
+
+    def test_explicit_lhs_name_still_wins(self) -> None:
+        runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
+        components = MagicMock()
+        components.dataset = _order_dataset("u_t")
+        final_eval = MagicMock()
+        final_eval.lhs_name = "u_tt"
+        assert runner._lhs_label(components, final_eval) == "u_tt"
+
+    def test_fallback_label_underscore_axis_no_crash(self) -> None:
+        runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
+        nx, nt = 6, 5
+        x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+        t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+        u = torch.randn(nx, nt, dtype=torch.float64)
+        ds = PDEDataset(
+            name="underscore-axis",
+            task_type=TaskType.PDE,
+            topology=DataTopology.GRID,
+            axes={"x_1": AxisInfo("x_1", x), "t": AxisInfo("t", t)},
+            axis_order=["x_1", "t"],
+            fields={"u": FieldData("u", u)},
+            lhs_field="u",
+            lhs_axis="x_1",
+        )
+        assert ds.lhs_order == 1
+        components = MagicMock()
+        components.dataset = ds
+        final_eval = MagicMock()
+        final_eval.lhs_name = ""
+        assert runner._lhs_label(components, final_eval) == "u_x_1"
+
+
+class TestRunnerBackstopLhsOrder:
+
+    def test_run_rejects_second_order_lhs_for_discover(self) -> None:
+        from kd.core.platform.builder import PlatformBuilder
+
+        plugin = DISCOVERPlugin(DiscoverConfig())
+        ds = _order_dataset("u_tt")
+        components = PlatformBuilder(ds, plugin.derivative_requirements).build()
+        runner = ExperimentRunner(algorithm=plugin, max_iterations=1)
+        with pytest.raises(NotImplementedError, match="lhs_order"):
+            runner.run(components)
+
+    def test_run_allows_first_order_lhs(self) -> None:
+        from kd.core.platform.builder import PlatformBuilder
+
+        plugin = DISCOVERPlugin(DiscoverConfig())
+        ds = _order_dataset("u_t")
+        components = PlatformBuilder(ds, plugin.derivative_requirements).build()
+        runner = ExperimentRunner(algorithm=plugin, max_iterations=1)
+
+        result = runner.run(components)
+        assert result is not None

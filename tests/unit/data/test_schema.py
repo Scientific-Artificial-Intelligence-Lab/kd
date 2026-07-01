@@ -748,6 +748,52 @@ class TestDatasetFingerprint:
 
 
 
+class TestFingerprintLhsOrder:
+
+    @staticmethod
+    def _build(lhs: str) -> PDEDataset:
+        n = 16
+        x = torch.linspace(0.0, 1.0, n, dtype=torch.float64)
+        t = torch.linspace(0.0, 1.0, n, dtype=torch.float64)
+        xx, tt = torch.meshgrid(x, t, indexing="ij")
+        u = torch.sin(xx) * torch.cos(tt)
+        return PDEDataset.from_arrays(
+            coords={"x": x, "t": t},
+            fields={"u": u},
+            lhs=lhs,
+            name="fp_order",
+        )
+
+    @pytest.mark.unit
+    def test_u_t_vs_u_tt_fingerprints_differ(self) -> None:
+        ds_order1 = self._build("u_t")
+        ds_order2 = self._build("u_tt")
+
+        assert ds_order1.lhs_order == 1
+        assert ds_order2.lhs_order == 2
+        assert ds_order1.lhs_axis == ds_order2.lhs_axis == "t"
+
+        fp1 = compute_dataset_fingerprint(ds_order1)
+        fp2 = compute_dataset_fingerprint(ds_order2)
+        assert fp1 != fp2
+
+    @pytest.mark.unit
+    def test_two_order_one_datasets_match(self) -> None:
+        ds_a = self._build("u_t")
+        ds_b = self._build("u_t")
+        assert ds_a is not ds_b
+        assert ds_a.lhs_order == ds_b.lhs_order == 1
+
+        fp_a = compute_dataset_fingerprint(ds_a)
+        fp_b = compute_dataset_fingerprint(ds_b)
+        assert fp_a == fp_b
+
+
+
+
+
+
+
 class TestSchemaDeviceAwareness:
 
     @pytest.mark.numerical
@@ -915,3 +961,54 @@ class TestPDEDatasetLhsValidation:
             lhs_axis="t",
         )
         assert ds.lhs_field == "u"
+
+
+
+
+
+
+
+class TestPDEDatasetLhsOrder:
+
+    def _make_dataset(self, **overrides: object) -> PDEDataset:
+        axes = {
+            "x": AxisInfo(name="x", values=torch.linspace(0, 1, 20)),
+            "t": AxisInfo(name="t", values=torch.linspace(0, 1, 10)),
+        }
+        fields = {"u": FieldData(name="u", values=torch.randn(20, 10))}
+        kwargs: dict[str, object] = {
+            "name": "lhs_order_test",
+            "task_type": TaskType.PDE,
+            "axes": axes,
+            "axis_order": ["x", "t"],
+            "fields": fields,
+            "lhs_field": "u",
+            "lhs_axis": "t",
+        }
+        kwargs.update(overrides)
+        return PDEDataset(**kwargs)
+
+    @pytest.mark.unit
+    def test_lhs_order_defaults_to_one(self) -> None:
+        ds = self._make_dataset()
+        assert ds.lhs_order == 1
+
+    @pytest.mark.unit
+    def test_lhs_order_carries_explicit_two(self) -> None:
+        ds = self._make_dataset(lhs_order=2)
+        assert ds.lhs_order == 2
+
+    @pytest.mark.unit
+    def test_lhs_order_rejects_zero(self) -> None:
+        with pytest.raises(ValueError):
+            self._make_dataset(lhs_order=0)
+
+    @pytest.mark.unit
+    def test_lhs_order_rejects_negative(self) -> None:
+        with pytest.raises(ValueError):
+            self._make_dataset(lhs_order=-1)
+
+    @pytest.mark.unit
+    def test_lhs_order_one_explicit_accepted(self) -> None:
+        ds = self._make_dataset(lhs_order=1)
+        assert ds.lhs_order == 1

@@ -152,6 +152,20 @@ class TestErrorHeatmapSmoke:
 
 class TestErrorHeatmapHappyPath:
 
+    def test_2d_custom_time_title_uses_lhs_axis_name(
+        self,
+        custom_axis_2d_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(custom_axis_2d_dataset)
+        result = _make_experiment_result()
+        fig, _ = plot_error_heatmap(result, custom_axis_2d_dataset, ir)
+        try:
+            title_text = " ".join(ax.get_title() for ax in fig.get_axes())
+            assert "tau=" in title_text
+            assert "t=" not in title_text
+        finally:
+            plt.close(fig)
+
     def test_1d_produces_axes(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
@@ -169,6 +183,28 @@ class TestErrorHeatmapHappyPath:
         fig, _ = plot_error_heatmap(result, ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
+        finally:
+            plt.close(fig)
+
+    def test_2d_renders_multiple_physical_panels_with_shared_colorbar(
+        self,
+        rectangular_2d_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(rectangular_2d_dataset)
+        result = _make_experiment_result()
+        fig, _ = plot_error_heatmap(result, rectangular_2d_dataset, ir)
+        try:
+            data_axes = [ax for ax in fig.get_axes() if ax.images]
+            assert len(data_axes) == 3
+            assert len(fig.get_axes()) == 4
+            clims = {ax.images[0].get_clim() for ax in data_axes}
+            assert len(clims) == 1
+            for ax in data_axes:
+                assert tuple(ax.images[0].get_extent()) == pytest.approx(
+                    (10.0, 14.0, -2.0, 3.0)
+                )
+                assert ax.get_xlabel() == "eta"
+                assert ax.get_ylabel() == "xi"
         finally:
             plt.close(fig)
 

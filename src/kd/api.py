@@ -43,6 +43,7 @@ from kd.search.sga import SGAConfig, SGAPlugin
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
+    from kd.core.platform.requirements import DerivativeReqs
     from kd.data.schema import PDEDataset
     from kd.search.protocol import SearchAlgorithm
     from kd.search.result import ExperimentResult
@@ -76,8 +77,6 @@ _DEFAULT_LHS_AXIS = "t"
 
 
 
-
-_FACADE_LHS_ORDER = 1
 _PROGRESS_PREFIX = "[kd]"
 _FIT_REQUIRED_MSG = "Model has not been fit. Call .fit(dataset) first."
 
@@ -198,12 +197,15 @@ class Model:
     post-fit attributes (``best_expr_``, ``best_score_``, ``result_``).
 
     Limitations:
-        Only **first-order LHS** PDE is supported (e.g., ``u_t = f(u, u_x, ...)``).
-        Higher-order LHS such as the wave equation ``u_tt = c**2 * u_xx`` is
-        NOT supported by this facade — both the LHS target inside SGA and the
-        Evaluator are wired with ``order=1`` (see ``_FACADE_LHS_ORDER``). To
-        discover a second-order-in-time PDE, reduce it to a first-order
-        system manually (introduce ``v = u_t``, then discover ``u_t = v`` and
+        Only **first-order LHS** PDE is supported end-to-end (e.g.
+        ``u_t = f(u, u_x, ...)``). A dataset can *carry* a higher-order LHS via
+        ``dataset.lhs_order`` (the single source of truth — DATA-0; e.g.
+        ``u_tt`` for the wave equation ``u_tt = c**2 * u_xx``), but no packaged
+        search algorithm can discover one yet: an unsupported
+        ``(algorithm, lhs_order)`` combination fails loud at ``fit`` time rather
+        than silently fitting the wrong target. To discover a
+        second-order-in-time PDE today, reduce it to a first-order system
+        manually (introduce ``v = u_t``, then discover ``u_t = v`` and
         ``v_t = ...`` separately).
 
     Args:
@@ -1100,7 +1102,36 @@ class Model:
         )
 
         reqs = _resolve_derivative_requirements(self._algorithm)
+        self._check_lhs_order_supported(dataset, reqs)
         return PlatformBuilder(dataset, reqs).build()
+
+    def _check_lhs_order_supported(
+        self,
+        dataset: PDEDataset,
+        reqs: DerivativeReqs,
+    ) -> None:
+        """Fail loud when the dataset's LHS order exceeds the plugin's support.
+
+        ``dataset.lhs_order`` is the science target (the single source of truth
+        — DATA-0); ``reqs.lhs_order`` is the plugin's declared capability (every
+        packaged plugin declares ``1`` today). A mismatch means the chosen
+        algorithm cannot honestly fit the declared LHS, so raise HERE — before
+        the (expensive) ``PlatformBuilder.build()`` / surrogate training —
+        rather than silently fitting a lower-order target ("trusted but wrong",
+        the exact failure this seam exists to kill). DATA-4 will add
+        second-order-capable plugins (and the dynamic-LHS escape hatch); until
+        then any order other than the plugin's declared order is rejected.
+
+        This gate is the facade's FAST-FAIL leg (it raises before the expensive
+        build); ``ExperimentRunner.run`` carries the same check as an
+        execution-layer backstop so direct ``PlatformBuilder + ExperimentRunner``
+        callers fail loud too. The narrow agent entry (``kd.evaluate_terms`` /
+        ``validate_terms``) intentionally allows an explicit ``lhs_order``
+        override against any dataset and routes through neither.
+        """
+        from kd.core.platform.requirements import assert_lhs_order_supported
+
+        assert_lhs_order_supported(dataset.lhs_order, reqs.lhs_order, self.algorithm)
 
     def _build_callbacks(self) -> list[RunnerCallback]:
         """Return the runner callback list.

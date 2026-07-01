@@ -44,9 +44,18 @@ def plot_pde_residual_field(
         warnings.append("Predicted data contains NaN/Inf values")
 
 
+
+
+
+
+    lhs_label = result.lhs_label
+
+
     if dataset is not None and _has_axis_info(dataset):
         with style_context(style):
-            fig = _render_axis_aware(actual, predicted, dataset, field_shape, warnings)
+            fig = _render_axis_aware(
+                actual, predicted, dataset, field_shape, warnings, lhs_label
+            )
         return fig, warnings
 
 
@@ -73,14 +82,14 @@ def plot_pde_residual_field(
             pred_2d = None
 
         if actual_2d is not None and pred_2d is not None:
-            _render_panel(axes[0], actual_2d, "True (u_t actual)")
-            _render_panel(axes[1], pred_2d, "Predicted (u_t predicted)")
+            _render_panel(axes[0], actual_2d, f"True ({lhs_label} actual)")
+            _render_panel(axes[1], pred_2d, f"Predicted ({lhs_label} predicted)")
             residual = actual_2d - pred_2d
             _render_panel(axes[2], residual, "Residual", residual=True)
         else:
 
-            _line_fallback(axes[0], actual, "True (u_t actual)")
-            _line_fallback(axes[1], predicted, "Predicted (u_t predicted)")
+            _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
+            _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
             residual_1d = actual - predicted
             _line_fallback(axes[2], residual_1d, "Residual")
 
@@ -122,6 +131,7 @@ def _render_axis_aware(
     dataset: PDEDataset,
     field_shape: tuple[int, ...] | None,
     warnings: list[str],
+    lhs_label: str,
 ) -> Figure:
     import contextlib
 
@@ -145,8 +155,8 @@ def _render_axis_aware(
             dpi=_DEFAULT_DPI,
         )
         axes: list[Axes] = list(axes_arr.flat)
-        _line_fallback(axes[0], actual, "True (u_t actual)")
-        _line_fallback(axes[1], predicted, "Predicted (u_t predicted)")
+        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
+        _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
         _line_fallback(axes[2], actual - predicted, "Residual")
         fig.tight_layout()
         return fig
@@ -162,8 +172,8 @@ def _render_axis_aware(
             dpi=_DEFAULT_DPI,
         )
         axes = list(axes_arr.flat)
-        _line_fallback(axes[0], actual, "True (u_t actual)")
-        _line_fallback(axes[1], predicted, "Predicted (u_t predicted)")
+        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
+        _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
         _line_fallback(axes[2], actual - predicted, "Residual")
         fig.tight_layout()
         return fig
@@ -181,8 +191,8 @@ def _render_axis_aware(
             dpi=_DEFAULT_DPI,
         )
         axes = list(axes_arr.flat)
-        _render_panel(axes[0], actual_nd, "True (u_t actual)")
-        _render_panel(axes[1], pred_nd, "Predicted (u_t predicted)")
+        _render_panel(axes[0], actual_nd, f"True ({lhs_label} actual)")
+        _render_panel(axes[1], pred_nd, f"Predicted ({lhs_label} predicted)")
         _render_panel(axes[2], residual_nd, "Residual", residual=True)
         fig.tight_layout()
         return fig
@@ -196,6 +206,7 @@ def _render_axis_aware(
             dataset,
             time_axis,
             spatial_axes,
+            lhs_label,
         )
     else:
 
@@ -217,6 +228,7 @@ def _render_1d_axis_aware(
     dataset: PDEDataset,
     time_axis: str,
     spatial_axes: list[str],
+    lhs_label: str,
 ) -> Figure:
     assert dataset.axis_order is not None
 
@@ -244,12 +256,33 @@ def _render_1d_axis_aware(
     )
     axes: list[Axes] = list(axes_arr.flat)
 
-    _pcolormesh_panel(axes[0], t_coords, s_coords, actual_display, "True (u_t actual)")
     _pcolormesh_panel(
-        axes[1], t_coords, s_coords, pred_display, "Predicted (u_t predicted)"
+        axes[0],
+        t_coords,
+        s_coords,
+        actual_display,
+        f"True ({lhs_label} actual)",
+        time_axis=time_axis,
+        spatial_axis=s_name,
     )
     _pcolormesh_panel(
-        axes[2], t_coords, s_coords, residual_display, "Residual", residual=True
+        axes[1],
+        t_coords,
+        s_coords,
+        pred_display,
+        f"Predicted ({lhs_label} predicted)",
+        time_axis=time_axis,
+        spatial_axis=s_name,
+    )
+    _pcolormesh_panel(
+        axes[2],
+        t_coords,
+        s_coords,
+        residual_display,
+        "Residual",
+        time_axis=time_axis,
+        spatial_axis=s_name,
+        residual=True,
     )
 
     fig.tight_layout()
@@ -290,9 +323,14 @@ def _render_2d_axis_aware(
     )
     axes: list[Axes] = list(axes_arr.flat)
 
-    _heatmap_panel(axes[0], actual_slice, f"True (t={t_val:.3g})")
-    _heatmap_panel(axes[1], pred_slice, f"Predicted (t={t_val:.3g})")
-    _heatmap_panel(axes[2], residual_slice, f"Residual (t={t_val:.3g})", residual=True)
+    _heatmap_panel(axes[0], actual_slice, f"True ({time_axis}={t_val:.3g})")
+    _heatmap_panel(axes[1], pred_slice, f"Predicted ({time_axis}={t_val:.3g})")
+    _heatmap_panel(
+        axes[2],
+        residual_slice,
+        f"Residual ({time_axis}={t_val:.3g})",
+        residual=True,
+    )
 
     fig.tight_layout()
     return fig
@@ -305,6 +343,8 @@ def _pcolormesh_panel(
     data: np.ndarray,
     title: str,
     *,
+    time_axis: str,
+    spatial_axis: str,
     residual: bool = False,
 ) -> None:
     display = np.where(np.isfinite(data), data, np.nan)
@@ -323,8 +363,8 @@ def _pcolormesh_panel(
         ax.figure.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04)
     else:
         ax.pcolormesh(t_coords, s_coords, display, shading="auto", rasterized=True)
-    ax.set_xlabel("t")
-    ax.set_ylabel("x")
+    ax.set_xlabel(time_axis)
+    ax.set_ylabel(spatial_axis)
     ax.set_title(title)
 
 

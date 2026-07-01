@@ -2,19 +2,22 @@
 
 # Knowledge Discovery (KD)
 
-**Symbolic PDE discovery from gridded data**
+**Symbolic PDE discovery from data**
 
 </div>
 
 ---
 
-KD is the lab's unified platform for data-driven discovery of partial
-differential equations. It provides refactored re-implementations of
-discovery algorithms developed in this lab — **SGA** (Chen et al.), **DLGA**
-(Xu et al.), and **DISCOVER** (Du et al.) — on one shared stack: a single
-dataset interface, a single term evaluator, and built-in HTML-report
-visualization. External engines such as **PySR** (Cranmer) are integrated
-unchanged behind the same API. More engines are on the roadmap.
+KD discovers the governing partial differential equation from data: give it a
+field sampled on a spatiotemporal grid, get back a symbolic PDE. Several
+discovery engines (**SGA**, **DLGA**, **DISCOVER**, and the external **PySR**)
+run behind one `kd.Model` API, sharing a single dataset interface, term
+evaluator, and HTML-report visualization. More engines are on the roadmap.
+
+<div align="center">
+<img src="docs/images/burgers2d_animation.gif" width="760" alt="2D Burgers field over time: true evolution vs the ground-truth PDE integrated forward"><br>
+<em>2D Burgers (<code>u_t = -u·u_x - u·u_y + 0.01·∇²u</code>): the field's true evolution beside the PDE integrated forward through the platform. Regenerate with <code>examples/14_field_animation_2d.py</code>.</em>
+</div>
 
 ## Install
 
@@ -26,7 +29,7 @@ cd kd
 uv sync                      # add --extra pysr for the PySR engine (Julia)
 ```
 
-## First fit
+## Quick start
 
 ```python
 import kd
@@ -43,10 +46,10 @@ print(model.best_score_)   # best AIC
 
 <div align="center">
 <img src="docs/images/burgers_field_comparison.png" width="760" alt="True vs predicted Burgers field"><br>
-<em>True vs predicted solution from the fit above — Burgers equation, residual ~1e-4.</em>
+<em>True vs predicted solution from the fit above (Burgers equation, residual ~1e-4).</em>
 </div>
 
-See [`examples/`](examples/) for runnable scripts covering every engine —
+See [`examples/`](examples/) for runnable scripts covering every engine,
 including [`09_compare_algorithms.py`](examples/09_compare_algorithms.py),
 which runs all four engines on the same dataset and ranks the discovered
 equations on one unified NMSE ruler (it needs the `pysr` extra).
@@ -57,44 +60,47 @@ Swap the `algorithm=` string to switch engines:
 
 | Algorithm | `algorithm=` | Origin | Approach |
 |-----------|--------------|--------|----------|
-| **SGA** | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic trees with finite-difference terms; scored by AIC |
-| **DLGA** | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + gene-encoded genetic algorithm |
-| **DISCOVER** | `"discover"` | Du et al. 2024 | LSTM controller trained with risk-seeking policy gradient |
-| **PySR** | `"pysr"` | Cranmer 2023 | External symbolic-regression engine (Julia); results re-scored by KD's own evaluator |
+| **SGA** | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic expression trees |
+| **DLGA** | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + genetic algorithm |
+| **DISCOVER** | `"discover"` | Du et al. 2024 | LSTM controller + policy gradient |
+| **PySR** | `"pysr"` | Cranmer 2023 | External symbolic-regression engine (Julia) |
 
 SGA, DLGA, and DISCOVER are re-implementations of the original algorithms,
 refactored onto KD's shared platform; PySR is an external tool integrated
 as-is (requires the `pysr` extra). More engines are planned.
 
-Per-engine hyperparameters live in each engine's config dataclass, passed
-via `Model(..., config=...)`:
+## Datasets
 
-```python
-from kd.search.dlga import DLGAConfig
+KD bundles a set of classic PDE datasets from the **SGA-PDE** and **EqGPT**
+benchmarks, so you can try any engine on a known equation before touching your
+own data:
 
-model = kd.Model(
-    algorithm="dlga",
-    generations=20,
-    config=DLGAConfig.burgers_preset(pop_size=80, seed=0),
-)
-```
+| Dataset | Governing PDE |
+|---------|---------------|
+| Burgers | `u_t = -u·u_x + 0.1·u_xx` |
+| KdV | `u_t = -u·u_x - 0.0025·u_xxx` |
+| Chafee-Infante | `u_t = u_xx - u + u³` |
+| Allen-Cahn | `u_t = 0.003·u_xx + u - u³` |
+| Convection-diffusion | `u_t = -u_x + 0.25·u_xx` |
+| PDE-divide | `u_t = -u_x/x + 0.25·u_xx` |
+| PDE-compound | `u_t = u·u_xx + u_x²` |
+| Eq 6.2.12 | `u_t = -0.1·u_x_t - 0.1·u_x` *(mixed derivative)* |
+| 2D Burgers | `u_t = -u·u_x - u·u_y + 0.01·∇²u` |
 
-## Built-in Datasets
+Load any with `kd.load_burgers()`, or browse the catalog programmatically with
+`kd.list_datasets()` / `kd.get_dataset(id)`; each entry carries its `.source`
+and `.license` (see [`NOTICE`](NOTICE)). Prefer synthetic data with a known
+ground truth? `kd.generate_burgers_data()`, `kd.generate_diffusion_data()`, …
+build PDEs on demand.
 
-Real PDE benchmarks bundled with KD, each loadable in one line:
-
-```python
-import kd
-
-dataset = kd.load_chafee_infante()   # also: load_burgers, load_kdv,
-                                     #       load_pde_compound, load_pde_divide
-print(dataset.name, "->", dataset.ground_truth)
-kd.preview(dataset)                  # sanity-check grid, dtype, NaN/Inf
-```
+Beyond the bundled datasets, KD can fetch additional datasets on demand from
+HuggingFace with `kd.load_from_hub(id)` after installing the hub extra
+(`uv sync --extra hub`). Browse them with `kd.list_remote_datasets()`; remote
+files are cached locally, checksum-verified, and revision-pinned.
 
 ## Bring Your Own Data
 
-Wrap your own arrays — any field on a regular grid — into a `PDEDataset`:
+Wrap your own arrays (any field on a regular grid) into a `PDEDataset`:
 
 ```python
 import torch
@@ -106,8 +112,8 @@ t = torch.linspace(0.0, 1.0, 32)   # time grid
 u = torch.rand(64, 32)             # your measured field on the (x, t) grid
 
 dataset = kd.PDEDataset.from_arrays(
-    coords={"x": x, "t": t},        # 1-D coordinate arrays; order = axis order
-    fields={"u": u},                # field tensor shaped (len(x), len(t))
+    coords={"x": x, "t": t},        # one 1D array per axis; insertion order sets the axis order
+    fields={"u": u},                # field shaped (len(x), len(t))
     lhs="u_t",                      # left-hand side of the equation to discover
     periodic={"x"},                 # optional: periodic axes improve fits
     name="my_pde",
@@ -115,12 +121,16 @@ dataset = kd.PDEDataset.from_arrays(
 )
 ```
 
+The same call handles 2D spatial fields: add a `y` axis and pass an nD field,
+e.g. `coords={"x": x, "y": y, "t": t}` with `u` shaped `(len(x), len(y),
+len(t))`.
+
 ## Score Your Own Candidate Terms
 
 You don't have to run a search to use KD's evaluator. `evaluate_terms` fits
 a candidate term set directly; `validate_terms` classifies terms without
 fitting. Both fail loud with a complete per-term rejection report (reason +
-hint), so a caller — human or LLM agent — can repair and resubmit:
+hint), so a caller (human or LLM agent) can repair and resubmit:
 
 ```python
 import kd
@@ -139,7 +149,7 @@ for v in report.rejected:
 model = kd.Model(algorithm="discover", generations=500, checkpoint_dir="ckpts")
 model.fit(dataset)                   # writes ckpts/checkpoint_*.pt as it goes
 
-# Later — or after a crash — continue from the saved search state:
+# Later (or after a crash), continue from the saved search state:
 model = kd.Model(algorithm="discover", generations=200)
 model.fit(dataset, resume_from="ckpts/checkpoint_final.pt")
 ```
@@ -162,16 +172,16 @@ print(len(report.figures))   # number of figure files
 ```
 
 The report renders the discovered equation as a structure-only **expression
-tree**, and — for the SGA engine — the raw **genome tree** of the best evolved
+tree**, and (for the SGA engine) the raw **genome tree** of the best evolved
 individual, so you can see what the search actually produced versus the sparse
 equation it was distilled into:
 
 <div align="center">
 <img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree vs discovered expression tree"><br>
-<em>Example — SGA on the built-in Chafee-Infante benchmark (recovers the ground truth
+<em>Example: SGA on the built-in Chafee-Infante benchmark (recovers the ground truth
 <code>u_t = u_xx - u + u^3</code>). Left: the raw GP genome of the best
 individual, still carrying evolved bloat (redundant / zeroed terms). Right: the
-discovered equation after sparse selection — operators and derivatives only,
+discovered equation after sparse selection, operators and derivatives only,
 coefficients dropped (they stay in the LaTeX equation figure).</em>
 </div>
 
@@ -182,11 +192,11 @@ version) so a run can be identified and reproduced later.
 
 ```
 src/kd/
-├── api.py        # Model facade — one-line fit() for every engine
-├── evaluate.py   # evaluate_terms / validate_terms — score terms directly
+├── api.py        # Model facade: one-line fit() for every engine
+├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
 ├── data/         # PDEDataset, synthetic generators, benchmark loaders
 ├── search/       # sga / dlga / discover / pysr engines + their configs
-├── viz/          # VizEngine — HTML reports & figures
+├── viz/          # VizEngine: HTML reports & figures
 └── inspect.py    # preview() dataset sanity checks
 ```
 
@@ -196,10 +206,10 @@ The SGA, DLGA, and DISCOVER engines are refactored re-implementations of
 algorithms developed in this lab; credit for the methods belongs to the
 original works:
 
-- **SGA-PDE** — Chen et al., [SGA-PDE](https://github.com/YuntianChen/SGA-PDE) —
+- **SGA-PDE**: Chen et al., [SGA-PDE](https://github.com/YuntianChen/SGA-PDE);
   also the source of the bundled benchmark datasets (see [`NOTICE`](NOTICE))
-- **DLGA** — Xu et al. 2020
-- **DISCOVER** — Du et al., [DISCOVER](https://github.com/menggedu/DISCOVER)
+- **DLGA**: Xu et al. 2020
+- **DISCOVER**: Du et al., [DISCOVER](https://github.com/menggedu/DISCOVER)
 
 KD also builds on [PySR](https://github.com/MilesCranmer/PySR) (integrated
 as an optional engine), [SymPy](https://github.com/sympy/sympy), and

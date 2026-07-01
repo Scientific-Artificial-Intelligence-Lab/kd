@@ -3695,3 +3695,26 @@ class TestSGAPluginDedupMode:
             "If this fails, dev changed the default — see step 5 "
             "(default change is gated on ablation results)."
         )
+
+
+
+
+
+
+
+class TestSGALhsOrderFailLoud:
+
+    def test_extract_lhs_target_rejects_second_order_lhs(self) -> None:
+        from kd.search.sga.plugin import SGAPlugin
+
+        plugin = SGAPlugin(SGAConfig(num=4, depth=3, width=3, seed=0))
+        nx, nt = 6, 5
+        x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+        t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+        u = torch.randn(nx, nt, dtype=torch.float64)
+        ds = PDEDataset.from_arrays(
+            coords={"x": x, "t": t}, fields={"u": u}, lhs="u_tt"
+        )
+        assert ds.lhs_order == 2
+        with pytest.raises(ValueError, match="lhs_order|first-order"):
+            plugin._extract_lhs_target(ds, MagicMock())

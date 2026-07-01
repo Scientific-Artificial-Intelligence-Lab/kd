@@ -122,8 +122,9 @@ __all__ = [
 
 
 
+
+
 _DEFAULT_MAX_ORDER = 2
-_DEFAULT_LHS_ORDER = 1
 
 
 
@@ -167,7 +168,7 @@ def validate_terms(
     terms: Sequence[str],
     *,
     max_order: int = _DEFAULT_MAX_ORDER,
-    lhs_order: int = _DEFAULT_LHS_ORDER,
+    lhs_order: int | None = None,
 ) -> TermValidationReport:
     """Classify each term as valid / rejected WITHOUT fitting.
 
@@ -186,10 +187,13 @@ def validate_terms(
             (``-> DerivativeReqs.max_atomic_order``). Gates terminal tokens such
             as ``u_xx``; open-form ``diff*_x`` calls are not gated.
         lhs_order: LHS derivative order the tautology guard compares against
-            (``1`` -> ``u_t``, ``2`` -> ``u_tt``). Must match the ``lhs_order``
-            passed to the subsequent ``evaluate_terms`` call so the two-call
-            pattern stays consistent (a tautology under one order is not one
-            under another).
+            (``1`` -> ``u_t``, ``2`` -> ``u_tt``). Default ``None`` DERIVES the
+            order from ``dataset.lhs_order`` (the single source of truth). An
+            explicit value is a deliberate OVERRIDE (request semantics) — it may
+            differ from ``dataset.lhs_order`` to probe a what-if target. Must
+            match the ``lhs_order`` passed to the subsequent ``evaluate_terms``
+            call so the two-call pattern stays consistent (a tautology under one
+            order is not one under another).
 
     Returns:
         A ``TermValidationReport`` partitioning the terms into valid / rejected,
@@ -198,12 +202,16 @@ def validate_terms(
     Raises:
         ValueError: If ``terms`` is empty.
         ValueError: Propagated from ``PlatformBuilder`` when the resolved LHS
-            field/axis is absent from the dataset, when ``lhs_order > max_order``
-            (the LHS is read from the same precomputed derivative cache that
-            ``max_order`` bounds), or when ``max_order > 3`` (provider cap).
+            field/axis is absent from the dataset, when the resolved
+            ``lhs_order > max_order`` (the LHS is read from the same precomputed
+            derivative cache that ``max_order`` bounds), or when
+            ``max_order > 3`` (provider cap).
     """
     term_list = _require_nonempty(terms)
-    components = _build_components(dataset, max_order=max_order, lhs_order=lhs_order)
+    lhs_order_resolved = _resolve_lhs_order(dataset, lhs_order)
+    components = _build_components(
+        dataset, max_order=max_order, lhs_order=lhs_order_resolved
+    )
     return classify_terms(term_list, components, max_order=max_order)
 
 
@@ -213,7 +221,7 @@ def evaluate_terms(
     *,
     skip_invalid: bool = False,
     max_order: int = _DEFAULT_MAX_ORDER,
-    lhs_order: int = _DEFAULT_LHS_ORDER,
+    lhs_order: int | None = None,
 ) -> EvaluationResult:
     """Evaluate candidate terms against a dataset, fail-loud.
 
@@ -230,7 +238,10 @@ def evaluate_terms(
             rejected, ``InvalidTermsError`` is still raised (no silent empty fit).
         max_order: Maximum atomic derivative order (``-> max_atomic_order``).
         lhs_order: LHS derivative order targeted by the fit (``1`` -> ``u_t``,
-            ``2`` -> ``u_tt``; ``-> DerivativeReqs.lhs_order``).
+            ``2`` -> ``u_tt``; ``-> DerivativeReqs.lhs_order``). Default ``None``
+            DERIVES from ``dataset.lhs_order`` (single source of truth); an
+            explicit value is a deliberate OVERRIDE (request semantics, may
+            differ from ``dataset.lhs_order``).
 
     Returns:
         An ``EvaluationResult`` with ``is_valid is True`` (honest metrics).
@@ -238,15 +249,19 @@ def evaluate_terms(
     Raises:
         ValueError: If ``terms`` is empty.
         ValueError: Propagated from ``PlatformBuilder`` when the resolved LHS
-            field/axis is absent from the dataset, when ``lhs_order > max_order``
-            (the LHS is read from the same precomputed derivative cache that
-            ``max_order`` bounds), or when ``max_order > 3`` (provider cap).
+            field/axis is absent from the dataset, when the resolved
+            ``lhs_order > max_order`` (the LHS is read from the same precomputed
+            derivative cache that ``max_order`` bounds), or when
+            ``max_order > 3`` (provider cap).
         InvalidTermsError: If terms are rejected (see ``skip_invalid``).
         EvaluationFailedError: If the final fit is invalid (the penalty sentinel
             is never returned).
     """
     term_list = _require_nonempty(terms)
-    components = _build_components(dataset, max_order=max_order, lhs_order=lhs_order)
+    lhs_order_resolved = _resolve_lhs_order(dataset, lhs_order)
+    components = _build_components(
+        dataset, max_order=max_order, lhs_order=lhs_order_resolved
+    )
     report = classify_terms(term_list, components, max_order=max_order)
 
     _handle_rejections(report, skip_invalid=skip_invalid)
@@ -299,6 +314,22 @@ def _require_nonempty(terms: Sequence[str]) -> list[str]:
     if not term_list:
         raise ValueError("Empty term list: provide at least one term to evaluate.")
     return term_list
+
+
+def _resolve_lhs_order(dataset: PDEDataset, lhs_order: int | None) -> int:
+    """Resolve the effective LHS order: derive from dataset, or honor override.
+
+    Decision A (DATA-0): ``lhs_order=None`` (default) DERIVES the order from
+    ``dataset.lhs_order`` — the single source of truth — so the agent entry
+    stays consistent with the dataset by default. An explicit value is a
+    deliberate OVERRIDE (request semantics): it may differ from
+    ``dataset.lhs_order`` to probe a what-if target (e.g. the u_tt relation on
+    an order-1 advection field), and is intentionally NOT reconciled against
+    the dataset here. This narrow-entry override is distinct from the ``Model``
+    facade, where the dataset's order is authoritative and an unsupported
+    ``(algorithm, lhs_order)`` fails loud.
+    """
+    return dataset.lhs_order if lhs_order is None else lhs_order
 
 
 def _build_components(

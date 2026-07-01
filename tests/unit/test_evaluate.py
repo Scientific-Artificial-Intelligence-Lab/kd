@@ -928,3 +928,114 @@ def test_j_callable_via_module_alias() -> None:
     ds = _build_advection_dataset()
     result = kd.evaluate_terms(ds, ["diff_x(u)"])
     assert result.is_valid is True
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _build_advection_dataset_order2() -> PDEDataset:
+    from kd.data.schema import PDEDataset as _PDEDataset
+
+    base = _build_advection_dataset()
+    x = base.get_coords("x")
+    t = base.get_coords("t")
+    u = base.get_field("u")
+    return _PDEDataset.from_arrays(
+        coords={"x": x, "t": t},
+        fields={"u": u},
+        lhs="u_tt",
+        periodic={"x"},
+        name="advection_u_tt",
+    )
+
+
+def test_k_default_none_derives_order_two_from_dataset() -> None:
+    api = _evaluate_api()
+    ds = _build_advection_dataset_order2()
+
+    assert ds.lhs_order == 2
+
+    result = api.evaluate_terms(ds, ["diff2_x(u)"])
+
+    assert result.is_valid is True
+    assert result.coefficients is not None
+    assert result.coefficients.numel() == 1
+    coef = float(result.coefficients.flatten()[0])
+    expected = _WAVE_SPEED**2
+    assert coef > 0.0
+    assert _within_rel(coef, expected)
+    assert result.nmse < _NMSE_CEILING
+
+
+def test_k_default_none_derives_order_one_advection() -> None:
+    api = _evaluate_api()
+    ds = _build_advection_dataset()
+    assert ds.lhs_order == 1
+
+    result = api.evaluate_terms(ds, ["diff_x(u)"])
+
+    assert result.is_valid is True
+    assert result.coefficients is not None
+    coef = float(result.coefficients.flatten()[0])
+    assert coef < 0.0
+    assert _within_rel(coef, -_WAVE_SPEED)
+    assert result.nmse < _NMSE_CEILING
+
+
+def test_k_default_none_validate_derives_tautology_from_dataset() -> None:
+    api = _evaluate_api()
+
+    ds_order2 = _build_advection_dataset_order2()
+    assert ds_order2.lhs_order == 2
+    report2 = api.validate_terms(ds_order2, ["diff_t(u)"])
+    assert report2.ok is True
+    assert report2.valid == ["diff_t(u)"]
+
+    ds_order1 = _build_advection_dataset()
+    assert ds_order1.lhs_order == 1
+    report1 = api.validate_terms(ds_order1, ["diff_t(u)"])
+    assert report1.ok is False
+    assert {rej.term for rej in report1.rejected} == {"diff_t(u)"}
+
+
+def test_k_explicit_kwarg_overrides_dataset_order() -> None:
+    api = _evaluate_api()
+    ds = _build_advection_dataset()
+
+    assert ds.lhs_order == 1
+
+    result = api.evaluate_terms(ds, ["diff2_x(u)"], lhs_order=2)
+
+    assert result.is_valid is True
+    assert result.coefficients is not None
+    assert result.coefficients.numel() == 1
+    coef = float(result.coefficients.flatten()[0])
+    assert coef > 0.0
+    assert _within_rel(coef, _WAVE_SPEED**2)
+    assert result.nmse < _NMSE_CEILING
+
+
+def test_k_explicit_kwarg_override_accepts_diff_t() -> None:
+    api = _evaluate_api()
+    ds = _build_advection_dataset()
+    assert ds.lhs_order == 1
+
+    report = api.validate_terms(ds, ["diff_t(u)"], lhs_order=2)
+    assert report.ok is True
+    assert report.valid == ["diff_t(u)"]
+
+    result = api.evaluate_terms(ds, ["diff_t(u)"], lhs_order=2)
+    assert result.is_valid is True
+    assert result.coefficients is not None

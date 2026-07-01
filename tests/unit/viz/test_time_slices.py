@@ -159,6 +159,27 @@ class TestTimeSlicesSmoke:
 
 class TestTimeSlicesHappyPath:
 
+    def test_1d_custom_axis_titles_use_lhs_axis_name(
+        self,
+        custom_axis_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(custom_axis_dataset)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(
+            result,
+            custom_axis_dataset,
+            ir,
+            n_slices=2,
+        )
+        try:
+            plot_axes = fig.get_axes()
+            title_text = " ".join(ax.get_title() for ax in plot_axes)
+            assert "tau =" in title_text
+            assert "t =" not in title_text
+            assert {ax.get_xlabel() for ax in plot_axes} == {"xi"}
+        finally:
+            plt.close(fig)
+
     def test_1d_produces_panels(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = _make_integration_result(ds)
@@ -177,6 +198,30 @@ class TestTimeSlicesHappyPath:
         fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
         try:
             assert len(fig.get_axes()) >= 3
+        finally:
+            plt.close(fig)
+
+    def test_2d_uses_physical_extent_and_axis_labels(
+        self,
+        rectangular_2d_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(rectangular_2d_dataset)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, rectangular_2d_dataset, ir, n_slices=3)
+        try:
+            data_axes = [ax for ax in fig.get_axes() if ax.images]
+            assert data_axes
+            image = data_axes[0].images[0]
+
+
+            assert tuple(image.get_extent()) == pytest.approx(
+                (10.0, 14.0, -2.0, 3.0)
+            )
+            assert tuple(image.get_extent()) != pytest.approx(
+                (-0.5, 3.5, -0.5, 4.5)
+            )
+            assert {ax.get_xlabel() for ax in data_axes} == {"eta"}
+            assert {ax.get_ylabel() for ax in data_axes} == {"xi"}
         finally:
             plt.close(fig)
 

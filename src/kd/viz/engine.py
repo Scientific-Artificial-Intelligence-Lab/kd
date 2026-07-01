@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
+from matplotlib.animation import PillowWriter
 
 from kd.viz.extension import VizExtension
+from kd.viz.plots.animation import plot_field_animation
 from kd.viz.plots.coefficient import plot_coefficient_bar
 from kd.viz.plots.comparison import (
     plot_score_bar,
@@ -157,6 +159,7 @@ class VizEngine:
         *,
         algorithm: Any | None = None,
         dataset: Any | None = None,
+        animate: bool = False,
     ) -> ReportResult:
         """Render universal plots, plugin plots, and HTML report.
 
@@ -166,6 +169,8 @@ class VizEngine:
                 are rendered with per-plot error isolation.
             dataset: If provided (PDEDataset), enables field comparison
                 (u-field True/Predicted/Residual) and PDE residual field.
+            animate: When True, render a 2D field animation GIF for
+                2D-spatial+time datasets. Defaults to False.
 
         Returns:
             ReportResult with generated figure paths, HTML report
@@ -182,7 +187,7 @@ class VizEngine:
 
 
         if dataset is not None:
-            self._render_field_comparison(result, dataset, report)
+            self._render_field_comparison(result, dataset, report, animate=animate)
 
 
         universal_figures = list(report.figures)
@@ -369,6 +374,8 @@ class VizEngine:
         result: ExperimentResult,
         dataset: PDEDataset,
         report: ReportResult,
+        *,
+        animate: bool = False,
     ) -> None:
         """Render field comparison and Tier 2 plots that need dataset."""
 
@@ -417,6 +424,17 @@ class VizEngine:
         if path is not None:
             report.figures.append(path)
         self._merge_warnings(report, warnings)
+
+
+        if animate:
+            path, warnings = self._render_animation(
+                result=result,
+                dataset=dataset,
+                integration_result=integration_result,
+            )
+            if path is not None:
+                report.data_files.append(path)
+            self._merge_warnings(report, warnings)
 
 
         self._render_pde_residual(result, dataset, report)
@@ -590,6 +608,57 @@ class VizEngine:
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def _render_animation(
+        self,
+        *,
+        result: ExperimentResult,
+        dataset: PDEDataset,
+        integration_result: IntegrationResult,
+    ) -> tuple[Path | None, list[str]]:
+        """Render the optional 2D field animation GIF."""
+        if not self._can_render_animation(dataset):
+            return None, []
+        if not PillowWriter.isAvailable():
+            msg = "PillowWriter unavailable; skipping field_animation.gif"
+            logger.warning(msg)
+            return None, [msg]
+
+        figs_before = set(plt.get_fignums())
+        animation = None
+        try:
+            animation, warnings = plot_field_animation(
+                result,
+                dataset,
+                integration_result,
+                style=self._style,
+            )
+            if animation is None:
+                return None, warnings
+            path = self._output_dir / "field_animation.gif"
+            writer = PillowWriter(fps=8)
+            animation.save(path, writer=writer)
+            return path, warnings
+        except Exception as exc:
+            for num in set(plt.get_fignums()) - figs_before:
+                plt.close(num)
+            msg = f"Animation 'field_animation' failed: {exc}"
+            logger.warning(msg)
+            return None, [msg]
+        finally:
+            if animation is not None:
+                fig = getattr(animation, "_fig", None)
+                if fig is not None:
+                    plt.close(fig)
+
+    @staticmethod
+    def _can_render_animation(dataset: PDEDataset) -> bool:
+        """Return True for 2D-spatial+time datasets."""
+        return (
+            dataset.axis_order is not None
+            and dataset.lhs_axis in dataset.axis_order
+            and len(dataset.spatial_axes) == 2
+        )
 
     def _render_one(
         self,

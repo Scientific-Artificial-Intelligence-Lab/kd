@@ -38,31 +38,22 @@ def parse_lhs_spec(
     *,
     fields: dict[str, Any],
     coords: dict[str, Any],
-) -> tuple[str, str]:
-    if "_" not in lhs:
+) -> tuple[str, str, int]:
+    from kd.core.expr.naming import parse_derivative_name
+
+    parsed = parse_derivative_name(
+        lhs,
+        known_fields=set(fields.keys()),
+        known_axes=set(coords.keys()),
+    )
+    if parsed is None:
         raise ValueError(
-            f"lhs spec '{lhs}' is malformed: expected '{{field}}_{{axis}}' "
-            f"format (e.g., 'u_t'). Available fields: {list(fields.keys())}, "
-            f"axes: {list(coords.keys())}."
+            f"lhs spec '{lhs}' is malformed or references an unknown "
+            f"field/axis: expected '{{field}}_{{axis...}}' format "
+            f"(e.g. 'u_t' for du/dt, 'u_tt' for d²u/dt²). Available fields: "
+            f"{list(fields.keys())}, axes: {list(coords.keys())}."
         )
-    lhs_field, lhs_axis = lhs.rsplit("_", 1)
-    if not lhs_field or not lhs_axis:
-        raise ValueError(
-            f"lhs spec '{lhs}' is malformed: expected '{{field}}_{{axis}}' "
-            f"format (e.g., 'u_t'). Available fields: {list(fields.keys())}, "
-            f"axes: {list(coords.keys())}."
-        )
-    if lhs_field not in fields:
-        raise ValueError(
-            f"lhs field '{lhs_field}' (parsed from lhs='{lhs}') not "
-            f"in fields. Available fields: {list(fields.keys())}."
-        )
-    if lhs_axis not in coords:
-        raise ValueError(
-            f"lhs axis '{lhs_axis}' (parsed from lhs='{lhs}') not "
-            f"in coords. Available axes: {list(coords.keys())}."
-        )
-    return lhs_field, lhs_axis
+    return parsed
 
 
 def _check_strictly_increasing(tensor: torch.Tensor, axis_name: str) -> None:

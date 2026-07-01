@@ -50,6 +50,13 @@ class DLGAConfig:
 
 
 
+    target_lhs_order: int = 1
+
+
+
+
+
+
 
 
 
@@ -147,6 +154,19 @@ class DLGAConfig:
             raise ValueError("library must not be empty")
         if self.pop_size < 2:
             raise ValueError(f"pop_size must be >= 2, got {self.pop_size}")
+        if self.target_lhs_order not in (1, 2):
+            raise ValueError(
+                "target_lhs_order must be 1 (u_t) or 2 (u_tt) — DLGA only "
+                f"materializes these evaluators, got {self.target_lhs_order}"
+            )
+        if self.target_lhs_order == 2 and not self.lhs_auto_select:
+            raise ValueError(
+                "target_lhs_order=2 (u_tt) requires lhs_auto_select=True: the "
+                "u_tt evaluator is only built under auto-select (see "
+                "DLGAPlugin._build_evaluators), so declaring order 2 with "
+                "auto-select disabled would pass the LHS-order gate but fit "
+                "u_t — a silent wrong-order ('trusted but wrong') result"
+            )
         if self.max_modules < 1:
             raise ValueError(f"max_modules must be >= 1, got {self.max_modules}")
         if self.max_module_length < 1:
@@ -220,7 +240,24 @@ class DLGAConfig:
         surrogate budget to pick the u_tt branch — keep ``surrogate_max_epochs``
         high. Pass ``**overrides`` to customize.
         """
-        defaults: dict[str, Any] = {"epsilon": 1e-3}
+        defaults: dict[str, Any] = {"epsilon": 1e-3, "target_lhs_order": 2}
+        defaults.update(overrides)
+        return cls(**defaults)
+
+    @classmethod
+    def kg_preset(cls, **overrides: Any) -> DLGAConfig:
+        """DLGAConfig for the Klein-Gordon equation (u_tt LHS, ``epsilon=1e-3``).
+
+        Klein-Gordon is ``u_tt = 0.5*u_xx - 5*u`` — a two-term second-order
+        target. Like wave it relies on the dual-LHS auto-select picking the
+        ``u_tt`` branch, so keep ``surrogate_max_epochs`` high. ``epsilon=1e-3``
+        was validated on the real EqGPT ``KG_Exp.mat`` (recovers ``u_xx`` + ``u``
+        with ``lhs=u_tt``, coefficients within tolerance and the -5*u sign
+        correct); it happens to match wave's epsilon but is kept a distinct
+        preset so KG-specific tuning stays decoupled. Pass ``**overrides`` to
+        customize.
+        """
+        defaults: dict[str, Any] = {"epsilon": 1e-3, "target_lhs_order": 2}
         defaults.update(overrides)
         return cls(**defaults)
 

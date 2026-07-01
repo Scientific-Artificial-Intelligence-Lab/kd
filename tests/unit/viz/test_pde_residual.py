@@ -67,7 +67,7 @@ def _make_2d_dataset(nx: int = 10, ny: int = 10, nt: int = 5) -> PDEDataset:
     )
 
 
-def _make_result(n_samples: int = 50) -> ExperimentResult:
+def _make_result(n_samples: int = 50, lhs_label: str = "u_t") -> ExperimentResult:
     actual = torch.randn(n_samples)
     predicted = actual + torch.randn(n_samples) * 0.1
     recorder = VizRecorder()
@@ -99,6 +99,7 @@ def _make_result(n_samples: int = 50) -> ExperimentResult:
         algorithm_name="SGA",
         config={},
         recorder=recorder,
+        lhs_label=lhs_label,
     )
 
 
@@ -135,6 +136,48 @@ class TestPdeResidualDatasetSmoke:
 
 
 class TestPdeResidualAxisAware1D:
+
+    def test_1d_custom_axis_labels_use_dataset_names(
+        self,
+        custom_axis_dataset: PDEDataset,
+    ) -> None:
+        result = _make_result(n_samples=6 * 5)
+        fig, _ = plot_pde_residual_field(
+            result,
+            field_shape=(6, 5),
+            dataset=custom_axis_dataset,
+        )
+        try:
+            plot_axes = fig.get_axes()[:3]
+            assert {ax.get_xlabel() for ax in plot_axes} == {"tau"}
+            assert {ax.get_ylabel() for ax in plot_axes} == {"xi"}
+        finally:
+            plt.close(fig)
+
+    def test_axis_aware_title_uses_result_label_not_dataset(self) -> None:
+        ds = _make_1d_dataset(nx=6, nt=5)
+        result = _make_result(n_samples=6 * 5, lhs_label="u_tt")
+        fig, _ = plot_pde_residual_field(result, field_shape=(6, 5), dataset=ds)
+        try:
+            title_text = " ".join(ax.get_title() for ax in fig.get_axes())
+            assert "u_tt actual" in title_text
+            assert "u_tt predicted" in title_text
+            assert "u_t actual" not in title_text
+            assert "u_t predicted" not in title_text
+        finally:
+            plt.close(fig)
+
+    def test_generic_fallback_title_uses_result_label(self) -> None:
+        result = _make_result(n_samples=10 * 5, lhs_label="u_tt")
+        fig, _ = plot_pde_residual_field(result, field_shape=(10, 5))
+        try:
+            title_text = " ".join(ax.get_title() for ax in fig.get_axes())
+            assert "u_tt actual" in title_text
+            assert "u_tt predicted" in title_text
+            assert "u_t actual" not in title_text
+            assert "u_t predicted" not in title_text
+        finally:
+            plt.close(fig)
 
     def test_1d_with_dataset_uses_pcolormesh(self) -> None:
         ds = _make_1d_dataset(nx=10, nt=5)

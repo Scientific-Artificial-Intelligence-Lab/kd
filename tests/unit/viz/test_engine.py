@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pytest
 
+from kd.core.integrator import IntegrationResult
 from kd.data.schema import PDEDataset
 from kd.search.result import ExperimentResult
 from kd.viz import VizEngine
@@ -189,6 +190,35 @@ def _make_pde_dataset_for_engine() -> PDEDataset:
     )
 
 
+def _make_2d_pde_dataset_for_engine() -> PDEDataset:
+    import torch
+
+    from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
+
+    nx, ny, nt = 5, 4, 3
+    x = torch.linspace(-2.0, 3.0, nx)
+    y = torch.linspace(10.0, 14.0, ny)
+    t = torch.linspace(0.0, 1.0, nt)
+    u_field = (
+        torch.sin(x).reshape(nx, 1, 1)
+        * torch.cos(y).reshape(1, ny, 1)
+        * torch.exp(-t).reshape(1, 1, nt)
+    ).to(torch.float64)
+    return PDEDataset(
+        name="test_2d",
+        task_type=TaskType.PDE,
+        axes={
+            "x": AxisInfo(name="x", values=x),
+            "y": AxisInfo(name="y", values=y),
+            "t": AxisInfo(name="t", values=t),
+        },
+        axis_order=["x", "y", "t"],
+        fields={"u": FieldData(name="u", values=u_field)},
+        lhs_field="u",
+        lhs_axis="t",
+    )
+
+
 class TestRenderAllTier2Plots:
 
     def test_coefficient_bar_in_render_all(
@@ -290,6 +320,104 @@ class TestRenderAllTier2Plots:
         engine.render_all(mock_experiment_result, dataset=ds)
         figs_after = plt.get_fignums()
         assert len(figs_after) <= len(figs_before)
+
+    def test_animation_default_false_does_not_render_gif(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_2d_pde_dataset_for_engine()
+        ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
+        engine = VizEngine(output_dir=tmp_path)
+
+        with (
+            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch(
+                "kd.viz.engine.plot_field_animation",
+                side_effect=AssertionError("animation should be gated off"),
+            ),
+        ):
+            report = engine.render_all(mock_experiment_result, dataset=ds)
+
+        assert not (tmp_path / "field_animation.gif").exists()
+        assert not any(path.name == "field_animation.gif" for path in report.figures)
+
+    def test_animation_true_saves_gif_outside_html_figures(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_2d_pde_dataset_for_engine()
+        ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
+        engine = VizEngine(output_dir=tmp_path)
+
+        class _FakeAnimation:
+            def __init__(self) -> None:
+                self._fig = plt.figure()
+
+            def save(self, path: Path, *, writer: object) -> None:
+                Path(path).write_bytes(b"GIF89a")
+
+        class _FakePillowWriter:
+            @classmethod
+            def isAvailable(cls) -> bool:
+                return True
+
+            def __init__(self, *, fps: int) -> None:
+                self.fps = fps
+
+        def _fake_plot(
+            *args: object,
+            **kwargs: object,
+        ) -> tuple[_FakeAnimation, list[str]]:
+            return _FakeAnimation(), []
+
+        with (
+            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch("kd.viz.engine.plot_field_animation", _fake_plot),
+            patch("kd.viz.engine.PillowWriter", _FakePillowWriter),
+        ):
+            report = engine.render_all(
+                mock_experiment_result,
+                dataset=ds,
+                animate=True,
+            )
+
+        gif_path = tmp_path / "field_animation.gif"
+        assert gif_path.read_bytes() == b"GIF89a"
+        assert gif_path in report.data_files
+        assert not any(path.name == "field_animation.gif" for path in report.figures)
+
+    def test_animation_missing_writer_warns_and_skips(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_2d_pde_dataset_for_engine()
+        ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
+        engine = VizEngine(output_dir=tmp_path)
+
+        class _UnavailablePillowWriter:
+            @classmethod
+            def isAvailable(cls) -> bool:
+                return False
+
+        with (
+            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch(
+                "kd.viz.engine.plot_field_animation",
+                side_effect=AssertionError("writer check should skip before plotting"),
+            ),
+            patch("kd.viz.engine.PillowWriter", _UnavailablePillowWriter),
+        ):
+            report = engine.render_all(
+                mock_experiment_result,
+                dataset=ds,
+                animate=True,
+            )
+
+        assert not (tmp_path / "field_animation.gif").exists()
+        assert any("PillowWriter" in warning for warning in report.warnings)
 
 
 

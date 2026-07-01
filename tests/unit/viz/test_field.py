@@ -280,6 +280,21 @@ class TestSliceNdTo2d:
 
 class TestPlotFieldComparison:
 
+    def test_1d_custom_axis_labels_use_dataset_names(
+        self,
+        custom_axis_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(custom_axis_dataset)
+        result = _make_experiment_result()
+
+        fig, _ = plot_field_comparison(result, custom_axis_dataset, ir)
+        try:
+            plot_axes = fig.get_axes()[:3]
+            assert {ax.get_xlabel() for ax in plot_axes} == {"tau"}
+            assert {ax.get_ylabel() for ax in plot_axes} == {"xi"}
+        finally:
+            plt.close(fig)
+
     def test_1d_spatial_returns_figure_and_warnings(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
@@ -343,6 +358,26 @@ class TestPlotFieldComparison:
 
             axes = fig.get_axes()
             assert len(axes) >= 3
+        finally:
+            plt.close(fig)
+
+    def test_2d_spatial_uses_physical_extent_and_axis_labels(
+        self,
+        rectangular_2d_dataset: PDEDataset,
+    ) -> None:
+        ir = _make_integration_result(rectangular_2d_dataset)
+        result = _make_experiment_result()
+
+        fig, _ = plot_field_comparison(result, rectangular_2d_dataset, ir)
+        try:
+            data_axes = [ax for ax in fig.get_axes() if ax.images]
+            assert data_axes
+            for ax in data_axes:
+                assert tuple(ax.images[0].get_extent()) == pytest.approx(
+                    (10.0, 14.0, -2.0, 3.0)
+                )
+                assert ax.get_xlabel() == "eta"
+                assert ax.get_ylabel() == "xi"
         finally:
             plt.close(fig)
 

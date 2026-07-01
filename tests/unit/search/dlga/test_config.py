@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 
 import pytest
 
@@ -118,3 +119,62 @@ class TestDLGAPresets:
             warnings.simplefilter("error")
             m = kd.Model(algorithm="dlga", config=DLGAConfig.kdv_preset())
         assert m.algorithm == "dlga"
+
+
+class TestDLGATargetLhsOrder:
+
+    @pytest.mark.unit
+    def test_target_lhs_order_default_is_one(self) -> None:
+        assert DLGAConfig().target_lhs_order == 1
+
+    @pytest.mark.unit
+    def test_wave_preset_sets_second_order_lhs(self) -> None:
+        assert DLGAConfig.wave_preset().target_lhs_order == 2
+
+    @pytest.mark.unit
+    def test_kg_preset_sets_second_order_lhs(self) -> None:
+        config = DLGAConfig.kg_preset()
+        assert config.target_lhs_order == 2
+        assert config.epsilon == pytest.approx(1e-3)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "make_config",
+        [
+            pytest.param(DLGAConfig, id="default"),
+            pytest.param(DLGAConfig.burgers_preset, id="burgers_preset"),
+            pytest.param(DLGAConfig.kdv_preset, id="kdv_preset"),
+            pytest.param(DLGAConfig.chafee_preset, id="chafee_preset"),
+        ],
+    )
+    def test_non_wave_configs_keep_first_order_lhs(
+        self, make_config: Callable[[], DLGAConfig]
+    ) -> None:
+        assert make_config().target_lhs_order == 1
+
+    @pytest.mark.unit
+    def test_target_lhs_order_is_overridable_per_preset(self) -> None:
+        assert DLGAConfig.burgers_preset(target_lhs_order=2).target_lhs_order == 2
+
+    @pytest.mark.unit
+    def test_target_lhs_order_two_with_auto_select_ok(self) -> None:
+        config = DLGAConfig(target_lhs_order=2, lhs_auto_select=True)
+        assert config.target_lhs_order == 2
+
+    @pytest.mark.unit
+    def test_target_lhs_order_two_requires_auto_select(self) -> None:
+        with pytest.raises(ValueError, match="requires lhs_auto_select=True"):
+            DLGAConfig(target_lhs_order=2, lhs_auto_select=False)
+
+    @pytest.mark.unit
+    def test_wave_preset_with_auto_select_off_raises(self) -> None:
+        with pytest.raises(ValueError, match="requires lhs_auto_select=True"):
+            DLGAConfig.wave_preset(lhs_auto_select=False)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("bad_order", [0, 3, 4])
+    def test_target_lhs_order_rejects_unmaterializable_orders(
+        self, bad_order: int
+    ) -> None:
+        with pytest.raises(ValueError, match="target_lhs_order must be 1"):
+            DLGAConfig(target_lhs_order=bad_order)

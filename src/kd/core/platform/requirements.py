@@ -25,3 +25,19 @@ class DerivativeReqs:
                 f"(got '{self.provider_kind}'); SurrogateContext relies on "
                 "AutogradProvider.get_field()"
             )
+
+
+def assert_lhs_order_supported(
+    dataset_lhs_order: int,
+    plugin_lhs_order: int,
+    algorithm: str,
+) -> None:
+    if dataset_lhs_order == plugin_lhs_order:
+        return
+    raise NotImplementedError(
+        f"Algorithm '{algorithm}' does not support a dataset with "
+        f"lhs_order={dataset_lhs_order}: it targets lhs_order={plugin_lhs_order} "
+        f"only. A higher-order LHS (e.g. u_tt, the wave/telegraph case) is not "
+        f"yet discoverable end-to-end — reduce to a first-order system, or pass "
+        f"lhs_order=1 data. Second-order LHS support is deferred to DATA-4."
+    )

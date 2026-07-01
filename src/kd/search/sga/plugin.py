@@ -664,9 +664,26 @@ class SGAPlugin:
         context: Any,
     ) -> Tensor:
         if dataset.lhs_field and dataset.lhs_axis:
+            lhs_order = getattr(dataset, "lhs_order", 1)
+
+
+
+
+
+
+            if lhs_order != 1:
+                raise ValueError(
+                    f"SGA only supports a first-order LHS (u_t); the dataset "
+                    f"declares lhs_order={lhs_order} "
+                    f"({dataset.lhs_field}_{dataset.lhs_axis * lhs_order}). "
+                    f"Second-order LHS (u_tt) discovery is not supported by SGA "
+                    f"(deferred to DATA-4)."
+                )
             try:
                 get_deriv = self._resolve_get_derivative(context)
-                deriv: Tensor = get_deriv(dataset.lhs_field, dataset.lhs_axis, 1)
+                deriv: Tensor = get_deriv(
+                    dataset.lhs_field, dataset.lhs_axis, lhs_order
+                )
                 return _numeric_flatten(deriv)
             except (KeyError, ValueError) as exc:
                 raise ValueError(

@@ -367,6 +367,99 @@ def test_from_arrays_lhs_multi_underscore_field() -> None:
 
 
 
+def _square_field(nx: int, nt: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+    t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+    u = torch.randn(nx, nt, dtype=torch.float64)
+    return x, t, u
+
+
+def test_from_arrays_lhs_second_order_time() -> None:
+    x, t, u = _square_field(8, 6)
+    ds = PDEDataset.from_arrays(
+        coords={"x": x, "t": t},
+        fields={"u": u},
+        lhs="u_tt",
+    )
+    assert ds.lhs_field == "u"
+    assert ds.lhs_axis == "t"
+    assert ds.lhs_order == 2
+
+
+def test_from_arrays_lhs_first_order_time() -> None:
+    x, t, u = _square_field(8, 6)
+    ds = PDEDataset.from_arrays(
+        coords={"x": x, "t": t},
+        fields={"u": u},
+        lhs="u_t",
+    )
+    assert ds.lhs_field == "u"
+    assert ds.lhs_axis == "t"
+    assert ds.lhs_order == 1
+
+
+def test_from_arrays_lhs_second_order_spatial() -> None:
+    x, t, u = _square_field(8, 6)
+    ds = PDEDataset.from_arrays(
+        coords={"x": x, "t": t},
+        fields={"u": u},
+        lhs="u_xx",
+    )
+    assert ds.lhs_field == "u"
+    assert ds.lhs_axis == "x"
+    assert ds.lhs_order == 2
+
+
+def test_from_arrays_lhs_no_underscore_raises() -> None:
+    x, t, u = _square_field(8, 6)
+    with pytest.raises(ValueError):
+        PDEDataset.from_arrays(
+            coords={"x": x, "t": t},
+            fields={"u": u},
+            lhs="u",
+        )
+
+
+def test_from_arrays_lhs_unknown_axis_raises() -> None:
+    x, t, u = _square_field(8, 6)
+    with pytest.raises(ValueError):
+        PDEDataset.from_arrays(
+            coords={"x": x, "t": t},
+            fields={"u": u},
+            lhs="u_z",
+        )
+
+
+def test_from_arrays_lhs_unknown_field_raises() -> None:
+    x, t, u = _square_field(8, 6)
+    with pytest.raises(ValueError):
+        PDEDataset.from_arrays(
+            coords={"x": x, "t": t},
+            fields={"u": u},
+            lhs="q_t",
+        )
+
+
+def test_from_arrays_lhs_multi_underscore_field_first_order() -> None:
+    nx, nt = 6, 4
+    x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+    t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+    f = torch.randn(nx, nt, dtype=torch.float64)
+    ds = PDEDataset.from_arrays(
+        coords={"x": x, "t": t},
+        fields={"my_field": f},
+        lhs="my_field_x",
+    )
+    assert ds.lhs_field == "my_field"
+    assert ds.lhs_axis == "x"
+    assert ds.lhs_order == 1
+
+
+
+
+
+
+
 def test_from_arrays_list_coords() -> None:
     x_list = [0.0, 0.5, 1.0, 1.5, 2.0]
     t_list = [0.0, 0.5, 1.0]

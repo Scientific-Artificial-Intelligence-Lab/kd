@@ -9,7 +9,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from kd.viz.plots._dim_utils import _pick_time_steps, _slice_nd_to_2d
+from kd.viz.plots._dim_utils import (
+    _imshow_extent_for_spatial_axes,
+    _pick_time_steps,
+    _slice_nd_to_2d,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -23,6 +27,7 @@ _DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 11
 _WARNING_WRAP_WIDTH = 60
 _RESIDUAL_PERCENTILE = 99.0
+_N_TIME_SNAPSHOTS = 3
 
 
 def plot_error_heatmap(
@@ -141,7 +146,7 @@ def plot_error_heatmap(
 
     time_dim = dataset.axis_order.index(time_axis)
 
-    div_tag = _diverged_tag(diverged, integration_result)
+    div_tag = _diverged_tag(diverged, integration_result, time_axis)
 
     with style_context(style):
         if n_spatial <= 1:
@@ -158,6 +163,7 @@ def plot_error_heatmap(
                 error,
                 dataset,
                 time_axis,
+                spatial_axes,
                 time_dim,
                 div_tag=div_tag,
             )
@@ -168,11 +174,12 @@ def plot_error_heatmap(
 def _diverged_tag(
     diverged: bool,
     integration_result: IntegrationResult,
+    time_axis: str,
 ) -> str:
     if not diverged:
         return ""
     if integration_result.diverged_at_t is not None:
-        return f" (DIVERGED at t={integration_result.diverged_at_t:.3g})"
+        return f" (DIVERGED at {time_axis}={integration_result.diverged_at_t:.3g})"
     return " (DIVERGED)"
 
 
@@ -225,35 +232,61 @@ def _render_2d_error(
     error: np.ndarray,
     dataset: PDEDataset,
     time_axis: str,
+    spatial_axes: list[str],
     time_dim: int,
     *,
     div_tag: str = "",
 ) -> Figure:
     n_t = error.shape[time_dim]
-    mid_indices = _pick_time_steps(n_t, 1)
-    mid_idx = mid_indices[0]
+    time_indices = _pick_time_steps(n_t, _N_TIME_SNAPSHOTS)
+    n_cols = len(time_indices)
 
     t_coords = dataset.get_coords(time_axis).detach().cpu().numpy()
-    t_val = float(t_coords[mid_idx])
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
-    error_slice = np.take(error, mid_idx, axis=time_dim)
-    if error_slice.ndim > 2:
-        error_slice = _slice_nd_to_2d(error_slice, (0, 1))
+    error_slices = []
+    for t_idx in time_indices:
+        error_slice = np.take(error, t_idx, axis=time_dim)
+        if error_slice.ndim > 2:
+            error_slice = _slice_nd_to_2d(error_slice, (0, 1))
+        error_slices.append(error_slice)
 
-    vmax = _robust_abs_max(error_slice)
+    vmax = _robust_abs_max(np.stack(error_slices, axis=0))
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 6), dpi=_DEFAULT_DPI)
-    im = ax.imshow(
-        error_slice,
-        aspect="auto",
-        origin="lower",
-        cmap="RdBu_r",
-        vmin=-vmax,
-        vmax=vmax,
-        rasterized=True,
+    fig, axes_arr = plt.subplots(
+        1,
+        n_cols,
+        figsize=(5 * n_cols, 4),
+        dpi=_DEFAULT_DPI,
+        constrained_layout=True,
+        squeeze=False,
     )
-    fig.colorbar(im, ax=ax, label="Error (True - Predicted)")
-    ax.set_title(f"Error Heatmap{div_tag} (t={t_val:.3g})")
+    mappable: Any | None = None
+    for col, (t_idx, error_slice) in enumerate(
+        zip(time_indices, error_slices, strict=True)
+    ):
+        ax = axes_arr[0, col]
+        t_val = float(t_coords[t_idx])
+        mappable = ax.imshow(
+            error_slice,
+            aspect="auto",
+            origin="lower",
+            extent=extent,
+            cmap="RdBu_r",
+            vmin=-vmax,
+            vmax=vmax,
+            rasterized=True,
+        )
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"Error Heatmap{div_tag} ({time_axis}={t_val:.3g})")
+
+    if mappable is not None:
+        fig.colorbar(
+            mappable,
+            ax=list(axes_arr.flat),
+            label="Error (True - Predicted)",
+        )
 
     return fig
 

@@ -10,6 +10,8 @@ import torch
 from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
+from kd.core.expr.naming import build_derivative_name
+from kd.core.platform.requirements import DerivativeReqs, assert_lhs_order_supported
 from kd.data.schema import PDEDataset, compute_dataset_fingerprint
 from kd.search.callbacks import (
     CHECKPOINT_VERSION,
@@ -71,6 +73,7 @@ class ExperimentRunner:
         self._current_iteration: int = 0
 
     def run(self, components: PlatformComponents) -> ExperimentResult:
+        self._assert_lhs_order_supported(components)
         self._current_iteration = 0
         recorder = self._ensure_recorder(components)
         callbacks = self._callbacks_for_run(recorder)
@@ -98,6 +101,15 @@ class ExperimentRunner:
             self._finalize_callbacks(callbacks)
 
         return self._build_experiment_result(components, recorder, early_stopped)
+
+    def _assert_lhs_order_supported(self, components: PlatformComponents) -> None:
+        reqs = getattr(self._algorithm, "derivative_requirements", None)
+        dataset = getattr(components, "dataset", None)
+        if isinstance(reqs, DerivativeReqs) and isinstance(dataset, PDEDataset):
+            algorithm = (
+                _algorithm_name(self._algorithm) or type(self._algorithm).__name__
+            )
+            assert_lhs_order_supported(dataset.lhs_order, reqs.lhs_order, algorithm)
 
     def _run_iteration(
         self,
@@ -293,10 +305,25 @@ class ExperimentRunner:
         dataset = components.dataset
         lhs_field = getattr(dataset, "lhs_field", None)
         lhs_axis = getattr(dataset, "lhs_axis", None)
-        has_field = isinstance(lhs_field, str) and bool(lhs_field)
-        has_axis = isinstance(lhs_axis, str) and bool(lhs_axis)
-        if has_field and has_axis:
-            return f"{lhs_field}_{lhs_axis}"
+
+
+        if (
+            isinstance(lhs_field, str)
+            and lhs_field
+            and isinstance(lhs_axis, str)
+            and lhs_axis
+        ):
+
+
+
+
+
+
+
+            lhs_order: int = getattr(dataset, "lhs_order", 1)
+            if lhs_order == 1:
+                return f"{lhs_field}_{lhs_axis}"
+            return build_derivative_name(lhs_field, lhs_axis, lhs_order)
         return _DEFAULT_LHS_LABEL
 
     def _invalid_final_eval(self, error_message: str) -> EvaluationResult:

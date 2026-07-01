@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.2.1"
+version = "0.3.0"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -42,6 +42,9 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.1.0",
 ]
+hub = [
+    "huggingface_hub>=0.20",
+]
 # Optional external symbolic-regression backend. PySR pulls in a Julia
 # runtime (juliacall), so it is NOT a default dependency — install with
 # ``pip install kd[pysr]`` only when using ``Model(algorithm="pysr")``.
@@ -69,7 +72,7 @@ where = ["src"]
 # Bundle benchmark dataset files + report HTML template into the wheel so
 # loaders / VizEngine.render_all work after `pip install` (no source-tree
 # fallback needed).
-"kd" = ["_assets/data/*.npy", "_assets/data/*.mat"]
+"kd" = ["_assets/data/*"]
 "kd.viz.templates" = ["*.html"]
 
 [tool.pytest.ini_options]

@@ -127,6 +127,10 @@ class PDEDataset:
         fields: Mapping from field name to FieldData
         lhs_field: Field for LHS of equation (e.g., "u")
         lhs_axis: Axis for time derivative on LHS (e.g., "t" for u_t = RHS)
+        lhs_order: Order of the LHS derivative along ``lhs_axis`` (``1`` -> u_t,
+            ``2`` -> u_tt for the wave/telegraph case). Default ``1``. This is
+            the single source of truth for the LHS order across the whole
+            pipeline (parser, fingerprint, platform builder, plugins).
         noise_level: Amount of noise added to data
         ground_truth: Optional ground truth equation string
 
@@ -154,6 +158,7 @@ class PDEDataset:
 
     lhs_field: str = ""
     lhs_axis: str = ""
+    lhs_order: int = 1
 
 
     noise_level: float = 0.0
@@ -164,6 +169,7 @@ class PDEDataset:
         self._validate_axis_consistency()
         self._validate_field_shapes()
         self._validate_lhs()
+        self._validate_lhs_order()
 
     def _validate_axis_consistency(self) -> None:
         """Validate that axis_order and axes are consistent."""
@@ -248,6 +254,20 @@ class PDEDataset:
         ):
             raise ValueError(
                 f"lhs_axis '{self.lhs_axis}' not found in axis_order: {self.axis_order}"
+            )
+
+    def _validate_lhs_order(self) -> None:
+        """Reject a non-positive LHS derivative order.
+
+        ``lhs_order`` is the order of the LHS time/axis derivative
+        (``1`` -> u_t, ``2`` -> u_tt). Order < 1 is meaningless: there is no
+        zeroth-order "derivative" LHS in this pipeline (the LHS is always a
+        derivative of the field), so it fails loud here rather than silently
+        producing a bogus regression target downstream.
+        """
+        if self.lhs_order < 1:
+            raise ValueError(
+                f"lhs_order must be >= 1 (1 -> u_t, 2 -> u_tt), got {self.lhs_order}."
             )
 
     @property
@@ -336,14 +356,19 @@ class PDEDataset:
                 Insertion order defines axis_order.
             fields: Mapping field name to nD field tensor whose shape matches
                 ``(len(coords[axis_0]), len(coords[axis_1]), ...)``.
-            lhs: Combined LHS spec ``"{field}_{axis}"`` for a **first-order**
-                LHS derivative (e.g. ``"u_t"`` means LHS is du/dt). Must
-                reference a field name in ``fields`` and an axis name in
-                ``coords``. Parsed by splitting on the LAST underscore so
-                ``"my_field_x"`` resolves to field=``"my_field"``, axis=``"x"``.
-                Higher-order LHS (e.g. u_tt for the wave equation) is NOT
-                supported by the public ``Model`` facade — reduce to a
-                first-order system manually if needed.
+            lhs: Combined LHS spec ``"{field}_{axis...}"`` encoding the LHS
+                derivative via the kd naming convention. ``"u_t"`` -> field
+                ``"u"``, axis ``"t"``, order ``1`` (du/dt); ``"u_tt"`` ->
+                order ``2`` (the wave/telegraph LHS d²u/dt²). Parsed by
+                ``naming.parse_derivative_name`` against the known field/axis
+                names, so a multi-underscore field still resolves
+                (``"my_field_t"`` -> field=``"my_field"``, axis=``"t"``,
+                order ``1``). Must reference a field in ``fields`` and an axis
+                in ``coords``. The parsed order is stored as ``lhs_order``
+                (the single source of truth). NOTE: a dataset can *carry* a
+                second-order LHS, but whether a given search algorithm can
+                *discover* it is enforced fail-loud at fit time — first-order
+                is the only order currently supported end-to-end.
             periodic: Iterable of axis names that are periodic.
             name: Dataset identifier (printed in repr).
             ground_truth: Optional ground-truth equation string.
@@ -369,7 +394,7 @@ class PDEDataset:
         if not fields:
             raise ValueError("fields must be a non-empty mapping")
 
-        lhs_field_parsed, lhs_axis_parsed = parse_lhs_spec(
+        lhs_field_parsed, lhs_axis_parsed, lhs_order_parsed = parse_lhs_spec(
             lhs, fields=fields, coords=coords
         )
         axes_dict = build_axes_dict(coords, dtype=dtype, periodic=periodic)
@@ -389,6 +414,7 @@ class PDEDataset:
                 fields=fields_dict,
                 lhs_field=lhs_field_parsed,
                 lhs_axis=lhs_axis_parsed,
+                lhs_order=lhs_order_parsed,
                 ground_truth=ground_truth,
             )
         except ValueError as exc:
@@ -417,6 +443,12 @@ def compute_dataset_fingerprint(dataset: PDEDataset) -> str:
 
     meta = f"{dataset.name}:{dataset.topology.value}"
     meta += f":{dataset.lhs_field}:{dataset.lhs_axis}"
+
+
+
+
+
+    meta += f":lhs_order={dataset.lhs_order}"
 
 
 
