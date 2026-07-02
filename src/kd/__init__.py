@@ -9,6 +9,7 @@ from kd.data import (
     DataTopology,
     FieldData,
     PDEDataset,
+    TabularDataset,
     TaskType,
     generate_advection_data,
     generate_burgers_data,
@@ -30,7 +31,9 @@ from kd.data import (
     load_llm4ed_heat,
     load_pde_compound,
     load_pde_divide,
+    load_tlc_cc,
     load_wave,
+    load_wave_breaking,
 )
 from kd.evaluate import (
     EvaluationFailedError,
@@ -47,7 +50,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     "AxisInfo",
@@ -64,6 +67,7 @@ __all__ = [
     "Model",
     "PDEDataset",
     "SGAConfig",
+    "TabularDataset",
     "TaskType",
     "TermRejection",
     "TermValidationReport",
@@ -90,7 +94,9 @@ __all__ = [
     "load_llm4ed_heat",
     "load_pde_compound",
     "load_pde_divide",
+    "load_tlc_cc",
     "load_wave",
+    "load_wave_breaking",
     "preview",
     "validate_terms",
 ]

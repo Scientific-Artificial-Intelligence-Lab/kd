@@ -31,6 +31,31 @@ Rules:
 | `wave` | `eqgpt_wave.mat` | EqGPT `Wave_equation/wave.mat` | `u_tt = u_xx` | 161 x 321, `(x,t)` | `load_wave` |
 | `klein-gordon` | `eqgpt_klein_gordon.mat` | EqGPT `KG_equation/KG_Exp.mat` | `u_tt = 0.5*u_xx - 5*u` | 201 x 201, `(x,t)` | `load_klein_gordon` |
 
+## Real-World Experimental Datasets (Tabular)
+
+Measured data, not solver output; exposed as `y = f(X)` tables (scattered /
+aggregated points, no regular grid), outside the PDE catalog.
+
+| Dataset id | File | Columns | Meaning | Loader |
+| --- | --- | --- | --- | --- |
+| `wave-breaking-N_G2Tp12A100_broad` | `wave_breaking_N_G2Tp12A100_broad.npz` | `t`, `x`, `eta` | camera-reconstructed surface elevation (314,478 scattered points) of one focused wave group toward breaking | `load_wave_breaking()` |
+| `tlc-cc-start` | `tlc_cc_Rf_t1.npy` | 0=`R_F`, 1=`r`, 2=`V_S` | mean start retention volume over 74 `(R_F, r)` conditions | `load_tlc_cc(target="start")` |
+| `tlc-cc-end` | `tlc_cc_Rf_t2.npy` | 0=`R_F`, 1=`r`, 2=`V_E` | mean end retention volume over 74 `(R_F, r)` conditions | `load_tlc_cc(target="end")` |
+
+**Wave breaking** (Xu, H. et al. *Nat Commun* **16**, 10255 (2025),
+doi:10.1038/s41467-025-65114-2; experimental background in the paper's SI):
+wave-tank measurements of focused wave groups approaching breaking, Imperial
+College London. The paper analysed 12 experiments; kd bundles one of them
+(`N_G2Tp12A100_broad`, 314,478 points). Further cases can be loaded from a
+local directory via `load_wave_breaking(case=..., data_dir=...)`.
+
+**TLC-CC** (Xu, H. et al. *Nat Commun* **16**, 832 (2025),
+doi:10.1038/s41467-025-56136-x; background in the paper's SI): automated
+column chromatography, 192 compounds on 4 g silica columns; the two tables
+hold the mean start/end retention volumes over 74 `(R_F, r)` conditions. The
+raw files carry four further columns (indices 3-6); the loader exposes
+columns 0-2 only.
+
 ## Bundled Reference Data Without Public Loader
 
 These files are retained for benchmark coverage or future loader work.

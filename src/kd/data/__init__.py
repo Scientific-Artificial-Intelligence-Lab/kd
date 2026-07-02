@@ -11,6 +11,11 @@ from kd.data.noise import (
     discover_unnormalized,
     xu2020_relative,
 )
+from kd.data.regression import (
+    TabularDataset,
+    load_tlc_cc,
+    load_wave_breaking,
+)
 from kd.data.remote import (
     list_remote_datasets,
     load_from_hub,
@@ -51,6 +56,7 @@ __all__ = [
     "FieldData",
     "NoiseScale",
     "PDEDataset",
+    "TabularDataset",
     "TaskType",
     "compute_dataset_fingerprint",
     "discover_unnormalized",
@@ -74,6 +80,8 @@ __all__ = [
     "load_llm4ed_heat",
     "load_pde_compound",
     "load_pde_divide",
+    "load_tlc_cc",
     "load_wave",
+    "load_wave_breaking",
     "xu2020_relative",
 ]

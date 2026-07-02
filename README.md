@@ -9,10 +9,10 @@
 ---
 
 KD discovers the governing partial differential equation from data: give it a
-field sampled on a spatiotemporal grid, get back a symbolic PDE. Several
-discovery engines (**SGA**, **DLGA**, **DISCOVER**, and the external **PySR**)
-run behind one `kd.Model` API, sharing a single dataset interface, term
-evaluator, and HTML-report visualization. More engines are on the roadmap.
+field sampled on a spatiotemporal grid, get back a symbolic PDE. Three
+in-house discovery engines (**SGA**, **DLGA**, **DISCOVER**) run behind one
+`kd.Model` API, sharing a single dataset interface, term evaluator, and
+HTML-report visualization. More engines are on the roadmap.
 
 <div align="center">
 <img src="docs/images/burgers2d_animation.gif" width="760" alt="2D Burgers field over time: true evolution vs the ground-truth PDE integrated forward"><br>
@@ -26,7 +26,7 @@ Requires **Python >= 3.11** and **PyTorch >= 2.0**.
 ```bash
 git clone -b trunk https://github.com/Scientific-Artificial-Intelligence-Lab/kd.git
 cd kd
-uv sync                      # add --extra pysr for the PySR engine (Julia)
+uv sync
 ```
 
 ## Quick start
@@ -34,7 +34,7 @@ uv sync                      # add --extra pysr for the PySR engine (Julia)
 ```python
 import kd
 
-# Synthetic Burgers data with a known ground truth.
+# Generate a synthetic Burgers dataset.
 dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
 
 model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
@@ -51,52 +51,95 @@ print(model.best_score_)   # best AIC
 
 See [`examples/`](examples/) for runnable scripts covering every engine,
 including [`09_compare_algorithms.py`](examples/09_compare_algorithms.py),
-which runs all four engines on the same dataset and ranks the discovered
-equations on one unified NMSE ruler (it needs the `pysr` extra).
+which runs the engines on the same dataset and ranks the discovered
+equations on one unified NMSE ruler.
 
 ## Engines
 
-Swap the `algorithm=` string to switch engines:
+All three engines are re-implementations of algorithms developed in this
+lab, refactored onto KD's shared platform. Swap the `algorithm=` string to
+switch:
 
 | Algorithm | `algorithm=` | Origin | Approach |
 |-----------|--------------|--------|----------|
 | **SGA** | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic expression trees |
 | **DLGA** | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + genetic algorithm |
 | **DISCOVER** | `"discover"` | Du et al. 2024 | LSTM controller + policy gradient |
-| **PySR** | `"pysr"` | Cranmer 2023 | External symbolic-regression engine (Julia) |
 
-SGA, DLGA, and DISCOVER are re-implementations of the original algorithms,
-refactored onto KD's shared platform; PySR is an external tool integrated
-as-is (requires the `pysr` extra). More engines are planned.
+The external PySR regressor can also be driven through the same facade as an
+optional fallback for cross-checking (`algorithm="pysr"`, needs
+`uv sync --extra pysr`). More engines are planned.
 
 ## Datasets
 
-KD bundles a set of classic PDE datasets from the **SGA-PDE** and **EqGPT**
-benchmarks, so you can try any engine on a known equation before touching your
-own data:
+### Simulated PDE benchmarks
 
-| Dataset | Governing PDE |
-|---------|---------------|
-| Burgers | `u_t = -u·u_x + 0.1·u_xx` |
-| KdV | `u_t = -u·u_x - 0.0025·u_xxx` |
-| Chafee-Infante | `u_t = u_xx - u + u³` |
-| Allen-Cahn | `u_t = 0.003·u_xx + u - u³` |
-| Convection-diffusion | `u_t = -u_x + 0.25·u_xx` |
-| PDE-divide | `u_t = -u_x/x + 0.25·u_xx` |
-| PDE-compound | `u_t = u·u_xx + u_x²` |
-| Eq 6.2.12 | `u_t = -0.1·u_x_t - 0.1·u_x` *(mixed derivative)* |
-| 2D Burgers | `u_t = -u·u_x - u·u_y + 0.01·∇²u` |
+KD bundles the simulated benchmark suites used across this lab's
+PDE-discovery papers — **SGA-PDE** (Chen et al., *Phys. Rev. Research* **4**,
+023174, 2022), **EqGPT** (Xu et al., *Nat Commun* **16**, 10255, 2025) and
+**LLM4ED** (Du et al., *Phys. Fluids* **36**, 097121, 2024):
 
-Load any with `kd.load_burgers()`, or browse the catalog programmatically with
-`kd.list_datasets()` / `kd.get_dataset(id)`; each entry carries its `.source`
-and `.license` (see [`NOTICE`](NOTICE)). Prefer synthetic data with a known
-ground truth? `kd.generate_burgers_data()`, `kd.generate_diffusion_data()`, …
-build PDEs on demand.
+<div align="center">
+<img src="docs/images/dataset_gallery.png" width="820" alt="Field snapshots of the bundled PDE benchmark datasets">
+</div>
 
-Beyond the bundled datasets, KD can fetch additional datasets on demand from
-HuggingFace with `kd.load_from_hub(id)` after installing the hub extra
-(`uv sync --extra hub`). Browse them with `kd.list_remote_datasets()`; remote
-files are cached locally, checksum-verified, and revision-pinned.
+| Dataset | Governing PDE | Grid | What it models |
+|---------|---------------|------|----------------|
+| `allen-cahn` | `u_t = 0.003·u_xx + u - u³` | `(256, 201)` | phase separation (reaction–diffusion) |
+| `burgers` | `u_t = -u·u_x + 0.1·u_xx` | `(256, 201)` | shock waves in fluids |
+| `burgers-2d` | `u_t = -u·u_x - u·u_y + 0.01·∇²u` | `(101, 51, 100)` | 2D Burgers flow |
+| `chafee-infante` | `u_t = u_xx - u + u³` | `(301, 200)` | reaction–diffusion |
+| `convection-diffusion` | `u_t = -u_x + 0.25·u_xx` | `(256, 100)` | advection plus diffusion |
+| `eq-6-2-12` | `u_t = -0.1·u_x_t - 0.1·u_x` | `(501, 501)` | handbook equation with a mixed space–time derivative |
+| `kdv` | `u_t = -u·u_x - 0.0025·u_xxx` | `(256, 201)` | shallow-water solitons |
+| `klein-gordon` | `u_tt = 0.5·u_xx - 5·u` | `(201, 201)` | relativistic wave equation |
+| `llm4ed-fisher` | `u_t = 0.02·u_xx + 10·u·(1-u)` | `(x, t)` | population growth with spatial spread |
+| `llm4ed-fisher-nonlinear` | `u_t = 0.02·(u·u_xx + u_x²) + 10·u·(1-u)` | `(x, t)` | Fisher growth with nonlinear diffusion |
+| `llm4ed-heat` | `u_t = 0.05·u_xx` | `(x, t)` | heat conduction |
+| `pde-compound` | `u_t = u·u_xx + u_x²` | `(100, 251)` | constructed compound-structure benchmark |
+| `pde-divide` | `u_t = -u_x/x + 0.25·u_xx` | `(100, 251)` | constructed benchmark with a division term |
+| `wave` | `u_tt = u_xx` | `(161, 321)` | vibrating string |
+
+Load any bundled dataset with `kd.load_burgers()`, or browse the catalog
+programmatically with `kd.list_datasets()` / `kd.get_dataset(id)`; each entry
+carries its `.source` and `.license` (see [`NOTICE`](NOTICE)).
+`kd.generate_burgers_data()`, `kd.generate_diffusion_data()`, … build
+synthetic datasets on demand. Remote (HF) entries
+are fetched with `kd.load_from_hub(id)` after installing the hub extra
+(`uv sync --extra hub`) and are cached locally, checksum-verified, and
+revision-pinned; browse them with `kd.list_remote_datasets()`.
+
+### Real-world experimental data
+
+KD also bundles **real-world experimental data** — measured, not simulated:
+
+| Dataset | Type | Measured quantity | Size | Reference |
+|---------|------|-------------------|------|-----------|
+| `wave-breaking` | wave-tank experiment (Imperial College London) | surface elevation `η(t, x)` of wave groups approaching breaking | 314,478 points (one of the paper's 12 experiments) | Xu et al., *Nat Commun* **16**, 10255 (2025) |
+| `tlc-cc` | automated chromatography experiment | column retention volumes `V_S`, `V_E` vs `(R_F, r)` | 2 tables × 74 conditions | Xu et al., *Nat Commun* **16**, 832 (2025) |
+
+**Wave breaking** — surface elevation of focused wave groups approaching
+breaking, reconstructed frame by frame from camera images in the wave-tank
+experiments of the EqGPT paper. KD bundles one of the paper's 12 experiments
+(case `N_G2Tp12A100_broad`) as scattered `(t, x, η)` points — a table rather
+than a gridded `PDEDataset`.
+
+**TLC-CC** — column-chromatography retention volumes measured on an
+automated platform (192 compounds, 4 g silica columns), aggregated to mean
+start/end retention volumes over 74 `(R_F, r)` conditions — ready for KD's
+scalar symbolic-regression entries
+([`examples/12`](examples/12_symbolic_regression.py),
+[`examples/13`](examples/13_sindy_basis_sr.py)).
+
+```python
+wb = kd.load_wave_breaking()          # η(t, x): scattered wave-tank points
+cc = kd.load_tlc_cc(target="start")   # X = (R_F, r), y = V_S
+```
+
+Experimental background, protocols, and references for both datasets are in
+the papers and their Supplementary Information
+([wave breaking](https://doi.org/10.1038/s41467-025-65114-2),
+[TLC-CC](https://doi.org/10.1038/s41467-025-56136-x)).
 
 ## Bring Your Own Data
 
@@ -178,7 +221,7 @@ equation it was distilled into:
 
 <div align="center">
 <img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree vs discovered expression tree"><br>
-<em>Example: SGA on the built-in Chafee-Infante benchmark (recovers the ground truth
+<em>Example: SGA on the built-in Chafee-Infante benchmark (recovers
 <code>u_t = u_xx - u + u^3</code>). Left: the raw GP genome of the best
 individual, still carrying evolved bloat (redundant / zeroed terms). Right: the
 discovered equation after sparse selection, operators and derivatives only,
@@ -211,8 +254,8 @@ original works:
 - **DLGA**: Xu et al. 2020
 - **DISCOVER**: Du et al., [DISCOVER](https://github.com/menggedu/DISCOVER)
 
-KD also builds on [PySR](https://github.com/MilesCranmer/PySR) (integrated
-as an optional engine), [SymPy](https://github.com/sympy/sympy), and
+KD also builds on [PySR](https://github.com/MilesCranmer/PySR) (optional
+fallback engine), [SymPy](https://github.com/sympy/sympy), and
 [PyTorch](https://github.com/pytorch/pytorch).
 
 ## License

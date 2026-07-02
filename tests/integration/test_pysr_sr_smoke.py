@@ -2,30 +2,24 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import numpy as np
 import pytest
 
+from kd.data.regression import load_tlc_cc
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.sr import PySRSymbolicRegressor
 
 pytestmark = pytest.mark.slow
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_TLC_CC_PATH = _REPO_ROOT / "tests" / "fixtures" / "pysr" / "tlc_cc_Rf_t1.npy"
 _VAR_NAMES = ["R_F", "r"]
 _N_SAMPLES = 74
 
 
-def _load_tlc_cc() -> tuple[np.ndarray, np.ndarray]:
-    data = np.load(_TLC_CC_PATH)
-    return data[:, [0, 1]], data[:, 2]
-
-
 def test_pysr_symbolic_regressor_real_tlc_cc_smoke() -> None:
     pytest.importorskip("pysr")
-    x, y = _load_tlc_cc()
+    dataset = load_tlc_cc(target="start")
+    x, y = dataset.X, dataset.y
     config = PySRConfig(
         niterations=5,
         population_size=20,

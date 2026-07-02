@@ -36,7 +36,7 @@ Each file is self-contained.
 | 09_compare_algorithms.py | **SGA / DLGA / DISCOVER on one dataset, one unified NMSE ruler**: with the external PySR as a reference baseline (needs the `pysr` extra) | ~10-15 min |
 | 10_checkpoint_resume.py | **Checkpoint a long run, resume after a crash** (`checkpoint_dir` / `fit(resume_from=...)`) | ~10 s |
 | 11_evaluate_terms.py | **Score candidate terms without a search**: the stateless, fail-loud `kd.evaluate_terms` / `kd.validate_terms` entry (agent-ready) | ~5 s |
-| 12_symbolic_regression.py | **Scalar SR bypass: PySR**: auto-search `y = f(X)` on tabular data, no PDE/Theta/facade; fits constants *inside* functions. Needs the `pysr` extra | ~10-30 s |
+| 12_symbolic_regression.py | **Scalar SR bypass: PySR**: auto-search `y = f(X)` on the real-world TLC-CC chromatography dataset (`kd.load_tlc_cc`), no PDE/Theta/facade; fits constants *inside* functions. Needs the `pysr` extra | ~10-30 s |
 | 13_sindy_basis_sr.py | **Scalar SR bypass: SINDy**: you supply a candidate-term library, one STRidge sparse solve picks support + coefficients; fail-loud on bad terms | ~3 s |
 | 14_field_animation_2d.py | **2D Burgers field animation**: integrate the ground-truth RHS and save a True\|Predicted GIF | ~5 s |
 | 15_remote_dataset.py | **On-demand remote dataset**: list HuggingFace datasets, fetch one, preview it, and run a tiny SGA fit. Needs network and the `hub` extra | network dependent |
