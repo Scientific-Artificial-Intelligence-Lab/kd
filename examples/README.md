@@ -18,6 +18,7 @@ python examples/12_symbolic_regression.py # scalar SR bypass: PySR auto-search y
 python examples/13_sindy_basis_sr.py # scalar SR bypass: you supply the basis, one sparse solve
 python examples/14_field_animation_2d.py # 2D Burgers True|Predicted field animation GIF
 python examples/15_remote_dataset.py # on-demand HuggingFace dataset (needs network + uv sync --extra hub)
+jupyter notebook examples/notebooks/getting_started.ipynb # narrated walkthrough with inline outputs
 ```
 
 Each file is self-contained.
@@ -39,6 +40,7 @@ Each file is self-contained.
 | 13_sindy_basis_sr.py | **Scalar SR bypass: SINDy**: you supply a candidate-term library, one STRidge sparse solve picks support + coefficients; fail-loud on bad terms | ~3 s |
 | 14_field_animation_2d.py | **2D Burgers field animation**: integrate the ground-truth RHS and save a True\|Predicted GIF | ~5 s |
 | 15_remote_dataset.py | **On-demand remote dataset**: list HuggingFace datasets, fetch one, preview it, and run a tiny SGA fit. Needs network and the `hub` extra | network dependent |
+| notebooks/getting_started.ipynb | **Narrated getting-started notebook**: load Burgers, preview the field, fit SGA, compare against truth, and keep inline outputs for GitHub | ~1-2 min |
 
 ### Scalar symbolic regression (bypass)
 

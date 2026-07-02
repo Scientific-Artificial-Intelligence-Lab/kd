@@ -17,11 +17,13 @@ EXPECTED_DATASET_IDS = {
     "convection-diffusion",
     "eq-6-2-12",
     "kdv",
+    "klein-gordon",
     "llm4ed-fisher",
     "llm4ed-fisher-nonlinear",
     "llm4ed-heat",
     "pde-compound",
     "pde-divide",
+    "wave",
 }
 
 LOADABLE_DATASET_IDS = {

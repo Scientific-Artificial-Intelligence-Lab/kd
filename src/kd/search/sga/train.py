@@ -210,15 +210,24 @@ def _stridge_no_debias(
     return full_w
 
 
+def _deterministic_lstsq(a: Tensor, b: Tensor) -> Tensor:
+    prev = torch.are_deterministic_algorithms_enabled()
+    prev_warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+    torch.use_deterministic_algorithms(True)
+    try:
+        sol: Tensor = torch.linalg.lstsq(a, b).solution
+        return sol
+    finally:
+        torch.use_deterministic_algorithms(prev, warn_only=prev_warn_only)
+
+
 def _solve(x: Tensor, y: Tensor, lam: float, d: int) -> Tensor:
     y_2d = y.unsqueeze(1) if y.dim() == 1 else y
     if lam != 0:
         xtx = x.T @ x + lam * torch.eye(d, dtype=x.dtype, device=x.device)
         xty = x.T @ y_2d
-        sol: Tensor = torch.linalg.lstsq(xtx, xty).solution
-        return sol
-    sol_ols: Tensor = torch.linalg.lstsq(x, y_2d).solution
-    return sol_ols
+        return _deterministic_lstsq(xtx, xty)
+    return _deterministic_lstsq(x, y_2d)
 
 
 def train_sweep(

@@ -18,8 +18,10 @@ from kd.data.synthetic import (
     load_convection_diffusion,
     load_eq_6_2_12,
     load_kdv,
+    load_klein_gordon,
     load_pde_compound,
     load_pde_divide,
+    load_wave,
 )
 
 DatasetLoader = Callable[[], PDEDataset]
@@ -167,6 +169,19 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         tags=("sga-pde", "canonical", "third-order"),
         files=("KdV_equation.mat",),
     ),
+    "klein-gordon": DatasetSpec(
+        id="klein-gordon",
+        loader=load_klein_gordon,
+        equation="u_tt = 0.5 * u_xx - 5 * u",
+        lhs="u_tt",
+        axes=_AXES_XT,
+        fmt="mat",
+        source=f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_klein_gordon.mat",
+        license=_EQGPT_LICENSE,
+        tier=_BUILTIN_TIER,
+        tags=("eqgpt", "second-order", "klein-gordon"),
+        files=("eqgpt_klein_gordon.mat",),
+    ),
     "llm4ed-fisher": DatasetSpec(
         id="llm4ed-fisher",
         loader=load_llm4ed_fisher,
@@ -243,6 +258,19 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         tier=_BUILTIN_TIER,
         tags=("sga-pde", "fractional", "open-form"),
         files=("PDE_divide.npy",),
+    ),
+    "wave": DatasetSpec(
+        id="wave",
+        loader=load_wave,
+        equation="u_tt = u_xx",
+        lhs="u_tt",
+        axes=_AXES_XT,
+        fmt="mat",
+        source=f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_wave.mat",
+        license=_EQGPT_LICENSE,
+        tier=_BUILTIN_TIER,
+        tags=("eqgpt", "second-order", "wave"),
+        files=("eqgpt_wave.mat",),
     ),
 }
 
