@@ -12,7 +12,7 @@ KD discovers the governing partial differential equation from data: give it a
 field sampled on a spatiotemporal grid, get back a symbolic PDE. Three
 in-house discovery engines (**SGA**, **DLGA**, **DISCOVER**) run behind one
 `kd.Model` API, sharing a single dataset interface, term evaluator, and
-HTML-report visualization. More engines are on the roadmap.
+HTML-report visualization.
 
 <div align="center">
 <img src="docs/images/burgers2d_animation.gif" width="760" alt="2D Burgers field over time: true evolution vs the ground-truth PDE integrated forward"><br>
@@ -40,13 +40,13 @@ dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
 model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
 model.fit(dataset)
 
-print(model.best_expr_)    # u_t = -1.00 u u_x + 0.10 u_xx
-print(model.best_score_)   # best AIC
+print(model.best_expr_)    # the discovered PDE
+print(model.best_score_)   # its AIC score
 ```
 
 <div align="center">
 <img src="docs/images/burgers_field_comparison.png" width="760" alt="True vs predicted Burgers field"><br>
-<em>True vs predicted solution from the fit above (Burgers equation, residual ~1e-4).</em>
+<em>True vs predicted solution from the fit above (Burgers equation).</em>
 </div>
 
 See [`examples/`](examples/) for runnable scripts covering every engine,
@@ -68,19 +68,19 @@ switch:
 
 The external PySR regressor can also be driven through the same facade as an
 optional fallback for cross-checking (`algorithm="pysr"`, needs
-`uv sync --extra pysr`). More engines are planned.
+`uv sync --extra pysr`).
 
 ## Datasets
 
-### Simulated PDE benchmarks
+### Simulated PDE datasets
 
-KD bundles the simulated benchmark suites used across this lab's
-PDE-discovery papers — **SGA-PDE** (Chen et al., *Phys. Rev. Research* **4**,
-023174, 2022), **EqGPT** (Xu et al., *Nat Commun* **16**, 10255, 2025) and
-**LLM4ED** (Du et al., *Phys. Fluids* **36**, 097121, 2024):
+The simulated datasets come from this lab's PDE-discovery papers —
+**SGA-PDE** (Chen et al., *Phys. Rev. Research* **4**, 023174, 2022),
+**EqGPT** (Xu et al., *Nat Commun* **16**, 10255, 2025) and **LLM4ED**
+(Du et al., *Phys. Fluids* **36**, 097121, 2024):
 
 <div align="center">
-<img src="docs/images/dataset_gallery.png" width="820" alt="Field snapshots of the bundled PDE benchmark datasets">
+<img src="docs/images/dataset_gallery.png" width="820" alt="Field snapshots of the bundled simulated PDE datasets">
 </div>
 
 | Dataset | Governing PDE | Grid | What it models |
@@ -96,8 +96,8 @@ PDE-discovery papers — **SGA-PDE** (Chen et al., *Phys. Rev. Research* **4**,
 | `llm4ed-fisher` | `u_t = 0.02·u_xx + 10·u·(1-u)` | `(x, t)` | population growth with spatial spread |
 | `llm4ed-fisher-nonlinear` | `u_t = 0.02·(u·u_xx + u_x²) + 10·u·(1-u)` | `(x, t)` | Fisher growth with nonlinear diffusion |
 | `llm4ed-heat` | `u_t = 0.05·u_xx` | `(x, t)` | heat conduction |
-| `pde-compound` | `u_t = u·u_xx + u_x²` | `(100, 251)` | constructed compound-structure benchmark |
-| `pde-divide` | `u_t = -u_x/x + 0.25·u_xx` | `(100, 251)` | constructed benchmark with a division term |
+| `pde-compound` | `u_t = u·u_xx + u_x²` | `(100, 251)` | constructed compound-structure case |
+| `pde-divide` | `u_t = -u_x/x + 0.25·u_xx` | `(100, 251)` | constructed case with a division term |
 | `wave` | `u_tt = u_xx` | `(161, 321)` | vibrating string |
 
 Load any bundled dataset with `kd.load_burgers()`, or browse the catalog
@@ -221,7 +221,7 @@ equation it was distilled into:
 
 <div align="center">
 <img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree vs discovered expression tree"><br>
-<em>Example: SGA on the built-in Chafee-Infante benchmark (recovers
+<em>Example: SGA on the built-in Chafee-Infante dataset (recovers
 <code>u_t = u_xx - u + u^3</code>). Left: the raw GP genome of the best
 individual, still carrying evolved bloat (redundant / zeroed terms). Right: the
 discovered equation after sparse selection, operators and derivatives only,
@@ -237,7 +237,7 @@ version) so a run can be identified and reproduced later.
 src/kd/
 ├── api.py        # Model facade: one-line fit() for every engine
 ├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
-├── data/         # PDEDataset, synthetic generators, benchmark loaders
+├── data/         # PDEDataset, synthetic generators, dataset loaders
 ├── search/       # sga / dlga / discover / pysr engines + their configs
 ├── viz/          # VizEngine: HTML reports & figures
 └── inspect.py    # preview() dataset sanity checks
@@ -250,7 +250,7 @@ algorithms developed in this lab; credit for the methods belongs to the
 original works:
 
 - **SGA-PDE**: Chen et al., [SGA-PDE](https://github.com/YuntianChen/SGA-PDE);
-  also the source of the bundled benchmark datasets (see [`NOTICE`](NOTICE))
+  also the source of several bundled datasets (see [`NOTICE`](NOTICE))
 - **DLGA**: Xu et al. 2020
 - **DISCOVER**: Du et al., [DISCOVER](https://github.com/menggedu/DISCOVER)
 
