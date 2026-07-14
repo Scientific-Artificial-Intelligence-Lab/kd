@@ -4,7 +4,9 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from functools import lru_cache
+from types import CodeType
+from typing import TYPE_CHECKING, Any, Final
 
 import torch
 from torch import Tensor
@@ -23,6 +25,36 @@ _DIFF_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
 _SPECIAL_OPERATOR_STUBS: dict[str, Any] = {"lap": _lap_stub}
 
 _SPECIAL_OPERATORS: frozenset[str] = frozenset(_SPECIAL_OPERATOR_STUBS)
+_UNITY_TOKEN: Final = "one"
+
+
+def _resolve_unity(name: str, context: ExecutionContext) -> Tensor | None:
+    if name == _UNITY_TOKEN:
+        return context.unity_column()
+    return None
+
+
+@dataclass(eq=False)
+class _ParsedExpression:
+
+    tree: ast.Expression
+    depth: int
+    has_open_form_diff: bool
+    compiled: CodeType
+
+
+@lru_cache(maxsize=512)
+def _parse_expression(code: str) -> _ParsedExpression:
+    try:
+        tree = ast.parse(code, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Syntax error in expression: {e}") from e
+    return _ParsedExpression(
+        tree=tree,
+        depth=_get_ast_depth(tree.body),
+        has_open_form_diff=_tree_has_open_form_diff(tree),
+        compiled=compile(tree, "<expr>", "eval"),
+    )
 
 
 @dataclass
@@ -60,39 +92,30 @@ class PythonExecutor:
             raise ValueError("Expression cannot be empty")
 
 
-        try:
-            tree = ast.parse(code, mode="eval")
-        except SyntaxError as e:
-            raise ValueError(f"Syntax error in expression: {e}") from e
+        parsed = _parse_expression(code)
 
 
-        ast_depth = _get_ast_depth(tree.body)
-        if ast_depth > self._max_depth:
+        if parsed.depth > self._max_depth:
             raise RuntimeError(f"Maximum recursion depth ({self._max_depth}) exceeded")
 
         use_full_path = _should_use_full_path(
-            code,
-            context,
-            force_diff_path=force_diff_path,
+            parsed, context, force_diff_path=force_diff_path
         )
 
         if use_full_path:
 
-            value = self._execute_with_diff(tree.body, context, depth=0)
+            value = self._execute_with_diff(parsed.tree.body, context, depth=0)
         else:
 
-            value = self._execute_simple(code, context)
+            value = self._execute_simple(parsed.compiled, context)
 
         return ExecutorResult(value=value, used_diff=use_full_path)
 
     def _execute_simple(
         self,
-        code: str,
+        compiled: CodeType,
         context: ExecutionContext,
     ) -> Tensor:
-
-        compiled = compile(ast.parse(code, mode="eval"), "<expr>", "eval")
-
 
 
 
@@ -173,6 +196,13 @@ class PythonExecutor:
                 from kd.core.safety import safe_div
 
                 return safe_div(left, right)
+            elif isinstance(node.op, ast.Pow):
+
+
+
+
+
+                return left**right
             else:
                 raise ValueError(f"Unsupported binary operator: {type(node.op)}")
 
@@ -278,6 +308,10 @@ class PythonExecutor:
         name: str,
         context: ExecutionContext,
     ) -> Tensor:
+        unity = _resolve_unity(name, context)
+        if unity is not None:
+            return unity
+
 
 
 
@@ -360,6 +394,10 @@ class _VariableAccessDict(dict[str, Any]):
         self._known_axes = known_axes
 
     def __missing__(self, key: str) -> Tensor:
+        unity = _resolve_unity(key, self._context)
+        if unity is not None:
+            return unity
+
 
         try:
             return self._context.get_variable(key)
@@ -437,13 +475,15 @@ def _context_name_sets(
 
 
 def _should_use_full_path(
-    code: str,
+    parsed: _ParsedExpression,
     context: ExecutionContext,
     *,
     force_diff_path: bool,
 ) -> bool:
     return (
-        force_diff_path or _context_fields_missing(context) or has_open_form_diff(code)
+        force_diff_path
+        or _context_fields_missing(context)
+        or parsed.has_open_form_diff
     )
 
 
@@ -501,13 +541,10 @@ def has_open_form_diff(code: str) -> bool:
     if not code or not code.strip():
         raise ValueError("Expression cannot be empty")
 
-
-    try:
-        tree = ast.parse(code, mode="eval")
-    except SyntaxError as e:
-        raise ValueError(f"Syntax error in expression: {e}") from e
+    return _parse_expression(code).has_open_form_diff
 
 
+def _tree_has_open_form_diff(tree: ast.Expression) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             func_name = node.func.id

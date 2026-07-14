@@ -28,6 +28,7 @@ def plot_residual(
     *,
     style: dict[str, Any] | None = None,
     field_shape: tuple[int, ...] | None = None,
+    infer_grid: bool = True,
 ) -> tuple[Figure, list[str]]:
     warnings: list[str] = []
     residuals = result.final_eval.residuals
@@ -56,7 +57,7 @@ def plot_residual(
         _render_histogram(ax_hist, finite_data, warnings)
 
 
-        _render_spatial(ax_spatial, data, field_shape, warnings)
+        _render_spatial(ax_spatial, data, field_shape, warnings, infer_grid=infer_grid)
 
     return fig, warnings
 
@@ -112,8 +113,10 @@ def _render_spatial(
     data: np.ndarray,
     field_shape: tuple[int, ...] | None,
     warnings: list[str],
+    *,
+    infer_grid: bool = True,
 ) -> None:
-    shape = _resolve_shape(data, field_shape, warnings)
+    shape = _resolve_shape(data, field_shape, warnings, infer_grid=infer_grid)
 
     if shape is None:
         _empty_panel(ax, "No spatial data", "Spatial Residual")
@@ -165,6 +168,8 @@ def _resolve_shape(
     data: np.ndarray,
     field_shape: tuple[int, ...] | None,
     warnings: list[str],
+    *,
+    infer_grid: bool = True,
 ) -> tuple[int, ...] | None:
     n = data.size
 
@@ -183,9 +188,10 @@ def _resolve_shape(
         return field_shape
 
 
-    sqrt_n = int(math.isqrt(n))
-    if sqrt_n * sqrt_n == n and sqrt_n > 1:
-        return (sqrt_n, sqrt_n)
+    if infer_grid:
+        sqrt_n = int(math.isqrt(n))
+        if sqrt_n * sqrt_n == n and sqrt_n > 1:
+            return (sqrt_n, sqrt_n)
 
     return None
 

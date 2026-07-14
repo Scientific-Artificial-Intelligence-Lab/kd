@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.3.2"
+version = "0.4.0"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -27,6 +27,12 @@ dependencies = [
     "scipy>=1.10",
     "matplotlib>=3.10.8",
     "jinja2>=3.1.6",
+    # XLSX ingress (PDEDataset.from_xlsx + the EqGPT steady loaders). openpyxl
+    # (not pandas) is a core dep by user decision (arch041 step 3c1): from_xlsx
+    # is a general, first-class platform ingress the user wants always available
+    # + CI-covered, and openpyxl is tiny (~250 KB). This supersedes the charter's
+    # earlier "optional-extra" suggestion; rationale recorded in the 3c1 taskfile.
+    "openpyxl>=3.1",
 ]
 
 [project.urls]
@@ -53,6 +59,16 @@ pysr = [
     # sympy_format, model.sympy()); the adapter asserts those columns at fit.
     "pysr>=1.5,<2",
 ]
+# Optional LLM proposer backend for the LLM4ED (EDL) plugin. The
+# RealLlm4edBackend targets any OpenAI-compatible chat endpoint (OpenAI,
+# DeepSeek, a local vLLM, ...). The SDK is imported LAZILY via
+# importlib.import_module("openai") — ``import kd`` never requires it, and CI
+# runs entirely on the offline FakeLlm4edBackend. Install with
+# ``pip install kd[llm4ed]`` / ``uv sync --extra llm4ed`` only when running
+# ``Model(algorithm="llm4ed")`` against a real endpoint.
+llm4ed = [
+    "openai>=1.40",
+]
 
 [dependency-groups]
 dev = [
@@ -62,6 +78,12 @@ dev = [
     "hypothesis>=6.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
+    "pandas>=3.0.3",
+    "scikit-learn>=1.9.0",
+    "pytest-xdist>=3.8.0",
+    # The EDL reference-oracle conftest imports tqdm at module load; without
+    # it the fast tier drowns real failures in collection errors.
+    "tqdm>=4.60",
 ]
 
 [tool.setuptools.packages.find]
@@ -74,6 +96,7 @@ where = ["src"]
 # fallback needed).
 "kd" = ["_assets/data/*"]
 "kd.viz.templates" = ["*.html"]
+"kd.search.eqgpt" = ["_assets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -97,6 +120,7 @@ markers = [
     "mode2_aggregate: 3-seed STRICT MODE2 aggregate (discover §B.2 contract)",
     "phase3_e2e: full discover plugin e2e (slow, requires GPU; research suite)",
     "pysr: tests requiring the optional PySR/Julia backend (excluded from default smoke)",
+    "eqgpt: tests requiring the EqGPT pretrained assets / reference source (skip gracefully when absent)",
     "exploration: open-question probes that are NOT quality gates — never run by default or nightly; run on demand with -m exploration",
 ]
 

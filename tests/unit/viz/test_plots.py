@@ -49,6 +49,36 @@ class TestPlotConvergence:
         assert len(warnings) > 0
         plt.close(fig)
 
+    def test_flat_curve_gets_explanatory_subtitle(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from kd.search.recorder import VizRecorder
+
+        rec = VizRecorder()
+        for _ in range(5):
+            rec.log("_best_score", 0.9486)
+        mock_experiment_result.recorder = rec
+        fig, ax = plt.subplots()
+        plot_convergence(mock_experiment_result, ax)
+        assert "constant" in ax.get_title().lower()
+
+        assert not any("constant" in t.get_text().lower() for t in ax.texts)
+        plt.close(fig)
+
+    def test_varied_curve_has_plain_title(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from kd.search.recorder import VizRecorder
+
+        rec = VizRecorder()
+        for score in [0.90, 0.93, 0.95]:
+            rec.log("_best_score", score)
+        mock_experiment_result.recorder = rec
+        fig, ax = plt.subplots()
+        plot_convergence(mock_experiment_result, ax)
+        assert ax.get_title() == "Convergence"
+        plt.close(fig)
+
 
 
 

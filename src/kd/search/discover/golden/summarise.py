@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from kd.search.discover.utils.canonicalize import canonicalize_expression
+from kd.core.equation.canonical import canonicalize_expression
 
 
 @dataclass(frozen=True, slots=True)

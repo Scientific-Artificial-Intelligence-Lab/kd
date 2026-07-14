@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import sympy
 
+from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.sympy_bridge import from_sympy
 from kd.search.pysr.backend import PySRBackend, default_backend_factory
 from kd.search.pysr.config import PySRConfig
@@ -17,21 +18,13 @@ from kd.search.pysr.config import PySRConfig
 BackendFactory = Callable[[PySRConfig], PySRBackend]
 
 _NMSE_EPS = 1e-12
-_KD_IR_RESERVED_NAMES = frozenset(
-    {
-        "add",
-        "mul",
-        "div",
-        "sub",
-        "neg",
-        "n2",
-        "n3",
-        "sin",
-        "cos",
-        "exp",
-        "log",
-        "lap",
-    }
+
+
+
+
+
+_KD_IR_RESERVED_NAMES: frozenset[str] = frozenset(
+    FunctionRegistry.create_default().list_names()
 )
 _DIFF_RESERVED_PATTERN = re.compile(r"^diff[0-9]*_[a-z]+$")
 

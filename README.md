@@ -9,10 +9,10 @@
 ---
 
 KD discovers the governing partial differential equation from data: give it a
-field sampled on a spatiotemporal grid, get back a symbolic PDE. Three
-in-house discovery engines (**SGA**, **DLGA**, **DISCOVER**) run behind one
-`kd.Model` API, sharing a single dataset interface, term evaluator, and
-HTML-report visualization.
+field sampled on a spatiotemporal grid, get back a symbolic PDE. Five
+in-house discovery engines (**SGA**, **DLGA**, **DISCOVER**, **EqGPT**,
+**LLM4ED**) run behind one `kd.Model` API, sharing a single dataset
+interface, term evaluator, and HTML-report visualization.
 
 <div align="center">
 <img src="docs/images/burgers2d_animation.gif" width="760" alt="2D Burgers field over time: true evolution vs the ground-truth PDE integrated forward"><br>
@@ -56,7 +56,7 @@ equations on one unified NMSE ruler.
 
 ## Engines
 
-All three engines are re-implementations of algorithms developed in this
+All five engines are re-implementations of algorithms developed in this
 lab, refactored onto KD's shared platform. Swap the `algorithm=` string to
 switch:
 
@@ -65,6 +65,13 @@ switch:
 | **SGA** | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic expression trees |
 | **DLGA** | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + genetic algorithm |
 | **DISCOVER** | `"discover"` | Du et al. 2024 | LSTM controller + policy gradient |
+| **EqGPT** | `"eqgpt"` | Xu et al. 2025 (EqGPT) | Pretrained generative GPT proposes candidate PDEs, then reward-guided fine-tuning |
+| **LLM4ED** | `"llm4ed"` | Du et al. 2024 (LLM4ED) | An LLM proposes candidate equations as text, scored by a sparse-regression reward |
+
+EqGPT needs its pretrained GPT weights, which are not vendored; see
+[`examples/16_eqgpt.py`](examples/16_eqgpt.py) for where to place them.
+LLM4ED runs fully offline with an injected provider, or against any
+OpenAI-compatible API (see [`examples/17_llm4ed.py`](examples/17_llm4ed.py)).
 
 The external PySR regressor can also be driven through the same facade as an
 optional fallback for cross-checking (`algorithm="pysr"`, needs
@@ -123,6 +130,10 @@ breaking, reconstructed frame by frame from camera images in the wave-tank
 experiments of the EqGPT paper. KD bundles one of the paper's 12 experiments
 (case `N_G2Tp12A100_broad`) as scattered `(t, x, η)` points — a table rather
 than a gridded `PDEDataset`.
+[`examples/18_eqgpt_wave_breaking.py`](examples/18_eqgpt_wave_breaking.py)
+reproduces the paper's wave-breaking discovery with the EqGPT engine across
+all 12 experiments (the full multi-case assets are not vendored; the script
+header explains what to download and where to point it).
 
 **TLC-CC** — column-chromatography retention volumes measured on an
 automated platform (192 compounds, 4 g silica columns), aggregated to mean
@@ -238,21 +249,26 @@ src/kd/
 ├── api.py        # Model facade: one-line fit() for every engine
 ├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
 ├── data/         # PDEDataset, synthetic generators, dataset loaders
-├── search/       # sga / dlga / discover / pysr engines + their configs
+├── search/       # sga / dlga / discover / eqgpt / llm4ed / pysr engines + configs
 ├── viz/          # VizEngine: HTML reports & figures
 └── inspect.py    # preview() dataset sanity checks
 ```
 
 ## Origins & Acknowledgements
 
-The SGA, DLGA, and DISCOVER engines are refactored re-implementations of
-algorithms developed in this lab; credit for the methods belongs to the
-original works:
+The SGA, DLGA, DISCOVER, EqGPT, and LLM4ED engines are refactored
+re-implementations of algorithms developed in this lab; credit for the
+methods belongs to the original works:
 
 - **SGA-PDE**: Chen et al., [SGA-PDE](https://github.com/YuntianChen/SGA-PDE);
   also the source of several bundled datasets (see [`NOTICE`](NOTICE))
 - **DLGA**: Xu et al. 2020
 - **DISCOVER**: Du et al., [DISCOVER](https://github.com/menggedu/DISCOVER)
+- **EqGPT**: Xu et al., [EqGPT](https://github.com/woshixuhao/EqGPT),
+  *Nat Commun* **16**, 10255 (2025); also the source of several bundled
+  datasets, including the wave-breaking experiments (see [`NOTICE`](NOTICE))
+- **LLM4ED**: Du et al., [LLM4ED](https://github.com/menggedu/EDL),
+  *Phys. Fluids* **36**, 097121 (2024)
 
 KD also builds on [PySR](https://github.com/MilesCranmer/PySR) (optional
 fallback engine), [SymPy](https://github.com/sympy/sympy), and

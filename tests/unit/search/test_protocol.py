@@ -7,6 +7,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import torch
+from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
 
@@ -18,7 +20,16 @@ from kd.search.protocol import PlatformComponents, SearchAlgorithm
 
 
 
-class _ConformingAlgorithm:
+class _BuildMethods:
+
+    def build_final_result(self) -> EvaluationResult:
+        return EvaluationResult(mse=0.0, nmse=0.0, r2=1.0)
+
+    def build_result_target(self) -> Tensor:
+        return torch.zeros(1)
+
+
+class _ConformingAlgorithm(_BuildMethods):
 
     def __init__(self) -> None:
         self._best_score: float = float("inf")
@@ -69,7 +80,7 @@ class _ConformingAlgorithm:
         self._state = value
 
 
-class _MissingPrepare:
+class _MissingPrepare(_BuildMethods):
 
     def propose(self, n: int) -> list[str]:
         return []
@@ -101,7 +112,7 @@ class _MissingPrepare:
         pass
 
 
-class _MissingPropose:
+class _MissingPropose(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -133,7 +144,7 @@ class _MissingPropose:
         pass
 
 
-class _MissingEvaluate:
+class _MissingEvaluate(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -165,7 +176,7 @@ class _MissingEvaluate:
         pass
 
 
-class _MissingUpdate:
+class _MissingUpdate(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -197,7 +208,7 @@ class _MissingUpdate:
         pass
 
 
-class _MissingBestScore:
+class _MissingBestScore(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -228,7 +239,7 @@ class _MissingBestScore:
         pass
 
 
-class _MissingBestExpression:
+class _MissingBestExpression(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -259,7 +270,7 @@ class _MissingBestExpression:
         pass
 
 
-class _MissingState:
+class _MissingState(_BuildMethods):
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -839,7 +850,7 @@ class _ConformingAlgorithmWithConfig(_ConformingAlgorithm):
         return {"algorithm": "test", "param": 42}
 
 
-class _MissingConfig:
+class _MissingConfig(_BuildMethods):
 
     def prepare(self, components: Any) -> None:
         pass
@@ -1016,3 +1027,117 @@ class TestIterativeSearchAlgorithmProtocol:
 
         with pytest.raises(TypeError):
             IterativeSearchAlgorithm()
+
+
+
+
+
+
+
+class _TerminatingAlgorithm(_ConformingAlgorithm):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._done = False
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+
+class TestTerminatingSearchAlgorithmProtocol:
+
+    @pytest.mark.smoke
+    def test_importable(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        assert TerminatingSearchAlgorithm is not None
+
+    @pytest.mark.smoke
+    def test_importable_from_package(self) -> None:
+        from kd.search import TerminatingSearchAlgorithm
+
+        assert TerminatingSearchAlgorithm is not None
+
+    @pytest.mark.unit
+    def test_is_runtime_checkable(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        obj = _TerminatingAlgorithm()
+        result = isinstance(obj, TerminatingSearchAlgorithm)
+        assert isinstance(result, bool)
+
+    @pytest.mark.unit
+    def test_extends_search_algorithm(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        obj = _TerminatingAlgorithm()
+        assert isinstance(obj, SearchAlgorithm)
+        assert isinstance(obj, TerminatingSearchAlgorithm)
+
+    @pytest.mark.unit
+    def test_object_with_is_done_is_recognized(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        obj = _TerminatingAlgorithm()
+        assert isinstance(obj, TerminatingSearchAlgorithm)
+
+    @pytest.mark.unit
+    def test_search_only_not_terminating(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        obj = _ConformingAlgorithm()
+        assert isinstance(obj, SearchAlgorithm)
+        assert not isinstance(obj, TerminatingSearchAlgorithm)
+
+    @pytest.mark.unit
+    def test_is_done_only_not_terminating(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        class _IsDoneOnly:
+            @property
+            def is_done(self) -> bool:
+                return True
+
+        obj = _IsDoneOnly()
+        assert not isinstance(obj, SearchAlgorithm)
+        assert not isinstance(obj, TerminatingSearchAlgorithm)
+
+    @pytest.mark.unit
+    def test_protocol_has_is_done_member(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        assert hasattr(TerminatingSearchAlgorithm, "is_done")
+
+    @pytest.mark.unit
+    def test_protocol_not_directly_instantiable(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        with pytest.raises(TypeError):
+            TerminatingSearchAlgorithm()
+
+    @pytest.mark.unit
+    def test_iterative_algorithm_not_terminating(self) -> None:
+        from kd.search.protocol import TerminatingSearchAlgorithm
+
+        obj = _IterativeAlgorithm()
+        assert not isinstance(obj, TerminatingSearchAlgorithm)
+
+    @pytest.mark.unit
+    def test_only_llm4ed_is_terminating(self) -> None:
+        from kd.api import _PLUGIN_CLASS_BY_ALGORITHM
+
+        _TERMINATING = {"llm4ed"}
+        assert _PLUGIN_CLASS_BY_ALGORITHM, "expected registered plugins"
+        for algorithm, plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.items():
+            terminating = hasattr(plugin_cls, "is_done")
+            if algorithm in _TERMINATING:
+                assert terminating, (
+                    f"plugin {algorithm!r} is expected to expose is_done "
+                    "(terminating search algorithm)"
+                )
+            else:
+                assert not terminating, (
+                    f"plugin {algorithm!r} unexpectedly exposes is_done; the T3 "
+                    "seam must not implicitly make an existing plugin terminating"
+                )

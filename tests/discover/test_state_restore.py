@@ -102,19 +102,19 @@ def test_rebuild_best_result_when_terms_present_is_valid_false() -> None:
     assert result.mse == math.inf
     assert result.nmse == math.inf
     assert result.r2 == -math.inf
-    assert result.aic == math.inf
+    assert result.score == math.inf
 
     assert not math.isnan(result.mse)
     assert not math.isnan(result.nmse)
     assert not math.isnan(result.r2)
-    assert result.aic is not None and not math.isnan(result.aic)
+    assert result.score is not None and not math.isnan(result.score)
 
 
 
     assert result.mse > 0
     assert result.nmse > 0
     assert result.r2 < 0
-    assert result.aic > 0
+    assert result.score > 0
 
     assert result.complexity == 0
 
@@ -243,7 +243,7 @@ def test_strip_result_preserves_aic_error_message_lhs_name() -> None:
         mse=0.1,
         nmse=0.05,
         r2=0.95,
-        aic=12.5,
+        score=12.5,
         complexity=2,
         coefficients=torch.tensor([1.0, -0.5], dtype=torch.float64),
         is_valid=True,
@@ -272,7 +272,7 @@ def test_strip_result_preserves_aic_error_message_lhs_name() -> None:
     assert stripped.residuals is None
 
 
-    assert stripped.aic == 12.5, (
+    assert stripped.score == 12.5, (
         "aic must survive _strip_result; live↔restored schema parity requires this."
     )
     assert stripped.error_message == "diagnostic note from evaluator", (

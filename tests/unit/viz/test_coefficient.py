@@ -44,7 +44,7 @@ def _make_result_with_coefficients(
             mse=0.01,
             nmse=0.005,
             r2=0.95,
-            aic=-100.0,
+            score=-100.0,
             complexity=n_terms,
             coefficients=torch.tensor(coeffs),
             is_valid=True,
@@ -252,3 +252,57 @@ class TestCoefficientBarEdgeCases:
         plt.close(fig)
         figs_after = len(plt.get_fignums())
         assert figs_after <= figs_before
+
+
+
+
+
+
+
+class TestCoefficientBarWideRange:
+
+    _WIDE = [0.8240275, 1.595041e-04, -2.611047e-05]
+    _WIDE_TERMS = ["u_x", "u_xxx", "diff2_x(mul(u, u_x))"]
+
+    def test_wide_range_switches_to_symlog(self) -> None:
+        result = _make_result_with_coefficients(self._WIDE, terms=self._WIDE_TERMS)
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            assert ax.get_yscale() == "symlog"
+            assert "symlog" in ax.get_ylabel().lower()
+        finally:
+            plt.close(fig)
+
+    def test_wide_range_labels_every_bar_with_its_value(self) -> None:
+        result = _make_result_with_coefficients(self._WIDE, terms=self._WIDE_TERMS)
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            texts = " ".join(t.get_text() for t in ax.texts)
+
+            assert "0.00016" in texts
+            assert "2.61e-05" in texts
+        finally:
+            plt.close(fig)
+
+    def test_narrow_range_stays_linear_and_unlabelled(self) -> None:
+        result = _make_result_with_coefficients([2.0, -3.0])
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            assert ax.get_yscale() == "linear"
+            assert ax.get_ylabel() == "Coefficient"
+            assert len(ax.texts) == 0
+            assert ax.get_ylim()[0] < 0
+        finally:
+            plt.close(fig)
+
+    def test_single_dominant_term_stays_linear(self) -> None:
+        result = _make_result_with_coefficients([5.0, 0.0, 0.0])
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            assert ax.get_yscale() == "linear"
+        finally:
+            plt.close(fig)

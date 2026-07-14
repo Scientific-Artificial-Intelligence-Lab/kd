@@ -8,6 +8,18 @@ import torch
 
 class DerivativeProvider(ABC):
 
+
+
+
+    _generation: int = 0
+
+    @property
+    def generation(self) -> int:
+        return self._generation
+
+    def _bump_generation(self) -> None:
+        self._generation = self._generation + 1
+
     @property
     def coords(self) -> dict[str, torch.Tensor]:
         return {}

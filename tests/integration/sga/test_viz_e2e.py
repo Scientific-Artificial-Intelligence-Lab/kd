@@ -50,7 +50,7 @@ def _minimal_result(recorder: VizRecorder) -> ExperimentResult:
         mse=0.01,
         nmse=0.01,
         r2=0.99,
-        aic=1.0,
+        score=1.0,
         complexity=2,
         coefficients=torch.tensor([0.1, -0.5], dtype=torch.float64),
         is_valid=True,

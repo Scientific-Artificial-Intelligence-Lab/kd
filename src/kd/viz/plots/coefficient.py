@@ -19,6 +19,15 @@ _BAR_ALPHA = 0.7
 _GT_BAR_ALPHA = 0.4
 
 
+
+
+
+
+
+_WIDE_RANGE_RATIO = 100.0
+_VALUE_LABEL_FONTSIZE = 7
+
+
 def plot_coefficient_bar(
     result: ExperimentResult,
     ax: Axes,
@@ -91,7 +100,7 @@ def plot_coefficient_bar(
         bar_width = max(0.35, min(0.55, 2.0 / len(labels)))
 
 
-    ax.bar(
+    discovered_bars = ax.bar(
         x,
         display_coeffs,
         bar_width,
@@ -131,7 +140,49 @@ def plot_coefficient_bar(
     ax.set_title("Coefficients")
     ax.legend()
 
+
+
+    if _spans_orders_of_magnitude(display_coeffs):
+        linthresh = 0.5 * _min_nonzero_abs(display_coeffs)
+        ax.set_yscale("symlog", linthresh=linthresh)
+        ax.set_ylabel("Coefficient (symlog)")
+        _annotate_bar_values(ax, discovered_bars, display_coeffs)
+
     return warnings
+
+
+def _min_nonzero_abs(coeffs: np.ndarray) -> float:
+    mags = np.abs(coeffs[np.isfinite(coeffs)])
+    nonzero = mags[mags > 0.0]
+    return float(nonzero.min()) if nonzero.size else 0.0
+
+
+def _spans_orders_of_magnitude(coeffs: np.ndarray) -> bool:
+    mags = np.abs(coeffs[np.isfinite(coeffs)])
+    nonzero = mags[mags > 0.0]
+    if nonzero.size < 2:
+        return False
+    return bool(nonzero.max() / nonzero.min() > _WIDE_RANGE_RATIO)
+
+
+def _annotate_bar_values(ax: Axes, bars: object, coeffs: np.ndarray) -> None:
+    from matplotlib.container import BarContainer
+
+    if not isinstance(bars, BarContainer):
+        return
+    for bar, value in zip(bars, coeffs, strict=True):
+        if not np.isfinite(value):
+            continue
+        above = value >= 0.0
+        ax.annotate(
+            f"{value:.3g}",
+            xy=(bar.get_x() + bar.get_width() / 2.0, value),
+            xytext=(0, 3 if above else -3),
+            textcoords="offset points",
+            ha="center",
+            va="bottom" if above else "top",
+            fontsize=_VALUE_LABEL_FONTSIZE,
+        )
 
 
 def _make_labels(terms: list[str]) -> list[str]:

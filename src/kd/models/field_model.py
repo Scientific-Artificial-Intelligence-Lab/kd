@@ -11,10 +11,28 @@ from torch import Tensor
 logger = logging.getLogger(__name__)
 
 
+class Rational(nn.Module):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.a = nn.Parameter(torch.tensor((1.1915, 1.5957, 0.5, 0.0218)))
+        self.b = nn.Parameter(torch.tensor((2.3830, 0.0, 1.0)))
+
+    def forward(self, x: Tensor) -> Tensor:
+        a = self.a
+        b = self.b
+        numerator = a[0] + x * (a[1] + x * (a[2] + a[3] * x))
+        denominator = b[0] + x * (b[1] + b[2] * x)
+
+        return numerator / denominator
+
+
+
 _ACTIVATIONS: dict[str, Callable[[], Callable[[Tensor], Tensor]]] = {
     "tanh": lambda: nn.Tanh(),
     "relu": lambda: nn.ReLU(),
     "sin": lambda: torch.sin,
+    "rational": lambda: Rational(),
 }
 
 

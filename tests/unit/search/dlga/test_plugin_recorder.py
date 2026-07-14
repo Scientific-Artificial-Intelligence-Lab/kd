@@ -52,7 +52,7 @@ _SGA_KEYS: frozenset[str] = frozenset({"best_aic"})
 def _valid_result(
     *,
     expression: str,
-    aic: float,
+    score: float,
     nmse: float,
     complexity: int,
     lhs_name: str,
@@ -61,7 +61,7 @@ def _valid_result(
         mse=nmse,
         nmse=nmse,
         r2=max(0.0, 1.0 - nmse),
-        aic=aic,
+        score=score,
         complexity=complexity,
         coefficients=torch.ones(complexity, dtype=torch.float64),
         is_valid=True,
@@ -78,7 +78,7 @@ def _invalid_result(*, expression: str, lhs_name: str = "u_t") -> EvaluationResu
         mse=float("inf"),
         nmse=float("inf"),
         r2=-float("inf"),
-        aic=float("inf"),
+        score=float("inf"),
         complexity=0,
         coefficients=None,
         is_valid=False,
@@ -94,13 +94,13 @@ def _invalid_result(*, expression: str, lhs_name: str = "u_t") -> EvaluationResu
 def _distinct_batch() -> list[EvaluationResult]:
     return [
         _valid_result(
-            expression="A", aic=12.0, nmse=0.30, complexity=5, lhs_name="u_t"
+            expression="A", score=12.0, nmse=0.30, complexity=5, lhs_name="u_t"
         ),
         _valid_result(
-            expression="B", aic=15.0, nmse=0.40, complexity=7, lhs_name="u_t"
+            expression="B", score=15.0, nmse=0.40, complexity=7, lhs_name="u_t"
         ),
         _valid_result(
-            expression="A", aic=18.0, nmse=0.55, complexity=9, lhs_name="u_tt"
+            expression="A", score=18.0, nmse=0.55, complexity=9, lhs_name="u_tt"
         ),
         _invalid_result(expression="C", lhs_name="u_t"),
         _invalid_result(expression="D", lhs_name="u_tt"),
@@ -295,13 +295,13 @@ def test_best_nmse_tracks_best_fitness_individual(
 ) -> None:
     batch = [
         _valid_result(
-            expression="M0", aic=10.0, nmse=0.50, complexity=3, lhs_name="u_t"
+            expression="M0", score=10.0, nmse=0.50, complexity=3, lhs_name="u_t"
         ),
         _valid_result(
-            expression="M1", aic=20.0, nmse=0.10, complexity=3, lhs_name="u_tt"
+            expression="M1", score=20.0, nmse=0.10, complexity=3, lhs_name="u_tt"
         ),
         _valid_result(
-            expression="M2", aic=15.0, nmse=0.30, complexity=3, lhs_name="u_t"
+            expression="M2", score=15.0, nmse=0.30, complexity=3, lhs_name="u_t"
         ),
         _invalid_result(expression="M3", lhs_name="u_tt"),
         _invalid_result(expression="M4", lhs_name="u_t"),
@@ -326,14 +326,14 @@ def test_mean_fitness_passes_inf_through_from_valid_guarded_individual() -> None
     plugin = _plugin_with_recorder(recorder)
     batch = [
         _valid_result(
-            expression="A", aic=12.0, nmse=0.30, complexity=4, lhs_name="u_t"
+            expression="A", score=12.0, nmse=0.30, complexity=4, lhs_name="u_t"
         ),
         _valid_result(
-            expression="B", aic=15.0, nmse=0.40, complexity=6, lhs_name="u_t"
+            expression="B", score=15.0, nmse=0.40, complexity=6, lhs_name="u_t"
         ),
 
         _valid_result(
-            expression="C", aic=float("inf"), nmse=0.55, complexity=8, lhs_name="u_tt"
+            expression="C", score=float("inf"), nmse=0.55, complexity=8, lhs_name="u_tt"
         ),
         _invalid_result(expression="D", lhs_name="u_t"),
     ]
@@ -358,7 +358,7 @@ def test_mean_fitness_passes_inf_through_from_valid_guarded_individual() -> None
     )
     best_nmse = recorder.get("gen_best_nmse")[-1]
     assert best_nmse == pytest.approx(0.30, rel=1e-9), (
-        f"gen_best_nmse must be 0.30 (nmse of the aic=12 best individual), "
+        f"gen_best_nmse must be 0.30 (nmse of the score=12 best individual), "
         f"not the guarded individual's 0.55. Got {best_nmse!r}."
     )
 
@@ -370,14 +370,14 @@ def test_all_valid_guarded_logs_inf_nmse_distinct_from_no_valid() -> None:
     batch = [
         _valid_result(
             expression="A",
-            aic=float("inf"),
+            score=float("inf"),
             nmse=float("inf"),
             complexity=3,
             lhs_name="u_t",
         ),
         _valid_result(
             expression="B",
-            aic=float("inf"),
+            score=float("inf"),
             nmse=float("inf"),
             complexity=5,
             lhs_name="u_tt",
@@ -410,7 +410,7 @@ def test_logging_metrics_does_not_regress_best_tracking(
         f"logging metrics must not perturb best-tracking. Got {plugin.best_score!r}."
     )
     assert plugin.best_expression == "A", (
-        f"best_expression must be 'A' (the aic=12.0 individual). Got "
+        f"best_expression must be 'A' (the score=12.0 individual). Got "
         f"{plugin.best_expression!r}."
     )
 
@@ -505,9 +505,15 @@ def test_n_unique_counts_distinct_expressions_over_all_results(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2, lhs_name="u_t"),
-        _valid_result(expression="A", aic=2.0, nmse=0.2, complexity=2, lhs_name="u_t"),
-        _valid_result(expression="B", aic=3.0, nmse=0.3, complexity=2, lhs_name="u_t"),
+        _valid_result(
+            expression="A", score=1.0, nmse=0.1, complexity=2, lhs_name="u_t"
+        ),
+        _valid_result(
+            expression="A", score=2.0, nmse=0.2, complexity=2, lhs_name="u_t"
+        ),
+        _valid_result(
+            expression="B", score=3.0, nmse=0.3, complexity=2, lhs_name="u_t"
+        ),
         _invalid_result(expression="B"),
         _invalid_result(expression="C"),
         _invalid_result(expression="D"),
@@ -533,7 +539,9 @@ def test_n_unique_folds_repeated_empty_string_expressions(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2, lhs_name="u_t"),
+        _valid_result(
+            expression="A", score=1.0, nmse=0.1, complexity=2, lhs_name="u_t"
+        ),
         _invalid_result(expression=""),
         _invalid_result(expression=""),
         _invalid_result(expression=""),
@@ -559,9 +567,15 @@ def test_lhs_counts_mixed_branches(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2, lhs_name="u_t"),
-        _valid_result(expression="B", aic=2.0, nmse=0.2, complexity=2, lhs_name="u_t"),
-        _valid_result(expression="C", aic=3.0, nmse=0.3, complexity=2, lhs_name="u_tt"),
+        _valid_result(
+            expression="A", score=1.0, nmse=0.1, complexity=2, lhs_name="u_t"
+        ),
+        _valid_result(
+            expression="B", score=2.0, nmse=0.2, complexity=2, lhs_name="u_t"
+        ),
+        _valid_result(
+            expression="C", score=3.0, nmse=0.3, complexity=2, lhs_name="u_tt"
+        ),
         _invalid_result(expression="D", lhs_name="u_t"),
         _invalid_result(expression="E", lhs_name="u_tt"),
     ]
@@ -583,8 +597,12 @@ def test_lhs_counts_single_branch_utt_zero(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2, lhs_name="u_t"),
-        _valid_result(expression="B", aic=2.0, nmse=0.2, complexity=2, lhs_name="u_t"),
+        _valid_result(
+            expression="A", score=1.0, nmse=0.1, complexity=2, lhs_name="u_t"
+        ),
+        _valid_result(
+            expression="B", score=2.0, nmse=0.2, complexity=2, lhs_name="u_t"
+        ),
     ]
     plugin.update(batch)
 

@@ -9,7 +9,7 @@ from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
 from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult, ResultBuilder, RunManifest
+from kd.search.result import ExperimentResult, RunManifest, default_final_result
 
 
 
@@ -22,7 +22,7 @@ def sample_eval_result() -> EvaluationResult:
         mse=0.01,
         nmse=0.02,
         r2=0.98,
-        aic=-50.0,
+        score=-50.0,
         complexity=3,
         coefficients=torch.tensor([1.0, -6.0, 1.0]),
         is_valid=True,
@@ -76,8 +76,8 @@ class TestExperimentResultSmoke:
     def test_instantiate(self, sample_experiment_result: ExperimentResult) -> None:
         assert isinstance(sample_experiment_result, ExperimentResult)
 
-    def test_result_builder_is_protocol(self) -> None:
-        assert hasattr(ResultBuilder, "build_final_result")
+    def test_default_final_result_is_callable(self) -> None:
+        assert callable(default_final_result)
 
 
 
@@ -211,7 +211,8 @@ class TestExperimentResultSerialization:
         assert fe.mse == pytest.approx(orig.mse)
         assert fe.nmse == pytest.approx(orig.nmse)
         assert fe.r2 == pytest.approx(orig.r2)
-        assert fe.aic == pytest.approx(orig.aic)
+
+        assert fe.score == pytest.approx(orig.score)
         assert fe.complexity == orig.complexity
         assert fe.is_valid == orig.is_valid
         assert fe.error_message == orig.error_message
@@ -242,32 +243,6 @@ class TestExperimentResultSerialization:
         fpath = tmp_path / "nested" / "deep" / "result.pt"
         sample_experiment_result.save(fpath)
         assert fpath.exists()
-
-
-
-
-
-
-
-class TestResultBuilderProtocol:
-
-    def test_conforming_class_passes_isinstance(self) -> None:
-        class MyBuilder:
-            def build_final_result(self) -> EvaluationResult:
-                return EvaluationResult(mse=0.0, nmse=0.0, r2=1.0)
-
-        assert isinstance(MyBuilder(), ResultBuilder)
-
-    def test_non_conforming_class_fails_isinstance(self) -> None:
-        class NotABuilder:
-            def some_other_method(self) -> None:
-                pass
-
-        assert not isinstance(NotABuilder(), ResultBuilder)
-
-    def test_protocol_not_instantiable_directly(self) -> None:
-        with pytest.raises(TypeError):
-            ResultBuilder()
 
 
 
@@ -352,12 +327,12 @@ class TestExperimentResultNegative:
             "previously returning None which violates float type)"
         )
 
-    def test_save_with_nan_aic(self, tmp_path: Path) -> None:
+    def test_save_with_nan_score(self, tmp_path: Path) -> None:
         eval_result = EvaluationResult(
             mse=0.01,
             nmse=0.02,
             r2=0.98,
-            aic=float("-inf"),
+            score=float("-inf"),
         )
         r = ExperimentResult(
             best_expression="u",
@@ -372,10 +347,10 @@ class TestExperimentResultNegative:
             config={},
             recorder=VizRecorder(),
         )
-        fpath = tmp_path / "nan_aic.json"
+        fpath = tmp_path / "nan_score.json"
         r.save(fpath)
         loaded = ExperimentResult.load(fpath)
-        assert loaded.final_eval.aic is None
+        assert loaded.final_eval.score is None
 
     def test_save_with_non_finite_final_eval_metrics(self, tmp_path: Path) -> None:
         import math
@@ -384,7 +359,7 @@ class TestExperimentResultNegative:
             mse=float("inf"),
             nmse=float("inf"),
             r2=float("-inf"),
-            aic=None,
+            score=None,
         )
         r = ExperimentResult(
             best_expression="",
@@ -414,7 +389,7 @@ class TestExperimentResultNegative:
                 f"non-finite final_eval.{name} must load as NaN, got {value!r}"
             )
 
-        assert fe.aic is None
+        assert fe.score is None
 
 
         assert math.isfinite(fe.r2) is False

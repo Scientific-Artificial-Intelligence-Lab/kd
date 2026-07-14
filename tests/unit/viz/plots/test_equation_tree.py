@@ -102,6 +102,7 @@ def _result_with(
     terms: list[str] | None,
     selected_indices: list[int] | None,
     best_expression: str,
+    is_valid: bool = True,
 ) -> ExperimentResult:
     import torch
 
@@ -111,10 +112,10 @@ def _result_with(
         mse=0.01,
         nmse=0.005,
         r2=0.95,
-        aic=-100.0,
+        score=-100.0,
         complexity=len(selected_indices) if selected_indices is not None else 0,
         coefficients=None,
-        is_valid=True,
+        is_valid=is_valid,
         selected_indices=selected_indices,
         terms=terms,
         expression=best_expression,
@@ -196,6 +197,36 @@ class TestPlotEquationTree:
         plot_equation_tree(result, ax)
 
         assert _labels(ax) == {"u_x"}
+        plt.close(fig)
+
+    def test_invalid_result_none_terms_does_not_render_best_expression(self) -> None:
+        result = _result_with(
+            terms=None,
+            selected_indices=None,
+            best_expression="add(u, add(u_x, u_xx))",
+            is_valid=False,
+        )
+        fig, ax = plt.subplots()
+        warnings = plot_equation_tree(result, ax)
+        labels = _labels(ax)
+        assert "u_x" not in labels
+        assert "u_xx" not in labels
+        assert len(warnings) > 0
+        plt.close(fig)
+
+    def test_invalid_result_with_terms_still_renders_terms(self) -> None:
+        result = _result_with(
+            terms=["u", "u_xx"],
+            selected_indices=None,
+            best_expression="add(u, add(u_x, u_xx))",
+            is_valid=False,
+        )
+        fig, ax = plt.subplots()
+        plot_equation_tree(result, ax)
+        labels = _labels(ax)
+        assert "u" in labels
+        assert "u_xx" in labels
+        assert "u_x" not in labels
         plt.close(fig)
 
     def test_fallback_to_best_expression_when_terms_none(self) -> None:

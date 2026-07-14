@@ -343,7 +343,7 @@ class TestSTRidgeSolver:
     ) -> None:
         from kd.core.linear_solve import STRidgeSolver
 
-        solver = STRidgeSolver(tol=0.01)
+        solver = STRidgeSolver(tol=0.01, compute_condition_number=True)
         n = 100
 
         rng = torch.Generator().manual_seed(56)
@@ -379,7 +379,18 @@ class TestSTRidgeSolver:
         assert isinstance(result.coefficients, torch.Tensor)
         assert isinstance(result.residual, float)
         assert isinstance(result.r2, float)
+        assert result.condition_number is None
+
+    def test_condition_number_returned_when_enabled(self) -> None:
+        from kd.core.linear_solve import STRidgeSolver
+
+        solver = STRidgeSolver(compute_condition_number=True)
+        theta, y, _ = _make_sparse_system(n=100, d=5, seed=59)
+        result = solver.solve(theta, y)
+
         assert isinstance(result.condition_number, float)
+        assert result.condition_number > 0
+        assert result.condition_number < float("inf")
 
     def test_result_has_selected_indices(self) -> None:
         from kd.core.linear_solve import STRidgeSolver

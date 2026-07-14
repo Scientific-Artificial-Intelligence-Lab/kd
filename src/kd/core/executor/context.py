@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from kd.data.schema import DataTopology
+
 if TYPE_CHECKING:
     from kd.data import PDEDataset
     from kd.data.derivatives import DerivativeProvider
@@ -19,6 +21,16 @@ class ExecutionContext:
     constants: dict[str, float] = field(default_factory=dict)
     device: torch.device = field(default_factory=lambda: torch.device("cpu"))
 
+    def unity_column(self) -> torch.Tensor:
+        try:
+            shape = self.dataset.get_shape()
+        except ValueError as exc:
+            raise ValueError(
+                "unity term 'one' requires a shaped dataset (GRID or SCATTERED "
+                "with axes); it is unsupported on axes-less datasets"
+            ) from exc
+        return torch.ones(shape, device=self.device, dtype=torch.float32)
+
     def get_variable(self, name: str) -> torch.Tensor:
 
         if self.dataset.fields is not None and name in self.dataset.fields:
@@ -28,6 +40,11 @@ class ExecutionContext:
         if self.dataset.axes is not None and name in self.dataset.axes:
             coord = self.dataset.axes[name].values.to(self.device)
 
+
+
+
+            if self.dataset.topology == DataTopology.SCATTERED:
+                return coord
             return self._broadcast_coord(name, coord)
 
         raise KeyError(f"Variable '{name}' not found in dataset")

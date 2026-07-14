@@ -10,7 +10,6 @@ from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
 from kd.search.protocol import PlatformComponents
-from kd.search.result import ResultTargetProvider
 from kd.search.runner import ExperimentRunner
 
 
@@ -34,6 +33,11 @@ class _BadProviderAlgorithm:
 
     def update(self, results: list[EvaluationResult]) -> None:
         pass
+
+    def build_final_result(self) -> EvaluationResult:
+
+
+        return EvaluationResult(mse=1.0, nmse=1.0, r2=0.0)
 
     def build_result_target(self) -> Tensor:
 
@@ -104,7 +108,7 @@ class _ShapeMismatchProviderAlgorithm:
             mse=1.0,
             nmse=1.0,
             r2=0.0,
-            aic=0.0,
+            score=0.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,
@@ -147,7 +151,8 @@ class TestM2BuildResultTargetContract:
     def test_bad_provider_returns_none_raises_typeerror(self) -> None:
         algorithm = _BadProviderAlgorithm()
 
-        assert isinstance(algorithm, ResultTargetProvider)
+
+        assert callable(algorithm.build_result_target)
 
         components = PlatformComponents(
             dataset=MagicMock(),
@@ -157,23 +162,22 @@ class TestM2BuildResultTargetContract:
             registry=MagicMock(),
         )
 
-
-
-
-        components.evaluator.lhs_target = torch.zeros(8)
-
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
         with pytest.raises(TypeError) as exc_info:
             runner.run(components)
 
 
-        msg = str(exc_info.value).lower()
-        assert "build_result_target" in msg or "resulttargetprovider" in msg, (
-            f"Expected TypeError to mention the protocol method/name, got: "
+        msg = str(exc_info.value)
+        assert "build_result_target" in msg, (
+            f"Expected TypeError to mention the protocol method, got: "
+            f"{exc_info.value}"
+        )
+        assert "NoneType" in msg, (
+            f"Expected TypeError to name the offending type, got: "
             f"{exc_info.value}"
         )
 
-    def test_bad_provider_does_not_silently_use_evaluator_target(self) -> None:
+    def test_bad_provider_does_not_ship_synthetic_target(self) -> None:
         algorithm = _BadProviderAlgorithm()
         components = PlatformComponents(
             dataset=MagicMock(),
@@ -182,11 +186,9 @@ class TestM2BuildResultTargetContract:
             context=MagicMock(),
             registry=MagicMock(),
         )
-
-        components.evaluator.lhs_target = torch.full((8,), 12345.0)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
-        with pytest.raises((TypeError, ValueError)):
+        with pytest.raises(TypeError, match="build_result_target"):
             runner.run(components)
 
 
@@ -210,7 +212,6 @@ class TestM3PredictedShapeGuard:
             context=MagicMock(),
             registry=MagicMock(),
         )
-        components.evaluator.lhs_target = torch.zeros(10)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
         with pytest.raises(ValueError) as exc_info:
@@ -238,7 +239,6 @@ class TestM3PredictedShapeGuard:
             context=MagicMock(),
             registry=MagicMock(),
         )
-        components.evaluator.lhs_target = torch.zeros(4, 5)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
         with pytest.raises(ValueError) as exc_info:
@@ -257,82 +257,6 @@ class TestM3PredictedShapeGuard:
 
 
 
-
-class _PlainAlgorithm:
-
-    def __init__(self) -> None:
-        self._state: dict[str, Any] = {}
-
-    def prepare(self, components: PlatformComponents) -> None:
-        pass
-
-    def propose(self, n: int) -> list[str]:
-        return [f"e{i}" for i in range(n)]
-
-    def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
-        return [EvaluationResult(mse=1.0, nmse=1.0, r2=0.0) for _ in candidates]
-
-    def update(self, results: list[EvaluationResult]) -> None:
-        pass
-
-    @property
-    def best_score(self) -> float:
-        return 0.0
-
-    @property
-    def best_expression(self) -> str:
-        return "e0"
-
-    @property
-    def config(self) -> dict[str, Any]:
-        return {"algorithm": "Plain"}
-
-    @property
-    def state(self) -> dict[str, Any]:
-        return dict(self._state)
-
-    @state.setter
-    def state(self, value: dict[str, Any]) -> None:
-        self._state = dict(value)
-
-
-@pytest.mark.unit
-class TestActualEvaluatorTargetStrict:
-
-    def test_non_tensor_lhs_target_raises_typeerror(self) -> None:
-        algorithm = _PlainAlgorithm()
-        components = PlatformComponents(
-            dataset=MagicMock(),
-            executor=MagicMock(),
-            evaluator=MagicMock(),
-            context=MagicMock(),
-            registry=MagicMock(),
-        )
-
-        components.evaluator.lhs_target = MagicMock()
-        runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
-
-        with pytest.raises(TypeError) as exc_info:
-            runner.run(components)
-        msg = str(exc_info.value).lower()
-        assert "lhs_target" in msg, (
-            f"Error must name the offending attribute, got: {exc_info.value}"
-        )
-
-    def test_none_lhs_target_raises_typeerror(self) -> None:
-        algorithm = _PlainAlgorithm()
-        components = PlatformComponents(
-            dataset=MagicMock(),
-            executor=MagicMock(),
-            evaluator=MagicMock(),
-            context=MagicMock(),
-            registry=MagicMock(),
-        )
-        components.evaluator.lhs_target = None
-        runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
-
-        with pytest.raises(TypeError):
-            runner.run(components)
 
 
 
@@ -367,7 +291,7 @@ class _BadResidualsAlgorithm:
             mse=1.0,
             nmse=1.0,
             r2=0.0,
-            aic=0.0,
+            score=0.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,
@@ -417,7 +341,6 @@ class TestPredictedResidualsTypeGuard:
             context=MagicMock(),
             registry=MagicMock(),
         )
-        components.evaluator.lhs_target = torch.zeros(3)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
         with pytest.raises(TypeError) as exc_info:

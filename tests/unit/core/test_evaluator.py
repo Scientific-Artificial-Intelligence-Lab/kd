@@ -168,7 +168,7 @@ class TestEvaluatorSmoke:
 
     def test_evaluation_result_default_values(self) -> None:
         result = EvaluationResult(mse=0.0, nmse=0.0, r2=1.0)
-        assert result.aic is None
+        assert result.score is None
         assert result.complexity == 0
         assert result.coefficients is None
         assert result.is_valid is True
@@ -212,6 +212,35 @@ class TestEvaluatorSmoke:
     def test_evaluator_has_evaluate_expression(self, evaluator: Evaluator) -> None:
         assert hasattr(evaluator, "evaluate_expression")
         assert callable(evaluator.evaluate_expression)
+
+
+
+
+
+
+
+@pytest.mark.unit
+class TestEvaluationResultToDictScoreKey:
+
+    def test_to_dict_emits_score_key_not_aic(self) -> None:
+        result = EvaluationResult(mse=0.01, nmse=0.02, r2=0.98, score=-12.5)
+        d = result.to_dict()
+        assert "score" in d
+        assert "aic" not in d
+
+    def test_to_dict_score_carries_sanitized_value(self) -> None:
+        result = EvaluationResult(mse=0.01, nmse=0.02, r2=0.98, score=-12.5)
+        assert result.to_dict()["score"] == pytest.approx(-12.5)
+
+    def test_to_dict_score_non_finite_sanitized_to_none(self) -> None:
+        result = EvaluationResult(mse=0.01, nmse=0.02, r2=0.98, score=float("inf"))
+        assert result.to_dict()["score"] is None
+
+    def test_to_dict_score_none_stays_none(self) -> None:
+        result = EvaluationResult(mse=0.01, nmse=0.02, r2=0.98, score=None)
+        d = result.to_dict()
+        assert "score" in d
+        assert d["score"] is None
 
 
 
@@ -370,8 +399,8 @@ class TestEvaluatorScorerInjection:
         assert result.is_valid
 
 
-        assert result.aic is not None
-        assert math.isfinite(result.aic)
+        assert result.score is not None
+        assert math.isfinite(result.score)
 
     def test_custom_scorer_is_called(
         self,
@@ -396,7 +425,7 @@ class TestEvaluatorScorerInjection:
         )
         result = evaluator.evaluate_terms(["u"])
         assert result.is_valid
-        assert result.aic == sentinel
+        assert result.score == sentinel
 
     def test_custom_scorer_receives_correct_args(
         self,
@@ -456,7 +485,7 @@ class TestEvaluatorScorerInjection:
         default_result = default_eval.evaluate_terms(["u"])
 
         assert result.mse == pytest.approx(default_result.mse)
-        assert result.aic != default_result.aic
+        assert result.score != default_result.score
 
 
 
@@ -975,7 +1004,7 @@ class TestAICComplexityKFix:
         assert result.is_valid is True
 
         assert result.mse > 1e-15, f"MSE too small ({result.mse}), AIC would be -inf"
-        assert result.aic is not None
+        assert result.score is not None
 
 
         n_samples = lhs_tensor.numel()
@@ -983,7 +1012,7 @@ class TestAICComplexityKFix:
         expected_aic = n_samples * math.log(result.mse) + 2 * expected_k
 
 
-        assert result.aic == pytest.approx(expected_aic, rel=1e-10)
+        assert result.score == pytest.approx(expected_aic, rel=1e-10)
 
     def test_dense_regression_unchanged(
         self,
@@ -1005,7 +1034,7 @@ class TestAICComplexityKFix:
 
         n_samples = evaluator._lhs_flat.shape[0]
         expected_aic = n_samples * math.log(result.mse) + 2 * len(terms)
-        assert result.aic == pytest.approx(expected_aic, rel=1e-10)
+        assert result.score == pytest.approx(expected_aic, rel=1e-10)
 
 
 
@@ -1590,7 +1619,7 @@ class TestAutogradOOM:
 
         assert result.is_valid is False
         assert "autograd OOM" in result.error_message
-        assert math.isinf(result.aic or 0.0)
+        assert math.isinf(result.score or 0.0)
 
     def test_evaluate_expression_oom_returns_invalid_result(
         self,

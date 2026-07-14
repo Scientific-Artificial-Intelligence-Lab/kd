@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import Tensor
 
+from kd.core.equation.types import Form
 from kd.core.jsonsafe import make_json_safe, sanitize_float
 from kd.core.metrics import ScorerFn, make_aic_scorer
 from kd.core.metrics import nmse as _metrics_nmse
+from kd.core.term_cache import TermColumnCache
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class EvaluationResult:
     mse: float
     nmse: float
     r2: float
-    aic: float | None = None
+    score: float | None = None
     complexity: int = 0
     coefficients: Tensor | None = None
     is_valid: bool = True
@@ -37,6 +39,7 @@ class EvaluationResult:
     terms: list[str] | None = None
     expression: str = ""
     lhs_name: str | None = None
+    form: Form = Form.EVOLUTION
 
     def to_dict(self, *, include_residuals: bool = True) -> dict[str, Any]:
         residuals: Any = None
@@ -49,7 +52,7 @@ class EvaluationResult:
             "mse": sanitize_float(self.mse),
             "nmse": sanitize_float(self.nmse),
             "r2": sanitize_float(self.r2),
-            "aic": sanitize_float(self.aic) if self.aic is not None else None,
+            "score": sanitize_float(self.score) if self.score is not None else None,
             "complexity": self.complexity,
             "coefficients": make_json_safe(
                 self.coefficients,
@@ -63,6 +66,8 @@ class EvaluationResult:
             "expression": self.expression,
             "lhs_name": self.lhs_name,
         }
+
+
 
 
 
@@ -83,12 +88,22 @@ class Evaluator:
         lhs: Tensor,
         penalty_value: float = 1e10,
         scorer: ScorerFn | None = None,
+        enable_term_cache: bool = True,
     ) -> None:
         self._executor = executor
         self._solver = solver
         self._context = context
         self._lhs = lhs.detach()
         self._penalty_value = penalty_value
+        self._term_cache: TermColumnCache | None = (
+            TermColumnCache() if enable_term_cache else None
+        )
+
+
+
+
+
+        self._term_cache_provider: object | None = None
 
 
         self._lhs_flat = self._lhs.flatten()
@@ -122,6 +137,10 @@ class Evaluator:
     @property
     def context(self) -> ExecutionContext:
         return self._context
+
+    def invalidate_term_cache(self) -> None:
+        if self._term_cache is not None:
+            self._term_cache.clear()
 
     def build_theta_matrix(
         self,
@@ -168,23 +187,57 @@ class Evaluator:
     ) -> tuple[Tensor, list[str]]:
         theta_columns: list[Tensor] = []
         valid_terms: list[str] = []
+        cache = self._term_cache
+
+
+
+
+
+
+
+
+
+        provider = self._context.derivative_provider
+        if cache is not None and provider is not self._term_cache_provider:
+            if self._term_cache_provider is not None:
+                cache.clear()
+            self._term_cache_provider = provider
+
+
+
+
+        generation = provider.generation
 
         for term in terms:
 
-            try:
-                result = self._executor.execute(term, self._context)
-                col = result.value.flatten()
-            except torch.cuda.OutOfMemoryError:
+
+
+
+            col = cache.get(term, generation) if cache is not None else None
+            if col is None:
+
+                try:
+                    result = self._executor.execute(term, self._context)
+                    col = result.value.flatten()
+                except torch.cuda.OutOfMemoryError:
 
 
 
 
-                raise
-            except Exception as e:
-                if not skip_invalid:
-                    raise ValueError(f"Execution error for '{term}': {e}") from e
-                logger.debug("skip_invalid: skipping '%s' (execution error)", term)
-                continue
+                    raise
+                except Exception as e:
+                    if not skip_invalid:
+                        raise ValueError(f"Execution error for '{term}': {e}") from e
+                    logger.debug(
+                        "skip_invalid: skipping '%s' (execution error)", term
+                    )
+                    continue
+
+
+
+
+                if cache is not None:
+                    cache.put(term, col, generation)
 
 
             if skip_invalid and not torch.isfinite(col).all():
@@ -257,13 +310,13 @@ class Evaluator:
         complexity = self._get_complexity(
             solve_result.selected_indices, len(valid_terms)
         )
-        aic_val = self._scorer(mse, complexity)
+        score_val = self._scorer(mse, complexity)
 
         return EvaluationResult(
             mse=mse,
             nmse=nmse_val,
             r2=r2,
-            aic=aic_val,
+            score=score_val,
             complexity=complexity,
             coefficients=coefficients,
             is_valid=True,
@@ -292,7 +345,7 @@ class Evaluator:
             mse=self._penalty_value,
             nmse=self._penalty_value,
             r2=-float("inf"),
-            aic=float("inf"),
+            score=float("inf"),
             complexity=0,
             coefficients=None,
             is_valid=False,

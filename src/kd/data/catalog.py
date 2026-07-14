@@ -19,8 +19,11 @@ from kd.data.synthetic import (
     load_eq_6_2_12,
     load_kdv,
     load_klein_gordon,
+    load_laplacian_eitech,
+    load_laplacian_smile,
     load_pde_compound,
     load_pde_divide,
+    load_poisson_disk,
     load_wave,
 )
 
@@ -56,7 +59,7 @@ class DatasetSpec:
     id: str
     loader: DatasetLoader
     equation: str
-    lhs: str
+    lhs: str | None
     axes: tuple[str, ...]
     fmt: str
     source: str
@@ -155,6 +158,51 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         tier=_BUILTIN_TIER,
         tags=("eqgpt", "mixed-derivative"),
         files=("eqgpt_eq_6_2_12.csv",),
+    ),
+    "eqgpt-laplacian-eitech": DatasetSpec(
+        id="eqgpt-laplacian-eitech",
+        loader=load_laplacian_eitech,
+        equation="u_xx + u_yy + 1 = 0",
+        lhs=None,
+        axes=("x", "y"),
+        fmt="xlsx",
+        source=(
+            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_eitech.xlsx"
+        ),
+        license=_EQGPT_LICENSE,
+        tier=_BUILTIN_TIER,
+        tags=("eqgpt", "steady", "homogeneous", "scattered"),
+        files=("eqgpt_laplacian_eitech.xlsx",),
+    ),
+    "eqgpt-laplacian-smile": DatasetSpec(
+        id="eqgpt-laplacian-smile",
+        loader=load_laplacian_smile,
+        equation="u_xx + u_yy = 0",
+        lhs=None,
+        axes=("x", "y"),
+        fmt="xlsx",
+        source=(
+            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_smile.xlsx"
+        ),
+        license=_EQGPT_LICENSE,
+        tier=_BUILTIN_TIER,
+        tags=("eqgpt", "steady", "homogeneous", "scattered"),
+        files=("eqgpt_laplacian_smile.xlsx",),
+    ),
+    "eqgpt-poisson-disk": DatasetSpec(
+        id="eqgpt-poisson-disk",
+        loader=load_poisson_disk,
+        equation="u_xx + u_yy = 0",
+        lhs=None,
+        axes=("x", "y"),
+        fmt="xlsx",
+        source=(
+            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_poisson_disk.xlsx"
+        ),
+        license=_EQGPT_LICENSE,
+        tier=_BUILTIN_TIER,
+        tags=("eqgpt", "steady", "homogeneous", "scattered"),
+        files=("eqgpt_poisson_disk.xlsx",),
     ),
     "kdv": DatasetSpec(
         id="kdv",

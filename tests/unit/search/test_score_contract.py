@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 
 import pytest
 
+from kd.api import _PLUGIN_CLASS_BY_ALGORITHM
 from kd.search.discover import DISCOVERPlugin
 from kd.search.dlga import DLGAPlugin
 from kd.search.protocol import (
@@ -24,12 +25,26 @@ from tests.unit.search._runner_mocks import (
 
 
 
-_EXPECTED_CONTRACTS = [
-    pytest.param(SGAPlugin, "AIC", "min", id="sga"),
-    pytest.param(DLGAPlugin, "DLGA fitness", "min", id="dlga"),
-    pytest.param(DISCOVERPlugin, "reward", "max", id="discover"),
-    pytest.param(PySRPlugin, "NMSE", "min", id="pysr"),
-]
+
+
+_REGISTERED_PLUGIN_CLASSES = tuple(_PLUGIN_CLASS_BY_ALGORITHM.values())
+_REGISTERED_PLUGIN_CASES = tuple(
+    pytest.param(algorithm, plugin_cls, id=algorithm)
+    for algorithm, plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.items()
+)
+_EXPECTED_SCORE_META = {
+    "sga": ("AIC", "min"),
+    "dlga": ("DLGA fitness", "min"),
+    "discover": ("reward", "max"),
+    "pysr": ("NMSE", "min"),
+
+
+
+    "eqgpt": ("EqGPT reward", "max"),
+
+
+    "llm4ed": ("LLM4ED sparse reward", "max"),
+}
 
 
 
@@ -127,36 +142,43 @@ def test_sga_direction_readable_from_class() -> None:
 
 class TestPluginScoreContractValues:
 
-    @pytest.mark.parametrize(("cls", "kind", "direction"), _EXPECTED_CONTRACTS)
-    def test_plugin_instance_implements_score_contract(
-        self, cls: type[Any], kind: str, direction: str
+    @pytest.mark.parametrize(("algorithm", "cls"), _REGISTERED_PLUGIN_CASES)
+    def test_plugin_class_implements_score_contract(
+        self, algorithm: str, cls: type[Any]
     ) -> None:
-        assert isinstance(cls(), ScoreContract), (
+        assert isinstance(cls, ScoreContract), (
             f"{cls.__name__} must declare score_kind/score_direction (ScoreContract)"
         )
 
-    @pytest.mark.parametrize(("cls", "kind", "direction"), _EXPECTED_CONTRACTS)
+    @pytest.mark.parametrize(("algorithm", "cls"), _REGISTERED_PLUGIN_CASES)
     def test_plugin_score_kind_class_level_value(
-        self, cls: type[Any], kind: str, direction: str
+        self, algorithm: str, cls: type[Any]
     ) -> None:
+        kind, _direction = _EXPECTED_SCORE_META[algorithm]
         assert cls.score_kind == kind
 
-    @pytest.mark.parametrize(("cls", "kind", "direction"), _EXPECTED_CONTRACTS)
+    @pytest.mark.parametrize(("algorithm", "cls"), _REGISTERED_PLUGIN_CASES)
     def test_plugin_score_direction_class_level_value(
-        self, cls: type[Any], kind: str, direction: str
+        self, algorithm: str, cls: type[Any]
     ) -> None:
+        _kind, direction = _EXPECTED_SCORE_META[algorithm]
         assert cls.score_direction == direction
 
     def test_builtin_score_kinds_are_pairwise_distinct(self) -> None:
-        kinds = [
-            SGAPlugin.score_kind,
-            DLGAPlugin.score_kind,
-            DISCOVERPlugin.score_kind,
-            PySRPlugin.score_kind,
+        identities = [
+            (cls.score_kind, cls.score_direction) for cls in _REGISTERED_PLUGIN_CLASSES
         ]
-        assert len(set(kinds)) == len(kinds), f"duplicate score_kind in {kinds}"
+
+        assert len(set(identities)) == len(identities), (
+            f"built-in score identities must be pairwise distinct; got {identities}"
+        )
+
+
+        assert ("DLGA fitness", "min") in identities
+        assert ("AIC", "min") in identities
+        assert ("reward", "max") in identities
 
     def test_no_builtin_uses_the_generic_fallback_kind(self) -> None:
-        for cls in (SGAPlugin, DLGAPlugin, DISCOVERPlugin, PySRPlugin):
+        for cls in _REGISTERED_PLUGIN_CLASSES:
             assert cls.score_kind != "Score"
             assert cls.score_kind.strip() != ""

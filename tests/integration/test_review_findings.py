@@ -69,7 +69,7 @@ def _make_diverging_sga_autograd_result(
             mse=0.01,
             nmse=0.01,
             r2=0.5,
-            aic=-50.0,
+            score=-50.0,
             complexity=1,
             coefficients=torch.tensor([0.0, 100.0]),
             is_valid=True,
@@ -104,7 +104,7 @@ class TestM1AutogradWarningDeduplication:
 
         html = report.report.read_text() if report.report is not None else ""
 
-        sentinel = "Domain note: SGA was run with use_autograd=True"
+        sentinel = "Domain note: this run fitted derivatives in an autograd"
         occurrences = html.count(sentinel)
         assert occurrences == 1, (
             f"Expected the autograd domain note to appear exactly once in "
@@ -121,7 +121,7 @@ class TestM1AutogradWarningDeduplication:
         engine = VizEngine(output_dir=tmp_path)
         report = engine.render_all(result, dataset=dataset)
 
-        sentinel = "Domain note: SGA was run with use_autograd=True"
+        sentinel = "Domain note: this run fitted derivatives in an autograd"
         matching = [w for w in report.warnings if sentinel in w]
         assert len(matching) == 1, (
             f"Expected exactly one warning containing the autograd domain "

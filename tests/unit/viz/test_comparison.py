@@ -49,7 +49,7 @@ def _make_result(
             mse=nmse * 2,
             nmse=nmse,
             r2=r2,
-            aic=-50.0,
+            score=-50.0,
             complexity=2,
             coefficients=torch.tensor([1.0, 0.5]),
             is_valid=True,
@@ -212,5 +212,250 @@ class TestOverlaidConvergenceBandGating:
             assert _has_mean_band(ax), (
                 "algorithm-free results must keep the legacy pooled band"
             )
+        finally:
+            plt.close(fig)
+
+
+
+
+
+
+
+
+def _result_with_equation(
+    name: str, term_irs: tuple[str, ...] | None
+) -> ExperimentResult:
+    import dataclasses
+
+    from kd.core.equation import LhsSpec, Scalar, make_evolution
+
+    equation = None
+    if term_irs is not None:
+        equation = make_evolution(
+            LhsSpec(field="u", axis="t", order=1),
+            tuple((term_ir, Scalar(1.0)) for term_ir in term_irs),
+        )
+    return dataclasses.replace(_make_result(name), equation=equation)
+
+
+def _table_cell_texts(ax) -> list[str]:
+    tables = ax.tables
+    assert tables, "plot_summary_table must render a table"
+    return [
+        cell.get_text().get_text() for cell in tables[0].get_celld().values()
+    ]
+
+
+class TestSummaryTableTermDiff:
+
+    @pytest.mark.unit
+    def test_diff_column_present_with_baseline_marker(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("u", "div(u, x)")),
+            _result_with_equation("B", ("u", "div(u, x)")),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("Δ Terms vs Run 0" in t for t in texts), texts
+            assert any("baseline" in t for t in texts), texts
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_added_and_removed_terms_named_canonically(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("u", "div(u, x)")),
+            _result_with_equation("B", ("u", "diff2_x(u)")),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("+diff2_x(u)" in t for t in texts), texts
+            assert any("-div(u,x)" in t for t in texts), texts
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_identical_structure_renders_equals_sign(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("mul(u, diff_x(u))",)),
+            _result_with_equation("B", ("mul(diff_x(u),u)",)),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert "=" in texts, texts
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_missing_equation_degrades_to_na_with_warning(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("u",)),
+            _result_with_equation("B", None),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("n/a" in t for t in texts), texts
+            assert any("equation" in w for w in warnings_list), warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_baseline_missing_equation_degrades_for_all_rows(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", None),
+            _result_with_equation("B", ("u",)),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("n/a" in t for t in texts), texts
+            assert any("equation" in w for w in warnings_list), warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_lhs_change_is_flagged(self) -> None:
+        import dataclasses
+
+        from kd.core.equation import LhsSpec, Scalar, make_evolution
+        from kd.viz.plots.comparison import plot_summary_table
+
+        eq_utt = make_evolution(
+            LhsSpec(field="u", axis="t", order=2), (("u", Scalar(1.0)),)
+        )
+        results = [
+            _result_with_equation("A", ("u",)),
+            dataclasses.replace(_make_result("B"), equation=eq_utt),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("lhs!" in t for t in texts), texts
+            assert "=" not in texts, texts
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_long_diff_degrades_to_counts_not_truncation(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("u", "div(u, x)", "diff2_x(u)")),
+            _result_with_equation(
+                "B", ("u", "mul(u, diff_x(u))", "diff_x(diff_x(diff_x(u)))")
+            ),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("+2 -2 terms" in t for t in texts), texts
+            assert not any("..." in t and "+" in t for t in texts), texts
+            assert any("full diff:" in w for w in warnings_list), warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_invalid_baseline_ir_warned_once_with_cause(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", ("mul(0.5, u)",)),
+            _result_with_equation("B", ("u",)),
+            _result_with_equation("C", ("diff2_x(u)",)),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            texts = _table_cell_texts(ax)
+            assert any("n/a" in t for t in texts), texts
+            canon_warnings = [w for w in warnings_list if "canonicalizable" in w]
+            assert len(canon_warnings) == 1, warnings_list
+            assert "Baseline" in canon_warnings[0], warnings_list
+            assert "mul(0.5, u)" in canon_warnings[0], warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_missing_baseline_equation_warned_once(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _result_with_equation("A", None),
+            _result_with_equation("B", ("u",)),
+            _result_with_equation("C", ("u",)),
+            _result_with_equation("D", ("u",)),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            equation_warnings = [w for w in warnings_list if "equation" in w]
+            assert len(equation_warnings) == 1, warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_mixed_algorithms_get_vocabulary_caveat(self) -> None:
+        import dataclasses
+
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            dataclasses.replace(
+                _make_result("A", algorithm="sga"),
+                equation=_result_with_equation("A", ("diff2_x(u)",)).equation,
+            ),
+            dataclasses.replace(
+                _make_result("B", algorithm="dlga"),
+                equation=_result_with_equation("B", ("u_xx",)).equation,
+            ),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            assert any("vocabular" in w for w in warnings_list), warnings_list
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.unit
+    def test_same_algorithm_no_vocabulary_caveat(self) -> None:
+        import dataclasses
+
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            dataclasses.replace(
+                _make_result("A", algorithm="sga"),
+                equation=_result_with_equation("A", ("u",)).equation,
+            ),
+            dataclasses.replace(
+                _make_result("B", algorithm="sga"),
+                equation=_result_with_equation("B", ("u",)).equation,
+            ),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings_list = plot_summary_table(results, ax)
+            assert not any("vocabular" in w for w in warnings_list), warnings_list
         finally:
             plt.close(fig)

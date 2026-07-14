@@ -80,6 +80,8 @@ def _build_render(result: ExperimentResult) -> tuple[RenderNode | None, list[str
 
 
 
+
+
     if terms is not None:
         if final_eval.selected_indices is not None:
             indices = [i for i in final_eval.selected_indices if 0 <= i < len(terms)]
@@ -96,6 +98,12 @@ def _build_render(result: ExperimentResult) -> tuple[RenderNode | None, list[str
         rendered = [sympy_to_render(to_sympy(terms[i], strict=False)) for i in indices]
         if rendered:
             return forest_to_render(rendered, op="+"), warnings
+        return None, warnings
+    if not final_eval.is_valid:
+
+
+
+
         return None, warnings
     expr_str = result.best_expression
     if not expr_str:

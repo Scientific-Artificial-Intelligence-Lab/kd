@@ -4,6 +4,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from torch import Tensor
@@ -32,6 +33,7 @@ _LARGE_TENSOR_WARNING_THRESHOLD = 10_000
 
 __all__ = [
     "VizRecorder",
+    "log_whitelisted_metrics",
     "_detach_tensor",
     "_is_json_serializable",
     "_make_json_safe",
@@ -124,3 +126,18 @@ class VizRecorder:
             {key: list(values) for key, values in data.items()},
         )
         return recorder
+
+
+def log_whitelisted_metrics(
+    recorder: VizRecorder | None,
+    whitelist: Iterable[str],
+    metrics: Mapping[str, Any],
+    *,
+    skip_missing: bool = False,
+) -> None:
+    if recorder is None:
+        return
+    for name in whitelist:
+        if skip_missing and name not in metrics:
+            continue
+        recorder.log(name, metrics[name])

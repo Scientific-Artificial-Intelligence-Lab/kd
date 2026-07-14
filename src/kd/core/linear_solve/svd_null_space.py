@@ -6,8 +6,7 @@ import math
 import torch
 
 from kd.core.linear_solve._helpers import (
-    compute_r2,
-    squared_residual,
+    r2_score,
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
@@ -46,7 +45,9 @@ class SVDNullSpaceSolver(SparseSolver):
             coefficients = (-null_vector[1:] / denominator).to(
                 device=theta.device, dtype=theta.dtype
             )
-            residual = squared_residual(theta, coefficients, y_1d)
+            coef_64 = upcast_for_solve(coefficients)
+            y_pred_64 = theta_solve @ coef_64
+            residual = float(((y_solve - y_pred_64) ** 2).sum().item())
             if not math.isfinite(residual):
                 return self._invalid(theta, "SVD residual is not finite")
 
@@ -56,7 +57,7 @@ class SVDNullSpaceSolver(SparseSolver):
             return SolveResult(
                 coefficients=coefficients.detach(),
                 residual=residual,
-                r2=compute_r2(theta, coefficients, y_1d),
+                r2=r2_score(y_pred_64, y_solve),
                 condition_number=self._condition_number(augmented),
                 selected_indices=selected_indices,
             )

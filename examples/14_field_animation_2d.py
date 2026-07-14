@@ -5,7 +5,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import sympy as sp
 import torch
 from matplotlib.animation import PillowWriter
 
@@ -73,7 +72,7 @@ def _make_demo_result(dataset: PDEDataset) -> ExperimentResult:
             mse=0.0,
             nmse=0.0,
             r2=1.0,
-            aic=0.0,
+            score=0.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,
@@ -98,7 +97,7 @@ def main() -> int:
         return 0
 
     dataset = _load_downsampled_burgers_2d()
-    rhs = sp.sympify("-u*u_x - u*u_y + 0.01*u_xx + 0.01*u_yy")
+    rhs = "-u*u_x - u*u_y + 0.01*u_xx + 0.01*u_yy"
     integration_result = integrate_pde(rhs, dataset, method="RK45")
     if not integration_result.success:
         print(f"Integration failed: {integration_result.warning}")

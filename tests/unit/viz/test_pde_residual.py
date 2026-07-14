@@ -83,7 +83,7 @@ def _make_result(n_samples: int = 50, lhs_label: str = "u_t") -> ExperimentResul
             mse=0.01,
             nmse=0.005,
             r2=0.95,
-            aic=-100.0,
+            score=-100.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,

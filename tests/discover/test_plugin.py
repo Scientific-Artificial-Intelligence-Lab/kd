@@ -17,7 +17,6 @@ from kd.search.protocol import (
     PlatformComponents,
     SearchAlgorithm,
 )
-from kd.search.result import ResultBuilder, ResultTargetProvider
 
 
 
@@ -479,12 +478,15 @@ def prepared_with_target(
     return p, evaluator
 
 
-class TestResultBuilderProtocol:
+class TestBuildFinalResult:
 
     @pytest.mark.unit
     @pytest.mark.smoke
-    def test_isinstance_result_builder(self, plugin: DISCOVERPlugin) -> None:
-        assert isinstance(plugin, ResultBuilder)
+    def test_isinstance_merged_search_algorithm(
+        self, plugin: DISCOVERPlugin
+    ) -> None:
+        assert isinstance(plugin, SearchAlgorithm)
+        assert callable(plugin.build_final_result)
 
     @pytest.mark.unit
     def test_build_final_result_returns_evaluation_result(
@@ -533,14 +535,14 @@ class TestResultBuilderProtocol:
             plugin.build_final_result()
 
 
-class TestResultTargetProviderProtocol:
+class TestBuildResultTarget:
 
     @pytest.mark.unit
     @pytest.mark.smoke
-    def test_isinstance_result_target_provider(
+    def test_has_build_result_target(
         self, plugin: DISCOVERPlugin,
     ) -> None:
-        assert isinstance(plugin, ResultTargetProvider)
+        assert callable(plugin.build_result_target)
 
     @pytest.mark.unit
     def test_build_result_target_parity_with_fallback(

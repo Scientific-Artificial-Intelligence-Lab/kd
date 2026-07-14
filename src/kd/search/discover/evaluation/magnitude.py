@@ -75,7 +75,7 @@ def _reject(result: EvaluationResult, reason: str) -> EvaluationResult:
         mse=result.mse,
         nmse=result.nmse,
         r2=result.r2,
-        aic=result.aic,
+        score=result.score,
         complexity=result.complexity,
         coefficients=result.coefficients,
         is_valid=False,

@@ -15,13 +15,13 @@ from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
     SearchAlgorithm,
+    TerminatingSearchAlgorithm,
 )
 from kd.search.recorder import VizRecorder
 from kd.search.result import (
     ExperimentResult,
-    ResultBuilder,
-    ResultTargetProvider,
     RunResult,
+    default_final_result,
 )
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
@@ -38,13 +38,13 @@ __all__ = [
     "IterativeSearchAlgorithm",
     "LoggingCallback",
     "PlatformComponents",
-    "ResultBuilder",
-    "ResultTargetProvider",
     "RunResult",
     "RunnerCallback",
     "SGAConfig",
     "SGAPlugin",
     "SearchAlgorithm",
+    "TerminatingSearchAlgorithm",
     "VizDataCollector",
     "VizRecorder",
+    "default_final_result",
 ]

@@ -140,6 +140,28 @@ def classify_terms(
     max_order: int,
 ) -> TermValidationReport:
     """Classify every term into valid / rejected (shared by both entries)."""
+    evaluator = components.evaluator
+    if evaluator is None:
+
+
+
+
+
+        raise TypeError(
+            "classify_terms requires components.evaluator (LHS target "
+            "shape check); got None."
+        )
+    context = components.context
+    if context is None:
+
+
+
+
+
+        raise TypeError(
+            "classify_terms requires components.context (term execution); "
+            "got None."
+        )
     known_fields, known_axes = _known_names(components.dataset)
     results: list[TermValidation] = []
     valid: list[str] = []
@@ -149,9 +171,9 @@ def classify_terms(
         reason = _classify_one(
             term,
             executor=components.executor,
-            context=components.context,
+            context=context,
             registry=components.registry,
-            lhs_target=components.evaluator.lhs_target,
+            lhs_target=evaluator.lhs_target,
             max_order=max_order,
             known_fields=known_fields,
             known_axes=known_axes,

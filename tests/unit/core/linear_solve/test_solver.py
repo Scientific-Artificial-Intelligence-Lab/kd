@@ -111,6 +111,15 @@ class TestSolverSmoke:
         assert result.condition_number == 10.0
         assert result.selected_indices is None
 
+    def test_solve_result_condition_number_defaults_to_none(self) -> None:
+        result = SolveResult(
+            coefficients=torch.tensor([1.0, 2.0]),
+            residual=0.1,
+            r2=0.99,
+        )
+
+        assert result.condition_number is None
+
     def test_solve_result_with_selected_indices(self) -> None:
         result = SolveResult(
             coefficients=torch.tensor([1.0, 0.0, 2.0]),
@@ -129,6 +138,11 @@ class TestSolverSmoke:
         solver = LeastSquaresSolver()
         assert solver is not None
         assert solver.rcond is None
+        assert solver.compute_condition_number is False
+
+    def test_least_squares_solver_can_opt_into_condition_number(self) -> None:
+        solver = LeastSquaresSolver(compute_condition_number=True)
+        assert solver.compute_condition_number is True
 
     def test_least_squares_solver_with_rcond(self) -> None:
         solver = LeastSquaresSolver(rcond=1e-10)
@@ -405,7 +419,7 @@ class TestMetrics:
 
         assert abs(result.r2 - expected_r2) < 1e-10
 
-    def test_condition_number_returned(
+    def test_condition_number_default_not_computed(
         self,
         solver: LeastSquaresSolver,
         simple_overdetermined: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
@@ -413,15 +427,26 @@ class TestMetrics:
         theta, y, _ = simple_overdetermined
         result = solver.solve(theta, y)
 
+        assert result.condition_number is None
+
+    def test_condition_number_returned_when_enabled(
+        self,
+        simple_overdetermined: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    ) -> None:
+        theta, y, _ = simple_overdetermined
+        solver = LeastSquaresSolver(compute_condition_number=True)
+        result = solver.solve(theta, y)
+
+        assert isinstance(result.condition_number, float)
         assert result.condition_number > 0
         assert result.condition_number < float("inf")
 
     def test_condition_number_high_for_ill_conditioned(
         self,
-        solver: LeastSquaresSolver,
         ill_conditioned: tuple[torch.Tensor, torch.Tensor],
     ) -> None:
         theta, y = ill_conditioned
+        solver = LeastSquaresSolver(compute_condition_number=True)
         result = solver.solve(theta, y)
 
 
@@ -734,10 +759,11 @@ class TestNumericalEdgeCases:
             solver.solve(theta, y)
 
     def test_all_zero_theta_returns_result_with_inf_condition(
-        self, solver: LeastSquaresSolver
+        self,
     ) -> None:
         theta = torch.zeros(10, 3, dtype=torch.float64)
         y = torch.randn(10, dtype=torch.float64)
+        solver = LeastSquaresSolver(compute_condition_number=True)
 
         result = solver.solve(theta, y)
 

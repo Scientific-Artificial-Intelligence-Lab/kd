@@ -3,8 +3,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import torch
+from torch import Tensor
+
 from kd.core.evaluator import EvaluationResult
 from kd.search.protocol import PlatformComponents
+
+
+def _default_final_eval() -> EvaluationResult:
+    return EvaluationResult(mse=0.1, nmse=0.1, r2=0.9)
+
 
 
 
@@ -31,6 +39,8 @@ class RecordingAlgorithm:
             else ["e0", "e1", "e2"]
         )
         self._state: dict[str, Any] = {}
+        self.final_eval_result: EvaluationResult = _default_final_eval()
+        self.result_target: Tensor = torch.zeros(0)
 
     def prepare(self, components: PlatformComponents) -> None:
         self.call_log.append("prepare")
@@ -51,6 +61,12 @@ class RecordingAlgorithm:
         self.call_log.append("update")
         self.update_args.append(results)
         self._iteration += 1
+
+    def build_final_result(self) -> EvaluationResult:
+        return self.final_eval_result
+
+    def build_result_target(self) -> Tensor:
+        return self.result_target
 
     @property
     def best_score(self) -> float:
@@ -81,6 +97,8 @@ class ExplodingAlgorithm:
         self._explode_at = explode_at
         self._iteration = 0
         self._state: dict[str, Any] = {}
+        self.final_eval_result: EvaluationResult = _default_final_eval()
+        self.result_target: Tensor = torch.zeros(0)
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -95,6 +113,12 @@ class ExplodingAlgorithm:
 
     def update(self, results: list[EvaluationResult]) -> None:
         self._iteration += 1
+
+    def build_final_result(self) -> EvaluationResult:
+        return self.final_eval_result
+
+    def build_result_target(self) -> Tensor:
+        return self.result_target
 
     @property
     def best_score(self) -> float:
@@ -125,6 +149,8 @@ class StatefulAlgorithm:
         self._best_score_val: float = float("inf")
         self._best_expr_val: str = ""
         self._prepared = False
+        self.final_eval_result: EvaluationResult = _default_final_eval()
+        self.result_target: Tensor = torch.zeros(0)
 
     def prepare(self, components: PlatformComponents) -> None:
         self._prepared = True
@@ -145,6 +171,12 @@ class StatefulAlgorithm:
         if best.mse < self._best_score_val:
             self._best_score_val = best.mse
             self._best_expr_val = f"found_at_gen{self._generation}"
+
+    def build_final_result(self) -> EvaluationResult:
+        return self.final_eval_result
+
+    def build_result_target(self) -> Tensor:
+        return self.result_target
 
     @property
     def best_score(self) -> float:
@@ -179,6 +211,8 @@ class StateVerifyingAlgorithm:
 
     def __init__(self) -> None:
         self._state: dict[str, Any] = {"restored": False}
+        self.final_eval_result: EvaluationResult = _default_final_eval()
+        self.result_target: Tensor = torch.zeros(0)
 
     def prepare(self, components: PlatformComponents) -> None:
         pass
@@ -191,6 +225,12 @@ class StateVerifyingAlgorithm:
 
     def update(self, results: list[EvaluationResult]) -> None:
         pass
+
+    def build_final_result(self) -> EvaluationResult:
+        return self.final_eval_result
+
+    def build_result_target(self) -> Tensor:
+        return self.result_target
 
     @property
     def best_score(self) -> float:
@@ -234,6 +274,59 @@ class IterativeRecordingAlgorithm(RecordingAlgorithm):
         self.call_log.append("between_iterations")
         self.between_iterations_count += 1
         self.between_iterations_at.append(self._iteration)
+
+
+class TerminatingRecordingAlgorithm(RecordingAlgorithm):
+
+    def __init__(
+        self,
+        done_after: int = 3,
+        score_sequence: list[float] | None = None,
+        expression_sequence: list[str] | None = None,
+    ) -> None:
+        super().__init__(score_sequence, expression_sequence)
+        self._done_after = done_after
+
+    @property
+    def is_done(self) -> bool:
+        return self._iteration >= self._done_after
+
+
+class DeferredTerminatingAlgorithm(RecordingAlgorithm):
+
+    def __init__(
+        self,
+        done_after: int = 2,
+        score_sequence: list[float] | None = None,
+        expression_sequence: list[str] | None = None,
+    ) -> None:
+        super().__init__(score_sequence, expression_sequence)
+        self._done_after = done_after
+
+    @property
+    def is_done(self) -> bool:
+        if self._iteration == 0:
+            raise RuntimeError(
+                "is_done was read before the first completed iteration; the "
+                "Runner must not probe is_done until after update() has run"
+            )
+        return self._iteration >= self._done_after
+
+
+class TerminatingIterativeRecordingAlgorithm(IterativeRecordingAlgorithm):
+
+    def __init__(
+        self,
+        done_after: int = 3,
+        score_sequence: list[float] | None = None,
+        expression_sequence: list[str] | None = None,
+    ) -> None:
+        super().__init__(score_sequence, expression_sequence)
+        self._done_after = done_after
+
+    @property
+    def is_done(self) -> bool:
+        return self._iteration >= self._done_after
 
 
 class RecordingCallback:

@@ -18,7 +18,7 @@ import copy
 import dataclasses
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 
@@ -34,7 +34,11 @@ from kd.search.discover.config import (
     DEFAULT_STABILITY_SELECTION,
 )
 from kd.search.dlga import DLGAConfig, DLGAPlugin
-from kd.search.protocol import PlatformComponents, ScoreContract
+from kd.search.eqgpt.config import EqGPTConfig
+from kd.search.eqgpt.plugin import EqGPTPlugin
+from kd.search.llm4ed.config import Llm4edConfig
+from kd.search.llm4ed.plugin import Llm4edPlugin
+from kd.search.protocol import FacadeWiringContract, PlatformComponents
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
 from kd.search.result import DEFAULT_SCORE_KIND
@@ -42,15 +46,19 @@ from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from kd.core.evaluator import EvaluationResult
     from kd.core.platform.requirements import DerivativeReqs
     from kd.data.schema import PDEDataset
+    from kd.llm import LLMProvider
     from kd.search.protocol import SearchAlgorithm
     from kd.search.result import ExperimentResult
 
 __all__ = ["Model"]
 
 
+_ConfigT = TypeVar("_ConfigT")
 
 
 
@@ -64,11 +72,19 @@ __all__ = ["Model"]
 
 
 
-_PLUGIN_CLASS_BY_ALGORITHM: dict[str, type[ScoreContract]] = {
+
+
+
+
+
+
+_PLUGIN_CLASS_BY_ALGORITHM: dict[str, type[FacadeWiringContract]] = {
     "sga": SGAPlugin,
     "dlga": DLGAPlugin,
     "discover": DISCOVERPlugin,
     "pysr": PySRPlugin,
+    "eqgpt": EqGPTPlugin,
+    "llm4ed": Llm4edPlugin,
 }
 _SUPPORTED_ALGORITHMS = tuple(_PLUGIN_CLASS_BY_ALGORITHM)
 _DEFAULT_LHS_FIELD = "u"
@@ -155,6 +171,7 @@ class _ProgressPrinter:
 
 
 
+
         label = _score_label(algorithm)
         print(
             f"{_PROGRESS_PREFIX} Generation {gen:>3}/{self._total} | "
@@ -177,9 +194,10 @@ def _score_label(algorithm: SearchAlgorithm) -> str:
     Reads the instance's ``ScoreContract`` ``score_kind`` declaration — the
     single source of truth, declared once on each plugin class: SGA -> "AIC";
     DLGA -> "DLGA fitness" (``nmse + epsilon*length`` — it is NOT an AIC,
-    labeling it so would mislead); discover -> "reward"; pysr -> "NMSE".
-    Algorithms without a declaration (external / fake plugins) fall back to
-    ``"Score"`` for consistency with HTML reports.
+    labeling it so would mislead); discover -> "reward"; pysr -> "NMSE";
+    eqgpt -> "EqGPT reward" (maximized); llm4ed -> "LLM4ED sparse reward"
+    (maximized). Algorithms without a declaration (external / fake plugins)
+    fall back to ``"Score"`` for consistency with HTML reports.
     """
     return getattr(algorithm, "score_kind", DEFAULT_SCORE_KIND)
 
@@ -213,8 +231,15 @@ class Model:
             full facade-parameter coverage), ``"dlga"`` (driven through
             ``config=DLGAConfig(...)`` + ``surrogate_model=`` only),
             ``"discover"`` (driven through ``config=DiscoverConfig(...)``
-            only), or ``"pysr"`` (driven through ``config=PySRConfig(...)``;
-            ``generations`` maps to PySR's internal GP ``niterations``).
+            only), ``"pysr"`` (driven through ``config=PySRConfig(...)``;
+            ``generations`` maps to PySR's internal GP ``niterations``), or
+            ``"eqgpt"`` (driven through ``config=EqGPTConfig(...)`` ONLY;
+            ``config`` is MANDATORY because ``sparsity_alpha`` is a per-problem
+            hyperparameter with no facade default, decision D5), or
+            ``"llm4ed"`` (an LLM equation proposer, driven through
+            ``config=Llm4edConfig(...)``; the real backend needs
+            ``base_url=`` + an ``OPENAI_API_KEY`` env var, or inject an offline
+            ``provider=`` for deterministic runs).
             For non-SGA algorithms the individual facade parameters below
             (population/depth/width/aic_ratio/derivatives) are SGA-only.
         generations: Maximum number of search iterations (all algorithms).
@@ -229,22 +254,27 @@ class Model:
             finite-difference provider remains in place for tree-internal
             derivative operators. SGA-only — DLGA always uses autograd,
             discover uses finite-diff.
-        seed: Random seed for reproducibility (all algorithms; for DLGA and
-            discover it is forwarded through the plugin config when
-            ``config=`` is unset, otherwise the config's own seed wins).
+        seed: Random seed for reproducibility. It threads into the default
+            config for dlga / discover / pysr (and SGA) when ``config=`` is
+            unset, otherwise the config's own seed wins. For eqgpt the seed
+            comes ONLY via ``EqGPTConfig(seed=...)``: passing the facade
+            ``seed=`` together with ``config=`` is rejected by
+            ``_validate_config_exclusivity``.
         verbose: When True, print per-iteration progress to stdout. The label
             is algorithm-aware (``AIC`` for SGA, ``DLGA fitness`` for DLGA,
-            ``reward`` for discover, ``NMSE`` for pysr).
+            ``reward`` for discover, ``NMSE`` for pysr, ``EqGPT reward`` for
+            eqgpt, ``LLM4ED sparse reward`` for llm4ed).
         config: Optional pre-built ``SGAConfig``, ``DLGAConfig``,
-            ``DiscoverConfig``, or ``PySRConfig``. When provided, it is the
-            single source of
+            ``DiscoverConfig``, ``PySRConfig``, ``EqGPTConfig``, or
+            ``Llm4edConfig``. When provided, it is the single source of
             plugin settings; passing any non-default SGA-related facade
             parameters (``population``, ``depth``, ``width``, ``aic_ratio``,
             ``derivatives``, ``seed``) or extra ``kwargs`` raises
             ``ValueError`` (SGA path) / ``TypeError`` (DLGA + discover paths).
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
-            ``checkpoint_dir``/``checkpoint_every``, and (for DLGA)
-            ``surrogate_model`` remain effective on the facade.
+            ``checkpoint_dir``/``checkpoint_every``, (for DLGA)
+            ``surrogate_model``, and (for llm4ed) ``provider`` remain effective
+            on the facade.
             Type must match ``algorithm`` (e.g. ``algorithm='dlga' +
             config=SGAConfig(...)`` raises). The config is deep-copied to
             prevent aliasing.
@@ -266,6 +296,21 @@ class Model:
             trains a fresh ``FieldModel`` per the DLGAConfig surrogate
             settings (``surrogate_hidden_sizes``, ``surrogate_activation``,
             etc.).
+        provider: Optional pre-built ``kd.llm.LLMProvider`` forwarded to
+            ``Llm4edPlugin(provider=...)``. llm4ed-only — passing it with any
+            other algorithm raises ``TypeError`` (silent drop is a
+            bug-attractor). Carries the offline ``FakeProvider`` /
+            ``TapeReplayProvider`` for deterministic runs, or a caller-built
+            canonical chain. When ``None`` and ``algorithm='llm4ed'``, the
+            plugin builds its default chain in ``prepare()`` from the config's
+            transport knobs (``base_url`` + an ``OPENAI_API_KEY`` env var).
+            The injected instance is REUSED across ``fit`` calls and NOT reset
+            (like ``callbacks``, unlike the self-built default chain, which is
+            rebuilt with a fresh budget on each fit): a second ``fit`` with a
+            stateful provider carries its state over — a ``TapeReplayProvider``
+            resumes from its exhausted cursor, an injected ``BudgetedProvider``
+            keeps its spent budget. Build a fresh provider per fit if a clean
+            slate is desired.
         checkpoint_dir: Optional directory for periodic checkpoints (all
             algorithms). When set, every ``fit`` attaches a fresh
             ``CheckpointCallback`` writing ``checkpoint_{iteration:06d}.pt``
@@ -326,9 +371,16 @@ class Model:
         derivatives: str = _UNSET,
         seed: int = _UNSET,
         verbose: bool = True,
-        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None = None,
+        config: SGAConfig
+        | DLGAConfig
+        | DiscoverConfig
+        | PySRConfig
+        | EqGPTConfig
+        | Llm4edConfig
+        | None = None,
         callbacks: list[RunnerCallback] | None = None,
         surrogate_model: torch.nn.Module | None = None,
+        provider: LLMProvider | None = None,
         checkpoint_dir: str | Path | None = None,
         checkpoint_every: int = _UNSET,
         **kwargs: Any,
@@ -375,6 +427,7 @@ class Model:
             algorithm,
             kwargs=kwargs,
             surrogate_model=surrogate_model,
+            provider=provider,
             population=population,
             depth=depth,
             width=width,
@@ -418,6 +471,15 @@ class Model:
 
 
         self._surrogate_model = surrogate_model
+
+
+
+
+
+
+
+
+        self._provider = provider
 
 
         self._fitted: bool = False
@@ -505,7 +567,13 @@ class Model:
 
     @staticmethod
     def _validate_config_exclusivity(
-        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None,
+        config: SGAConfig
+        | DLGAConfig
+        | DiscoverConfig
+        | PySRConfig
+        | EqGPTConfig
+        | Llm4edConfig
+        | None,
         population: Any,
         depth: Any,
         width: Any,
@@ -544,8 +612,9 @@ class Model:
                 f"parameters: {overrides}. When 'config' is provided, use "
                 f"it as the single source of plugin settings; only "
                 f"'generations', 'verbose', 'callbacks', "
-                f"'checkpoint_dir'/'checkpoint_every' (and 'surrogate_model' "
-                f"for DLGA) remain effective on the facade."
+                f"'checkpoint_dir'/'checkpoint_every' ('surrogate_model' "
+                f"for DLGA, 'provider' for llm4ed) remain effective on the "
+                f"facade."
             )
 
     @staticmethod
@@ -554,6 +623,7 @@ class Model:
         *,
         kwargs: dict[str, Any],
         surrogate_model: torch.nn.Module | None,
+        provider: LLMProvider | None,
         population: Any,
         depth: Any,
         width: Any,
@@ -565,6 +635,9 @@ class Model:
         - ``surrogate_model`` is meaningful only for ``algorithm='dlga'`` —
           SGA + ``surrogate_model=`` would silently drop the model, so raise
           instead of accepting a no-op argument.
+
+        - ``provider`` is meaningful only for ``algorithm='llm4ed'`` — passing
+          it on any other algorithm would silently drop it, so raise.
 
         - ``algorithm='dlga'`` + SGA-only facade params (``population``,
           ``depth``, ``width``, ``aic_ratio``, ``derivatives``) or extra
@@ -581,6 +654,13 @@ class Model:
                 "``algorithm='dlga'``; for SGA opt-in autograd derivatives use "
                 "``derivatives='autograd'`` instead."
             )
+        if algorithm != "llm4ed" and provider is not None:
+            raise TypeError(
+                f"Model(algorithm={algorithm!r}, provider=...) is not "
+                "supported. ``provider`` is consumed only by "
+                "``algorithm='llm4ed'`` (an injected LLMProvider); other "
+                "algorithms have no LLM provider seam."
+            )
         Model._reject_sga_only_params_for_non_sga(
             algorithm,
             kwargs=kwargs,
@@ -590,13 +670,6 @@ class Model:
             aic_ratio=aic_ratio,
             derivatives=derivatives,
         )
-
-
-    _CONFIG_CLASS_BY_ALGORITHM = {
-        "dlga": "DLGAConfig",
-        "discover": "DiscoverConfig",
-        "pysr": "PySRConfig",
-    }
 
     @staticmethod
     def _reject_sga_only_params_for_non_sga(
@@ -617,11 +690,16 @@ class Model:
         any extra ``kwargs`` are not exposed for them and would otherwise be
         silently dropped (a classic bug-attractor). The error names the offending
         params and the config class to use instead. No-op for ``sga`` (whose
-        knobs are first-class) and any algorithm not in the rejection map.
+        knobs are first-class) and any algorithm not in the registry.
         """
-        config_class = Model._CONFIG_CLASS_BY_ALGORITHM.get(algorithm)
-        if config_class is None:
+
+
+
+
+        plugin_class = _PLUGIN_CLASS_BY_ALGORITHM.get(algorithm)
+        if plugin_class is None or algorithm == "sga":
             return
+        config_class = plugin_class.config_cls.__name__
         sga_only_set: list[str] = []
         if population is not _UNSET:
             sga_only_set.append("population")
@@ -648,7 +726,13 @@ class Model:
     @staticmethod
     def _validate_discover_config_facade_compat(
         algorithm: str,
-        config: SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | None,
+        config: SGAConfig
+        | DLGAConfig
+        | DiscoverConfig
+        | PySRConfig
+        | EqGPTConfig
+        | Llm4edConfig
+        | None,
     ) -> None:
         """Guard DiscoverConfig fields that have no effect under the facade.
 
@@ -853,7 +937,10 @@ class Model:
 
 
 
-        max_iterations = 1 if self.algorithm == "pysr" else self.generations
+
+
+        one_shot = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm].one_shot
+        max_iterations = 1 if one_shot else self.generations
         runner = ExperimentRunner(
             algorithm=plugin,
             max_iterations=max_iterations,
@@ -878,35 +965,101 @@ class Model:
         self._fitted = True
         return self
 
+
+
+
+
+
+
+
+    _CONFIG_BUILDER_BY_ALGORITHM: dict[str, str] = {
+        "sga": "_build_config",
+        "dlga": "_build_dlga_config",
+        "discover": "_build_discover_config",
+        "pysr": "_build_pysr_config",
+        "eqgpt": "_build_eqgpt_config",
+        "llm4ed": "_build_llm4ed_config",
+    }
+
     def _build_plugin(self) -> tuple[SearchAlgorithm, int]:
         """Construct the search plugin for the configured ``algorithm``.
 
+        Generic over the ``_PLUGIN_CLASS_BY_ALGORITHM`` registry: look up the
+        plugin class, resolve its config via the facade-side builder dispatch,
+        construct the plugin, and read the runner batch size from the plugin's
+        own ``runner_batch_size`` declaration (FacadeWiringContract).
+
         Returns:
-            ``(plugin, batch_size)`` — the plugin instance and the runner
-            batch size. Batch size derives from the plugin config (SGA
-            ``num``, DLGA ``pop_size``).
+            ``(plugin, batch_size)`` — the plugin instance and the runner batch
+            size (sourced from ``plugin.runner_batch_size``; SGA ``num``, DLGA
+            ``pop_size``, DISCOVER ``batch_size``, PySR fixed ``1``, EqGPT
+            ``samples_per_epoch``). This two-tuple signature is load-bearing:
+            several facade tests call ``_build_plugin()`` directly.
         """
-        if self.algorithm == "sga":
-            sga_cfg = self._build_config()
-            return SGAPlugin(sga_cfg), sga_cfg.num
-        if self.algorithm == "dlga":
-            dlga_cfg = self._build_dlga_config()
-            return (
-                DLGAPlugin(dlga_cfg, surrogate_model=self._surrogate_model),
-                dlga_cfg.pop_size,
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM.get(self.algorithm)
+        if plugin_cls is None:
+            raise NotImplementedError(
+                f"Algorithm '{self.algorithm}' has no plugin builder."
             )
-        if self.algorithm == "discover":
-            discover_cfg = self._build_discover_config()
-            return DISCOVERPlugin(discover_cfg), discover_cfg.batch_size
-        if self.algorithm == "pysr":
+        builder = getattr(self, self._CONFIG_BUILDER_BY_ALGORITHM[self.algorithm])
+        cfg = builder()
 
 
 
-            return PySRPlugin(self._build_pysr_config()), 1
+        plugin_factory = cast("Callable[..., FacadeWiringContract]", plugin_cls)
+        if self.algorithm == "dlga":
 
-        raise NotImplementedError(
-            f"Algorithm '{self.algorithm}' has no plugin builder."
-        )
+
+
+
+            plugin = plugin_factory(cfg, surrogate_model=self._surrogate_model)
+        elif self.algorithm == "llm4ed":
+
+
+
+
+
+            plugin = plugin_factory(cfg, provider=self._provider)
+        else:
+            plugin = plugin_factory(cfg)
+        return cast("SearchAlgorithm", plugin), plugin.runner_batch_size
+
+    def _resolve_config(
+        self,
+        config_cls: type[_ConfigT],
+        default_factory: Callable[[], _ConfigT],
+    ) -> _ConfigT:
+        """Shared config-resolution mechanics for every algorithm.
+
+        Three-way policy, identical across algorithms (only the config class
+        and the facade-default factory differ, which the wrappers supply):
+
+        - user ``config=`` MATCHES the algorithm's class -> deep-copy it (the
+          user config is the single source of truth; the copy prevents later
+          mutations of the user's object from leaking into the fit);
+        - user ``config=`` is a DIFFERENT config type -> fail fast with a
+          ``TypeError`` so e.g. ``Model(algorithm='dlga', config=SGAConfig())``
+          does not silently ignore the mismatched config;
+        - no ``config=`` -> call ``default_factory`` (the facade default; some
+          wrappers raise here instead, e.g. EqGPT has no default, D5).
+
+        The ``requires {article} {ConfigName}`` article follows English
+        initialism pronunciation: "an SGAConfig"/"an EqGPTConfig" (spoken
+        "ess-", "ee-") vs "a DLGAConfig"/"a DiscoverConfig"/"a PySRConfig".
+        """
+        if isinstance(self._config_override, config_cls):
+            return copy.deepcopy(self._config_override)
+        if self._config_override is not None:
+            name = config_cls.__name__
+
+
+
+            article = "an" if name[0] in "AEIOUS" else "a"
+            raise TypeError(
+                f"Model(algorithm={self.algorithm!r}, config=...) requires "
+                f"{article} {name}; got {type(self._config_override).__name__}."
+            )
+        return default_factory()
 
     def _build_dlga_config(self) -> DLGAConfig:
         """Resolve the DLGAConfig: user override (deep-copied) or facade default.
@@ -915,38 +1068,26 @@ class Model:
         ``Model(...)`` parameters — power users must pass a complete
         ``DLGAConfig`` via ``config=`` for non-default settings. The default
         path (``Model(algorithm='dlga')`` without ``config=``) yields
-        ``DLGAConfig()`` which targets Xu 2020 Stage I baseline (sin+5×50,
-        SVD null space, pop_size=400).
+        ``DLGAConfig(seed=self.seed)`` which targets Xu 2020 Stage I baseline
+        (sin+5×50, SVD null space, pop_size=400). See ``_resolve_config`` for
+        the shared override/deep-copy/type-check mechanics.
         """
-        if isinstance(self._config_override, DLGAConfig):
-            return copy.deepcopy(self._config_override)
-        if self._config_override is not None:
-            raise TypeError(
-                f"Model(algorithm='dlga', config=...) requires a DLGAConfig; "
-                f"got {type(self._config_override).__name__}."
-            )
-        return DLGAConfig(seed=self.seed)
+        return self._resolve_config(DLGAConfig, lambda: DLGAConfig(seed=self.seed))
 
     def _build_discover_config(self) -> DiscoverConfig:
         """Resolve the DiscoverConfig: user override (deep-copied) or facade default.
 
         Same pattern as ``_build_dlga_config``: the facade does not expose
-        individual DISCOVER fields as ``Model(...)`` parameters — users
-        must pass a complete ``DiscoverConfig`` via ``config=`` for
-        non-default settings. The default path
-        (``Model(algorithm='discover', seed=N)`` without ``config=``) yields
-        ``DiscoverConfig(seed=self.seed)`` so the facade ``seed=`` parameter
-        threads through to the plugin (mirrors SGA's ``_build_config`` which
-        also forwards ``self.seed`` to ``SGAConfig``).
+        individual DISCOVER fields as ``Model(...)`` parameters — users must
+        pass a complete ``DiscoverConfig`` via ``config=`` for non-default
+        settings. The default path (``Model(algorithm='discover', seed=N)``
+        without ``config=``) yields ``DiscoverConfig(seed=self.seed)`` so the
+        facade ``seed=`` parameter threads through to the plugin (mirrors SGA's
+        ``_build_config``). See ``_resolve_config`` for the shared mechanics.
         """
-        if isinstance(self._config_override, DiscoverConfig):
-            return copy.deepcopy(self._config_override)
-        if self._config_override is not None:
-            raise TypeError(
-                f"Model(algorithm='discover', config=...) requires a "
-                f"DiscoverConfig; got {type(self._config_override).__name__}."
-            )
-        return DiscoverConfig(seed=self.seed)
+        return self._resolve_config(
+            DiscoverConfig, lambda: DiscoverConfig(seed=self.seed)
+        )
 
     def _build_pysr_config(self) -> PySRConfig:
         """Resolve the PySRConfig: user override (deep-copied) or facade default.
@@ -960,17 +1101,49 @@ class Model:
         plugin; see ``fit``) — and the facade ``seed=`` parameter threads
         through as ``PySRConfig(seed=self.seed)`` (PySR's ``random_state``;
         mirrors SGA/DLGA/DISCOVER builders, and keeps the RunManifest seed
-        truthful). A non-PySRConfig override raises so
-        ``Model(algorithm='pysr', config=SGAConfig(...))`` fails fast.
+        truthful). See ``_resolve_config`` for the shared mechanics.
         """
-        if isinstance(self._config_override, PySRConfig):
-            return copy.deepcopy(self._config_override)
-        if self._config_override is not None:
-            raise TypeError(
-                f"Model(algorithm='pysr', config=...) requires a PySRConfig; "
-                f"got {type(self._config_override).__name__}."
-            )
-        return PySRConfig(niterations=self.generations, seed=self.seed)
+        return self._resolve_config(
+            PySRConfig,
+            lambda: PySRConfig(niterations=self.generations, seed=self.seed),
+        )
+
+    def _build_eqgpt_config(self) -> EqGPTConfig:
+        """Resolve the EqGPTConfig: user override (deep-copied), required.
+
+        Unlike SGA/DLGA/DISCOVER/PySR, there is no facade default: EqGPTConfig
+        requires ``sparsity_alpha`` (D5: per-problem, not a constant), so a
+        bare ``Model(algorithm='eqgpt')`` with no ``config=`` cannot resolve
+        one and the default factory raises rather than silently guessing a
+        value. See ``_resolve_config`` for the shared mechanics.
+        """
+        return self._resolve_config(EqGPTConfig, self._no_eqgpt_default)
+
+    @staticmethod
+    def _no_eqgpt_default() -> EqGPTConfig:
+        """Default factory for EqGPT: there is none (D5), so raise loud."""
+        raise TypeError(
+            "Model(algorithm='eqgpt') requires config=EqGPTConfig(...) "
+            "(sparsity_alpha has no facade default, D5); e.g. "
+            "config=EqGPTConfig(sparsity_alpha=0.02)."
+        )
+
+    def _build_llm4ed_config(self) -> Llm4edConfig:
+        """Resolve the Llm4edConfig: user override (deep-copied), else default.
+
+        Unlike EqGPT, every ``Llm4edConfig`` field carries an EDL-faithful (or
+        kd-guardrail) default, so a bare ``Model(algorithm='llm4ed')`` resolves
+        a runnable default config. The facade ``seed=`` threads through as
+        ``Llm4edConfig(seed=self.seed)`` (mirrors the SGA/DLGA/DISCOVER/PySR
+        builders, keeping the RunManifest seed truthful). Note the default
+        config has ``base_url=None``: a bare ``fit`` with no injected provider
+        fails loud in ``prepare()`` (the real backend needs an endpoint); CI
+        drives llm4ed through an injected offline provider instead. See
+        ``_resolve_config`` for the shared mechanics.
+        """
+        return self._resolve_config(
+            Llm4edConfig, lambda: Llm4edConfig(seed=self.seed)
+        )
 
     @property
     def best_expr_(self) -> str:
@@ -989,6 +1162,9 @@ class Model:
         - ``"discover"``: reward in roughly ``[0, 1]``, **higher is better**.
         - ``"pysr"``: kd re-fit NMSE of the best expression, **lower is better**
           (PySR's own loss is discarded; kd re-scores on the term library).
+        - ``"eqgpt"``: EqGPT reward in roughly ``[0, 1]``, **higher is better**.
+        - ``"llm4ed"``: LLM4ED sparse reward in roughly ``(0, 1]``, **higher is
+          better** (0.0 is the empty-pool sentinel).
 
         ``EarlyStoppingCallback(mode="min"|"max")`` should be set accordingly.
         """
@@ -1053,23 +1229,26 @@ class Model:
 
         If an SGA ``config`` override was provided, return a deep copy so
         that later mutations of the user's config object do not affect the
-        fit. Otherwise, forward only kwargs that match real ``SGAConfig``
-        fields (validated up-front in ``__init__``).
+        fit. Otherwise, map the individual SGA facade parameters onto
+        ``SGAConfig`` and forward only kwargs that match real ``SGAConfig``
+        fields (validated up-front in ``__init__``). SGA is the one algorithm
+        whose config is assembled from facade knobs rather than a single
+        default factory call.
 
         Only invoked from the SGA branch (``algorithm='sga'``); DLGA uses
         ``_build_dlga_config``. A non-SGA config override raises here so
-        ``Model(algorithm='sga', config=DLGAConfig(...))`` fails fast.
+        ``Model(algorithm='sga', config=DLGAConfig(...))`` fails fast. See
+        ``_resolve_config`` for the shared override/deep-copy/type-check
+        mechanics.
         """
-        if self._config_override is not None:
-            if not isinstance(self._config_override, SGAConfig):
-                raise TypeError(
-                    f"Model(algorithm='sga', config=...) requires an SGAConfig; "
-                    f"got {type(self._config_override).__name__}."
-                )
-            return copy.deepcopy(self._config_override)
+        return self._resolve_config(SGAConfig, self._default_sga_config)
 
+    def _default_sga_config(self) -> SGAConfig:
+        """Facade default SGAConfig assembled from the individual SGA knobs.
 
-
+        All kwargs were validated in ``__init__`` to be valid ``SGAConfig``
+        fields and to not collide with explicitly-mapped facade params.
+        """
         return SGAConfig(
             num=self.population,
             depth=self.depth,
@@ -1102,25 +1281,24 @@ class Model:
         )
 
         reqs = _resolve_derivative_requirements(self._algorithm)
-        self._check_lhs_order_supported(dataset, reqs)
+        self._check_dataset_supported(dataset, reqs)
         return PlatformBuilder(dataset, reqs).build()
 
-    def _check_lhs_order_supported(
+    def _check_dataset_supported(
         self,
         dataset: PDEDataset,
         reqs: DerivativeReqs,
     ) -> None:
-        """Fail loud when the dataset's LHS order exceeds the plugin's support.
+        """Fail loud when the dataset's (topology, LHS order) is unsupported.
 
-        ``dataset.lhs_order`` is the science target (the single source of truth
-        — DATA-0); ``reqs.lhs_order`` is the plugin's declared capability (every
-        packaged plugin declares ``1`` today). A mismatch means the chosen
-        algorithm cannot honestly fit the declared LHS, so raise HERE — before
-        the (expensive) ``PlatformBuilder.build()`` / surrogate training —
-        rather than silently fitting a lower-order target ("trusted but wrong",
-        the exact failure this seam exists to kill). DATA-4 will add
-        second-order-capable plugins (and the dynamic-LHS escape hatch); until
-        then any order other than the plugin's declared order is rejected.
+        Delegates to ``assert_dataset_supported`` (arch041 step 3b / C-A): the
+        dataset's ``topology`` must be in the plugin's ``supported_topologies``,
+        and its ``lhs_order`` (the DATA-0 science target) must equal the plugin's
+        selected ``reqs.lhs_order``. A mismatch means the chosen algorithm cannot
+        honestly fit the dataset, so raise HERE — before the (expensive)
+        ``PlatformBuilder.build()`` / surrogate training — rather than silently
+        fitting the wrong target ("trusted but wrong", the exact failure this
+        seam exists to kill).
 
         This gate is the facade's FAST-FAIL leg (it raises before the expensive
         build); ``ExperimentRunner.run`` carries the same check as an
@@ -1129,9 +1307,11 @@ class Model:
         ``validate_terms``) intentionally allows an explicit ``lhs_order``
         override against any dataset and routes through neither.
         """
-        from kd.core.platform.requirements import assert_lhs_order_supported
+        from kd.core.platform.requirements import assert_dataset_supported
 
-        assert_lhs_order_supported(dataset.lhs_order, reqs.lhs_order, self.algorithm)
+        assert_dataset_supported(
+            dataset.lhs_order, dataset.topology, reqs, self.algorithm
+        )
 
     def _build_callbacks(self) -> list[RunnerCallback]:
         """Return the runner callback list.
@@ -1152,3 +1332,19 @@ class Model:
         if self.verbose:
             cbs.append(_ProgressPrinter(total_generations=self.generations))
         return cbs
+
+
+
+
+
+
+
+
+
+if set(Model._CONFIG_BUILDER_BY_ALGORITHM) != set(_PLUGIN_CLASS_BY_ALGORITHM):
+    raise RuntimeError(
+        "kd.api registry drift: _CONFIG_BUILDER_BY_ALGORITHM keys "
+        f"{sorted(Model._CONFIG_BUILDER_BY_ALGORITHM)} != "
+        f"_PLUGIN_CLASS_BY_ALGORITHM keys {sorted(_PLUGIN_CLASS_BY_ALGORITHM)}. "
+        "Every registered algorithm needs a config-builder entry (and vice versa)."
+    )

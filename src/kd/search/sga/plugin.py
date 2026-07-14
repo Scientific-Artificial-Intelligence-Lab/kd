@@ -20,7 +20,8 @@ from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer, TrainingResult
 from kd.search.dlga import surrogate_log as _surrogate_log
 from kd.search.protocol import PlatformComponents
-from kd.search.recorder import VizRecorder
+from kd.search.recorder import VizRecorder, log_whitelisted_metrics
+from kd.search.result import invalid_evaluation_result
 from kd.search.sga import tree_render as _tree_render
 from kd.search.sga import viz as _viz_helpers
 from kd.search.sga.config import OPS, ROOT, SGAConfig, build_den
@@ -57,7 +58,7 @@ def _is_valid_aic(aic: float) -> bool:
 
 
 def _aic_of(result: EvaluationResult) -> float:
-    return result.aic if result.aic is not None else _INVALID_AIC
+    return result.score if result.score is not None else _INVALID_AIC
 
 
 
@@ -132,6 +133,10 @@ class SGAPlugin:
     score_kind: ClassVar[str] = "AIC"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
 
+
+    config_cls: ClassVar[type[SGAConfig]] = SGAConfig
+    one_shot: ClassVar[bool] = False
+
     def __init__(self, config: SGAConfig | None = None) -> None:
         self._config = config or SGAConfig()
         self._population: list[PDE] | None = None
@@ -184,6 +189,10 @@ class SGAPlugin:
         }
 
     @property
+    def runner_batch_size(self) -> int:
+        return self._config.num
+
+    @property
     def derivative_requirements(self) -> DerivativeReqs:
         return DerivativeReqs(
             provider_kind="finite_diff",
@@ -208,6 +217,15 @@ class SGAPlugin:
         self._restore_pending = False
         dataset = components.dataset
         context = components.context
+        if context is None:
+
+
+
+
+            raise TypeError(
+                "SGAPlugin.prepare requires components.context (variable "
+                "lookup); got None (a provider_kind='none' light bundle)."
+            )
         self._recorder = components.recorder
 
 
@@ -379,7 +397,7 @@ class SGAPlugin:
 
         for i, result in enumerate(results):
             if i < len(offspring):
-                aic = result.aic if result.aic is not None else _INVALID_AIC
+                aic = result.score if result.score is not None else _INVALID_AIC
                 if not result.is_valid or not math.isfinite(aic):
                     aic = _INVALID_AIC
                 population.append(offspring[i])
@@ -463,7 +481,7 @@ class SGAPlugin:
             mse=candidate.mse,
             nmse=metrics_nmse(candidate.mse, self._target_variance()),
             r2=self._compute_r2(predicted),
-            aic=candidate.aic_score,
+            score=candidate.aic_score,
             complexity=len(candidate.selected_indices),
             coefficients=candidate.coefficients.detach(),
             is_valid=is_valid,
@@ -628,19 +646,9 @@ class SGAPlugin:
         return r2_score(predicted, self._y)
 
     def _invalid_final_result(self, error_message: str) -> EvaluationResult:
-        residuals = torch.zeros_like(self._y) if self._y is not None else torch.zeros(0)
-        return EvaluationResult(
-            mse=float("inf"),
-            nmse=float("inf"),
-            r2=-float("inf"),
-            aic=float("inf"),
-            complexity=0,
-            coefficients=None,
-            is_valid=False,
-            error_message=error_message,
-            selected_indices=[],
-            residuals=residuals,
-            terms=[],
+        return invalid_evaluation_result(
+            error_message,
+            score=float("inf"),
             expression=self._best_expression,
         )
 
@@ -1153,7 +1161,7 @@ class SGAPlugin:
             )
             pruned = candidate.pruned_pde
             result = self._to_eval_result(candidate, pde_to_kd_expr(pruned))
-            aic = result.aic if result.aic is not None else _INVALID_AIC
+            aic = result.score if result.score is not None else _INVALID_AIC
             score = aic if result.is_valid and math.isfinite(aic) else _INVALID_AIC
             return _ScoredPDE(pruned, score, result)
         except Exception:
@@ -1208,8 +1216,7 @@ class SGAPlugin:
             "n_unique": len({result.expression for result in results}),
             "gen_mean_complexity": gen_mean_complexity,
         }
-        for name in _LOGGED_METRICS:
-            recorder.log(name, metrics[name])
+        log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 
     def _r2_from_mse(self, mse: float) -> float:
         if not math.isfinite(mse):
@@ -1230,7 +1237,7 @@ class SGAPlugin:
             mse=mse,
             nmse=metrics_nmse(mse, self._target_variance()),
             r2=self._r2_from_mse(mse),
-            aic=aic,
+            score=aic,
             complexity=len(result.selected_indices),
             coefficients=result.coefficients,
             is_valid=is_valid,
@@ -1242,18 +1249,9 @@ class SGAPlugin:
         )
 
     def _invalid_result(self, expression: str) -> EvaluationResult:
-        return EvaluationResult(
-            mse=float("inf"),
-            nmse=float("inf"),
-            r2=-float("inf"),
-            aic=float("inf"),
-            complexity=0,
-            coefficients=None,
-            is_valid=False,
-            error_message="No corresponding PDE for evaluation",
-            selected_indices=None,
-            residuals=None,
-            terms=None,
+        return invalid_evaluation_result(
+            "No corresponding PDE for evaluation",
+            score=float("inf"),
             expression=expression,
         )
 

@@ -637,7 +637,7 @@ def _valid_result_with_tensors() -> EvaluationResult:
         mse=0.0123,
         nmse=0.0456,
         r2=0.987,
-        aic=-12.5,
+        score=-12.5,
         complexity=2,
         coefficients=torch.tensor([-1.7, 0.5], dtype=torch.float64),
         is_valid=True,
@@ -655,7 +655,7 @@ def _invalid_result_with_neg_inf() -> EvaluationResult:
         mse=1e10,
         nmse=1e10,
         r2=-float("inf"),
-        aic=float("inf"),
+        score=float("inf"),
         complexity=0,
         coefficients=None,
         is_valid=False,
@@ -668,12 +668,12 @@ def _invalid_result_with_neg_inf() -> EvaluationResult:
     )
 
 
-def _result_with_none_aic() -> EvaluationResult:
+def _result_with_none_score() -> EvaluationResult:
     return EvaluationResult(
         mse=0.5,
         nmse=0.6,
         r2=0.4,
-        aic=None,
+        score=None,
         complexity=1,
         coefficients=torch.tensor([2.0], dtype=torch.float64),
         is_valid=True,
@@ -686,12 +686,12 @@ def _result_with_none_aic() -> EvaluationResult:
     )
 
 
-def _result_with_zero_aic() -> EvaluationResult:
+def _result_with_zero_score() -> EvaluationResult:
     return EvaluationResult(
         mse=0.3,
         nmse=0.3,
         r2=0.7,
-        aic=0.0,
+        score=0.0,
         complexity=1,
         coefficients=torch.tensor([1.5], dtype=torch.float64),
         is_valid=True,
@@ -712,7 +712,7 @@ _EVALUATION_RESULT_KEYS = frozenset(
         "mse",
         "nmse",
         "r2",
-        "aic",
+        "score",
         "complexity",
         "coefficients",
         "is_valid",
@@ -737,7 +737,7 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "mse": 0.0123,
             "nmse": 0.0456,
             "r2": 0.987,
-            "aic": -12.5,
+            "score": -12.5,
             "complexity": 2,
             "coefficients": [-1.7, 0.5],
             "is_valid": True,
@@ -755,7 +755,7 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "mse": 1e10,
             "nmse": 1e10,
             "r2": None,
-            "aic": None,
+            "score": None,
             "complexity": 0,
             "coefficients": None,
             "is_valid": False,
@@ -768,12 +768,12 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
         },
     ),
     (
-        _result_with_none_aic,
+        _result_with_none_score,
         {
             "mse": 0.5,
             "nmse": 0.6,
             "r2": 0.4,
-            "aic": None,
+            "score": None,
             "complexity": 1,
             "coefficients": [2.0],
             "is_valid": True,
@@ -786,12 +786,12 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
         },
     ),
     (
-        _result_with_zero_aic,
+        _result_with_zero_score,
         {
             "mse": 0.3,
             "nmse": 0.3,
             "r2": 0.7,
-            "aic": 0.0,
+            "score": 0.0,
             "complexity": 1,
             "coefficients": [1.5],
             "is_valid": True,
@@ -819,11 +819,11 @@ def test_i_to_dict_matches_inline_golden(
     assert set(produced.keys()) == _EVALUATION_RESULT_KEYS
 
 
-def test_i_to_dict_zero_aic_stays_zero_not_none() -> None:
-    payload = _result_with_zero_aic().to_dict()
+def test_i_to_dict_zero_score_stays_zero_not_none() -> None:
+    payload = _result_with_zero_score().to_dict()
 
-    assert payload["aic"] == 0.0
-    assert payload["aic"] is not None
+    assert payload["score"] == 0.0
+    assert payload["score"] is not None
 
 
 @pytest.mark.parametrize(
@@ -831,8 +831,8 @@ def test_i_to_dict_zero_aic_stays_zero_not_none() -> None:
     [
         _valid_result_with_tensors,
         _invalid_result_with_neg_inf,
-        _result_with_none_aic,
-        _result_with_zero_aic,
+        _result_with_none_score,
+        _result_with_zero_score,
     ],
 )
 def test_i_to_dict_json_round_trips(factory: Any) -> None:
@@ -845,13 +845,13 @@ def test_i_to_dict_json_round_trips(factory: Any) -> None:
     assert reloaded == payload
 
 
-def test_i_to_dict_aic_none_preserved() -> None:
-    result = _result_with_none_aic()
+def test_i_to_dict_score_none_preserved() -> None:
+    result = _result_with_none_score()
 
     payload = result.to_dict()
 
-    assert "aic" in payload
-    assert payload["aic"] is None
+    assert "score" in payload
+    assert payload["score"] is None
 
 
 def test_i_to_dict_neg_inf_r2_sanitized_to_none() -> None:

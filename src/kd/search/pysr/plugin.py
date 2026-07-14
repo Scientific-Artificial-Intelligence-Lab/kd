@@ -16,7 +16,7 @@ from kd.search.pysr import viz as _viz_helpers
 from kd.search.pysr.backend import PySRBackend, default_backend_factory
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.convert import build_feature_names
-from kd.search.recorder import VizRecorder
+from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -41,6 +41,14 @@ _PARETO_NMSE_KEY = "pareto_nmse"
 _SELECTED_COMPLEXITY_KEY = "selected_complexity"
 _SELECTED_LOSS_KEY = "selected_loss"
 _SELECTED_NMSE_KEY = "selected_nmse"
+_LOGGED_METRICS: tuple[str, ...] = (
+    _PARETO_COMPLEXITY_KEY,
+    _PARETO_LOSS_KEY,
+    _PARETO_NMSE_KEY,
+    _SELECTED_COMPLEXITY_KEY,
+    _SELECTED_LOSS_KEY,
+    _SELECTED_NMSE_KEY,
+)
 
 
 _STATE_ALGORITHM = "algorithm"
@@ -59,6 +67,12 @@ class PySRPlugin:
 
     score_kind: ClassVar[str] = "NMSE"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
+
+    config_cls: ClassVar[type[PySRConfig]] = PySRConfig
+
+
+
+    one_shot: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -87,6 +101,12 @@ class PySRPlugin:
 
 
     def prepare(self, components: PlatformComponents) -> None:
+        if components.evaluator is None:
+            raise TypeError(
+                "PySRPlugin requires components.evaluator (Theta build + "
+                "re-scoring); got None. Assemble the platform with an "
+                "evaluator (PlatformBuilder default) to run PySR."
+            )
         if not self._restore_pending:
             self._reset_fit_state()
         self._restore_pending = False
@@ -114,17 +134,17 @@ class PySRPlugin:
         if self._pareto_logged:
             return
         meta = self._hof_meta or []
-        self._recorder.log(
-            _PARETO_COMPLEXITY_KEY, [complexity for complexity, _ in meta]
-        )
-        self._recorder.log(_PARETO_LOSS_KEY, [loss for _, loss in meta])
-        self._recorder.log(
-            _PARETO_NMSE_KEY,
-            [result.nmse if result.is_valid else None for result in results],
-        )
-        self._recorder.log(_SELECTED_COMPLEXITY_KEY, self._selected_complexity)
-        self._recorder.log(_SELECTED_LOSS_KEY, self._selected_loss)
-        self._recorder.log(_SELECTED_NMSE_KEY, self._selected_nmse)
+        metrics: dict[str, Any] = {
+            _PARETO_COMPLEXITY_KEY: [complexity for complexity, _ in meta],
+            _PARETO_LOSS_KEY: [loss for _, loss in meta],
+            _PARETO_NMSE_KEY: [
+                result.nmse if result.is_valid else None for result in results
+            ],
+            _SELECTED_COMPLEXITY_KEY: self._selected_complexity,
+            _SELECTED_LOSS_KEY: self._selected_loss,
+            _SELECTED_NMSE_KEY: self._selected_nmse,
+        }
+        log_whitelisted_metrics(self._recorder, _LOGGED_METRICS, metrics)
         self._pareto_logged = True
 
 
@@ -143,6 +163,10 @@ class PySRPlugin:
             _STATE_ALGORITHM: ALGORITHM_NAME,
             **asdict(self._config),
         }
+
+    @property
+    def runner_batch_size(self) -> int:
+        return 1
 
     @property
     def terms(self) -> list[str] | None:

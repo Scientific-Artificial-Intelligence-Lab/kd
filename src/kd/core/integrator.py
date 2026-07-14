@@ -1,32 +1,67 @@
 
 from __future__ import annotations
 
+import ast
 import logging
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import sympy
 import torch
 from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
-from sympy.core.function import AppliedUndef
 from torch import Tensor
 
+from kd.core.executor.context import ExecutionContext
+from kd.core.expr.executor import (
+    PythonExecutor,
+    _is_diff_operator,
+    _parse_diff_name,
+    _parse_expression,
+)
 from kd.core.expr.naming import parse_compound_derivative
+from kd.core.expr.registry import FunctionRegistry
+from kd.data.derivatives.base import DerivativeProvider
 from kd.data.derivatives.finite_diff import (
     DX_ZERO_FLOOR,
     UNIFORM_GRID_RTOL,
-    central_diff,
+    FiniteDiffProvider,
     is_uniform_grid,
 )
-from kd.data.schema import DataTopology, PDEDataset
+from kd.data.schema import AxisInfo, DataTopology, FieldData, PDEDataset
 
 logger = logging.getLogger(__name__)
 
 
 DEFAULT_METHOD = "Radau"
+
+
+_MAX_STENCIL_ORDER = 3
+
+
+
+
+
+
+
+
+
+_ALLOWED_NODE_TYPES: tuple[type[ast.AST], ...] = (
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Name,
+    ast.Constant,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Pow,
+    ast.USub,
+    ast.UAdd,
+    ast.expr_context,
+)
 
 
 @dataclass
@@ -39,78 +74,28 @@ class IntegrationResult:
 
 
 @dataclass
-class _ParsedSymbols:
+class _RHSClassification:
 
-    state_vars: set[str] = field(default_factory=set)
-    derivatives: dict[str, tuple[str, list[tuple[str, int]]]] = field(
-        default_factory=dict
-    )
-    coordinates: set[str] = field(default_factory=set)
-    unsupported_functions: set[str] = field(default_factory=set)
-    unknown_symbols: set[str] = field(default_factory=set)
+    provider_max_order: int
+    references_derivatives: bool
 
 
+class _UnusedDerivativeProvider(DerivativeProvider):
 
-
-
-
-_DERIV_PLACEHOLDER_RE = re.compile(r"^d\d+_[a-zA-Z]\w*$")
-
-
-def _is_derivative_placeholder(name: str) -> bool:
-    return bool(_DERIV_PLACEHOLDER_RE.match(name))
-
-
-def _classify_symbols(
-    rhs_expr: sympy.Expr,
-    field_names: set[str],
-    coord_names: set[str],
-) -> _ParsedSymbols:
-    parsed = _ParsedSymbols()
-    for call in rhs_expr.atoms(AppliedUndef):
-        parsed.unsupported_functions.add(str(call.func))
-
-    for sym in rhs_expr.free_symbols:
-        name = str(sym)
-        derivative = parse_compound_derivative(
-            name,
-            known_fields=field_names,
-            known_axes=coord_names,
+    def get_derivative(self, field: str, axis: str, order: int) -> Tensor:
+        raise RuntimeError(
+            "derivative-free RHS classification violated: "
+            f"get_derivative({field!r}, {axis!r}, {order}) requested"
         )
-        if derivative is not None:
-            parsed.derivatives[name] = derivative
-            continue
-        if name in field_names:
-            parsed.state_vars.add(name)
-            continue
-        if name in coord_names:
-            parsed.coordinates.add(name)
-            continue
 
+    def diff(self, expression: Tensor, axis: str, order: int) -> Tensor:
+        raise RuntimeError(
+            "derivative-free RHS classification violated: "
+            f"diff(..., {axis!r}, {order}) requested"
+        )
 
-
-
-        parsed.unknown_symbols.add(name)
-    return parsed
-
-
-def _finite_diff(
-    u: NDArray[np.floating[Any]],
-    dx: float,
-    order: int,
-    periodic: bool,
-) -> NDArray[np.floating[Any]]:
-    return _finite_diff_along_axis(u, 0, dx, order, periodic)
-
-
-@dataclass
-class _SpatialAxisInfo:
-
-    name: str
-    values: NDArray[np.floating[Any]]
-    dx: float
-    periodic: bool
-    axis_index: int
+    def available_derivatives(self) -> list[tuple[str, str, int]]:
+        return []
 
 
 def _check_spatial_uniformity(
@@ -147,162 +132,196 @@ def _check_spatial_uniformity(
     return None
 
 
-def _build_spatial_info(
+def _classify_rhs(
+    tree: ast.Expression,
+    dataset: PDEDataset,
+    registry: FunctionRegistry,
+) -> tuple[_RHSClassification | None, str | None]:
+    assert dataset.fields is not None and dataset.axes is not None
+    lhs_field = dataset.lhs_field
+    field_names = set(dataset.fields.keys())
+    axis_names = set(dataset.axes.keys())
+    spatial_axes = set(dataset.spatial_axes)
+
+    unsupported_calls: list[str] = []
+    bad_axis_derivatives: list[str] = []
+    cross_field: list[str] = []
+    unknown_symbols: list[str] = []
+    over_order: list[str] = []
+    orders: list[int] = []
+    references_derivatives = False
+
+
+
+    call_func_ids = {
+        id(node.func)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    def _add_unique(bucket: list[str], name: str) -> None:
+        if name not in bucket:
+            bucket.append(name)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, _ALLOWED_NODE_TYPES):
+            return None, (
+                "Unsupported syntax in RHS expression for integrate_pde: "
+                f"{type(node).__name__} nodes are not part of the platform "
+                "expression IR."
+            )
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(
+                node.value, (int, float)
+            ):
+                return None, (
+                    "Unsupported constant in RHS expression for "
+                    f"integrate_pde: {node.value!r} (only numeric literals "
+                    "are supported)."
+                )
+            continue
+        if isinstance(node, ast.Call):
+            if node.keywords:
+                return None, (
+                    "Unsupported syntax in RHS expression for integrate_pde: "
+                    "keyword arguments are not part of the platform "
+                    "expression IR."
+                )
+            if not isinstance(node.func, ast.Name):
+                return None, (
+                    "Unsupported syntax in RHS expression for integrate_pde: "
+                    "only simple function calls are supported."
+                )
+            func_name = node.func.id
+            if _is_diff_operator(func_name):
+
+
+
+
+                if len(node.args) != 1:
+                    return None, (
+                        f"Malformed derivative call in RHS expression for "
+                        f"integrate_pde: '{func_name}' expects exactly 1 "
+                        f"argument, got {len(node.args)}."
+                    )
+                try:
+                    axis, order = _parse_diff_name(func_name)
+                except ValueError:
+                    _add_unique(bad_axis_derivatives, func_name)
+                    continue
+                if axis not in spatial_axes:
+                    _add_unique(bad_axis_derivatives, func_name)
+                    continue
+                if order > _MAX_STENCIL_ORDER:
+                    _add_unique(over_order, func_name)
+                    continue
+                references_derivatives = True
+                continue
+            if func_name == "lap" or not registry.has(func_name):
+                _add_unique(unsupported_calls, func_name)
+            continue
+        if isinstance(node, ast.Name) and id(node) not in call_func_ids:
+            name = node.id
+            if name == lhs_field:
+                continue
+            if name in field_names:
+                _add_unique(cross_field, name)
+                continue
+            derivative = parse_compound_derivative(
+                name,
+                known_fields=field_names,
+                known_axes=axis_names,
+            )
+            if derivative is not None:
+                deriv_field, segments = derivative
+                if deriv_field != lhs_field:
+                    _add_unique(cross_field, name)
+                    continue
+                if any(axis not in spatial_axes for axis, _ in segments):
+                    _add_unique(bad_axis_derivatives, name)
+                    continue
+                if any(order > _MAX_STENCIL_ORDER for _, order in segments):
+                    _add_unique(over_order, name)
+                    continue
+
+
+
+                orders.append(segments[0][1])
+                references_derivatives = True
+                continue
+            if name in spatial_axes:
+                continue
+            _add_unique(unknown_symbols, name)
+
+    if unsupported_calls:
+        return None, (
+            "Unsupported function calls in RHS expression for integrate_pde: "
+            f"{sorted(unsupported_calls)}. integrate_pde supports field, "
+            "coordinate, and explicit derivative symbols only. Expand "
+            "context-aware operators such as lap(...) to explicit "
+            "derivative symbols."
+        )
+    if bad_axis_derivatives:
+        return None, (
+            "integrate_pde skipped: RHS contains derivatives along "
+            f"non-spatial or unknown axes {sorted(bad_axis_derivatives)}. "
+            "Time integration supports spatial-axis derivatives of the "
+            "LHS field only."
+        )
+    if cross_field:
+        return None, (
+            f"Cross-field references not supported: {sorted(cross_field)} "
+            f"reference fields other than LHS field '{lhs_field}'"
+        )
+    if unknown_symbols:
+        return None, (
+            "integrate_pde skipped: RHS contains unrecognised symbols "
+            f"{sorted(unknown_symbols)}. Time integration supports field, "
+            "spatial-coordinate, and explicit-derivative symbols only."
+        )
+    if over_order:
+        return None, (
+            "integrate_pde skipped: derivative order exceeds the supported "
+            f"stencil maximum ({_MAX_STENCIL_ORDER}): {sorted(over_order)}."
+        )
+
+    return (
+        _RHSClassification(
+            provider_max_order=max(orders, default=0),
+            references_derivatives=references_derivatives,
+        ),
+        None,
+    )
+
+
+def _build_spatial_slice(
     dataset: PDEDataset,
     spatial_axes: list[str],
-) -> list[_SpatialAxisInfo]:
+    initial_state: NDArray[np.float64],
+) -> tuple[PDEDataset, Tensor]:
     assert dataset.axes is not None
-    info_list: list[_SpatialAxisInfo] = []
-    for idx, axis_name in enumerate(spatial_axes):
-        axis = dataset.axes[axis_name]
-        vals = axis.values.detach().cpu().numpy().astype(np.float64)
-        dx = float(vals[1] - vals[0]) if len(vals) > 1 else 1.0
-        info_list.append(
-            _SpatialAxisInfo(
-                name=axis_name,
-                values=vals,
-                dx=dx,
-                periodic=axis.is_periodic,
-                axis_index=idx,
-            )
+    slice_axes = {
+        name: AxisInfo(
+            name=name,
+            values=dataset.axes[name].values.detach().to("cpu", torch.float64),
+            is_periodic=dataset.axes[name].is_periodic,
         )
-    return info_list
-
-
-def _build_lambdify_args(
-    parsed: _ParsedSymbols,
-    coord_names: set[str],
-) -> list[sympy.Symbol]:
-    args: list[sympy.Symbol] = []
-    for name in sorted(parsed.state_vars):
-        args.append(sympy.Symbol(name))
-    for name in sorted(parsed.derivatives.keys()):
-        args.append(sympy.Symbol(name))
-    for name in sorted(coord_names & parsed.coordinates):
-        args.append(sympy.Symbol(name))
-    return args
-
-
-def _finite_diff_along_axis(
-    u: NDArray[np.floating[Any]],
-    axis_index: int,
-    dx: float,
-    order: int,
-    periodic: bool,
-) -> NDArray[np.floating[Any]]:
-    tensor = torch.from_numpy(np.ascontiguousarray(u))
-    deriv = central_diff(tensor, dx, axis=axis_index, order=order, is_periodic=periodic)
-    return np.asarray(deriv.numpy())
-
-
-def _mol_rhs(
-    u_flat: NDArray[np.floating[Any]],
-    rhs_func: Any,
-    parsed: _ParsedSymbols,
-    spatial_info: list[_SpatialAxisInfo],
-    spatial_shape: tuple[int, ...],
-    sym_args: list[sympy.Symbol],
-    lhs_field: str,
-) -> NDArray[np.floating[Any]]:
-    for _name, (fld, _orders) in parsed.derivatives.items():
-        assert fld == lhs_field, (
-            f"_mol_rhs single-field invariant violated: derivative "
-            f"references '{fld}' but lhs_field is '{lhs_field}'"
-        )
-    for svar in parsed.state_vars:
-        assert svar == lhs_field, (
-            f"_mol_rhs single-field invariant violated: state var "
-            f"'{svar}' does not match lhs_field '{lhs_field}'"
-        )
-    u = u_flat.reshape(spatial_shape)
-    axis_lookup = {info.name: info for info in spatial_info}
-
-
-    deriv_values: dict[str, NDArray[np.floating[Any]]] = {}
-    for name, (_fld, axis_orders) in parsed.derivatives.items():
-        deriv = u
-        for axis, order in axis_orders:
-            axis_info = axis_lookup.get(axis)
-            if axis_info is None:
-                raise ValueError(
-                    f"Spatial axis '{axis}' not found for derivative '{name}'",
-                )
-            if len(spatial_shape) == 1:
-                deriv = _finite_diff(
-                    deriv,
-                    axis_info.dx,
-                    order,
-                    axis_info.periodic,
-                )
-            else:
-                deriv = _finite_diff_along_axis(
-                    deriv,
-                    axis_info.axis_index,
-                    axis_info.dx,
-                    order,
-                    axis_info.periodic,
-                )
-        deriv_values[name] = deriv
-
-
-    coord_grids: dict[str, NDArray[np.floating[Any]]] = {}
-    for info in spatial_info:
-        if info.name in parsed.coordinates:
-            if len(spatial_info) == 1:
-                coord_grids[info.name] = info.values
-            else:
-                shape = [1] * len(spatial_shape)
-                shape[info.axis_index] = len(info.values)
-                coord_grids[info.name] = np.broadcast_to(
-                    info.values.reshape(shape),
-                    spatial_shape,
-                )
-
-
-
-
-
-
-
-
-    call_args: list[Any] = []
-    for sym in sym_args:
-        name = str(sym)
-        if name in parsed.state_vars:
-            call_args.append(u)
-        elif name in deriv_values:
-            call_args.append(deriv_values[name])
-        elif name in coord_grids:
-            call_args.append(coord_grids[name])
-        else:
-            raise AssertionError(
-                f"_mol_rhs received unrecognised symbol '{name}' in "
-                "sym_args; _classify_symbols should have routed it via "
-                "parsed.unknown_symbols before "
-                "lambdify."
-            )
-
-    dudt_raw: Any = rhs_func(*call_args)
-
-    if np.isscalar(dudt_raw):
-        dudt = np.full(spatial_shape, dudt_raw, dtype=np.float64)
-    else:
-
-
-        dudt = np.array(dudt_raw, dtype=np.float64)
-
-
-    for info in spatial_info:
-        if not info.periodic:
-            idx_first: list[Any] = [slice(None)] * len(spatial_shape)
-            idx_first[info.axis_index] = 0
-            dudt[tuple(idx_first)] = 0.0
-
-            idx_last: list[Any] = [slice(None)] * len(spatial_shape)
-            idx_last[info.axis_index] = -1
-            dudt[tuple(idx_last)] = 0.0
-
-    return dudt.ravel()
+        for name in spatial_axes
+    }
+    state_tensor = torch.from_numpy(initial_state.copy())
+    slice_dataset = PDEDataset(
+        name=f"{dataset.name}::integration-slice",
+        task_type=dataset.task_type,
+        topology=DataTopology.GRID,
+        axes=slice_axes,
+        axis_order=list(spatial_axes),
+        fields={
+            dataset.lhs_field: FieldData(name=dataset.lhs_field, values=state_tensor)
+        },
+        lhs_field="",
+        lhs_axis="",
+    )
+    return slice_dataset, state_tensor
 
 
 def _check_divergence(
@@ -328,7 +347,7 @@ def _reconstruct_field(
     field_np = np.zeros(output_shape, dtype=np.float64)
     for i in range(n_times):
         u_spatial = y[:, i].reshape(spatial_shape)
-        idx: list[Any] = [slice(None)] * len(output_shape)
+        idx: list[slice | int] = [slice(None)] * len(output_shape)
         idx[time_dim] = i
         field_np[tuple(idx)] = u_spatial
 
@@ -336,7 +355,7 @@ def _reconstruct_field(
 
 
 def integrate_pde(
-    rhs_expr: sympy.Expr,
+    rhs: str,
     dataset: PDEDataset,
     *,
     method: str = DEFAULT_METHOD,
@@ -372,6 +391,22 @@ def integrate_pde(
             warning=f"Time axis '{time_axis}' not found in dataset axes",
         )
 
+
+
+
+
+
+    if not spatial_axes:
+        return IntegrationResult(
+            success=False,
+            warning=(
+                "integrate_pde skipped: dataset has no spatial axes "
+                f"(axis_order contains only the evolution axis '{time_axis}'). "
+                "Method-of-Lines integration requires at least one spatial "
+                "axis; pure-ODE datasets are not supported."
+            ),
+        )
+
     t_vals = dataset.axes[time_axis].values.detach().cpu().numpy().astype(np.float64)
     t_span = (float(t_vals[0]), float(t_vals[-1]))
 
@@ -385,106 +420,106 @@ def integrate_pde(
     if non_uniform_warning is not None:
         return IntegrationResult(success=False, warning=non_uniform_warning)
 
-    spatial_info = _build_spatial_info(dataset, spatial_axes)
-
-
-    field_names = set(dataset.fields.keys())
-    coord_names = set(spatial_axes)
-    parsed = _classify_symbols(rhs_expr, field_names, coord_names)
-
-    if parsed.unsupported_functions:
-        unsupported = sorted(parsed.unsupported_functions)
-        return IntegrationResult(
-            success=False,
-            warning=(
-                "Unsupported function calls in RHS expression for integrate_pde: "
-                f"{unsupported}. integrate_pde supports field, coordinate, and "
-                "explicit derivative symbols only. Expand context-aware operators "
-                "such as lap(...) to explicit derivative symbols, or add explicit "
-                "lambdify support for the function."
-            ),
-        )
 
 
 
-
-
-
-
-
-
-
-    if parsed.unknown_symbols:
-        unknowns = sorted(parsed.unknown_symbols)
-        placeholders = [n for n in unknowns if _is_derivative_placeholder(n)]
-        detail = (
-            f"nested-derivative placeholders {placeholders}"
-            if placeholders
-            else f"unrecognised symbols {unknowns}"
-        )
-        return IntegrationResult(
-            success=False,
-            warning=(
-                f"integrate_pde skipped: RHS contains {detail} "
-                "Time integration supports field, spatial-coordinate, and "
-                "explicit-derivative symbols only."
-            ),
-        )
-
-
-
-
-
-    cross_fields: list[str] = []
-    for dname, (dfld, _axis_orders) in parsed.derivatives.items():
-        if dfld != field_name:
-            cross_fields.append(dname)
-    for svar in sorted(parsed.state_vars):
-        if svar != field_name:
-            cross_fields.append(svar)
-
-    if cross_fields:
-        return IntegrationResult(
-            success=False,
-            warning=(
-                f"Cross-field references not supported: "
-                f"{cross_fields} reference fields other than "
-                f"LHS field '{field_name}'"
-            ),
-        )
-
-
-    sym_args = _build_lambdify_args(parsed, coord_names)
     try:
-        rhs_func = sympy.lambdify(sym_args, rhs_expr, modules=["numpy"])
-    except Exception as exc:
+        parsed = _parse_expression(rhs)
+    except (TypeError, ValueError) as exc:
         return IntegrationResult(
             success=False,
-            warning=f"Failed to lambdify RHS expression: {exc}",
+            warning=f"Invalid RHS expression for integrate_pde: {exc}",
         )
+
+
+    registry = FunctionRegistry.create_default()
+    classification, rejection = _classify_rhs(parsed.tree, dataset, registry)
+    if classification is None:
+        return IntegrationResult(success=False, warning=rejection or "")
+
+    executor = PythonExecutor(registry)
 
 
     time_dim = dataset.axis_order.index(time_axis)
-    u0 = np.take(field_data, 0, axis=time_dim).ravel().astype(np.float64)
-
     spatial_shape = tuple(dataset.axes[a].values.numel() for a in spatial_axes)
+    u0_grid = np.ascontiguousarray(
+        np.take(field_data, 0, axis=time_dim).reshape(spatial_shape)
+    )
+    u0 = u0_grid.ravel()
 
+    slice_dataset, state_tensor = _build_spatial_slice(dataset, spatial_axes, u0_grid)
+
+
+    assert slice_dataset.axes is not None
+    dirichlet_axes = [
+        idx
+        for idx, name in enumerate(spatial_axes)
+        if not slice_dataset.axes[name].is_periodic
+    ]
+
+    references_derivatives = classification.references_derivatives
+    provider_max_order = max(classification.provider_max_order, 1)
+    static_context: ExecutionContext | None = None
+    if not references_derivatives:
+
+
+
+        static_context = ExecutionContext(
+            dataset=slice_dataset,
+            derivative_provider=_UnusedDerivativeProvider(),
+        )
 
     def ode_rhs(
         _t: float,
         u_flat: NDArray[np.floating[Any]],
     ) -> NDArray[np.floating[Any]]:
-        return _mol_rhs(
-            u_flat,
-            rhs_func,
-            parsed,
-            spatial_info,
-            spatial_shape,
-            sym_args,
-            field_name,
-        )
+        state = np.ascontiguousarray(u_flat.reshape(spatial_shape))
+        state_tensor.copy_(torch.from_numpy(state))
 
-    solve_kwargs: dict[str, Any] = {
+        if references_derivatives:
+
+
+            provider: DerivativeProvider = FiniteDiffProvider(
+                slice_dataset,
+                max_order=provider_max_order,
+            )
+            context = ExecutionContext(
+                dataset=slice_dataset,
+                derivative_provider=provider,
+            )
+        else:
+            assert static_context is not None
+            context = static_context
+
+        value = executor.execute(rhs, context).value
+
+        if value.dim() == 0:
+
+
+            dudt = np.full(spatial_shape, float(value.item()), dtype=np.float64)
+        else:
+
+
+
+            dudt = np.array(value.detach().cpu().numpy(), dtype=np.float64)
+            if dudt.shape != spatial_shape:
+                raise ValueError(
+                    f"RHS evaluation produced shape {dudt.shape}, expected "
+                    f"{spatial_shape}"
+                )
+
+        for axis_idx in dirichlet_axes:
+            idx_first: list[slice | int] = [slice(None)] * len(spatial_shape)
+            idx_first[axis_idx] = 0
+            dudt[tuple(idx_first)] = 0.0
+
+            idx_last: list[slice | int] = [slice(None)] * len(spatial_shape)
+            idx_last[axis_idx] = -1
+            dudt[tuple(idx_last)] = 0.0
+
+        return dudt.ravel()
+
+    solve_kwargs: dict[str, object] = {
         "method": method,
         "t_eval": t_vals,
         "dense_output": False,

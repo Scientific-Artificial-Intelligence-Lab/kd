@@ -100,7 +100,7 @@ def _make_experiment_result() -> ExperimentResult:
             mse=0.01,
             nmse=0.005,
             r2=0.95,
-            aic=-100.0,
+            score=-100.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,

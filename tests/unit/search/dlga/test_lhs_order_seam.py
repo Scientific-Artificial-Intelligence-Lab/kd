@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kd.core.platform.requirements import assert_lhs_order_supported
+from kd.core.platform.requirements import assert_dataset_supported
 from kd.data.schema import PDEDataset
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 
@@ -49,8 +49,8 @@ def test_gate_accepts_order2_dataset_with_wave_preset_plugin() -> None:
     plugin = DLGAPlugin(DLGAConfig.wave_preset())
 
 
-    assert_lhs_order_supported(
-        dataset.lhs_order, plugin.derivative_requirements.lhs_order, "dlga"
+    assert_dataset_supported(
+        dataset.lhs_order, dataset.topology, plugin.derivative_requirements, "dlga"
     )
 
 
@@ -59,8 +59,8 @@ def test_gate_rejects_order2_dataset_with_default_plugin() -> None:
     dataset = _make_dataset("u_tt")
     plugin = DLGAPlugin(DLGAConfig())
     with pytest.raises(NotImplementedError, match="lhs_order"):
-        assert_lhs_order_supported(
-            dataset.lhs_order, plugin.derivative_requirements.lhs_order, "dlga"
+        assert_dataset_supported(
+            dataset.lhs_order, dataset.topology, plugin.derivative_requirements, "dlga"
         )
 
 
@@ -68,6 +68,6 @@ def test_gate_rejects_order2_dataset_with_default_plugin() -> None:
 def test_gate_accepts_order1_dataset_with_default_plugin() -> None:
     dataset = _make_dataset("u_t")
     plugin = DLGAPlugin(DLGAConfig())
-    assert_lhs_order_supported(
-        dataset.lhs_order, plugin.derivative_requirements.lhs_order, "dlga"
+    assert_dataset_supported(
+        dataset.lhs_order, dataset.topology, plugin.derivative_requirements, "dlga"
     )

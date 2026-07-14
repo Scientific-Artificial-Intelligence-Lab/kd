@@ -558,8 +558,8 @@ class TestSGAPluginEvaluate:
         results = plugin.evaluate(candidates)
 
         for r in results:
-            assert r.aic is not None
-            assert isinstance(r.aic, float)
+            assert r.score is not None
+            assert isinstance(r.score, float)
 
 
 
@@ -1142,7 +1142,7 @@ class TestSGAPluginNegative:
                 mse=float("inf"),
                 nmse=float("inf"),
                 r2=-float("inf"),
-                aic=float("inf"),
+                score=float("inf"),
                 is_valid=False,
                 error_message="test failure",
             )
@@ -1278,7 +1278,7 @@ class TestOffspringLifecycleAndCrossover:
         plugin._pending_scores = [-999.0]
         plugin._offspring = [stale]
         plugin._offspring_results = [
-            EvaluationResult(mse=0.0, nmse=0.0, r2=1.0, aic=-999.0)
+            EvaluationResult(mse=0.0, nmse=0.0, r2=1.0, score=-999.0)
         ]
 
         plugin.state = {
@@ -1308,7 +1308,7 @@ class TestOffspringLifecycleAndCrossover:
         plugin._pending_scores = [-999.0]
         plugin._offspring = [stale]
         plugin._offspring_results = [
-            EvaluationResult(mse=0.0, nmse=0.0, r2=1.0, aic=-999.0)
+            EvaluationResult(mse=0.0, nmse=0.0, r2=1.0, score=-999.0)
         ]
 
         plugin.prepare(mock_components)
@@ -2227,8 +2227,8 @@ class TestAICLowerBound:
             )
 
 
-            assert r.aic == pytest.approx(-200.0), (
-                f"Expected AIC=-200.0 preserved, got {r.aic} "
+            assert r.score == pytest.approx(-200.0), (
+                f"Expected AIC=-200.0 preserved, got {r.score} "
                 f"(exception handler sets inf — wrong code path)"
             )
 
@@ -2856,21 +2856,22 @@ class TestSGAPluginRecorder:
 
 
 
-class TestSGAPluginResultBuilder:
+class TestSGAPluginBuildMethods:
 
     @pytest.mark.smoke
-    def test_result_builder_importable(self) -> None:
-        from kd.search.result import ResultBuilder
+    def test_default_final_result_importable(self) -> None:
+        from kd.search.result import default_final_result
 
-        assert ResultBuilder is not None
+        assert callable(default_final_result)
 
     @pytest.mark.unit
-    def test_sga_plugin_isinstance_result_builder(self) -> None:
-        from kd.search.result import ResultBuilder
+    def test_sga_plugin_isinstance_merged_search_algorithm(self) -> None:
+        from kd.search.protocol import SearchAlgorithm
         from kd.search.sga.plugin import SGAPlugin
 
         plugin = SGAPlugin()
-        assert isinstance(plugin, ResultBuilder)
+        assert isinstance(plugin, SearchAlgorithm)
+        assert callable(plugin.build_final_result)
 
     @pytest.mark.unit
     def test_has_build_final_result_method(self) -> None:
@@ -3532,7 +3533,7 @@ class TestSGAPluginDedupMode:
                     mse=1.0,
                     nmse=1.0,
                     r2=0.5,
-                    aic=10.0,
+                    score=10.0,
                     complexity=1,
                     coefficients=None,
                     is_valid=True,

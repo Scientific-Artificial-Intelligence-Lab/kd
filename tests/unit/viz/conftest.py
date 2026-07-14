@@ -23,7 +23,7 @@ def mock_evaluation_result() -> EvaluationResult:
         mse=0.01,
         nmse=0.005,
         r2=0.95,
-        aic=-100.0,
+        score=-100.0,
         complexity=3,
         coefficients=torch.tensor([1.0, -0.5, 0.3]),
         is_valid=True,

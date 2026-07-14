@@ -1,11 +1,23 @@
 
 import ast
 import hashlib
+import warnings
 
 from kd.core.expr.registry import FunctionRegistry
 
 
 DEFAULT_MAX_DEPTH: int = 1000
+
+_DEPRECATION_MESSAGE: str = (
+    "kd.core.expr.canonicalizer is deprecated; use "
+    "kd.core.equation.canonical.canonicalize_expression instead."
+)
+
+
+def _warn_deprecated() -> None:
+
+
+    warnings.warn(_DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=3)
 
 
 def canonicalize(
@@ -14,29 +26,12 @@ def canonicalize(
     _depth: int = 0,
     max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> ast.expr:
-    if _depth > max_depth:
-        raise RecursionError(f"Expression depth {_depth} exceeds max_depth {max_depth}")
+    del registry, _depth, max_depth
+    _warn_deprecated()
+    from kd.core.equation.canonical import canonicalize_expression
 
-    if isinstance(node, ast.Call):
-
-        new_args = [
-            canonicalize(arg, registry, _depth + 1, max_depth) for arg in node.args
-        ]
-
-
-        if isinstance(node.func, ast.Name):
-            func_name = node.func.id
-
-
-
-            if registry.has(func_name) and registry.is_commutative(func_name):
-                new_args = sorted(new_args, key=lambda a: ast.dump(a))
-
-
-        return ast.Call(func=node.func, args=new_args, keywords=[])
-
-
-    return node
+    canonical = canonicalize_expression(ast.unparse(node))
+    return ast.parse(canonical, mode="eval").body
 
 
 def canonical_hash(
@@ -44,17 +39,11 @@ def canonical_hash(
     registry: FunctionRegistry,
     max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> str:
+    del registry, max_depth
+    _warn_deprecated()
+    from kd.core.equation.canonical import canonicalize_expression
 
-    tree = ast.parse(code, mode="eval")
-
-
-    canonical = canonicalize(tree.body, registry, max_depth=max_depth)
-
-
-    canonical_code = ast.unparse(canonical)
-
-
-    return hashlib.sha256(canonical_code.encode()).hexdigest()[:16]
+    return hashlib.sha256(canonicalize_expression(code).encode()).hexdigest()[:16]
 
 
 def canonicalize_code(
@@ -62,11 +51,8 @@ def canonicalize_code(
     registry: FunctionRegistry,
     max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> str:
+    del registry, max_depth
+    _warn_deprecated()
+    from kd.core.equation.canonical import canonicalize_expression
 
-    tree = ast.parse(code, mode="eval")
-
-
-    canonical = canonicalize(tree.body, registry, max_depth=max_depth)
-
-
-    return ast.unparse(canonical)
+    return canonicalize_expression(code)

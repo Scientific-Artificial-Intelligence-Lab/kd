@@ -14,11 +14,12 @@ from kd.api import (
 from kd.search.callbacks import EarlyStoppingCallback
 from kd.search.discover import DISCOVERPlugin
 from kd.search.dlga import DLGAPlugin
+from kd.search.eqgpt.plugin import EqGPTPlugin
 from kd.search.protocol import ScoreContract
 from kd.search.pysr import PySRPlugin
 from kd.search.sga import SGAPlugin
 
-_EXPECTED_ORDER = ("sga", "dlga", "discover", "pysr")
+_EXPECTED_ORDER = ("sga", "dlga", "discover", "pysr", "eqgpt", "llm4ed")
 
 
 
@@ -28,6 +29,9 @@ _EXPECTED_ORDER = ("sga", "dlga", "discover", "pysr")
 
 class TestPluginRegistry:
 
+    def test_expected_order_covers_registry_keys(self) -> None:
+        assert set(_EXPECTED_ORDER) == set(_PLUGIN_CLASS_BY_ALGORITHM)
+
     def test_registry_keys_and_order(self) -> None:
         assert tuple(_PLUGIN_CLASS_BY_ALGORITHM) == _EXPECTED_ORDER
 
@@ -36,6 +40,7 @@ class TestPluginRegistry:
         assert _PLUGIN_CLASS_BY_ALGORITHM["dlga"] is DLGAPlugin
         assert _PLUGIN_CLASS_BY_ALGORITHM["discover"] is DISCOVERPlugin
         assert _PLUGIN_CLASS_BY_ALGORITHM["pysr"] is PySRPlugin
+        assert _PLUGIN_CLASS_BY_ALGORITHM["eqgpt"] is EqGPTPlugin
 
     def test_supported_algorithms_derived_from_registry(self) -> None:
         assert tuple(_PLUGIN_CLASS_BY_ALGORITHM) == _SUPPORTED_ALGORITHMS

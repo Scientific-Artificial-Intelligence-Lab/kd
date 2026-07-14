@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 
 from kd.search.sga.pde import PDE
 from kd.search.sga.tree import Node, Tree
@@ -74,6 +75,16 @@ def pde_to_kd_expr(
     pde: PDE,
     coefficients: list[float] | None = None,
 ) -> str:
+    if coefficients is not None:
+        warnings.warn(
+            "coefficients is deprecated because it emits mul(<float>, term) "
+            "executable IR outside the canonicalizable subset of "
+            "kd.core.equation.canonical; equation coefficients belong in the "
+            "separate Equation IR (Scalar).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     if pde.width == 0:
         return KdExpression("")
 

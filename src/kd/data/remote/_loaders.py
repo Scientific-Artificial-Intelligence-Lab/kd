@@ -78,10 +78,11 @@ def _load_llm4ed_heat_from_path(path: Path, spec: DatasetSpec) -> PDEDataset:
             f"expected {expected_shape}"
         )
 
+    lhs = _require_evolution_lhs(spec)
     return PDEDataset.from_arrays(
         coords={_AXIS_X: x_np, _AXIS_T: t_np},
         fields={_FIELD_U: u_np},
-        lhs=spec.lhs,
+        lhs=lhs,
         periodic={_AXIS_X},
         name=spec.id,
         ground_truth=spec.equation,
@@ -102,10 +103,11 @@ def _load_llm4ed_fisher_from_path(path: Path, spec: DatasetSpec) -> PDEDataset:
         )
     u_np = np.ascontiguousarray(u_raw.T)
 
+    lhs = _require_evolution_lhs(spec)
     return PDEDataset.from_arrays(
         coords={_AXIS_X: x_np, _AXIS_T: t_np},
         fields={_FIELD_U: u_np},
-        lhs=spec.lhs,
+        lhs=lhs,
         periodic=None,
         name=spec.id,
         ground_truth=spec.equation,
@@ -124,6 +126,12 @@ def _load_remote_spec(
     if spec.id in {_LLM4ED_FISHER_ID, _LLM4ED_FISHER_NONLINEAR_ID}:
         return _load_llm4ed_fisher_from_path(path, spec)
     raise KeyError(f"no remote loader registered for dataset id {spec.id!r}")
+
+
+def _require_evolution_lhs(spec: DatasetSpec) -> str:
+    if spec.lhs is None:
+        raise ValueError(f"{spec.id} is homogeneous and cannot use this grid loader")
+    return spec.lhs
 
 
 def load_llm4ed_heat(

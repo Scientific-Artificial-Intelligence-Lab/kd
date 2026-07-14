@@ -170,7 +170,7 @@ class TestDefaultRegistry:
             assert default_reg.get_arity(name) == 2, f"{name} should have arity 2"
 
     def test_unary_operators_exist(self, default_reg: FunctionRegistry) -> None:
-        unary_ops = ["sin", "cos", "exp", "log", "neg", "n2", "n3", "lap"]
+        unary_ops = ["sin", "cos", "exp", "log", "neg", "n2", "n3", "recip", "lap"]
         for name in unary_ops:
             assert default_reg.has(name), f"Missing unary operator: {name}"
             assert default_reg.get_arity(name) == 1, f"{name} should have arity 1"
@@ -220,7 +220,7 @@ class TestDefaultRegistry:
 
 
         names = default_reg.list_names()
-        assert len(names) == 12
+        assert len(names) == 13
 
     def test_lap_stub_prevents_registry_execution(
         self, default_reg: FunctionRegistry
@@ -234,7 +234,7 @@ class TestDefaultRegistry:
         unary = default_reg.get_by_arity(1)
         binary = default_reg.get_by_arity(2)
 
-        assert len(unary) == 8
+        assert len(unary) == 9
         assert len(binary) == 4
 
 

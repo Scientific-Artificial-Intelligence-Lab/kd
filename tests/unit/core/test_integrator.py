@@ -3,21 +3,11 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
-import sympy
 import torch
 
 from kd.core.expr.naming import parse_compound_derivative
-from kd.core.expr.sympy_bridge import to_sympy
-from kd.core.integrator import (
-    IntegrationResult,
-    _finite_diff,
-    _mol_rhs,
-    _ParsedSymbols,
-    _SpatialAxisInfo,
-    integrate_pde,
-)
+from kd.core.integrator import IntegrationResult, integrate_pde
 from kd.data.schema import (
     AxisInfo,
     DataTopology,
@@ -140,8 +130,7 @@ class TestIntegratePdeSmoke:
 
     @pytest.mark.smoke
     def test_returns_integration_result(self, simple_grid_dataset: PDEDataset) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u_x", simple_grid_dataset)
         assert isinstance(result, IntegrationResult)
 
 
@@ -153,17 +142,15 @@ class TestIntegratePdeSmoke:
 class TestScatteredRejection:
 
     def test_scattered_returns_failure(self, scattered_dataset: PDEDataset) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, scattered_dataset)
+        result = integrate_pde("u_x", scattered_dataset)
         assert isinstance(result, IntegrationResult)
         assert result.success is False
         assert result.predicted_field is None
         assert result.warning
 
     def test_scattered_does_not_raise(self, scattered_dataset: PDEDataset) -> None:
-        rhs = sympy.Symbol("u_x")
 
-        integrate_pde(rhs, scattered_dataset)
+        integrate_pde("u_x", scattered_dataset)
 
 
 
@@ -174,24 +161,21 @@ class TestScatteredRejection:
 class TestOutputTensorProperties:
 
     def test_output_is_torch_tensor(self, simple_grid_dataset: PDEDataset) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u_x", simple_grid_dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert isinstance(result.predicted_field, torch.Tensor)
 
     def test_output_shape_matches_dataset(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u_x", simple_grid_dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         expected_shape = simple_grid_dataset.get_shape()
         assert result.predicted_field.shape == expected_shape
 
     def test_output_is_finite(self, simple_grid_dataset: PDEDataset) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u_x", simple_grid_dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         assert torch.isfinite(result.predicted_field).all()
@@ -207,8 +191,7 @@ class TestEdgeCases:
     def test_zero_rhs_preserves_initial_condition(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        rhs = sympy.Integer(0)
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("0", simple_grid_dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         ic = simple_grid_dataset.get_field("u")[:, 0]
@@ -223,8 +206,7 @@ class TestEdgeCases:
 
     def test_constant_rhs_linear_growth(self, simple_grid_dataset: PDEDataset) -> None:
         c_val = 2.0
-        rhs = sympy.Float(c_val)
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("2.0", simple_grid_dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         t_vals = simple_grid_dataset.get_coords("t")
@@ -239,69 +221,49 @@ class TestEdgeCases:
                 atol=1e-6,
             )
 
-    def test_unsupported_lap_function_rejected_before_lambdify(
+    def test_unsupported_lap_function_rejected_before_solve(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        result = integrate_pde(to_sympy("lap(u)"), simple_grid_dataset)
+        result = integrate_pde("lap(u)", simple_grid_dataset)
 
         assert result.success is False
         assert "Unsupported function calls" in result.warning
         assert "lap" in result.warning
+        assert "explicit derivative symbols" in result.warning
         assert "Integration failed" not in result.warning
 
-    def test_nested_derivative_placeholder_rejected_cleanly(
+    def test_unknown_symbol_message_states_facts_not_consumers(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-
-        rhs = sympy.Symbol("u") + sympy.Symbol("d1_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u + t", simple_grid_dataset)
 
         assert result.success is False
-        assert "" in result.warning
-        assert "d1_x" in result.warning
+        assert "unrecognised symbols" in result.warning
+        assert "'t'" in result.warning
+        for consumer_text in ("Field-comparison", "pde-residual", "plots"):
+            assert consumer_text not in result.warning
 
         assert len(result.warning) < 300, (
             f"Warning too long ({len(result.warning)} chars), "
             "should stay one terse sentence"
         )
 
-    def test_unknown_non_placeholder_symbol_also_rejected(
+    def test_linear_nested_diff_integrates_natively(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        rhs = sympy.Symbol("u") + sympy.Symbol("foobar")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde(
+            "diff_x(add(u_x, diff_x(u)))",
+            simple_grid_dataset,
+            max_step=0.05,
+        )
 
-        assert result.success is False
-        assert "" in result.warning
-        assert "foobar" in result.warning
-
-    def test_unknown_symbol_message_states_facts_not_consumers(
-        self, simple_grid_dataset: PDEDataset
-    ) -> None:
-        rhs = sympy.Symbol("u") + sympy.Symbol("t")
-        result = integrate_pde(rhs, simple_grid_dataset)
-
-        assert result.success is False
-        assert "" in result.warning
-        assert "'t'" in result.warning
-        for consumer_text in ("Field-comparison", "pde-residual", "plots"):
-            assert consumer_text not in result.warning
-
-    def test_linear_nested_diff_integrates_as_compound_derivative(
-        self, simple_grid_dataset: PDEDataset
-    ) -> None:
-        rhs = to_sympy("diff_x(add(u_x, diff_x(u)))")
-        result = integrate_pde(rhs, simple_grid_dataset, max_step=0.05)
-
-        assert rhs == 2 * sympy.Symbol("u_x_x")
         assert result.success is True, result.warning
         assert result.predicted_field is not None
 
     def test_explicit_coordinate_symbol_works(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        rhs = sympy.Symbol("u") + sympy.Symbol("x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u + x", simple_grid_dataset)
 
         assert result.success is True, (
             f"Expected coord-as-variable to work natively; got: {result.warning}"
@@ -309,15 +271,52 @@ class TestEdgeCases:
         assert result.predicted_field is not None
 
     def test_method_parameter_accepted(self, simple_grid_dataset: PDEDataset) -> None:
-        rhs = sympy.Integer(0)
         for method in ["RK45", "Radau", "BDF", "RK23"]:
-            result = integrate_pde(rhs, simple_grid_dataset, method=method)
+            result = integrate_pde("0", simple_grid_dataset, method=method)
             assert isinstance(result, IntegrationResult)
 
     def test_max_step_parameter_accepted(self, simple_grid_dataset: PDEDataset) -> None:
-        rhs = sympy.Integer(0)
-        result = integrate_pde(rhs, simple_grid_dataset, max_step=0.01)
+        result = integrate_pde("0", simple_grid_dataset, max_step=0.01)
         assert isinstance(result, IntegrationResult)
+
+
+
+
+
+
+
+class TestTimeOnlyDatasetRejection:
+
+    @staticmethod
+    def _time_only_dataset() -> PDEDataset:
+        t = torch.linspace(0.0, 1.0, 11, dtype=torch.float64)
+        return PDEDataset(
+            name="test-time-only",
+            task_type=TaskType.PDE,
+            topology=DataTopology.GRID,
+            axes={"t": AxisInfo(name="t", values=t, is_periodic=False)},
+            axis_order=["t"],
+            fields={"u": FieldData(name="u", values=torch.exp(-t))},
+            lhs_field="u",
+            lhs_axis="t",
+        )
+
+    def test_time_only_dataset_returns_failure_not_raise(self) -> None:
+        result = integrate_pde("(-1.0)*(u)", self._time_only_dataset())
+
+        assert isinstance(result, IntegrationResult)
+        assert result.success is False
+        assert result.predicted_field is None
+        assert "no spatial axes" in result.warning
+        assert "spatial axis" in result.warning
+
+    def test_same_rhs_on_spatial_dataset_succeeds(
+        self, simple_grid_dataset: PDEDataset
+    ) -> None:
+        result = integrate_pde("(-1.0)*(u)", simple_grid_dataset)
+
+        assert result.success is True, result.warning
+        assert result.predicted_field is not None
 
 
 
@@ -348,7 +347,7 @@ class TestNonUniformSpatialSpacing:
             lhs_field="u",
             lhs_axis="t",
         )
-        result = integrate_pde(sympy.Symbol("u_x"), ds)
+        result = integrate_pde("u_x", ds)
         assert isinstance(result, IntegrationResult)
         assert result.success is False
         assert result.warning
@@ -377,13 +376,12 @@ class TestNonUniformSpatialSpacing:
             lhs_axis="t",
         )
 
-        integrate_pde(sympy.Symbol("u_x"), ds)
+        integrate_pde("u_x", ds)
 
     def test_accepts_uniform_with_floating_point_drift(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("u_x", simple_grid_dataset)
 
 
 
@@ -408,7 +406,7 @@ class TestNonUniformSpatialSpacing:
             lhs_field="u",
             lhs_axis="t",
         )
-        result = integrate_pde(sympy.Symbol("u_x"), ds)
+        result = integrate_pde("u_x", ds)
         assert isinstance(result, IntegrationResult)
         assert result.success is False
         msg = (result.warning or "").lower()
@@ -433,7 +431,7 @@ class TestNonUniformSpatialSpacing:
             lhs_field="u",
             lhs_axis="t",
         )
-        result = integrate_pde(sympy.Symbol("u"), ds)
+        result = integrate_pde("u", ds)
 
         if not result.success:
             assert "non-uniform" not in (result.warning or "").lower()
@@ -451,9 +449,7 @@ class TestDivergenceHandling:
         self, simple_grid_dataset: PDEDataset
     ) -> None:
 
-        u_sym = sympy.Symbol("u")
-        rhs = 1e10 * u_sym
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("1e10*u", simple_grid_dataset)
         assert isinstance(result, IntegrationResult)
         assert not result.success, "Explosive RHS should fail"
         assert result.warning, "Failed integration must have a warning"
@@ -461,9 +457,7 @@ class TestDivergenceHandling:
     def test_diverged_at_t_is_set_on_failure(
         self, simple_grid_dataset: PDEDataset
     ) -> None:
-        u_sym = sympy.Symbol("u")
-        rhs = 1e10 * u_sym
-        result = integrate_pde(rhs, simple_grid_dataset)
+        result = integrate_pde("1e10*u", simple_grid_dataset)
         assert not result.success, "Explosive RHS should fail"
 
 
@@ -501,16 +495,14 @@ class TestMultiDimensional:
             lhs_field="u",
             lhs_axis="t",
         )
-        rhs = sympy.Symbol("u_x") + sympy.Symbol("u_y")
-        result = integrate_pde(rhs, dataset)
+        result = integrate_pde("u_x + u_y", dataset)
         assert isinstance(result, IntegrationResult)
 
-    def test_mixed_partial_symbol_from_sympy_bridge_integrates(
+    def test_mixed_partial_open_form_integrates(
         self, mixed_partial_dataset: PDEDataset
     ) -> None:
-        rhs = to_sympy("diff_y(u_x)")
         result = integrate_pde(
-            rhs,
+            "diff_y(u_x)",
             mixed_partial_dataset,
             method="RK45",
             max_step=0.1,
@@ -560,8 +552,7 @@ class TestDirichletBoundary:
             lhs_field="u",
             lhs_axis="t",
         )
-        rhs = sympy.Symbol("u_xx")
-        result = integrate_pde(rhs, dataset)
+        result = integrate_pde("u_xx", dataset)
         assert isinstance(result, IntegrationResult)
 
     def test_dirichlet_boundaries_preserved(self) -> None:
@@ -583,8 +574,7 @@ class TestDirichletBoundary:
             lhs_field="u",
             lhs_axis="t",
         )
-        rhs = sympy.Symbol("u_xx")
-        result = integrate_pde(rhs, dataset)
+        result = integrate_pde("u_xx", dataset)
         assert result.success, f"Integration must succeed: {result.warning}"
         assert result.predicted_field is not None
 
@@ -637,29 +627,28 @@ class TestCrossFieldGuard:
 
     def test_cross_field_derivative_rejected(self) -> None:
         ds = self._two_field_dataset()
-        rhs = sympy.Symbol("v_x")
-        result = integrate_pde(rhs, ds)
+        result = integrate_pde("v_x", ds)
         assert result.success is False, (
             "Cross-field derivative v_x should be rejected, "
             "but integration returned success=True"
         )
 
         assert result.warning, "Failed result must include a warning"
+        assert "v_x" in result.warning
 
     def test_cross_field_compound_derivative_rejected(self) -> None:
         ds = self._two_field_dataset()
-        rhs = sympy.Symbol("v_xx")
-        result = integrate_pde(rhs, ds)
+        result = integrate_pde("v_xx", ds)
         assert result.success is False, (
             "Cross-field derivative v_xx should be rejected, "
             "but integration returned success=True"
         )
         assert result.warning, "Failed result must include a warning"
+        assert "v_xx" in result.warning
 
     def test_same_field_derivative_accepted(self) -> None:
         ds = self._two_field_dataset()
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, ds)
+        result = integrate_pde("u_x", ds)
         assert result.success is True, (
             f"Same-field derivative u_x should be accepted, "
             f"but got failure: {result.warning}"
@@ -668,62 +657,12 @@ class TestCrossFieldGuard:
 
     def test_multi_field_state_var_still_rejected(self) -> None:
         ds = self._two_field_dataset()
-        rhs = sympy.Symbol("v")
-        result = integrate_pde(rhs, ds)
+        result = integrate_pde("v", ds)
         assert result.success is False, (
             "Direct cross-field reference 'v' should be rejected, "
             "but integration returned success=True"
         )
 
-    def test_mol_rhs_defensive_assert_on_cross_field_derivative(self) -> None:
-        parsed = _ParsedSymbols(
-            state_vars={"u"},
-            derivatives={"v_x": ("v", [("x", 1)])},
-        )
-        spatial_info = [
-            _SpatialAxisInfo(
-                name="x",
-                values=np.linspace(0.0, 1.0, 8),
-                dx=0.125,
-                periodic=True,
-                axis_index=0,
-            )
-        ]
-        with pytest.raises(AssertionError, match="single-field invariant"):
-            _mol_rhs(
-                np.ones(8),
-                lambda u, v_x: u,
-                parsed,
-                spatial_info,
-                (8,),
-                [sympy.Symbol("u"), sympy.Symbol("v_x")],
-                "u",
-            )
-
-    def test_mol_rhs_defensive_assert_on_cross_field_state_var(self) -> None:
-        parsed = _ParsedSymbols(
-            state_vars={"v"},
-            derivatives={},
-        )
-        spatial_info = [
-            _SpatialAxisInfo(
-                name="x",
-                values=np.linspace(0.0, 1.0, 8),
-                dx=0.125,
-                periodic=True,
-                axis_index=0,
-            )
-        ]
-        with pytest.raises(AssertionError, match="single-field invariant"):
-            _mol_rhs(
-                np.ones(8),
-                lambda v: v,
-                parsed,
-                spatial_info,
-                (8,),
-                [sympy.Symbol("v")],
-                "u",
-            )
 
 
 
@@ -731,157 +670,62 @@ class TestCrossFieldGuard:
 
 
 
-class TestFDMinimumPoints:
 
-    def test_order1_too_few_points(self) -> None:
-        u = np.array([1.0, 2.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 0.1, order=1, periodic=False)
+class TestStencilConstraintsSurfaceThroughIntegration:
 
-    def test_order2_too_few_points(self) -> None:
-        u = np.array([1.0, 2.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 0.1, order=2, periodic=False)
-
-    def test_order3_too_few_points_4pts(self) -> None:
-        u = np.ones(4)
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 0.1, order=3, periodic=False)
-
-    def test_order1_minimum_points_accepted(self) -> None:
-        u = np.array([0.0, 1.0, 4.0, 9.0, 16.0])
-        result = _finite_diff(u, 1.0, order=1, periodic=False)
-        assert isinstance(result, np.ndarray)
-        assert result.shape == u.shape
-        assert np.all(np.isfinite(result))
-
-    def test_order1_below_platform_minimum_rejected(self) -> None:
-        u = np.array([0.0, 1.0, 4.0, 9.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 1.0, order=1, periodic=False)
-
-    def test_order2_minimum_points_accepted(self) -> None:
-        u = np.array([0.0, 1.0, 4.0, 9.0, 16.0])
-        result = _finite_diff(u, 1.0, order=2, periodic=False)
-        assert isinstance(result, np.ndarray)
-        assert result.shape == u.shape
-        assert np.all(np.isfinite(result))
-
-    def test_order2_below_platform_minimum_rejected(self) -> None:
-        u = np.array([0.0, 1.0, 4.0, 9.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 1.0, order=2, periodic=False)
-
-    def test_order3_minimum_points_accepted(self) -> None:
-        u = np.array([0.0, 1.0, 8.0, 27.0, 64.0])
-        result = _finite_diff(u, 1.0, order=3, periodic=False)
-        assert isinstance(result, np.ndarray)
-        assert result.shape == u.shape
-        assert np.all(np.isfinite(result))
-
-    def test_periodic_too_few_points_wrong_values(self) -> None:
-        u = np.array([0.0, 1.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 1.0, order=2, periodic=True)
-
-    def test_periodic_order1_too_few_points(self) -> None:
-        u = np.array([1.0, 2.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 1.0, order=1, periodic=True)
-
-    def test_periodic_order3_too_few_points(self) -> None:
-        u = np.array([1.0, 2.0, 3.0, 4.0])
-        with pytest.raises(ValueError, match=r"(?i).*(point|size|too\s*(few|small))"):
-            _finite_diff(u, 1.0, order=3, periodic=True)
-
-
-
-
-
-
-
-class TestFDPlatformStencilAlignment:
-
-
-
-    _INTERIOR_TOL = 1e-4
-
-
-    _BOUNDARY_TOL = 1e-2
-
-    def test_order1_interior_is_fourth_order(self) -> None:
-        n = 64
-        x = np.linspace(0.0, 2 * np.pi, n)
-        dx = float(x[1] - x[0])
-        d1 = _finite_diff(np.sin(x), dx, order=1, periodic=False)
-        err = np.abs(d1[2:-2] - np.cos(x[2:-2])).max()
-        assert err < self._INTERIOR_TOL, (
-            f"order-1 interior error {err:.3e} is at the old 2nd-order "
-            f"level; expected 4th-order (< {self._INTERIOR_TOL})"
+    @staticmethod
+    def _tiny_grid_dataset() -> PDEDataset:
+        nx, nt = 4, 5
+        x = torch.linspace(0.0, 1.0, nx, dtype=torch.float64)
+        t = torch.linspace(0.0, 0.5, nt, dtype=torch.float64)
+        u = torch.sin(x).unsqueeze(-1).expand(nx, nt).clone()
+        return PDEDataset(
+            name="tiny-grid",
+            task_type=TaskType.PDE,
+            topology=DataTopology.GRID,
+            axes={
+                "x": AxisInfo(name="x", values=x, is_periodic=False),
+                "t": AxisInfo(name="t", values=t, is_periodic=False),
+            },
+            axis_order=["x", "t"],
+            fields={"u": FieldData(name="u", values=u)},
+            lhs_field="u",
+            lhs_axis="t",
         )
 
-    def test_order2_interior_is_fourth_order(self) -> None:
-        n = 64
-        x = np.linspace(0.0, 2 * np.pi, n)
-        dx = float(x[1] - x[0])
-        d2 = _finite_diff(np.sin(x), dx, order=2, periodic=False)
-        err = np.abs(d2[2:-2] - (-np.sin(x[2:-2]))).max()
-        assert err < self._INTERIOR_TOL, (
-            f"order-2 interior error {err:.3e} is at the old 2nd-order "
-            f"level; expected 4th-order (< {self._INTERIOR_TOL})"
+    def test_derivative_rhs_below_stencil_minimum_fails_gracefully(self) -> None:
+        result = integrate_pde("u_x", self._tiny_grid_dataset())
+
+        assert isinstance(result, IntegrationResult)
+        assert result.success is False
+        assert result.predicted_field is None
+        assert "points" in result.warning
+
+    def test_order_above_stencil_maximum_rejected_preflight(self) -> None:
+        nx, nt = 32, 10
+        x = torch.linspace(0.0, 2 * torch.pi, nx, dtype=torch.float64)
+        t = torch.linspace(0.0, 1.0, nt, dtype=torch.float64)
+        u = torch.sin(x).unsqueeze(-1).expand(nx, nt).clone()
+        ds = PDEDataset(
+            name="order-cap",
+            task_type=TaskType.PDE,
+            topology=DataTopology.GRID,
+            axes={
+                "x": AxisInfo(name="x", values=x, is_periodic=True),
+                "t": AxisInfo(name="t", values=t, is_periodic=False),
+            },
+            axis_order=["x", "t"],
+            fields={"u": FieldData(name="u", values=u)},
+            lhs_field="u",
+            lhs_axis="t",
         )
 
-    def test_order2_boundary_uses_one_sided_stencil_not_copy(self) -> None:
-        x = 0.5 + np.arange(64) * 0.05
-        d2 = _finite_diff(np.sin(x), 0.05, order=2, periodic=False)
-        exact = -np.sin(x)
+        result = integrate_pde("u_xxxx", ds)
+        assert result.success is False
+        assert "u_xxxx" in result.warning
 
-        assert d2[0] != d2[1], "left boundary must not copy its neighbour"
-        assert d2[-1] != d2[-2], "right boundary must not copy its neighbour"
-        assert abs(d2[0] - exact[0]) < self._BOUNDARY_TOL
-        assert abs(d2[-1] - exact[-1]) < self._BOUNDARY_TOL
-
-    def test_order1_periodic_all_points_fourth_order(self) -> None:
-        n = 64
-        x = np.arange(n) * (2 * np.pi / n)
-        d1 = _finite_diff(np.sin(x), 2 * np.pi / n, order=1, periodic=True)
-        err = np.abs(d1 - np.cos(x)).max()
-        assert err < self._INTERIOR_TOL, (
-            f"periodic order-1 max error {err:.3e} exceeds 4th-order level"
-        )
-
-    def test_order2_periodic_all_points_fourth_order(self) -> None:
-        n = 64
-        x = np.arange(n) * (2 * np.pi / n)
-        d2 = _finite_diff(np.sin(x), 2 * np.pi / n, order=2, periodic=True)
-        err = np.abs(d2 - (-np.sin(x))).max()
-        assert err < self._INTERIOR_TOL, (
-            f"periodic order-2 max error {err:.3e} exceeds 4th-order level"
-        )
-
-    def test_matches_platform_central_diff_exactly(self) -> None:
-        from kd.data.derivatives.finite_diff import central_diff
-
-        n = 32
-        x = np.linspace(0.0, 1.0, n)
-        dx = float(x[1] - x[0])
-        u = np.exp(-((x - 0.5) ** 2) * 10.0)
-
-        for order in (1, 2, 3):
-            for periodic in (False, True):
-                got = _finite_diff(u, dx, order=order, periodic=periodic)
-                want = central_diff(
-                    torch.from_numpy(u),
-                    dx,
-                    axis=0,
-                    order=order,
-                    is_periodic=periodic,
-                ).numpy()
-                np.testing.assert_array_equal(
-                    got,
-                    want,
-                    err_msg=f"order={order}, periodic={periodic}",
-                )
+        control = integrate_pde("u_xxx", ds, method="RK45", max_step=0.05)
+        assert "u_xxx" not in (control.warning or "")
 
 
 
@@ -907,9 +751,8 @@ class TestMixedPartialConfirmation:
     def test_mixed_partial_correct_values(
         self, mixed_partial_dataset: PDEDataset
     ) -> None:
-        rhs = to_sympy("diff_y(u_x)")
         result = integrate_pde(
-            rhs,
+            "diff_y(u_x)",
             mixed_partial_dataset,
             method="RK45",
             max_step=0.05,

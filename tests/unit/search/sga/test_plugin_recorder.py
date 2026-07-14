@@ -55,7 +55,7 @@ _SMALL_TIME_SIZE = 5
 def _valid_result(
     *,
     expression: str,
-    aic: float,
+    score: float,
     nmse: float,
     complexity: int,
 ) -> EvaluationResult:
@@ -63,7 +63,7 @@ def _valid_result(
         mse=nmse,
         nmse=nmse,
         r2=max(0.0, 1.0 - nmse),
-        aic=aic,
+        score=score,
         complexity=complexity,
         coefficients=torch.ones(complexity, dtype=torch.float64),
         is_valid=True,
@@ -79,7 +79,7 @@ def _invalid_result(*, expression: str) -> EvaluationResult:
         mse=float("inf"),
         nmse=float("inf"),
         r2=-float("inf"),
-        aic=float("inf"),
+        score=float("inf"),
         complexity=0,
         coefficients=None,
         is_valid=False,
@@ -97,9 +97,9 @@ def _invalid_result(*, expression: str) -> EvaluationResult:
 
 def _distinct_batch() -> list[EvaluationResult]:
     return [
-        _valid_result(expression="A", aic=12.0, nmse=0.30, complexity=5),
-        _valid_result(expression="B", aic=15.0, nmse=0.10, complexity=7),
-        _valid_result(expression="A", aic=18.0, nmse=0.55, complexity=9),
+        _valid_result(expression="A", score=12.0, nmse=0.30, complexity=5),
+        _valid_result(expression="B", score=15.0, nmse=0.10, complexity=7),
+        _valid_result(expression="A", score=18.0, nmse=0.55, complexity=9),
         _invalid_result(expression="C"),
         _invalid_result(expression="D"),
     ]
@@ -355,9 +355,9 @@ def test_best_nmse_tracks_best_aic_individual(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="M0", aic=10.0, nmse=0.50, complexity=3),
-        _valid_result(expression="M1", aic=20.0, nmse=0.10, complexity=3),
-        _valid_result(expression="M2", aic=15.0, nmse=0.30, complexity=3),
+        _valid_result(expression="M0", score=10.0, nmse=0.50, complexity=3),
+        _valid_result(expression="M1", score=20.0, nmse=0.10, complexity=3),
+        _valid_result(expression="M2", score=15.0, nmse=0.30, complexity=3),
         _invalid_result(expression="M3"),
         _invalid_result(expression="M4"),
     ]
@@ -380,9 +380,9 @@ def test_mean_complexity_uses_selected_indices_count(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2),
-        _valid_result(expression="B", aic=2.0, nmse=0.2, complexity=4),
-        _valid_result(expression="C", aic=3.0, nmse=0.3, complexity=6),
+        _valid_result(expression="A", score=1.0, nmse=0.1, complexity=2),
+        _valid_result(expression="B", score=2.0, nmse=0.2, complexity=4),
+        _valid_result(expression="C", score=3.0, nmse=0.3, complexity=6),
         _invalid_result(expression="D"),
         _invalid_result(expression="E"),
     ]
@@ -499,9 +499,9 @@ def test_n_unique_counts_distinct_expressions_over_all_results(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2),
-        _valid_result(expression="A", aic=2.0, nmse=0.2, complexity=2),
-        _valid_result(expression="B", aic=3.0, nmse=0.3, complexity=2),
+        _valid_result(expression="A", score=1.0, nmse=0.1, complexity=2),
+        _valid_result(expression="A", score=2.0, nmse=0.2, complexity=2),
+        _valid_result(expression="B", score=3.0, nmse=0.3, complexity=2),
         _invalid_result(expression="B"),
         _invalid_result(expression="C"),
         _invalid_result(expression="D"),
@@ -527,7 +527,7 @@ def test_n_unique_folds_repeated_empty_string_expressions(
     recorder: VizRecorder,
 ) -> None:
     batch = [
-        _valid_result(expression="A", aic=1.0, nmse=0.1, complexity=2),
+        _valid_result(expression="A", score=1.0, nmse=0.1, complexity=2),
         _invalid_result(expression=""),
         _invalid_result(expression=""),
         _invalid_result(expression=""),

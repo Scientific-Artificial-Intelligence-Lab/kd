@@ -22,7 +22,6 @@ from kd.search.pysr.config import PySRConfig
 
 
 from kd.search.pysr.plugin import PySRPlugin
-from kd.search.result import ResultBuilder, ResultTargetProvider
 from kd.viz.extension import PlotInfo, VizExtension
 from tests.unit.search.pysr.conftest import (
     FakePySRBackend,
@@ -123,11 +122,11 @@ class TestProtocolSmoke:
     def test_is_viz_extension(self) -> None:
         assert isinstance(_make_plugin(FakePySRBackend()), VizExtension)
 
-    def test_is_result_builder(self) -> None:
-        assert isinstance(_make_plugin(FakePySRBackend()), ResultBuilder)
+    def test_has_build_final_result(self) -> None:
+        assert callable(_make_plugin(FakePySRBackend()).build_final_result)
 
-    def test_is_result_target_provider(self) -> None:
-        assert isinstance(_make_plugin(FakePySRBackend()), ResultTargetProvider)
+    def test_has_build_result_target(self) -> None:
+        assert callable(_make_plugin(FakePySRBackend()).build_result_target)
 
     def test_has_all_protocol_members(self) -> None:
         plugin = _make_plugin(FakePySRBackend())
@@ -850,7 +849,7 @@ class TestDerivativeRequirements:
 
 
 
-class TestResultBuilderTarget:
+class TestBuildFinalResultTarget:
 
     def test_build_final_result_returns_evaluation_result(
         self, real_pysr_components: PlatformComponents

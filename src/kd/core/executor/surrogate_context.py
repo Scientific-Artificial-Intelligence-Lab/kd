@@ -54,6 +54,10 @@ class SurrogateContext(ExecutionContext):
             return dataset_device
         return torch.device("cpu")
 
+    def unity_column(self) -> torch.Tensor:
+        reference = self.get_variable(self._surrogate_field)
+        return torch.ones(reference.shape, device=self.device, dtype=torch.float32)
+
     def get_variable(self, name: str) -> torch.Tensor:
         if name == self._surrogate_field:
             if name not in self._cache:

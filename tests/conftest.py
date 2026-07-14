@@ -10,9 +10,14 @@ from hypothesis import settings
 
 
 
-settings.register_profile("ci", deadline=None)
-if os.environ.get("CI"):
-    settings.load_profile("ci")
+
+
+
+
+
+settings.register_profile("no-deadline", deadline=None)
+if os.environ.get("CI") or os.environ.get("PYTEST_XDIST_WORKER"):
+    settings.load_profile("no-deadline")
 
 
 @pytest.fixture

@@ -1,16 +1,6 @@
 
 import importlib.util
-import sys
 from pathlib import Path
-
-
-
-if importlib.util.find_spec("pysr") is None:
-    sys.exit(
-        "This example runs all four engines and needs the optional PySR "
-        "backend.\nInstall it first: uv sync --extra pysr "
-        '(or: pip install "kd[pysr]")'
-    )
 
 import matplotlib
 
@@ -19,11 +9,24 @@ import matplotlib.pyplot as plt
 
 import kd
 from kd.core.expr.sympy_bridge import format_pde
+from kd.llm import LLMRequest, LLMResponse
 from kd.search.dlga import DLGAConfig
-from kd.search.pysr.config import PySRConfig
+from kd.search.eqgpt.backend import resolve_asset_path
+from kd.search.eqgpt.config import EqGPTConfig
+from kd.search.llm4ed.config import Llm4edConfig
 
 OUT_DIR = Path(__file__).parent / "out" / "09_compare"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class OfflineProvider:
+
+    def prepare(self) -> None:
+        return None
+
+    def complete(self, request: LLMRequest) -> LLMResponse:
+        return LLMResponse(text="<res>u*u_x+u_xx</res>", model="offline", usage=None)
+
 
 
 
@@ -31,7 +34,10 @@ dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
 print(f"Ground truth: {dataset.ground_truth}")
 
 
-MODELS = {
+
+
+
+MODELS: dict[str, kd.Model] = {
     "SGA": kd.Model(algorithm="sga", generations=30, population=15, seed=0),
     "DLGA": kd.Model(
         algorithm="dlga",
@@ -43,7 +49,14 @@ MODELS = {
         ),
     ),
     "DISCOVER": kd.Model(algorithm="discover", generations=20, seed=0),
-    "PySR": kd.Model(
+}
+skipped: dict[str, str] = {}
+
+
+if importlib.util.find_spec("pysr") is not None:
+    from kd.search.pysr.config import PySRConfig
+
+    MODELS["PySR"] = kd.Model(
         algorithm="pysr",
         config=PySRConfig(
             terms=("u", "u_x", "u_xx"),
@@ -52,13 +65,48 @@ MODELS = {
 
             extra_pysr_kwargs={"deterministic": True, "parallelism": "serial"},
         ),
-    ),
-}
+    )
+else:
+    skipped["PySR"] = "needs the `pysr` extra (uv sync --extra pysr); see examples/12"
+
+
+
+
+
+try:
+    resolve_asset_path()
+except FileNotFoundError:
+    skipped["EqGPT"] = "needs pretrained weights (.pt); see examples/16_eqgpt.py"
+else:
+    MODELS["EqGPT"] = kd.Model(
+        algorithm="eqgpt", generations=3, config=EqGPTConfig.burgers_preset()
+    )
+
+
+
+
+MODELS["llm4ed"] = kd.Model(
+    algorithm="llm4ed",
+    generations=3,
+    config=Llm4edConfig(samples_per_epoch=4, max_llm_calls_per_propose=4),
+    provider=OfflineProvider(),
+)
+PRESET_ENGINES = {"llm4ed"}
+
+
+def display_name(name: str) -> str:
+    return f"{name} (preset)" if name in PRESET_ENGINES else name
+
+
+if skipped:
+    print("\nSkipped (optional asset missing):")
+    for name, why in skipped.items():
+        print(f" - {name}: {why}")
 
 
 
 for name, model in MODELS.items():
-    print(f"\n=== {name} ===")
+    print(f"\n=== {display_name(name)} ===")
     model.fit(dataset)
     kind = model.result_.score_kind
     print(f"{name} best: {model.best_expr_} (native {kind}: {model.best_score_:.4g})")
@@ -100,9 +148,16 @@ def discovered_structure(result: kd.ExperimentResult) -> list[str]:
     return list(ev.terms)
 
 
+def canonical_terms(terms: list[str]) -> list[str]:
+    return terms
+
+
 UNIFIED_LHS = "u_t"
 
-structures = {name: discovered_structure(m.result_) for name, m in MODELS.items()}
+structures = {
+    name: canonical_terms(discovered_structure(m.result_))
+    for name, m in MODELS.items()
+}
 lhs_names = {
     name: (m.result_.final_eval.lhs_name or UNIFIED_LHS) for name, m in MODELS.items()
 }
@@ -132,13 +187,14 @@ for name in MODELS:
         exclusions[name] = f"unified re-fit refused: {err}"
 
 print("\n=== Unified platform evaluation (kd.evaluate_terms, same NMSE) ===")
-print(f"{'Algorithm':<10} {'unified NMSE':>14} {'R^2':>9} discovered structure")
+print(f"{'Algorithm':<16} {'unified NMSE':>14} {'R^2':>9} discovered structure")
 for name, ev in unified.items():
     if ev is None:
-        print(f"{name:<10} {'(excluded)':>14} {'-':>9} {exclusions[name]}")
+        line = f"{display_name(name):<16} {'(excluded)':>14} {'-':>9} "
+        print(line + exclusions[name])
     else:
         structure = " + ".join(structures[name])
-        print(f"{name:<10} {ev.nmse:>14.4g} {ev.r2:>9.4f} {structure}")
+        print(f"{display_name(name):<16} {ev.nmse:>14.4g} {ev.r2:>9.4f} {structure}")
 
 
 
@@ -175,7 +231,7 @@ for name, result in results.items():
     ok = ev is not None
     rows.append(
         [
-            name,
+            display_name(name),
             equation_cell(name),
             f"{ev.nmse:.2e}" if ok else "--",
             f"{ev.r2:.4f}" if ok else "--",
@@ -187,7 +243,7 @@ table = ax_t.table(
     colLabels=col_labels,
     loc="center",
     cellLoc="center",
-    colWidths=[0.09, 0.55, 0.12, 0.10, 0.14],
+    colWidths=[0.15, 0.49, 0.12, 0.10, 0.14],
 )
 table.auto_set_font_size(False)
 table.set_fontsize(11)
@@ -202,6 +258,20 @@ ax_t.set_title(
     fontsize=12,
     pad=14,
 )
+if PRESET_ENGINES & set(MODELS):
+
+    ax_t.text(
+        0.5,
+        -0.06,
+        "(preset) = canned offline provider proposes a known-good structure; "
+        "it demonstrates the unified re-fit, not search quality (see examples/17)",
+        transform=ax_t.transAxes,
+        ha="center",
+        va="top",
+        fontsize=8.5,
+        style="italic",
+        color="#555555",
+    )
 
 
 
@@ -217,12 +287,14 @@ for name, result in results.items():
     else:
         span = series[-1] - series[0]
         prog = [(s - series[0]) / span for s in series]
-    ax_p.plot(range(len(prog)), prog, marker=".", markersize=4, label=name)
+    ax_p.plot(
+        range(len(prog)), prog, marker=".", markersize=4, label=display_name(name)
+    )
 ax_p.set_xlabel("Iteration")
 ax_p.set_ylabel("Normalized best-score progress")
 ax_p.set_title("Search progress (per-engine normalized to [0, 1])")
 ax_p.grid(alpha=0.25)
-ax_p.legend(fontsize=9, loc="lower right")
+ax_p.legend(fontsize=8, loc="lower right")
 
 
 
@@ -233,14 +305,16 @@ for n, e in unified.items():
         warnings.append(f"{n}: off the ruler -- {exclusions[n]}")
     else:
         shown[n] = e.nmse
+bar_colors = ["#c0392b" if n in PRESET_ENGINES else "darkorange" for n in shown]
 bars = ax_b.bar(
-    list(shown.keys()), list(shown.values()), color="darkorange", alpha=0.85
+    [display_name(n) for n in shown], list(shown.values()), color=bar_colors, alpha=0.85
 )
 if shown:
     ax_b.set_ylim(0, max(shown.values()) * 1.30)
 ax_b.set_ylabel("NMSE (unified Evaluator)")
 ax_b.set_title("One ruler: platform re-fit NMSE (lower is better)")
 ax_b.grid(axis="y", alpha=0.25)
+ax_b.tick_params(axis="x", labelrotation=20, labelsize=8)
 for bar, value in zip(bars, shown.values(), strict=True):
     ax_b.annotate(
         f"{value:.2e}",
@@ -251,10 +325,10 @@ for bar, value in zip(bars, shown.values(), strict=True):
         fontsize=9,
     )
 
+engine_list = ", ".join(display_name(n) for n in MODELS)
 fig.suptitle(
-    "kd: three in-house engines + PySR baseline, "
-    "one Burgers dataset (nx=64, nt=32, nu=0.1, seed=0)",
-    fontsize=13,
+    f"kd engines on one Burgers dataset (nx=64, nt=32, nu=0.1, seed=0)\n{engine_list}",
+    fontsize=12,
 )
 fig.tight_layout()
 fig.savefig(OUT_DIR / "comparison.svg")
@@ -265,7 +339,13 @@ for w in warnings:
 
 
 
-report = kd.VizEngine(output_dir=OUT_DIR / "pysr_report").render_all(
-    MODELS["PySR"].result_, algorithm=MODELS["PySR"].algorithm_, dataset=dataset
-)
-print(f"PySR report: {report.report}")
+
+report_engine = next((n for n in ("PySR", "EqGPT") if n in MODELS), None)
+if report_engine is not None:
+    engine = kd.VizEngine(output_dir=OUT_DIR / f"{report_engine.lower()}_report")
+    report = engine.render_all(
+        MODELS[report_engine].result_,
+        algorithm=MODELS[report_engine].algorithm_,
+        dataset=dataset,
+    )
+    print(f"{report_engine} report: {report.report}")

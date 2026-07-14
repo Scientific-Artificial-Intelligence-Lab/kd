@@ -75,6 +75,23 @@ class PlatformBuilder:
 
 
         self._surrogate_training = None
+        if self._reqs.provider_kind == "none":
+
+
+
+
+
+
+            dataset = self._resolve_lhs(self._dataset)
+            registry = FunctionRegistry.create_default()
+            executor = PythonExecutor(registry)
+            return PlatformComponents(
+                dataset=dataset,
+                executor=executor,
+                evaluator=None,
+                context=None,
+                registry=registry,
+            )
         dataset = self._resolve_lhs(self._dataset)
         provider = self._build_provider(dataset)
         context = self._build_context(dataset, provider)
@@ -95,6 +112,9 @@ class PlatformBuilder:
 
     @staticmethod
     def _resolve_lhs(dataset: PDEDataset) -> PDEDataset:
+        if dataset.lhs_order == 0:
+            return dataset
+
         lhs_field = dataset.lhs_field or _DEFAULT_LHS_FIELD
         lhs_axis = dataset.lhs_axis or _DEFAULT_LHS_AXIS
 
@@ -172,6 +192,12 @@ class PlatformBuilder:
         executor: PythonExecutor,
         context: ExecutionContext,
     ) -> Evaluator:
+        if dataset.lhs_order == 0:
+            raise NotImplementedError(
+                "PlatformBuilder cannot build a platform evaluator for a "
+                "homogeneous (lhs_order=0) dataset; use a provider_kind='none' "
+                "plugin-private homogeneous path."
+            )
         solver = LeastSquaresSolver()
         lhs = (
             provider.get_derivative(

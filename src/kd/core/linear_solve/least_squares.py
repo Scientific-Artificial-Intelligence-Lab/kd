@@ -4,8 +4,7 @@ from __future__ import annotations
 import torch
 
 from kd.core.linear_solve._helpers import (
-    compute_r2,
-    squared_residual,
+    r2_score,
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
@@ -13,8 +12,11 @@ from kd.core.linear_solve.base import SolveResult, SparseSolver
 
 class LeastSquaresSolver(SparseSolver):
 
-    def __init__(self, rcond: float | None = None) -> None:
+    def __init__(
+        self, rcond: float | None = None, *, compute_condition_number: bool = False
+    ) -> None:
         self.rcond = rcond
+        self.compute_condition_number = compute_condition_number
 
     def solve(
         self,
@@ -28,7 +30,11 @@ class LeastSquaresSolver(SparseSolver):
             theta_solve = upcast_for_solve(theta)
             y_solve = upcast_for_solve(y_1d)
 
-            condition_number = self._compute_condition_number(theta_solve)
+            condition_number = (
+                self._compute_condition_number(theta_solve)
+                if self.compute_condition_number
+                else None
+            )
 
             result = torch.linalg.lstsq(
                 theta_solve,
@@ -41,8 +47,10 @@ class LeastSquaresSolver(SparseSolver):
                 coefficients = coefficients.unsqueeze(0)
 
             coefficients = coefficients.to(device=theta.device, dtype=theta.dtype)
-            residual = squared_residual(theta, coefficients, y_1d)
-            r2 = compute_r2(theta, coefficients, y_1d)
+            coef_64 = upcast_for_solve(coefficients)
+            y_pred_64 = theta_solve @ coef_64
+            residual = float(((y_solve - y_pred_64) ** 2).sum().item())
+            r2 = r2_score(y_pred_64, y_solve)
 
             return SolveResult(
                 coefficients=coefficients.detach(),

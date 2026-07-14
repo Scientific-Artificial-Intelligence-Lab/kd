@@ -131,6 +131,22 @@ class TestPostInitConstraint:
         DerivativeReqs()
 
     @pytest.mark.unit
+    def test_none_provider_with_surrogate_train_kwargs_raises(self) -> None:
+        with pytest.raises(ValueError, match="surrogate_train_kwargs"):
+            DerivativeReqs(
+                provider_kind="none",
+                surrogate_train_kwargs={"max_epochs": 1},
+            )
+
+    @pytest.mark.unit
+    def test_none_provider_with_surrogate_arch_kwargs_raises(self) -> None:
+        with pytest.raises(ValueError, match="surrogate_arch_kwargs"):
+            DerivativeReqs(
+                provider_kind="none",
+                surrogate_arch_kwargs={"hidden_layers": (16,)},
+            )
+
+    @pytest.mark.unit
     @pytest.mark.parametrize(
         ("needs_surrogate", "provider_kind"),
         [
@@ -312,8 +328,9 @@ class TestTypeContract:
         assert provider_kind_type is not str
 
         args = get_args(provider_kind_type)
-        assert set(args) == {"finite_diff", "autograd"}, (
-            f"Expected Literal['finite_diff', 'autograd'], got {provider_kind_type}"
+        assert set(args) == {"finite_diff", "autograd", "none"}, (
+            f"Expected Literal['finite_diff', 'autograd', 'none'], got "
+            f"{provider_kind_type}"
         )
 
 
@@ -325,7 +342,7 @@ class TestTypeContract:
 class TestFieldSet:
 
     @pytest.mark.unit
-    def test_field_set_is_exactly_seven(self) -> None:
+    def test_field_set_is_exactly_eight(self) -> None:
         names = {f.name for f in dataclasses.fields(DerivativeReqs)}
         assert names == {
             "provider_kind",
@@ -335,6 +352,7 @@ class TestFieldSet:
             "surrogate_model",
             "surrogate_train_kwargs",
             "surrogate_arch_kwargs",
+            "supported_topologies",
         }
 
 

@@ -157,12 +157,9 @@ def _stridge_no_debias(
 
 
     if normalize != 0:
-        mreg = torch.zeros(d_reduced, 1, dtype=theta.dtype, device=theta.device)
-        x_norm = torch.zeros_like(x0)
-        for i in range(d_reduced):
-            cn = torch.linalg.norm(x0[:, i], ord=normalize).item()
-            mreg[i, 0] = 1.0 / cn
-            x_norm[:, i] = mreg[i, 0] * x0[:, i]
+        norms = torch.linalg.norm(x0, ord=normalize, dim=0)
+        mreg = (1.0 / norms).unsqueeze(1)
+        x_norm = x0 * mreg.squeeze(-1)
     else:
         x_norm = x0
         mreg = torch.ones(d_reduced, 1, dtype=theta.dtype, device=theta.device)

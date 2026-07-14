@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from torch import Tensor
 
 import kd
 from kd.data.schema import (
@@ -63,28 +62,24 @@ def _make_1d_dataset(name: str = "manifest_1d") -> PDEDataset:
     )
 
 
-def _real_components(dataset: PDEDataset, target: Tensor) -> PlatformComponents:
-    components = PlatformComponents(
+def _real_components(dataset: PDEDataset) -> PlatformComponents:
+    return PlatformComponents(
         dataset=dataset,
         executor=MagicMock(),
         evaluator=MagicMock(),
         context=MagicMock(),
         registry=MagicMock(),
     )
-    components.evaluator.lhs_target = target
-    return components
 
 
-def _mock_components_with_target() -> PlatformComponents:
-    components = PlatformComponents(
+def _fresh_mock_components() -> PlatformComponents:
+    return PlatformComponents(
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
         context=MagicMock(),
         registry=MagicMock(),
     )
-    components.evaluator.lhs_target = torch.zeros(0)
-    return components
 
 
 
@@ -103,20 +98,18 @@ class TestRunnerPopulatesManifest:
 
     def test_run_produces_non_none_manifest(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        result = runner.run(_real_components(dataset, target))
+        result = runner.run(_real_components(dataset))
 
         assert result.manifest is not None
         assert isinstance(result.manifest, RunManifest)
 
     def test_manifest_fingerprint_and_version_non_empty(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert isinstance(manifest.dataset_fingerprint, str)
@@ -126,10 +119,9 @@ class TestRunnerPopulatesManifest:
 
     def test_fingerprint_equals_compute_dataset_fingerprint(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.dataset_fingerprint == compute_dataset_fingerprint(dataset)
@@ -138,10 +130,9 @@ class TestRunnerPopulatesManifest:
         import importlib.metadata
 
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
 
@@ -150,10 +141,9 @@ class TestRunnerPopulatesManifest:
 
     def test_terms_none_for_current_algorithms(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.terms is None
@@ -169,34 +159,31 @@ class TestManifestSeed:
 
     def test_seed_none_when_config_has_no_seed(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
 
         assert RecordingAlgorithm().config.get("seed") is None
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.seed is None
 
     def test_seed_propagated_from_config(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         algorithm = SeededRecordingAlgorithm(seed=1234)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.seed == 1234
 
     def test_seed_zero_is_not_dropped(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         algorithm = SeededRecordingAlgorithm(seed=0)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.seed == 0
@@ -221,14 +208,14 @@ class TestManifestDeterminism:
             ExperimentRunner(
                 algorithm=SeededRecordingAlgorithm(seed=7), max_iterations=1
             )
-            .run(_real_components(ds_a, ds_a.get_field("u")))
+            .run(_real_components(ds_a))
             .manifest
         )
         m2 = (
             ExperimentRunner(
                 algorithm=SeededRecordingAlgorithm(seed=7), max_iterations=1
             )
-            .run(_real_components(ds_b, ds_b.get_field("u")))
+            .run(_real_components(ds_b))
             .manifest
         )
 
@@ -251,12 +238,11 @@ class TestManifestDeterminism:
         import json
 
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         manifest = (
             ExperimentRunner(
                 algorithm=SeededRecordingAlgorithm(seed=7), max_iterations=1
             )
-            .run(_real_components(dataset, target))
+            .run(_real_components(dataset))
             .manifest
         )
 
@@ -268,12 +254,11 @@ class TestManifestDeterminism:
 
     def test_manifest_has_no_timestamp_key(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         manifest = (
             ExperimentRunner(
                 algorithm=SeededRecordingAlgorithm(seed=7), max_iterations=1
             )
-            .run(_real_components(dataset, target))
+            .run(_real_components(dataset))
             .manifest
         )
 
@@ -296,7 +281,7 @@ class TestManifestRobustnessToMock:
     def test_run_with_mock_dataset_does_not_crash(self) -> None:
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        result = runner.run(_mock_components_with_target())
+        result = runner.run(_fresh_mock_components())
 
         assert result.manifest is not None
         assert isinstance(result.manifest.dataset_fingerprint, str)
@@ -305,8 +290,8 @@ class TestManifestRobustnessToMock:
         runner_a = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
         runner_b = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        fp_a = runner_a.run(_mock_components_with_target()).manifest
-        fp_b = runner_b.run(_mock_components_with_target()).manifest
+        fp_a = runner_a.run(_fresh_mock_components()).manifest
+        fp_b = runner_b.run(_fresh_mock_components()).manifest
 
         assert fp_a is not None
         assert fp_b is not None
@@ -315,7 +300,7 @@ class TestManifestRobustnessToMock:
     def test_mock_dataset_fingerprint_has_no_object_id(self) -> None:
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_mock_components_with_target()).manifest
+        manifest = runner.run(_fresh_mock_components()).manifest
 
         assert manifest is not None
         assert _ID_LEAK_PATTERN.search(manifest.dataset_fingerprint) is None, (
@@ -327,7 +312,7 @@ class TestManifestRobustnessToMock:
 
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
 
-        manifest = runner.run(_mock_components_with_target()).manifest
+        manifest = runner.run(_fresh_mock_components()).manifest
 
         assert manifest is not None
         encoded = json.dumps(manifest.to_dict(), allow_nan=False)
@@ -358,7 +343,7 @@ class TestManifestThreeAlgorithmCompat:
         runner = ExperimentRunner(algorithm=plugin, max_iterations=1)
 
         manifest = runner._build_manifest(
-            _real_components(dataset, dataset.get_field("u"))
+            _real_components(dataset)
         )
 
 
@@ -452,34 +437,31 @@ class TestManifestTermsFromPlugin:
 
     def test_terms_present_when_algorithm_exposes_them(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         algorithm = _TermsExposingAlgorithm(terms=["u", "u_x", "mul(u, u_x)"])
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.terms == ["u", "u_x", "mul(u, u_x)"]
 
     def test_terms_none_when_algorithm_terms_is_none(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         algorithm = _TermsExposingAlgorithm(terms=None)
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.terms is None
 
     def test_terms_none_for_algorithm_without_attribute(self) -> None:
         dataset = _make_1d_dataset()
-        target = dataset.get_field("u")
         plain = RecordingAlgorithm()
         assert not hasattr(plain, "terms")
         runner = ExperimentRunner(algorithm=plain, max_iterations=1)
 
-        manifest = runner.run(_real_components(dataset, target)).manifest
+        manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
         assert manifest.terms is None

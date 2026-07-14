@@ -19,7 +19,7 @@ from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
 )
-from kd.search.recorder import VizRecorder
+from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -155,6 +155,9 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     score_kind: ClassVar[str] = "reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
 
+    config_cls: ClassVar[type[DiscoverConfig]] = DiscoverConfig
+    one_shot: ClassVar[bool] = False
+
     def __init__(self, config: DiscoverConfig | None = None) -> None:
         self._config = config or DiscoverConfig()
         self._evaluator: _ExpressionEvaluator | None = None
@@ -195,11 +198,12 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         engine = self._require_engine()
         engine.receive_results(results)
         engine.update()
-        if self._recorder is not None:
-            metrics = engine.last_metrics
-            for name in _LOGGED_METRICS:
-                if name in metrics:
-                    self._recorder.log(name, metrics[name])
+        log_whitelisted_metrics(
+            self._recorder,
+            _LOGGED_METRICS,
+            engine.last_metrics,
+            skip_missing=True,
+        )
 
     def between_iterations(self) -> None:
         pass
@@ -222,6 +226,10 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             "algorithm": ALGORITHM_NAME,
             **asdict(self._config),
         }
+
+    @property
+    def runner_batch_size(self) -> int:
+        return self._config.batch_size
 
 
 
@@ -320,7 +328,12 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     def _coerce_evaluator(self, evaluator: object) -> _ExpressionEvaluator:
         if not hasattr(evaluator, "evaluate_expression"):
-            raise TypeError("components.evaluator must expose evaluate_expression().")
+            raise TypeError(
+                "DISCOVERPlugin requires components.evaluator exposing "
+                f"evaluate_expression(); got {type(evaluator).__name__}. "
+                "Assemble the platform with an evaluator (PlatformBuilder "
+                "default) to run DISCOVER."
+            )
         return cast(_ExpressionEvaluator, evaluator)
 
     def _require_engine(self) -> DiscoverEngine:

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
@@ -290,18 +292,23 @@ class TestPdeToKdExprNoCoefficents:
 
 
 
+def _pde_to_kd_expr_deprecated(pde: PDE, coefficients: list[float]) -> str:
+    with pytest.warns(DeprecationWarning, match="coefficients"):
+        return pde_to_kd_expr(pde, coefficients=coefficients)
+
+
 class TestPdeToKdExprWithCoefficients:
 
     def test_single_term_with_coefficient(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u"))])
-        result = pde_to_kd_expr(pde, coefficients=[2.5])
+        result = _pde_to_kd_expr_deprecated(pde, [2.5])
 
         assert "2.5" in result
         assert "u" in result
 
     def test_two_terms_with_coefficients(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u")), _tree(_leaf("x"))])
-        result = pde_to_kd_expr(pde, coefficients=[1.0, -0.5])
+        result = _pde_to_kd_expr_deprecated(pde, [1.0, -0.5])
 
         assert "1.0" in result or "1" in result
         assert "-0.5" in result or "0.5" in result
@@ -310,13 +317,13 @@ class TestPdeToKdExprWithCoefficients:
 
     def test_coefficient_wraps_each_term(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u"))])
-        result = pde_to_kd_expr(pde, coefficients=[3.0])
+        result = _pde_to_kd_expr_deprecated(pde, [3.0])
 
         assert result.startswith("mul("), f"Expected 'mul(' prefix, got '{result}'"
 
     def test_coefficient_format_is_numeric_literal(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u"))])
-        result = pde_to_kd_expr(pde, coefficients=[0.1])
+        result = _pde_to_kd_expr_deprecated(pde, [0.1])
 
         assert "_const" not in result
 
@@ -324,9 +331,29 @@ class TestPdeToKdExprWithCoefficients:
 
     def test_funcall_format_with_two_terms(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u")), _tree(_leaf("x"))])
-        result = pde_to_kd_expr(pde, coefficients=[1.0, -0.5])
+        result = _pde_to_kd_expr_deprecated(pde, [1.0, -0.5])
 
         assert result == "add(mul(1.0, u), mul(-0.5, x))"
+
+
+class TestPdeToKdExprCoefficientsDeprecation:
+
+    def test_warning_explains_canonicalizable_exclusion(self) -> None:
+        pde = PDE(terms=[_tree(_leaf("u"))])
+        with pytest.warns(DeprecationWarning) as record:
+            pde_to_kd_expr(pde, coefficients=[1.0])
+        messages = [str(w.message) for w in record]
+        assert any(
+            "coefficients" in m and "deprecated" in m and "canonicaliz" in m
+            for m in messages
+        ), f"Warning must name param + reason, got: {messages}"
+
+    def test_none_coefficients_does_not_warn(self) -> None:
+        pde = PDE(terms=[_tree(_leaf("u"))])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            pde_to_kd_expr(pde)
+            pde_to_kd_expr(pde, coefficients=None)
 
 
 
@@ -348,8 +375,9 @@ class TestPdeToKdExprEdgeCases:
 
     def test_coefficient_count_mismatch_raises(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u")), _tree(_leaf("x"))])
-        with pytest.raises((ValueError, IndexError)):
-            pde_to_kd_expr(pde, coefficients=[1.0])
+        with pytest.warns(DeprecationWarning, match="coefficients"):
+            with pytest.raises((ValueError, IndexError)):
+                pde_to_kd_expr(pde, coefficients=[1.0])
 
     def test_return_type_is_str(self) -> None:
         pde = PDE(terms=[_tree(_leaf("u"))])
@@ -360,7 +388,7 @@ class TestPdeToKdExprEdgeCases:
         term1 = _tree(_binary("*", _leaf("u"), _leaf("x")))
         term2 = _tree(_unary("^2", _leaf("t")))
         pde = PDE(terms=[term1, term2])
-        result = pde_to_kd_expr(pde, coefficients=[1.5, -2.0])
+        result = _pde_to_kd_expr_deprecated(pde, [1.5, -2.0])
 
         assert len(result) > 0
 
@@ -373,7 +401,7 @@ class TestPdeToKdExprEdgeCases:
                 _tree(_leaf("u_xx")),
             ]
         )
-        result = pde_to_kd_expr(pde, coefficients=[-1.0, 0.1])
+        result = _pde_to_kd_expr_deprecated(pde, [-1.0, 0.1])
         compile(result, "<test>", "eval")
 
 
@@ -404,11 +432,12 @@ class TestConverterNegative:
 
     def test_empty_coefficients_list_with_empty_pde(self) -> None:
         pde = PDE(terms=[])
-        try:
-            result = pde_to_kd_expr(pde, coefficients=[])
-            assert isinstance(result, str)
-        except (ValueError, IndexError):
-            pass
+        with pytest.warns(DeprecationWarning, match="coefficients"):
+            try:
+                result = pde_to_kd_expr(pde, coefficients=[])
+                assert isinstance(result, str)
+            except (ValueError, IndexError):
+                pass
 
     def test_d_operator_with_non_leaf_axis_raises_or_handles(self) -> None:
 

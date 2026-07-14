@@ -7,8 +7,7 @@ import torch
 
 from kd.core.linear_solve._helpers import (
     SOLVE_DTYPE,
-    compute_r2,
-    squared_residual,
+    r2_score,
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
@@ -34,11 +33,13 @@ class STRidgeSolver(SparseSolver):
         lam: float = _DEFAULT_LAM,
         max_iter: int = _DEFAULT_MAX_ITER,
         normalize: int = _DEFAULT_NORMALIZE,
+        compute_condition_number: bool = False,
     ) -> None:
         self.tol = tol
         self.lam = lam
         self.max_iter = max_iter
         self.normalize = normalize
+        self.compute_condition_number = compute_condition_number
 
     def solve(
         self,
@@ -61,13 +62,15 @@ class STRidgeSolver(SparseSolver):
             y_solve = upcast_for_solve(y_1d)
             _n, d = theta.shape
 
+            condition_number = None
+            if self.compute_condition_number:
 
-            condition_number = _compute_condition_number(theta_solve)
-            if condition_number > _COND_WARN_THRESHOLD:
-                logger.warning(
-                    "High condition number %.2e detected in theta matrix",
-                    condition_number,
-                )
+                condition_number = _compute_condition_number(theta_solve)
+                if condition_number > _COND_WARN_THRESHOLD:
+                    logger.warning(
+                        "High condition number %.2e detected in theta matrix",
+                        condition_number,
+                    )
 
 
             zero_mask = _detect_zero_columns(theta_solve)
@@ -77,8 +80,8 @@ class STRidgeSolver(SparseSolver):
 
                 return _build_result(
                     torch.zeros(d, dtype=theta.dtype, device=theta.device),
-                    theta,
-                    y_1d,
+                    theta_solve,
+                    y_solve,
                     condition_number,
                 )
 
@@ -117,7 +120,7 @@ class STRidgeSolver(SparseSolver):
             full_w[nonzero_cols] = w.squeeze(-1)
             full_w = full_w.to(device=theta.device, dtype=theta.dtype)
 
-            return _build_result(full_w, theta, y_1d, condition_number)
+            return _build_result(full_w, theta_solve, y_solve, condition_number)
 
     def _validate_inputs(self, theta: torch.Tensor, y: torch.Tensor) -> None:
         if theta.dim() != 2:
@@ -175,18 +178,15 @@ def _normalize_columns(
         mreg = torch.ones(d, 1, dtype=x0.dtype, device=x0.device)
         return x0, mreg
 
-    mreg = torch.zeros(d, 1, dtype=x0.dtype, device=x0.device)
-    x_norm = torch.zeros_like(x0)
 
 
 
 
 
 
-    for i in range(d):
-        col_norm = torch.linalg.norm(x0[:, i], ord=normalize).item()
-        mreg[i, 0] = 1.0 / col_norm
-        x_norm[:, i] = mreg[i, 0] * x0[:, i]
+    norms = torch.linalg.norm(x0, ord=normalize, dim=0)
+    mreg = (1.0 / norms).unsqueeze(1)
+    x_norm = x0 * mreg.squeeze(-1)
     return x_norm, mreg
 
 
@@ -270,12 +270,14 @@ def _compute_condition_number(theta: torch.Tensor) -> float:
 
 def _build_result(
     full_w: torch.Tensor,
-    theta: torch.Tensor,
-    y_1d: torch.Tensor,
-    condition_number: float,
+    theta_solve: torch.Tensor,
+    y_solve: torch.Tensor,
+    condition_number: float | None,
 ) -> SolveResult:
-    residual = squared_residual(theta, full_w, y_1d)
-    r2 = compute_r2(theta, full_w, y_1d)
+    coef_64 = upcast_for_solve(full_w)
+    y_pred_64 = theta_solve @ coef_64
+    residual = float(((y_solve - y_pred_64) ** 2).sum().item())
+    r2 = r2_score(y_pred_64, y_solve)
 
 
     nonzero_mask = full_w.abs() > _ZERO_COL_EPS

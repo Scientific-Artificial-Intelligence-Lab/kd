@@ -107,18 +107,74 @@ def build_axes_dict(
     return axes_dict
 
 
+def build_scatter_axes_dict(
+    coords: dict[str, torch.Tensor | np.ndarray | Sequence[float]],
+    *,
+    dtype: torch.dtype,
+    allow_nan: bool = False,
+) -> dict[str, AxisInfo]:
+    from kd.data.schema import AxisInfo
+
+    axes_dict: dict[str, AxisInfo] = {}
+    for axis_name, axis_values in coords.items():
+        tensor = to_float_tensor(axis_values, dtype, kind="coord", label=axis_name)
+        if tensor.dim() != 1:
+            raise ValueError(
+                f"scatter coords['{axis_name}'] must be 1D (per-point), got "
+                f"{tensor.dim()}D shape {tuple(tensor.shape)}."
+            )
+        axes_dict[axis_name] = AxisInfo(
+            name=axis_name,
+            values=tensor,
+            allow_nan=allow_nan,
+        )
+    return axes_dict
+
+
 def build_fields_dict(
     fields: dict[str, torch.Tensor | np.ndarray],
     *,
     dtype: torch.dtype,
+    allow_nan: bool = False,
 ) -> dict[str, FieldData]:
     from kd.data.schema import FieldData
 
     fields_dict: dict[str, FieldData] = {}
     for field_name, field_values in fields.items():
         tensor = to_float_tensor(field_values, dtype, kind="field", label=field_name)
-        fields_dict[field_name] = FieldData(name=field_name, values=tensor)
+        fields_dict[field_name] = FieldData(
+            name=field_name,
+            values=tensor,
+            allow_nan=allow_nan,
+        )
     return fields_dict
+
+
+def validate_scatter_point_shapes(
+    axes_dict: dict[str, AxisInfo],
+    axis_order: list[str],
+    fields_dict: dict[str, FieldData],
+) -> None:
+    axis_lengths = {name: axes_dict[name].values.numel() for name in axis_order}
+    for field_name, field_data in fields_dict.items():
+        if field_data.values.dim() != 1:
+            raise ValueError(
+                f"scatter field '{field_name}' must be 1-D (per-point values), "
+                f"got {field_data.values.dim()}D shape "
+                f"{tuple(field_data.values.shape)}."
+            )
+    field_lengths = {
+        name: field_data.values.numel() for name, field_data in fields_dict.items()
+    }
+    if len(set(axis_lengths.values()) | set(field_lengths.values())) != 1:
+        summary = ", ".join(
+            f"{n}=len({length})"
+            for n, length in {**axis_lengths, **field_lengths}.items()
+        )
+        raise ValueError(
+            "scatter coords + fields must all share one point count N; got "
+            f"[{summary}]."
+        )
 
 
 def annotate_shape_error(

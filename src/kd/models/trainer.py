@@ -48,8 +48,12 @@ class FieldModelTrainer:
         val_ratio: float = 0.2,
         seed: int = 0,
         restore_best: bool = False,
+        device: str | torch.device | None = None,
     ) -> TrainingResult:
         _validate_val_ratio(val_ratio)
+        entry_device = next(self._model.parameters()).device
+        target_device = _normalize_device(device)
+        _validate_device_available(target_device)
 
 
         _data_dtype = _infer_dtype(coords, targets)
@@ -67,17 +71,22 @@ class FieldModelTrainer:
         if torch.cuda.is_available():
             cuda_devices = list(range(torch.cuda.device_count()))
 
-        with torch.random.fork_rng(devices=cuda_devices):
-            torch.manual_seed(seed)
-            return self._fit_inner(
-                coords,
-                targets,
-                max_epochs,
-                patience,
-                val_ratio,
-                seed,
-                restore_best,
-            )
+        try:
+            with torch.random.fork_rng(devices=cuda_devices):
+                torch.manual_seed(seed)
+                result = self._fit_inner(
+                    coords,
+                    targets,
+                    max_epochs,
+                    patience,
+                    val_ratio,
+                    seed,
+                    restore_best,
+                    target_device,
+                )
+        finally:
+            self._model = self._model.to(entry_device)
+        return result
 
 
 
@@ -90,6 +99,7 @@ class FieldModelTrainer:
         val_ratio: float,
         seed: int,
         restore_best: bool,
+        target_device: torch.device | None,
     ) -> TrainingResult:
 
         _reinit_parameters(self._model)
@@ -103,6 +113,10 @@ class FieldModelTrainer:
 
         coords = {k: v.detach() for k, v in coords.items()}
         targets = {k: v.detach() for k, v in targets.items()}
+        if target_device is not None:
+            self._model = self._model.to(target_device)
+            coords = _move_tensors(coords, target_device)
+            targets = _move_tensors(targets, target_device)
 
 
         self._set_normalization(coords, targets)
@@ -248,6 +262,37 @@ def _infer_dtype(coords: dict[str, Tensor], targets: dict[str, Tensor]) -> torch
 def _validate_val_ratio(val_ratio: float) -> None:
     if val_ratio < 0.0 or val_ratio >= 1.0:
         raise ValueError(f"val_ratio must be in [0, 1), got {val_ratio}")
+
+
+def _normalize_device(device: str | torch.device | None) -> torch.device | None:
+    if device is None:
+        return None
+    try:
+        return torch.device(device)
+    except RuntimeError as exc:
+        raise ValueError(
+            f"Invalid training device {device!r}: expected a torch device string "
+            "or torch.device"
+        ) from exc
+
+
+def _validate_device_available(device: torch.device | None) -> None:
+    if device is None or device.type != "cuda":
+        return
+    if not torch.cuda.is_available():
+        raise ValueError(
+            f"Requested CUDA device {device!s}, but CUDA is not available. "
+            "Choose an available training device."
+        )
+    if device.index is not None and device.index >= torch.cuda.device_count():
+        raise ValueError(
+            f"Requested CUDA device {device!s}, but only "
+            f"{torch.cuda.device_count()} CUDA device(s) are available."
+        )
+
+
+def _move_tensors(data: dict[str, Tensor], device: torch.device) -> dict[str, Tensor]:
+    return {k: v.to(device) for k, v in data.items()}
 
 
 def _get_n_samples(data: dict[str, Tensor]) -> int:

@@ -188,6 +188,12 @@ class DiscoverEngine:
         except Exception:
             self._pending = None
             raise
+        finally:
+
+
+            invalidate = getattr(evaluator, "invalidate_term_cache", None)
+            if invalidate is not None:
+                invalidate()
         return dict(self._last_metrics)
 
     def run_cycle(
@@ -325,7 +331,7 @@ class DiscoverEngine:
             mse=result.mse,
             nmse=result.nmse,
             r2=result.r2,
-            aic=result.aic,
+            score=result.score,
             complexity=result.complexity,
             is_valid=result.is_valid,
             error_message=result.error_message,
@@ -354,7 +360,7 @@ class DiscoverEngine:
             mse=math.inf,
             nmse=math.inf,
             r2=-math.inf,
-            aic=math.inf,
+            score=math.inf,
             complexity=0,
             is_valid=False,
             error_message=error_message,

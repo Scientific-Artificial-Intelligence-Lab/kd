@@ -37,7 +37,8 @@ from kd.search.dlga.genes import (
     select_survivors,
 )
 from kd.search.protocol import PlatformComponents
-from kd.search.recorder import VizRecorder
+from kd.search.recorder import VizRecorder, log_whitelisted_metrics
+from kd.search.result import invalid_evaluation_result
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -103,6 +104,9 @@ class DLGAPlugin:
     score_kind: ClassVar[str] = "DLGA fitness"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
 
+    config_cls: ClassVar[type[DLGAConfig]] = DLGAConfig
+    one_shot: ClassVar[bool] = False
+
     def __init__(
         self,
         config: DLGAConfig | None = None,
@@ -136,6 +140,10 @@ class DLGAPlugin:
     @property
     def config(self) -> dict[str, Any]:
         return {"algorithm": "dlga", **asdict(self._config)}
+
+    @property
+    def runner_batch_size(self) -> int:
+        return self._config.pop_size
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
@@ -294,8 +302,7 @@ class DLGAPlugin:
             "lhs_ut": sum(1 for r in valid_results if r.lhs_name == "u_t"),
             "lhs_utt": sum(1 for r in valid_results if r.lhs_name == "u_tt"),
         }
-        for name in _LOGGED_METRICS:
-            recorder.log(name, metrics[name])
+        log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 
     def between_iterations(self) -> None:
         self._require_prepared()
@@ -495,13 +502,13 @@ class DLGAPlugin:
                     result = replace(result, nmse=float("inf"))
                 length_penalty = _length_penalty(genome, result)
                 fitness = result.nmse + self._config.epsilon * length_penalty
-                result = replace(result, aic=fitness, lhs_name=lhs_name)
+                result = replace(result, score=fitness, lhs_name=lhs_name)
             else:
                 result = replace(result, lhs_name=lhs_name)
             choices.append(result)
         valid = [result for result in choices if result.is_valid]
         if not valid:
-            return replace(choices[0], aic=_INVALID_FITNESS)
+            return replace(choices[0], score=_INVALID_FITNESS)
         return min(
             valid,
             key=lambda result: (result.nmse, 0 if result.lhs_name == "u_tt" else 1),
@@ -592,18 +599,9 @@ class DLGAPlugin:
 
     @staticmethod
     def _invalid_result(expression: str, message: str) -> EvaluationResult:
-        return EvaluationResult(
-            mse=float("inf"),
-            nmse=float("inf"),
-            r2=-float("inf"),
-            aic=float("inf"),
-            complexity=0,
-            coefficients=None,
-            is_valid=False,
-            error_message=message,
-            selected_indices=[],
-            residuals=None,
-            terms=[],
+        return invalid_evaluation_result(
+            message,
+            score=float("inf"),
             expression=expression,
         )
 
@@ -617,9 +615,9 @@ def _fitness(result: EvaluationResult) -> float:
 
 
 
-    if result.aic is None:
+    if result.score is None:
         return _INVALID_FITNESS
-    score = result.aic
+    score = result.score
     return score if math.isfinite(score) else _INVALID_FITNESS
 
 

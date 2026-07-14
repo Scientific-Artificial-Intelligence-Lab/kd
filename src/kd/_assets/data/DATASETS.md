@@ -28,6 +28,9 @@ Rules:
 | `eqgpt-burgers-2d` | `eqgpt_burgers_2d.mat` | EqGPT `Burgers_2D/Burgers2D.mat` | `u_t + u*u_x + u*u_y - 0.01*(u_xx + u_yy) = 0` | 101 x 51 x 100, `(x,y,t)` | `load_burgers_2d` |
 | `convection-diffusion` | `eqgpt_convection_diffusion.mat` | EqGPT `Convection_diffusion_equation/data.mat` | `u_t = -u_x + 0.25*u_xx` | 256 x 100, `(x,t)` | `load_convection_diffusion` |
 | `eqgpt-eq-6-2-12` | `eqgpt_eq_6_2_12.csv` | EqGPT `Eq_6_2_12/data_Eq_6_2_12.csv` | `0.1*u_xt + u_t + 0.1*u_x = 0` | 501 x 501, `(x,t)` | `load_eq_6_2_12` |
+| `eqgpt-laplacian-eitech` | `eqgpt_laplacian_eitech.xlsx` | EqGPT `Laplacian_EITech/Laplacian_EITech.xlsx` | `u_xx + u_yy + 1 = 0` | 48,367 valid scattered `(x,y)` points | `kd.get_dataset("eqgpt-laplacian-eitech").loader()` |
+| `eqgpt-laplacian-smile` | `eqgpt_laplacian_smile.xlsx` | EqGPT `Laplacian_smile/Laplacian_smile.xlsx` | `u_xx + u_yy = 0` | 44,711 valid scattered `(x,y)` points | `kd.get_dataset("eqgpt-laplacian-smile").loader()` |
+| `eqgpt-poisson-disk` | `eqgpt_poisson_disk.xlsx` | EqGPT `Possion_equation/Possion_x_y.xlsx` | `u_xx + u_yy = 0` on disk/polar coordinates | 40,200 valid scattered `(x,y)` points | `kd.get_dataset("eqgpt-poisson-disk").loader()` |
 | `wave` | `eqgpt_wave.mat` | EqGPT `Wave_equation/wave.mat` | `u_tt = u_xx` | 161 x 321, `(x,t)` | `load_wave` |
 | `klein-gordon` | `eqgpt_klein_gordon.mat` | EqGPT `KG_equation/KG_Exp.mat` | `u_tt = 0.5*u_xx - 5*u` | 201 x 201, `(x,t)` | `load_klein_gordon` |
 
@@ -62,7 +65,4 @@ These files are retained for benchmark coverage or future loader work.
 
 | Dataset id | File | Source | Equation / description | Shape / axes | Loader |
 | --- | --- | --- | --- | --- | --- |
-| `eqgpt-laplacian-eitech` | `eqgpt_laplacian_eitech.xlsx` | EqGPT `Laplacian_EITech/Laplacian_EITech.xlsx` | `u_xx + u_yy + 1 = 0` | 800 spatial observations, 200 temporal observations | none |
-| `eqgpt-laplacian-smile` | `eqgpt_laplacian_smile.xlsx` | EqGPT `Laplacian_smile/Laplacian_smile.xlsx` | `u_xx + u_yy = 0` | 250 x 250 spatial observations | none |
 | `eqgpt-pde-compound` | `eqgpt_pde_compound.csv` | EqGPT `PDE_compound/PDE_compound.csv` | `u_t - 0.2*(u*u_x)_x = 0` | 200 x 200, `(x,t)` | none |
-| `eqgpt-poisson-disk` | `eqgpt_poisson_disk.xlsx` | EqGPT `Possion_equation/Possion_x_y.xlsx` | `u_xx + u_yy = 0` on disk/polar coordinates | 200 radial x 201 angular observations | none |

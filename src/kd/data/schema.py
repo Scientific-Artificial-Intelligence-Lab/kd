@@ -10,7 +10,9 @@ This module defines the core data structures:
 Design principles:
 - n-dimensional support: no hardcoded axis names ("x", "t")
 - torch.Tensor throughout, device-aware
-- Grid topology supported today; Scattered reserved for NN-derivative sampling
+- Grid topology (dense tensor) + Scattered topology (per-point, via
+  ``PDEDataset.from_scatter``); see ``topology`` / ``axes`` docs for the
+  per-topology meaning of ``axes`` and ``fields`` (Option A storage)
 
 Note on axis naming:
 - Axis names can be arbitrary strings (e.g., "x", "time", "spatial")
@@ -24,6 +26,7 @@ import hashlib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -32,8 +35,11 @@ from kd.data._factory import (
     annotate_shape_error,
     build_axes_dict,
     build_fields_dict,
+    build_scatter_axes_dict,
     parse_lhs_spec,
+    validate_scatter_point_shapes,
 )
+from kd.data.xlsx import read_xlsx_columns
 
 
 _LARGE_DATA_THRESHOLD_BYTES = 10_000_000
@@ -65,11 +71,13 @@ class AxisInfo:
         name: User-defined axis name (e.g., "x", "t", "y")
         values: 1D tensor of coordinate values
         is_periodic: Whether this axis has periodic boundary conditions
+        allow_nan: Whether this ingress explicitly permits missing values
     """
 
     name: str
     values: torch.Tensor
     is_periodic: bool = False
+    allow_nan: bool = False
 
     def __post_init__(self) -> None:
         """Validate axis info."""
@@ -77,7 +85,7 @@ class AxisInfo:
             raise ValueError(f"AxisInfo values must be 1D, got {self.values.dim()}D")
         if self.values.numel() == 0:
             raise ValueError("AxisInfo values must not be empty")
-        if torch.isnan(self.values).any():
+        if not self.allow_nan and torch.isnan(self.values).any():
             raise ValueError("AxisInfo values must not contain NaN")
         if torch.isinf(self.values).any():
             raise ValueError("AxisInfo values must not contain Inf")
@@ -90,10 +98,12 @@ class FieldData:
     Attributes:
         name: Field name (e.g., "u", "v")
         values: nD tensor of field values, shape matches axis order
+        allow_nan: Whether this ingress explicitly permits missing values
     """
 
     name: str
     values: torch.Tensor
+    allow_nan: bool = False
 
     def __post_init__(self) -> None:
         """Validate field data."""
@@ -103,7 +113,7 @@ class FieldData:
             )
         if self.values.numel() == 0:
             raise ValueError("FieldData values must not be empty")
-        if torch.isnan(self.values).any():
+        if not self.allow_nan and torch.isnan(self.values).any():
             raise ValueError("FieldData values must not contain NaN")
         if torch.isinf(self.values).any():
             raise ValueError("FieldData values must not contain Inf")
@@ -122,15 +132,21 @@ class PDEDataset:
         name: Dataset identifier
         task_type: Type of problem (PDE, ODE, regression)
         topology: Data layout (grid or scattered)
-        axes: Mapping from axis name to AxisInfo (Grid mode)
+        axes: Mapping from axis name to AxisInfo. GRID: each ``AxisInfo.values``
+            is that axis's coordinate vector (length = grid dimension size).
+            SCATTERED (Option A, build via :meth:`from_scatter`): each holds the
+            per-point coordinate along that axis (length = point count N, shared
+            by every axis + field). ``None`` for metadata-only SCATTERED (PINN).
         axis_order: Ordered list of axis names defining tensor dimensions
-        fields: Mapping from field name to FieldData
+        fields: Mapping from field name to FieldData. GRID: nD tensor shaped by
+            ``axis_order``. SCATTERED: 1-D per-point vector (length N).
         lhs_field: Field for LHS of equation (e.g., "u")
         lhs_axis: Axis for time derivative on LHS (e.g., "t" for u_t = RHS)
-        lhs_order: Order of the LHS derivative along ``lhs_axis`` (``1`` -> u_t,
-            ``2`` -> u_tt for the wave/telegraph case). Default ``1``. This is
-            the single source of truth for the LHS order across the whole
-            pipeline (parser, fingerprint, platform builder, plugins).
+        lhs_order: Order of the LHS derivative along ``lhs_axis`` (``0`` ->
+            homogeneous / no evolution LHS with empty ``lhs_axis`` + ``lhs_field``,
+            ``1`` -> u_t, ``2`` -> u_tt for the wave/telegraph case). Default
+            ``1``. This is the single source of truth for the LHS order across the
+            whole pipeline (parser, fingerprint, platform builder, plugins).
         noise_level: Amount of noise added to data
         ground_truth: Optional ground truth equation string
 
@@ -149,6 +165,7 @@ class PDEDataset:
     name: str
     task_type: TaskType
     topology: DataTopology = DataTopology.GRID
+
 
 
     axes: dict[str, AxisInfo] | None = None
@@ -216,6 +233,17 @@ class PDEDataset:
                     f"Field key '{key}' does not match field.name '{field.name}'"
                 )
 
+
+
+
+
+
+
+
+
+        if self.topology == DataTopology.SCATTERED:
+            return
+
         expected_shape = tuple(
             self.axes[axis_name].values.numel() for axis_name in self.axis_order
         )
@@ -257,28 +285,53 @@ class PDEDataset:
             )
 
     def _validate_lhs_order(self) -> None:
-        """Reject a non-positive LHS derivative order.
+        """Reject a negative/non-integer LHS order or a contradictory zeroth order.
 
-        ``lhs_order`` is the order of the LHS time/axis derivative
-        (``1`` -> u_t, ``2`` -> u_tt). Order < 1 is meaningless: there is no
-        zeroth-order "derivative" LHS in this pipeline (the LHS is always a
-        derivative of the field), so it fails loud here rather than silently
-        producing a bogus regression target downstream.
+        ``lhs_order`` is the integer order of the LHS time/axis derivative
+        (``1`` -> u_t, ``2`` -> u_tt). ``0`` is the honest homogeneous case (no
+        evolution LHS, ``Σ term = 0``; arch041 step 3b / C-A) and is legal, but
+        ONLY with an empty ``lhs_axis`` AND an empty ``lhs_field``: a homogeneous
+        equation singles out no distinguished LHS derivative, axis, or field, so
+        naming any is a contradiction. A negative or non-integer (incl. bool /
+        float) order is always meaningless.
         """
-        if self.lhs_order < 1:
+        if not isinstance(self.lhs_order, int) or isinstance(self.lhs_order, bool):
             raise ValueError(
-                f"lhs_order must be >= 1 (1 -> u_t, 2 -> u_tt), got {self.lhs_order}."
+                f"lhs_order must be a non-negative int, got {self.lhs_order!r} "
+                f"({type(self.lhs_order).__name__})."
+            )
+        if self.lhs_order < 0:
+            raise ValueError(
+                f"lhs_order must be >= 0 (0 -> homogeneous/no evolution LHS, "
+                f"1 -> u_t, 2 -> u_tt), got {self.lhs_order}."
+            )
+        if self.lhs_order == 0 and (self.lhs_axis or self.lhs_field):
+            raise ValueError(
+                f"lhs_order=0 (homogeneous, no evolution LHS) requires an empty "
+                f"lhs_axis and lhs_field, got lhs_axis={self.lhs_axis!r}, "
+                f"lhs_field={self.lhs_field!r}: a homogeneous equation names no "
+                f"distinguished LHS axis or field."
             )
 
     @property
     def spatial_axes(self) -> list[str]:
         """Spatial axes derived from ``axis_order`` minus ``lhs_axis``.
 
-        Returns an empty list when ``axis_order`` is missing or ``lhs_axis``
-        is unset. This keeps PDE-domain metadata in the dataset while allowing
-        callers to handle non-PDE or under-specified datasets explicitly.
+        A homogeneous SCATTERED dataset (``lhs_order == 0``) has no distinguished
+        LHS, so every coordinate in ``axis_order`` is spatial -- required for
+        ``lap``/``BiLaplace`` on the steady homogeneous path (arch041 step 3c2).
+        The all-axes semantics are SCATTERED-scoped (least-power: the steady path
+        is always SCATTERED, and no GRID-homogeneous consumer needs them): every
+        other empty-``lhs_axis`` dataset keeps ``[]``. In particular the GRID
+        integrator spatial-slice (``lhs_axis=""``, ``core/integrator.py``) and a
+        GRID homogeneous dataset both stay ``[]`` (``tests/unit/data/
+        test_schema_scattered.py`` :258 regression-lock).
         """
-        if self.axis_order is None or not self.lhs_axis:
+        if self.axis_order is None:
+            return []
+        if self.lhs_order == 0 and self.topology == DataTopology.SCATTERED:
+            return list(self.axis_order)
+        if not self.lhs_axis:
             return []
         return [axis for axis in self.axis_order if axis != self.lhs_axis]
 
@@ -291,8 +344,16 @@ class PDEDataset:
         Raises:
             ValueError: If dataset is not properly configured.
         """
-        if self.axis_order is None or self.axes is None:
+        if not self.axis_order or self.axes is None:
             raise ValueError("Dataset not properly configured: missing axes/axis_order")
+
+
+
+
+
+
+        if self.topology == DataTopology.SCATTERED:
+            return (self.axes[self.axis_order[0]].values.numel(),)
 
         return tuple(
             self.axes[axis_name].values.numel() for axis_name in self.axis_order
@@ -425,6 +486,157 @@ class PDEDataset:
                 axis_order=axis_order,
             ) from exc
 
+    @classmethod
+    def from_scatter(
+        cls,
+        coords: dict[str, torch.Tensor | np.ndarray | Sequence[float]],
+        fields: dict[str, torch.Tensor | np.ndarray],
+        *,
+        lhs: str = "u_t",
+        name: str = "custom",
+        ground_truth: str | None = None,
+        dtype: torch.dtype = torch.float64,
+        allow_nan: bool = False,
+    ) -> PDEDataset:
+        """Factory: wrap raw per-point scatter arrays into a SCATTERED dataset.
+
+        Honest representation for "no grid + scattered points" data (arch041
+        step 3b-ii-a / charter C-A④). Unlike :meth:`from_arrays` (grid), the
+        coordinates are UNORDERED per-point samples: every ``coords[axis]`` is a
+        1-D length-``N`` vector of per-point coordinate values (NOT the sorted
+        grid axis), every ``fields[field]`` is a 1-D length-``N`` vector of
+        per-point values, and all share the single point count ``N``. Scatter
+        coords are deliberately NOT required to be monotonic (real data such as
+        wave-breaking ``(t, x)`` is unordered).
+
+        Args:
+            coords: Mapping axis name to a 1-D per-point coordinate array (or
+                numpy/list). Insertion order defines ``axis_order``.
+            fields: Mapping field name to a 1-D per-point value array of the
+                same length ``N`` as the coords.
+            lhs: LHS spec. ``"u_t"`` (default) parses via the kd naming
+                convention to (field, axis, order) for the evolution / wave
+                track (pivot pinned to ``u_t``). The empty string ``""`` marks
+                the HOMOGENEOUS steady track: ``lhs_field=""``, ``lhs_axis=""``,
+                ``lhs_order=0`` (Σ term = 0, no distinguished LHS derivative).
+            name: Dataset identifier.
+            ground_truth: Optional ground-truth equation string.
+            dtype: Float dtype to cast coords + fields to (default float64).
+            allow_nan: Whether to retain NaN values in the axes/fields. Intended
+                for a missing-value-preserving ingress such as ``from_xlsx`` with
+                ``drop_na=False``; default ``False`` keeps ordinary scatter
+                construction finite-only.
+
+        Returns:
+            A validated SCATTERED ``PDEDataset``.
+
+        Raises:
+            ValueError: If ``coords``/``fields`` is empty, a coord/field is not
+                1-D, the coords + fields do not share one length ``N``, or the
+                (non-empty) ``lhs`` spec references a missing field/axis.
+        """
+        if not coords:
+            raise ValueError("coords must be a non-empty mapping")
+        if not fields:
+            raise ValueError("fields must be a non-empty mapping")
+
+        axes_dict = build_scatter_axes_dict(coords, dtype=dtype, allow_nan=allow_nan)
+        fields_dict = build_fields_dict(fields, dtype=dtype, allow_nan=allow_nan)
+        axis_order = list(coords.keys())
+
+
+
+
+
+        validate_scatter_point_shapes(axes_dict, axis_order, fields_dict)
+
+        if lhs == "":
+            lhs_field_parsed, lhs_axis_parsed, lhs_order_parsed = "", "", 0
+        else:
+            lhs_field_parsed, lhs_axis_parsed, lhs_order_parsed = parse_lhs_spec(
+                lhs, fields=fields, coords=coords
+            )
+
+        return cls(
+            name=name,
+            task_type=TaskType.PDE,
+            topology=DataTopology.SCATTERED,
+            axes=axes_dict,
+            axis_order=axis_order,
+            fields=fields_dict,
+            lhs_field=lhs_field_parsed,
+            lhs_axis=lhs_axis_parsed,
+            lhs_order=lhs_order_parsed,
+            ground_truth=ground_truth,
+        )
+
+    @classmethod
+    def from_xlsx(
+        cls,
+        path: str | Path,
+        *,
+        coords: dict[str, str],
+        fields: dict[str, str],
+        lhs: str = "u_t",
+        name: str = "custom",
+        sheet: str | int | None = None,
+        header_row: int = 0,
+        na_values: Sequence[str] = ("Indeterminate",),
+        drop_na: bool = True,
+        ground_truth: str | None = None,
+        dtype: torch.dtype = torch.float64,
+    ) -> PDEDataset:
+        """Build a scattered dataset from named XLSX columns.
+
+        This is the honest XLSX ingress for general tabular ``(x, y, u)``
+        data. Header names select coordinate and field columns. Set ``lhs=""``
+        for a homogeneous steady equation with no distinguished LHS derivative.
+
+        Args:
+            path: XLSX workbook to read.
+            coords: Mapping from output axis names to XLSX header names.
+            fields: Mapping from output field names to XLSX header names.
+            lhs: LHS spec; ``""`` denotes a homogeneous steady equation.
+            name: Dataset name.
+            sheet: Worksheet name or zero-based worksheet position.
+            header_row: Zero-based header-row position.
+            na_values: String cell values to represent as NaN.
+            drop_na: Drop rows containing NaN in any selected column. When
+                false, preserve those rows and their NaN values.
+            ground_truth: Optional ground-truth equation string.
+            dtype: Floating dtype for coordinates and field values.
+        """
+        column_names = list(dict.fromkeys([*coords.values(), *fields.values()]))
+        columns = read_xlsx_columns(
+            path,
+            column_names,
+            sheet=sheet,
+            header_row=header_row,
+            na_values=na_values,
+        )
+        arrays = {
+            column_name: np.asarray(values, dtype=np.float64)
+            for column_name, values in columns.items()
+        }
+        if drop_na and arrays:
+            valid_rows = np.ones(len(next(iter(arrays.values()))), dtype=bool)
+            for values in arrays.values():
+                valid_rows &= ~np.isnan(values)
+            arrays = {
+                column_name: values[valid_rows]
+                for column_name, values in arrays.items()
+            }
+
+        return cls.from_scatter(
+            coords={axis: arrays[column] for axis, column in coords.items()},
+            fields={field: arrays[column] for field, column in fields.items()},
+            lhs=lhs,
+            name=name,
+            ground_truth=ground_truth,
+            dtype=dtype,
+            allow_nan=not drop_na,
+        )
+
 
 def compute_dataset_fingerprint(dataset: PDEDataset) -> str:
     """Compute dataset fingerprint for cache isolation.
@@ -449,6 +661,7 @@ def compute_dataset_fingerprint(dataset: PDEDataset) -> str:
 
 
     meta += f":lhs_order={dataset.lhs_order}"
+
 
 
 

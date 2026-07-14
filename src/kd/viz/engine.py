@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import logging
 import math
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import matplotlib.pyplot as plt
 from matplotlib.animation import PillowWriter
 
+from kd.data.schema import DataTopology
 from kd.viz.extension import VizExtension
 from kd.viz.plots.animation import plot_field_animation
 from kd.viz.plots.coefficient import plot_coefficient_bar
@@ -50,20 +52,39 @@ _PLUGIN_FIGSIZE = (8, 5)
 
 
 
-_SGA_ALGORITHM_NAME = "sga"
 
 
 
 
-
-_SGA_AUTOGRAD_DOMAIN_NOTE = (
-    "Domain note: SGA was run with use_autograd=True (NN-smoothed first-order "
-    "derivatives), but PDE integration uses finite-difference spatial "
-    "derivatives. As a result, final_eval (fit quality in AD domain) and "
-    "field-comparison metrics (physical recovery in FD domain) measure "
-    "different things and may disagree on noisy data. This is expected, "
-    "not a discovery error."
+_AUTOGRAD_DOMAIN_NOTE = (
+    "Domain note: this run fitted derivatives in an autograd / NN-smoothed "
+    "domain. Forward time integration necessarily applies "
+    "finite-difference spatial derivatives to the evolved states (the same "
+    " stencils as the data pipeline; no autograd surrogate exists for "
+    "integrator states). Integrating autograd-fitted coefficients with "
+    "finite-difference derivatives is an inherent approximation of this plot: "
+    "final_eval (fit quality in the autograd domain) and field-comparison "
+    "metrics (physical recovery in the finite-difference domain) measure "
+    "different things and may disagree on noisy data. This is expected, not a "
+    "discovery error."
 )
+
+
+
+
+
+
+_PROTECTED_SEMANTICS_NOTE = (
+    "Protected-operator note: the integrated RHS contains exp/log, which "
+    "the platform evaluates with protected semantics (safe_exp/safe_log "
+    "clamping) — the same semantics under which the equation was scored "
+    "during search. Trajectories that would diverge under bare operators "
+    "may remain bounded."
+)
+
+
+
+_PROTECTED_OPERATORS = frozenset({"exp", "log"})
 
 
 
@@ -95,9 +116,10 @@ def _prune_near_zero_terms(
 
     A term is pruned when ``|c| < _INTEGRATION_PRUNE_RTOL * max|c|`` over
     the active, finite coefficients. Non-finite coefficients are never
-    pruned (format_pde rejects them loudly — fail-loud beats silent drop).
-    The largest-|c| term always survives, so a non-empty selection stays
-    non-empty.
+    pruned: they flow on to ``_assemble_integration_rhs``, which rejects
+    them explicitly with a ValueError naming the offending term —
+    fail-loud beats silent drop. The largest-|c| term always survives,
+    so a non-empty selection stays non-empty.
 
     Returns:
         Tuple of (surviving indices, disclosure notes — one summary line
@@ -124,6 +146,76 @@ def _prune_near_zero_terms(
         "reported equation and metrics keep the full term list."
     )
     return keep, [note]
+
+
+def _assemble_integration_rhs(
+    terms: Sequence[str],
+    coefficients: Sequence[float],
+    keep: Sequence[int],
+) -> str:
+    """Assemble the integrable RHS IR string from surviving terms (-4).
+
+    ``"(c0)*(term0) + (c1)*(term1) + ..."`` with coefficients serialized
+    via ``repr()`` (float64 round-trip). An empty selection yields ``"0"``
+    so ``integrate_pde``'s scalar-broadcast branch keeps the field at its
+    initial condition.
+
+    Exactly-zero coefficients are omitted without disclosure: dropping
+    ``(0.0)*(term)`` is mathematically lossless and preserves the old
+    sympy path's ``0*x -> 0`` canonicalization (an all-zero equation must
+    integrate as u_t = 0, not fail on an unintegrable zero-weighted
+    term). Near-zero-but-nonzero terms are handled — and disclosed — by
+    ``_prune_near_zero_terms`` instead.
+
+    Raises:
+        ValueError: If any surviving coefficient is non-finite. A NaN/Inf
+            refit coefficient is an upstream pipeline defect, not a
+            property of the RHS terms — it must fail loud HERE with an
+            accurate attribution (the old path's ``format_pde`` raised
+            'Coefficients must be finite'), not serialize via ``repr()``
+            into a bare ``nan``/``inf`` symbol that the integrator's
+            classifier would misreport as an unrecognised RHS symbol.
+            Assembly runs before ``_get_integration_result``'s try/except,
+            so this propagates to the caller by design.
+    """
+    non_finite = [i for i in keep if not math.isfinite(coefficients[i])]
+    if non_finite:
+        detail = ", ".join(
+            f"term '{terms[i]}' has coefficient {coefficients[i]!r}"
+            for i in non_finite
+        )
+        raise ValueError(
+            f"Cannot assemble integration RHS: non-finite coefficient(s) — "
+            f"{detail}. Coefficients must be finite; a NaN/Inf here points "
+            "at a degenerate upstream fit/refit, not at the RHS terms."
+        )
+    survivors = [i for i in keep if coefficients[i] != 0.0]
+    if not survivors:
+        return "0"
+    return " + ".join(f"({coefficients[i]!r})*({terms[i]})" for i in survivors)
+
+
+def _protected_semantics_note(rhs: str) -> str | None:
+    """Return the protected-operator disclosure when the RHS needs it.
+
+    -5: when the integrable RHS calls exp/log, disclose that the
+    registry evaluates them as safe_exp/safe_log (clamped). Uses an AST
+    walk (not substring matching) so e.g. a hypothetical ``myexp(...)``
+    does not false-positive; unparseable RHS strings yield no note —
+    ``integrate_pde`` reports those on its own.
+    """
+    try:
+        tree = ast.parse(rhs, mode="eval")
+    except (SyntaxError, ValueError):
+        return None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _PROTECTED_OPERATORS
+        ):
+            return _PROTECTED_SEMANTICS_NOTE
+    return None
 
 
 class VizEngine:
@@ -178,12 +270,23 @@ class VizEngine:
         """
 
 
+
+
+
+
+
+
+        is_scatter = getattr(dataset, "topology", None) == DataTopology.SCATTERED
         try:
-            field_shape = dataset.get_shape() if dataset is not None else None
+            field_shape = (
+                None if (dataset is None or is_scatter) else dataset.get_shape()
+            )
         except (ValueError, AttributeError):
             field_shape = None
 
-        report = self.render_universal(result, field_shape=field_shape)
+        report = self.render_universal(
+            result, field_shape=field_shape, infer_grid=not is_scatter
+        )
 
 
         if dataset is not None:
@@ -213,6 +316,7 @@ class VizEngine:
         result: ExperimentResult,
         *,
         field_shape: tuple[int, ...] | None = None,
+        infer_grid: bool = True,
     ) -> ReportResult:
         """Render universal plots from an ExperimentResult.
 
@@ -228,6 +332,10 @@ class VizEngine:
                 reshape 1D residuals into a 2D heatmap. When omitted the
                 spatial-residual panel falls back to a square-shape guess
                 and shows "No spatial data" if that fails.
+            infer_grid: When ``field_shape`` is omitted, whether to allow the
+                square-shape guess. ``False`` (set by ``render_all`` for
+                SCATTERED data) forces "No spatial data" instead of a
+                fabricated grid.
 
         Returns:
             ReportResult with generated figure paths and warnings.
@@ -259,6 +367,7 @@ class VizEngine:
             plot_residual,
             result=result,
             field_shape=field_shape,
+            infer_grid=infer_grid,
         )
         if path is not None:
             report.figures.append(path)
@@ -390,6 +499,22 @@ class VizEngine:
         self._merge_warnings(report, warnings)
 
 
+
+
+
+
+
+
+
+
+        if getattr(dataset, "topology", None) == DataTopology.SCATTERED:
+            self._merge_warnings(
+                report,
+                ["scattered data: field-grid plots skipped (no grid topology)"],
+            )
+            return
+
+
         integration_result, prune_notes = self._get_integration_result(result, dataset)
         self._merge_warnings(report, prune_notes)
 
@@ -488,11 +613,20 @@ class VizEngine:
         was pruned and must reach the report exactly once
         (``_render_field_comparison`` owns that).
 
-        Only ``integrate_pde()`` is wrapped in try/except (it may fail for
-        legitimate scientific reasons). Attribute access and ``format_pde``
-        are programmer-level calls whose errors should propagate normally.
+        The integrable RHS is the platform IR string assembled directly
+        from the pruned terms + coefficients (-4):
+        ``"(c0)*(term0) + (c1)*(term1) + ..."`` with ``repr()``
+        coefficients for float64 round-trip, or ``"0"`` when everything
+        is pruned/deselected. ``format_pde``/sympy no longer sit on the
+        integration path — they serve LaTeX display only, so nested
+        open-form derivative terms reach ``integrate_pde`` losslessly.
 
-        Why no autograd-note annotation here: the SGA-autograd domain
+        Only ``integrate_pde()`` is wrapped in try/except (it may fail for
+        legitimate scientific reasons). Attribute access and the string
+        assembly are programmer-level steps whose errors should propagate
+        normally.
+
+        Why no autograd-note annotation here: the autograd-domain
         warning is emitted ONCE engine-side by ``_render_field_comparison``
         (see the dedup check around ``autograd_note``). Mutating
         ``IntegrationResult.warning`` would let Tier 2 plots forward the
@@ -501,7 +635,6 @@ class VizEngine:
         Returns:
             Tuple of (integration result, disclosure notes).
         """
-        from kd.core.expr.sympy_bridge import format_pde
         from kd.core.integrator import IntegrationResult, integrate_pde
 
         terms = result.final_eval.terms
@@ -518,14 +651,12 @@ class VizEngine:
         selected = result.final_eval.selected_indices
         active = list(selected) if selected is not None else list(range(len(terms)))
         keep, notes = _prune_near_zero_terms(terms, coeff_values, active)
-        formatted = format_pde(
-            terms,
-            coeff_values,
-            lhs=result.lhs_label,
-            selected_indices=keep,
-        )
+        rhs = _assemble_integration_rhs(terms, coeff_values, keep)
+        protected_note = _protected_semantics_note(rhs)
+        if protected_note is not None:
+            notes = [*notes, protected_note]
         try:
-            return integrate_pde(formatted.rhs, dataset), notes
+            return integrate_pde(rhs, dataset), notes
         except Exception as exc:
             return (
                 IntegrationResult(
@@ -537,20 +668,24 @@ class VizEngine:
 
     @staticmethod
     def _maybe_autograd_domain_note(result: ExperimentResult) -> str | None:
-        """Return the SGA-autograd domain note, or ``None`` if not applicable.
+        """Return the autograd-domain note, or ``None`` if not applicable.
 
-        The note applies when the experiment ran SGA in autograd mode
-        (matches ``SGAPlugin.config`` shape: ``algorithm == _SGA_ALGORITHM_NAME``
-        and truthy ``use_autograd``).
+        The note applies when result config says the fit used an autograd
+        provider (``provider_kind == "autograd"``) or the SGA-specific internal
+        autograd path (``use_autograd is True``). The latter remains necessary
+        because SGA builds its own internal provider while its platform-level
+        derivative requirement stays finite-difference.
         """
         config = getattr(result, "config", None)
         if not isinstance(config, dict):
             return None
-        if config.get("algorithm") != _SGA_ALGORITHM_NAME:
+        uses_autograd_domain = (
+            config.get("provider_kind") == "autograd"
+            or config.get("use_autograd") is True
+        )
+        if not uses_autograd_domain:
             return None
-        if not config.get("use_autograd"):
-            return None
-        return _SGA_AUTOGRAD_DOMAIN_NOTE
+        return _AUTOGRAD_DOMAIN_NOTE
 
     def _render_pde_residual(
         self,

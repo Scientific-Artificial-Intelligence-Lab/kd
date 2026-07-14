@@ -50,7 +50,7 @@ def _make_result(
             mse=0.01,
             nmse=0.005,
             r2=0.99,
-            aic=-50.0,
+            score=-50.0,
             complexity=2,
             coefficients=torch.tensor([1.0, 0.5]),
             is_valid=True,

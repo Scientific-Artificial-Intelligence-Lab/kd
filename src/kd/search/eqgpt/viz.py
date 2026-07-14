@@ -1,0 +1,319 @@
+
+from __future__ import annotations
+
+import logging
+import math
+from typing import TYPE_CHECKING, Any
+
+from kd.viz.extension import PlotInfo
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
+    from kd.search.recorder import VizRecorder
+
+
+
+
+_PLOT_METRIC: dict[str, str] = {
+    "reward_convergence": "pool_best",
+    "finetune_loss": "finetune_loss",
+}
+_SPREAD_METRICS: tuple[str, ...] = ("pool_best", "pool_median", "pool_worst")
+
+
+
+_YLABEL: dict[str, str] = {
+    "reward_convergence": "pool_best",
+    "finetune_loss": "finetune_loss",
+    "pool_reward_spread": "reward",
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_PLOT_INFOS: tuple[PlotInfo, ...] = (
+    PlotInfo(
+        name="reward_convergence",
+        title="Reward Convergence",
+        description="Best top-k pool reward per epoch (the search's primary signal).",
+    ),
+    PlotInfo(
+        name="pool_reward_spread",
+        title="Pool Reward Spread",
+        description=(
+            "Top-k pool reward band (best / median / worst) per epoch -- pool "
+            "quality and diversity as the GPT proposer evolves."
+        ),
+    ),
+    PlotInfo(
+        name="finetune_loss",
+        title="Fine-tune Loss",
+        description=(
+            "Mean cross-entropy loss of the per-epoch GPT fine-tune on the top-k "
+            "pool."
+        ),
+    ),
+)
+
+_PLOT_NAMES: tuple[str, ...] = tuple(info.name for info in _PLOT_INFOS)
+_NO_DATA_TEXT = "No data"
+_X_LABEL = "Epoch"
+_LINE_MARKER = "."
+_LINE_MARKER_SIZE = 3
+
+
+
+
+
+
+_PER_CASE_PLOT_NAME = "per_case_reward"
+_PER_CASE_TITLE = "Per-case Reward"
+PER_CASE_PLOT_INFO = PlotInfo(
+    name=_PER_CASE_PLOT_NAME,
+    title=_PER_CASE_TITLE,
+    description=(
+        "Reward of the discovered structure fitted to each wave-breaking case "
+        "on its own -- one bar per experiment. A uniformly high band shows a "
+        "single discovered law explaining every case."
+    ),
+)
+_PER_CASE_XLABEL = "case"
+_PER_CASE_YLABEL = "reward"
+_PER_CASE_LABEL_FONTSIZE = 6
+
+logger = logging.getLogger(__name__)
+
+
+def list_plot_infos() -> list[PlotInfo]:
+    return [
+        PlotInfo(name=info.name, title=info.title, description=info.description)
+        for info in _PLOT_INFOS
+    ]
+
+
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+    _check_known_name(name)
+    ax.set_xlabel(_X_LABEL)
+    ax.set_ylabel(_YLABEL[name])
+    ax.set_title(_plot_title(name))
+
+    if name == "pool_reward_spread":
+        series_by_metric = {
+            metric: _safe_get_series(recorder, metric) for metric in _SPREAD_METRICS
+        }
+        max_len = max((len(series) for series in series_by_metric.values()), default=0)
+        if max_len == 0:
+            _draw_no_data(ax, recorder)
+            return
+        x = list(range(max_len))
+        for metric in _SPREAD_METRICS:
+            ax.plot(
+                x,
+                _pad_series(series_by_metric[metric], max_len),
+                marker=_LINE_MARKER,
+                markersize=_LINE_MARKER_SIZE,
+                label=metric,
+            )
+        ax.legend()
+        return
+
+    metric = _PLOT_METRIC[name]
+    series = _safe_get_series(recorder, metric)
+    if not series:
+        _draw_no_data(ax, recorder)
+        return
+    ax.plot(
+        range(len(series)),
+        series,
+        marker=_LINE_MARKER,
+        markersize=_LINE_MARKER_SIZE,
+    )
+    if name == "reward_convergence":
+        _annotate_if_flat(ax, series)
+
+
+def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
+    _check_known_name(name)
+    if name == "pool_reward_spread":
+        series_by_metric = {
+            metric: _safe_get_series(recorder, metric) for metric in _SPREAD_METRICS
+        }
+        max_len = max((len(series) for series in series_by_metric.values()), default=0)
+        return {
+            "x": list(range(max_len)),
+            "y": {
+                metric: [
+                    _sanitize_y(value)
+                    for value in _pad_series(series_by_metric[metric], max_len)
+                ]
+                for metric in _SPREAD_METRICS
+            },
+            "xlabel": _X_LABEL,
+            "ylabel": _YLABEL[name],
+            "title": _plot_title(name),
+        }
+
+    metric = _PLOT_METRIC[name]
+    series = _safe_get_series(recorder, metric)
+    return {
+        "x": list(range(len(series))),
+        "y": [_sanitize_y(value) for value in series],
+        "xlabel": _X_LABEL,
+        "ylabel": _YLABEL[name],
+        "title": _plot_title(name),
+    }
+
+
+def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
+    ax.set_xlabel(_PER_CASE_XLABEL)
+    ax.set_ylabel(_PER_CASE_YLABEL)
+    ax.set_title(_PER_CASE_TITLE)
+    names = list(per_case)
+    if not names or not any(_is_finite(per_case[name]) for name in names):
+        reason = "no candidate" if not names else "no survivor cases"
+        ax.text(
+            0.5,
+            0.5,
+            f"{_NO_DATA_TEXT} ({reason})",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+        )
+        return
+    positions = list(range(len(names)))
+    heights = [per_case[name] if _is_finite(per_case[name]) else 0.0 for name in names]
+    ax.bar(positions, heights)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(
+        [_short_case(name) for name in names],
+        rotation=90,
+        fontsize=_PER_CASE_LABEL_FONTSIZE,
+    )
+    for position, name in enumerate(names):
+        if not _is_finite(per_case[name]):
+            ax.text(
+                position,
+                0.0,
+                "n/a",
+                ha="center",
+                va="bottom",
+                fontsize=_PER_CASE_LABEL_FONTSIZE,
+            )
+
+
+def per_case_data(per_case: dict[str, float]) -> dict[str, Any]:
+    names = list(per_case)
+    return {
+        "x": names,
+        "y": [_sanitize_y(per_case[name]) for name in names],
+        "xlabel": _PER_CASE_XLABEL,
+        "ylabel": _PER_CASE_YLABEL,
+        "title": _PER_CASE_TITLE,
+    }
+
+
+def _is_finite(value: float) -> bool:
+    return isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _short_case(name: str) -> str:
+    return name[2:] if name.startswith("N_") else name
+
+
+def _check_known_name(name: str) -> None:
+    if name not in _PLOT_NAMES:
+        available = ", ".join(_PLOT_NAMES)
+        raise ValueError(f"Unknown plot name: {name!r}. Available: {available}")
+
+
+def _safe_get_series(recorder: VizRecorder | None, metric: str) -> list[Any]:
+    if recorder is None or not recorder.enabled:
+        return []
+    return recorder.get(metric)
+
+
+def _pad_series(series: list[Any], length: int) -> list[Any]:
+    if len(series) >= length:
+        return list(series)
+    return [*series, *([None] * (length - len(series)))]
+
+
+def _sanitize_y(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        return None if math.isnan(value) or math.isinf(value) else value
+    if isinstance(value, int):
+        return float(value)
+    logger.warning(
+        "eqgpt.viz._sanitize_y: dropping unsupported recorder payload "
+        "type=%s value=%r.",
+        type(value).__name__,
+        value,
+    )
+    return None
+
+
+def _annotate_if_flat(ax: Axes, series: list[Any]) -> None:
+    from kd.viz.plots.convergence import flat_value
+
+    constant = flat_value(series)
+    if constant is None:
+        return
+    ax.set_title(
+        f"{ax.get_title()}\nbest reward constant at {constant:.4g} "
+        "(reached at the first epoch)",
+        fontsize="medium",
+    )
+
+
+def _draw_no_data(ax: Axes, recorder: VizRecorder | None) -> None:
+    ax.text(
+        0.5,
+        0.5,
+        f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+    )
+
+
+def _no_data_reason(recorder: VizRecorder | None) -> str:
+    if recorder is None:
+        return "no recorder"
+    if not recorder.enabled:
+        return "disabled"
+    return "empty"
+
+
+def _plot_title(name: str) -> str:
+    for info in _PLOT_INFOS:
+        if info.name == name:
+            return info.title
+    return name
+
+
+__all__ = [
+    "PER_CASE_PLOT_INFO",
+    "get_data",
+    "list_plot_infos",
+    "per_case_data",
+    "render",
+    "render_per_case_reward",
+]

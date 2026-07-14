@@ -30,6 +30,7 @@ _KD_OPS: dict[str, Callable[..., Any]] = {
     "neg": lambda value: -value,
     "n2": lambda value: value**2,
     "n3": lambda value: value**3,
+    "recip": lambda value: 1 / value,
     "sin": sympy.sin,
     "cos": sympy.cos,
     "exp": sympy.exp,
@@ -269,8 +270,12 @@ def _serialize_pow(base: Expr, exponent: int) -> str:
     if exponent > 0:
         return _repeat_mul(base_ir, exponent)
     if exponent == -1:
-        return f"div(1, {base_ir})"
-    return f"div(1, {_repeat_mul(base_ir, abs(exponent))})"
+        return f"recip({base_ir})"
+
+
+
+
+    return f"recip({_serialize_pow(base, -exponent)})"
 
 
 def _sympy_to_ir(expr: Expr) -> str:

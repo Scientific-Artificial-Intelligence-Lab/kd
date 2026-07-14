@@ -9,20 +9,31 @@ import pytest
 import torch
 
 from kd.core.evaluator import EvaluationResult
+from kd.core.platform.requirements import DerivativeReqs
 from kd.search.callbacks import VizDataCollector
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder
 from kd.search.runner import ExperimentRunner, RunResult
 from tests.unit.search._runner_mocks import (
+    DeferredTerminatingAlgorithm,
     ExplodingAlgorithm,
     IterativeRecordingAlgorithm,
     RecordingAlgorithm,
     RecordingCallback,
+    TerminatingIterativeRecordingAlgorithm,
+    TerminatingRecordingAlgorithm,
 )
 
 
 
 
+
+
+class _AutogradProviderAlgorithm(RecordingAlgorithm):
+
+    @property
+    def derivative_requirements(self) -> DerivativeReqs:
+        return DerivativeReqs(provider_kind="autograd")
 
 
 class TestRunnerSmoke:
@@ -738,6 +749,19 @@ class TestRunnerExperimentResult:
         assert isinstance(result.config, dict)
 
     @pytest.mark.unit
+    def test_experiment_result_config_carries_provider_kind(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algorithm = _AutogradProviderAlgorithm()
+        runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
+
+        result = runner.run(mock_components)
+
+        assert result.config["algorithm"] == "RecordingAlgorithm"
+        assert result.config["provider_kind"] == "autograd"
+
+    @pytest.mark.unit
     def test_experiment_result_preserves_best_from_algorithm(
         self,
         mock_components: PlatformComponents,
@@ -867,75 +891,29 @@ class TestRunnerVizDataCollectorInjection:
 
 
 
-class TestRunnerResultBuilderFallback:
+class TestRunnerResultEnrichment:
 
     @pytest.mark.unit
-    def test_result_builder_path(
+    def test_final_eval_comes_from_algorithm(
         self,
         mock_components: PlatformComponents,
     ) -> None:
-
-        from kd.search.result import ResultBuilder
-
         final_eval = EvaluationResult(
             mse=0.001,
             nmse=0.001,
             r2=0.999,
-            aic=-50.0,
+            score=-50.0,
             residuals=torch.zeros(10),
         )
-
-        class _BuilderAlgorithm(RecordingAlgorithm):
-
-            @property
-            def config(self) -> dict:
-                return {"algorithm": "builder_test"}
-
-            def build_final_result(self) -> EvaluationResult:
-                return final_eval
-
-        algo = _BuilderAlgorithm()
-        assert isinstance(algo, ResultBuilder)
-
-
-
-        mock_components.evaluator.lhs_target = torch.zeros(10)
+        algo = RecordingAlgorithm()
+        algo.final_eval_result = final_eval
+        algo.result_target = torch.zeros(10)
 
         runner = ExperimentRunner(algorithm=algo, max_iterations=1)
         result = runner.run(mock_components)
 
-
-        assert result.final_eval.mse == final_eval.mse
-        assert result.final_eval.aic == final_eval.aic
-
-    @pytest.mark.unit
-    def test_evaluator_fallback_path(
-        self,
-        recording_algorithm: RecordingAlgorithm,
-        mock_components: PlatformComponents,
-    ) -> None:
-
-        from kd.search.result import ResultBuilder
-
-
-        assert not isinstance(recording_algorithm, ResultBuilder)
-
-
-        fallback_eval = EvaluationResult(
-            mse=0.5,
-            nmse=0.5,
-            r2=0.5,
-            residuals=torch.zeros(10),
-        )
-        mock_components.evaluator.evaluate_expression.return_value = fallback_eval
-        mock_components.evaluator.lhs_target = torch.randn(10)
-
-        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=1)
-        result = runner.run(mock_components)
-
-
-        mock_components.evaluator.evaluate_expression.assert_called_once()
-        assert result.final_eval.mse == fallback_eval.mse
+        assert result.final_eval is final_eval
+        assert result.final_eval.score == final_eval.score
 
     @pytest.mark.unit
     def test_predicted_derived_from_actual_and_residuals(
@@ -947,19 +925,19 @@ class TestRunnerResultBuilderFallback:
         residuals = torch.tensor([0.1, -0.2, 0.3])
         expected_predicted = actual_data + residuals
 
-        fallback_eval = EvaluationResult(
+        algo = RecordingAlgorithm()
+        algo.final_eval_result = EvaluationResult(
             mse=0.1,
             nmse=0.1,
             r2=0.9,
             residuals=residuals,
         )
-        mock_components.evaluator.evaluate_expression.return_value = fallback_eval
-        mock_components.evaluator.lhs_target = actual_data
+        algo.result_target = actual_data
 
-        algo = RecordingAlgorithm()
         runner = ExperimentRunner(algorithm=algo, max_iterations=1)
         result = runner.run(mock_components)
 
+        torch.testing.assert_close(result.actual, actual_data)
         torch.testing.assert_close(
             result.predicted, expected_predicted, rtol=1e-7, atol=1e-10
         )
@@ -972,14 +950,6 @@ class TestRunnerResultBuilderFallback:
     ) -> None:
 
         mock_components.dataset.name = "test_burgers"
-        fallback_eval = EvaluationResult(
-            mse=0.1,
-            nmse=0.1,
-            r2=0.9,
-            residuals=torch.zeros(10),
-        )
-        mock_components.evaluator.evaluate_expression.return_value = fallback_eval
-        mock_components.evaluator.lhs_target = torch.randn(10)
 
         runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=1)
         result = runner.run(mock_components)
@@ -992,15 +962,6 @@ class TestRunnerResultBuilderFallback:
         recording_algorithm: RecordingAlgorithm,
         mock_components: PlatformComponents,
     ) -> None:
-
-        fallback_eval = EvaluationResult(
-            mse=0.1,
-            nmse=0.1,
-            r2=0.9,
-            residuals=torch.zeros(10),
-        )
-        mock_components.evaluator.evaluate_expression.return_value = fallback_eval
-        mock_components.evaluator.lhs_target = torch.randn(10)
 
         runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=1)
         result = runner.run(mock_components)
@@ -1177,6 +1138,146 @@ class TestRunnerBetweenIterations:
 
 
 
+class TestRunnerTerminatingSignal:
+
+    @pytest.mark.unit
+    def test_stops_at_exactly_iteration_n(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingRecordingAlgorithm(done_after=3)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=10)
+        result = runner.run(mock_components)
+
+        assert result.iterations == 3
+        assert result.early_stopped is True
+
+        assert len(algo.propose_args) == 3
+        assert len(algo.update_args) == 3
+
+    @pytest.mark.unit
+    def test_terminating_run_produces_valid_experiment_result(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        from kd.search.result import ExperimentResult
+
+        algo = TerminatingRecordingAlgorithm(done_after=2)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=10)
+        result = runner.run(mock_components)
+
+        assert isinstance(result, ExperimentResult)
+        assert result.early_stopped is True
+        assert result.iterations == 2
+        assert isinstance(result.final_eval, EvaluationResult)
+        assert isinstance(result.best_expression, str)
+        assert isinstance(result.best_score, float)
+
+    @pytest.mark.unit
+    def test_non_terminating_algorithm_runs_full_length(
+        self,
+        recording_algorithm: RecordingAlgorithm,
+        mock_components: PlatformComponents,
+    ) -> None:
+        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=5)
+        result = runner.run(mock_components)
+
+        assert result.iterations == 5
+        assert result.early_stopped is False
+
+    @pytest.mark.unit
+    def test_protocol_present_but_never_done_runs_full_length(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingRecordingAlgorithm(done_after=999)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=4)
+        result = runner.run(mock_components)
+
+        assert result.iterations == 4
+        assert result.early_stopped is False
+
+    @pytest.mark.unit
+    def test_is_done_and_callback_both_fire_stops_cleanly(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingRecordingAlgorithm(done_after=3)
+        cb = RecordingCallback(stop_at_iteration=2)
+        runner = ExperimentRunner(
+            algorithm=algo, max_iterations=10, callbacks=[cb]
+        )
+        result = runner.run(mock_components)
+
+        assert result.early_stopped is True
+        assert result.iterations == 3
+
+        assert len(algo.update_args) == 3
+        assert cb.iteration_ends == [0, 1, 2]
+
+    @pytest.mark.unit
+    def test_callback_stops_before_is_done_would_fire(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingRecordingAlgorithm(done_after=5)
+        cb = RecordingCallback(stop_at_iteration=1)
+        runner = ExperimentRunner(
+            algorithm=algo, max_iterations=10, callbacks=[cb]
+        )
+        result = runner.run(mock_components)
+
+        assert result.early_stopped is True
+        assert result.iterations == 2
+
+    @pytest.mark.unit
+    def test_between_iterations_not_called_after_done_stop(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingIterativeRecordingAlgorithm(done_after=3)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=10)
+        result = runner.run(mock_components)
+
+        assert result.iterations == 3
+        assert result.early_stopped is True
+        assert algo.between_iterations_count == 2
+
+    @pytest.mark.unit
+    def test_done_on_first_iteration_stops_immediately(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = TerminatingRecordingAlgorithm(done_after=1)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=10)
+        result = runner.run(mock_components)
+
+        assert result.iterations == 1
+        assert result.early_stopped is True
+        assert len(algo.update_args) == 1
+
+    @pytest.mark.unit
+    def test_is_done_never_probed_before_first_iteration(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        algo = DeferredTerminatingAlgorithm(done_after=2)
+        runner = ExperimentRunner(algorithm=algo, max_iterations=10)
+
+
+        result = runner.run(mock_components)
+
+
+        assert result.early_stopped is True
+        assert result.iterations == 2
+        assert len(algo.update_args) == 2
+
+
+
+
+
+
+
 class _MismatchedLengthAlgorithm:
 
     def __init__(self) -> None:
@@ -1194,6 +1295,12 @@ class _MismatchedLengthAlgorithm:
 
     def update(self, results: list[EvaluationResult]) -> None:
         pass
+
+    def build_final_result(self) -> EvaluationResult:
+        return EvaluationResult(mse=1.0, nmse=1.0, r2=0.0)
+
+    def build_result_target(self) -> torch.Tensor:
+        return torch.zeros(0)
 
     @property
     def best_score(self) -> float:
@@ -1233,6 +1340,12 @@ class _WrongTypeAlgorithm:
 
     def update(self, results: list[Any]) -> None:
         pass
+
+    def build_final_result(self) -> EvaluationResult:
+        return EvaluationResult(mse=1.0, nmse=1.0, r2=0.0)
+
+    def build_result_target(self) -> torch.Tensor:
+        return torch.zeros(0)
 
     @property
     def best_score(self) -> float:
@@ -1291,15 +1404,10 @@ class TestEnsureRecorderBackfill:
 
     @staticmethod
     def _components_no_recorder() -> PlatformComponents:
-
-
-
-        evaluator = MagicMock()
-        evaluator.lhs_target = torch.zeros(4)
         return PlatformComponents(
             dataset=MagicMock(),
             executor=MagicMock(),
-            evaluator=evaluator,
+            evaluator=MagicMock(),
             context=MagicMock(),
             registry=MagicMock(),
         )

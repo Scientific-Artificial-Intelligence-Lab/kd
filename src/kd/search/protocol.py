@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from kd.core.evaluator import EvaluationResult, Evaluator
     from kd.core.executor.context import ExecutionContext
     from kd.core.expr.executor import PythonExecutor
@@ -13,13 +15,13 @@ if TYPE_CHECKING:
     from kd.search.recorder import VizRecorder
 
 
-@dataclass
+@dataclass(kw_only=True)
 class PlatformComponents:
 
     dataset: PDEDataset
     executor: PythonExecutor
-    evaluator: Evaluator
-    context: ExecutionContext
+    evaluator: Evaluator | None = None
+    context: ExecutionContext | None = None
     registry: FunctionRegistry
     recorder: VizRecorder | None = None
 
@@ -29,6 +31,17 @@ class ScoreContract(Protocol):
 
     score_kind: ClassVar[str]
     score_direction: ClassVar[Literal["min", "max"]]
+
+
+@runtime_checkable
+class FacadeWiringContract(ScoreContract, Protocol):
+
+    config_cls: ClassVar[type[Any]]
+    one_shot: ClassVar[bool]
+
+    @property
+    def runner_batch_size(self) -> int:
+        ...
 
 
 @runtime_checkable
@@ -44,6 +57,12 @@ class SearchAlgorithm(Protocol):
         ...
 
     def update(self, results: list[EvaluationResult]) -> None:
+        ...
+
+    def build_final_result(self) -> EvaluationResult:
+        ...
+
+    def build_result_target(self) -> Tensor:
         ...
 
     @property
@@ -71,4 +90,12 @@ class SearchAlgorithm(Protocol):
 class IterativeSearchAlgorithm(SearchAlgorithm, Protocol):
 
     def between_iterations(self) -> None:
+        ...
+
+
+@runtime_checkable
+class TerminatingSearchAlgorithm(SearchAlgorithm, Protocol):
+
+    @property
+    def is_done(self) -> bool:
         ...

@@ -5,6 +5,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+from dataclasses import replace
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -450,7 +451,7 @@ class TestGetIntegrationResultTryExcept:
 
         assert result.warning is not None
 
-    def test_format_pde_bug_not_swallowed(
+    def test_format_pde_out_of_integration_path(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
     ) -> None:
         from unittest.mock import patch
@@ -458,15 +459,16 @@ class TestGetIntegrationResultTryExcept:
         ds = _make_pde_dataset_for_engine()
         engine = VizEngine(output_dir=tmp_path)
 
-
-        with (
-            patch(
-                "kd.core.expr.sympy_bridge.format_pde",
-                side_effect=TypeError("BUG: wrong argument type"),
-            ),
-            pytest.raises(TypeError, match="BUG"),
+        with patch(
+            "kd.core.expr.sympy_bridge.format_pde",
+            side_effect=TypeError("BUG: format_pde must not be called"),
         ):
-            engine._get_integration_result(mock_experiment_result, ds)
+            result, _notes = engine._get_integration_result(
+                mock_experiment_result, ds
+            )
+
+
+        assert "BUG" not in (result.warning or "")
 
     def test_attribute_access_bug_not_swallowed(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
@@ -679,3 +681,52 @@ class TestIntegrationWarningReportedOnce:
             w for w in report.warnings if "excluded from time integration" in w
         ]
         assert len(prune_notes) == 1, report.warnings
+
+
+class TestAutogradDomainNote:
+
+    @pytest.mark.parametrize(
+        ("config", "expect_note"),
+        [
+            ({"algorithm": "sga", "provider_kind": "finite_diff"}, False),
+            (
+                {
+                    "algorithm": "sga",
+                    "provider_kind": "finite_diff",
+                    "use_autograd": True,
+                },
+                True,
+            ),
+            ({"algorithm": "dlga", "provider_kind": "autograd"}, True),
+            ({"algorithm": "discover", "provider_kind": "finite_diff"}, False),
+            ({"algorithm": "pysr", "provider_kind": "finite_diff"}, False),
+            ({"algorithm": "eqgpt", "provider_kind": "finite_diff"}, False),
+        ],
+        ids=["sga-fd", "sga-autograd", "dlga-autograd", "discover", "pysr", "eqgpt"],
+    )
+    def test_note_uses_autograd_domain_metadata(
+        self,
+        mock_experiment_result: ExperimentResult,
+        config: dict[str, object],
+        expect_note: bool,
+    ) -> None:
+        result = replace(mock_experiment_result, config=config)
+
+        note = VizEngine._maybe_autograd_domain_note(result)
+
+        assert (note is not None) is expect_note
+
+    def test_note_wording_is_algorithm_neutral(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        result = replace(
+            mock_experiment_result,
+            config={"algorithm": "dlga", "provider_kind": "autograd"},
+        )
+
+        note = VizEngine._maybe_autograd_domain_note(result)
+
+        assert note is not None
+        assert "SGA" not in note
+        assert "autograd" in note
+        assert "finite-difference" in note

@@ -233,7 +233,7 @@ class TestDLGAPluginLifecycle:
 
         assert final.nmse == pytest.approx(1.145, abs=5e-3)
 
-        assert final.aic == pytest.approx(1.145, abs=5e-3)
+        assert final.score == pytest.approx(1.145, abs=5e-3)
         assert final.complexity == 1
         assert final.coefficients is not None
         assert final.coefficients.numel() == 1
@@ -263,7 +263,7 @@ class TestDLGAPluginLifecycle:
                     mse=0.5,
                     nmse=0.5,
                     r2=0.5,
-                    aic=0.5,
+                    score=0.5,
                     complexity=1,
                     coefficients=torch.tensor([1.0], dtype=torch.float64),
                     is_valid=True,
@@ -305,7 +305,7 @@ class TestDLGAPluginLifecycle:
                     mse=0.25,
                     nmse=0.25,
                     r2=0.0,
-                    aic=0.25,
+                    score=0.25,
                     complexity=1,
                     coefficients=torch.tensor([1.0], dtype=torch.float64),
                     is_valid=True,
@@ -321,7 +321,7 @@ class TestDLGAPluginLifecycle:
 
         result = plugin.evaluate(plugin.propose(1))[0]
 
-        assert result.aic == pytest.approx(0.55)
+        assert result.score == pytest.approx(0.55)
 
     @pytest.mark.unit
     def test_evaluators_lhs_targets_have_no_autograd_graph(self) -> None:
@@ -375,7 +375,7 @@ class TestExpressionBloatWarningLength:
             mse=nmse,
             nmse=nmse,
             r2=0.0,
-            aic=nmse,
+            score=nmse,
             complexity=complexity,
             coefficients=torch.tensor([1.0], dtype=torch.float64),
             is_valid=True,

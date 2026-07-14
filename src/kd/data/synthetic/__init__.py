@@ -32,6 +32,11 @@ from kd.data.synthetic._eqgpt_grid_loaders import (
     load_burgers_2d,
     load_eq_6_2_12,
 )
+from kd.data.synthetic._eqgpt_steady_loaders import (
+    load_laplacian_eitech,
+    load_laplacian_smile,
+    load_poisson_disk,
+)
 from kd.data.synthetic._kdv_xu2020 import generate_kdv_xu2020_data
 from kd.data.synthetic._loaders import (
     load_allen_cahn,
@@ -61,7 +66,10 @@ __all__ = [
     "load_eq_6_2_12",
     "load_kdv",
     "load_klein_gordon",
+    "load_laplacian_eitech",
+    "load_laplacian_smile",
     "load_pde_compound",
     "load_pde_divide",
+    "load_poisson_disk",
     "load_wave",
 ]

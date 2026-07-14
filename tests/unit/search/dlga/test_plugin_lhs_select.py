@@ -62,7 +62,7 @@ class _StubEvaluator:
                 mse=float("inf"),
                 nmse=float("inf"),
                 r2=0.0,
-                aic=float("nan"),
+                score=float("nan"),
                 complexity=self._complexity,
                 coefficients=None,
                 is_valid=False,
@@ -81,7 +81,7 @@ class _StubEvaluator:
 
 
 
-            aic=float("nan"),
+            score=float("nan"),
             complexity=self._complexity,
             coefficients=self._coeff,
             is_valid=True,
@@ -233,9 +233,9 @@ class TestLHSSelectByNMSE:
 
 
 
-        assert result.aic == pytest.approx(0.6, abs=1e-9), (
+        assert result.score == pytest.approx(0.6, abs=1e-9), (
             f"Expected fitness=0.6 (nmse 0.3 + 0.1*3 length penalty), "
-            f"got result.aic={result.aic!r}. Substitution attacks ruled "
+            f"got result.score={result.score!r}. Substitution attacks ruled "
             "out: mse-sub gives 0.301, r2-sub gives 1.0, nmse-only "
             "gives 0.3 — none equal 0.6. Fix: change "
             "``fitness = result.mse + ...`` to ``fitness = result.nmse + ...``."
@@ -375,9 +375,9 @@ class TestLHSAutoSelectDisabled:
 
 
 
-        assert result.aic == pytest.approx(0.8, abs=1e-9), (
+        assert result.score == pytest.approx(0.8, abs=1e-9), (
             f"Single-evaluator fitness must be nmse + epsilon * length "
-            f"= 0.5 + 0.1*3 = 0.8, got result.aic={result.aic!r}. "
+            f"= 0.5 + 0.1*3 = 0.8, got result.score={result.score!r}. "
             "The plugin still computes mse + epsilon * length = "
             "0.001 + 0.3 = 0.301 (mse-substitution attack) instead of "
             "using nmse."
@@ -642,9 +642,9 @@ class TestInvalidEvaluators:
             f"Both-invalid fallback must return u_t (insertion-order "
             f"first), got {result.lhs_name!r}"
         )
-        assert result.aic == _INVALID_FITNESS, (
+        assert result.score == _INVALID_FITNESS, (
             f"Both-invalid fallback must apply _INVALID_FITNESS sentinel, "
-            f"got result.aic={result.aic!r}"
+            f"got result.score={result.score!r}"
         )
 
     @pytest.mark.unit
@@ -660,7 +660,7 @@ class TestInvalidEvaluators:
                     mse=float("inf"),
                     nmse=float("inf"),
                     r2=0.0,
-                    aic=42.0,
+                    score=42.0,
                     complexity=1,
                     coefficients=None,
                     is_valid=False,
@@ -680,10 +680,10 @@ class TestInvalidEvaluators:
         result = plugin.evaluate(["u"])[0]
 
         assert result.is_valid is False
-        assert result.aic == _INVALID_FITNESS, (
+        assert result.score == _INVALID_FITNESS, (
             f"Invalid-branch fallback must apply _INVALID_FITNESS, not "
-            f"surface the leftover aic=42.0 from the stub. Got "
-            f"result.aic={result.aic!r}."
+            f"surface the leftover score=42.0 from the stub. Got "
+            f"result.score={result.score!r}."
         )
 
-        assert result.aic != 42.0
+        assert result.score != 42.0

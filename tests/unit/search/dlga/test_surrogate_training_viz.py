@@ -548,7 +548,7 @@ def test_prepare_surrogate_logging_does_not_disturb_generation_logging() -> None
         mse=float("inf"),
         nmse=float("inf"),
         r2=-float("inf"),
-        aic=float("inf"),
+        score=float("inf"),
         complexity=0,
         coefficients=None,
         is_valid=False,

@@ -13,7 +13,7 @@ class SolveResult:
     coefficients: torch.Tensor
     residual: float
     r2: float
-    condition_number: float
+    condition_number: float | None = None
     selected_indices: list[int] | None = None
     is_valid: bool = True
     error_message: str = ""

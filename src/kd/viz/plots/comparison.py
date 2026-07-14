@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from kd.core.equation import TermDiff, structure, term_diff
 from kd.search.result import DEFAULT_SCORE_KIND
 
 if TYPE_CHECKING:
@@ -154,10 +155,16 @@ def plot_summary_table(
     warnings: list[str] = []
     run_labels = [_safe_label(results, labels, i) for i in range(len(results))]
 
-    col_labels = ["Run", "Expression", "NMSE", "R2", "Iterations"]
+    col_labels = ["Run", "Expression", "NMSE", "R2", "Iterations", "Δ Terms vs Run 0"]
     table_data: list[list[Any]] = []
 
+    baseline_ready = _validate_baseline_for_term_diff(results, run_labels, warnings)
+    _warn_on_mixed_algorithm_vocabularies(results, warnings)
+
     for i, result in enumerate(results):
+        term_diff_text = _summary_term_diff(
+            results, i, run_labels, warnings, baseline_ready
+        )
         table_data.append(
             [
                 run_labels[i],
@@ -165,6 +172,7 @@ def plot_summary_table(
                 f"{result.final_eval.nmse:.4g}",
                 f"{result.final_eval.r2:.4f}",
                 str(result.iterations),
+                term_diff_text,
             ]
         )
 
@@ -180,6 +188,99 @@ def plot_summary_table(
     table.scale(1.0, 1.4)
 
     return warnings
+
+
+def _validate_baseline_for_term_diff(
+    results: list[ExperimentResult], run_labels: list[str], warnings: list[str]
+) -> bool:
+    if len(results) < 2:
+        return False
+    baseline = results[0]
+    if baseline.equation is None:
+        warnings.append(
+            f"Baseline {run_labels[0]} has no equation; term diffs unavailable"
+        )
+        return False
+    try:
+        structure(baseline.equation)
+    except (ValueError, NotImplementedError) as err:
+        warnings.append(
+            f"Baseline {run_labels[0]} equation is not canonicalizable; "
+            f"term diffs unavailable ({err})"
+        )
+        return False
+    return True
+
+
+def _warn_on_mixed_algorithm_vocabularies(
+    results: list[ExperimentResult], warnings: list[str]
+) -> None:
+    algorithms = {
+        algorithm
+        for result in results
+        if (algorithm := result.config.get("algorithm")) is not None
+    }
+    if len(algorithms) > 1:
+        warnings.append(
+            "Δ Terms compares canonical IR spelling; term vocabularies may "
+            f"differ across algorithms ({', '.join(sorted(map(str, algorithms)))})"
+        )
+
+
+def _summary_term_diff(
+    results: list[ExperimentResult],
+    index: int,
+    run_labels: list[str],
+    warnings: list[str],
+    baseline_ready: bool,
+) -> str:
+    if index == 0:
+        return "baseline"
+    if not baseline_ready:
+        return "n/a"
+
+    baseline_equation = results[0].equation
+    if baseline_equation is None:
+
+        return "n/a"
+
+    result = results[index]
+    if result.equation is None:
+        warnings.append(f"{run_labels[index]} has no equation; term diff unavailable")
+        return "n/a"
+
+    try:
+        delta = term_diff(baseline_equation, result.equation)
+    except (ValueError, NotImplementedError) as err:
+        warnings.append(
+            f"{run_labels[index]} equation is not canonicalizable; "
+            f"term diff unavailable ({err})"
+        )
+        return "n/a"
+
+    return _render_term_diff_cell(delta, run_labels[index], warnings)
+
+
+def _render_term_diff_cell(delta: TermDiff, label: str, warnings: list[str]) -> str:
+    markers: list[str] = []
+    if delta.form_changed:
+        markers.append("form!")
+    if delta.lhs_changed:
+        markers.append("lhs!")
+    parts = (
+        markers
+        + [f"+{term}" for term in sorted(delta.added)]
+        + [f"-{term}" for term in sorted(delta.removed)]
+    )
+    if not parts:
+        return "="
+    full = " ".join(parts)
+    if len(full) <= _DEFAULT_MAX_LEN:
+        return full
+    warnings.append(f"{label} term diff abbreviated to counts; full diff: {full}")
+    return " ".join(
+        markers + [f"+{len(delta.added)}", f"-{len(delta.removed)}", "terms"]
+    )
 
 
 _TRUNCATE_SUFFIX = "..."

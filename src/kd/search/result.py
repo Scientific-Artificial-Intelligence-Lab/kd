@@ -6,12 +6,24 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import torch
 from torch import Tensor
 
-from kd.core.evaluator import EvaluationResult
+from kd.core.equation import (
+    Equation,
+    LhsSpec,
+    build_equation,
+)
+from kd.core.equation import (
+    from_dict as equation_from_dict,
+)
+from kd.core.equation import (
+    to_dict as equation_to_dict,
+)
+from kd.core.evaluator import EvaluationResult, Evaluator
+from kd.core.expr.naming import parse_derivative_name
 from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
 
 logger = logging.getLogger(__name__)
@@ -32,7 +44,7 @@ def _serialize_evaluation_result(result: EvaluationResult) -> dict[str, Any]:
 
     Thin delegate to ``EvaluationResult.to_dict``: the dataclass method is
     now the single serialization source. Kept as a free function so existing
-    callers (``ResultBuilder`` / save path) keep importing it unchanged.
+    callers (result-build / save path) keep importing it unchanged.
     """
     return result.to_dict()
 
@@ -62,16 +74,19 @@ def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
     """Reconstruct an ``EvaluationResult`` from serialized data.
 
     ``mse`` / ``nmse`` / ``r2`` are typed ``float``, so a sanitized ``None``
-    is coerced back to ``NaN`` (see :func:`_load_float`). ``aic`` is
+    is coerced back to ``NaN`` (see :func:`_load_float`). ``score`` is
     ``float | None`` — ``None`` is a legal "not computed" sentinel and is kept
     as-is (coercing it to NaN would fabricate a score; see
-    ``test_save_with_nan_aic``).
+    ``test_save_with_nan_score``). Reads the ``"score"`` key when present;
+    falls back to the legacy ``"aic"`` key otherwise so files
+    written before the rename stay readable. Neither key present -> the
+    natural ``KeyError`` propagates.
     """
     return EvaluationResult(
         mse=_load_float(data["mse"]),
         nmse=_load_float(data["nmse"]),
         r2=_load_float(data["r2"]),
-        aic=data["aic"],
+        score=data["score"] if "score" in data else data["aic"],
         complexity=data["complexity"],
         coefficients=_deserialize_tensor(data["coefficients"]),
         is_valid=data["is_valid"],
@@ -81,6 +96,34 @@ def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
         terms=data["terms"],
         expression=data["expression"],
         lhs_name=data.get("lhs_name"),
+    )
+
+
+def _derive_lhs_spec_from_name(name: object) -> LhsSpec | None:
+    if not isinstance(name, str) or not name:
+        return None
+    parsed = parse_derivative_name(name)
+    if parsed is None:
+        return None
+    field, axis, order = parsed
+    return LhsSpec(field=field, axis=axis, order=order)
+
+
+def _derive_equation_from_final_eval(
+    final_eval: EvaluationResult,
+    lhs_label: object,
+) -> Equation | None:
+    """Rebuild a default evolution equation from legacy final-eval fields."""
+    lhs_spec = (
+        _derive_lhs_spec_from_name(final_eval.lhs_name)
+        if isinstance(final_eval.lhs_name, str) and final_eval.lhs_name
+        else _derive_lhs_spec_from_name(lhs_label)
+    )
+    return build_equation(
+        final_eval.terms,
+        final_eval.coefficients,
+        lhs_spec,
+        is_valid=final_eval.is_valid,
     )
 
 
@@ -117,28 +160,52 @@ def _infer_legacy_score_meta(data: dict[str, Any]) -> tuple[str, str]:
     return _legacy_score_label(algorithm), _legacy_score_direction(algorithm)
 
 
-@runtime_checkable
-class ResultBuilder(Protocol):
-    """Optional protocol for algorithms that build a final result directly.
+def default_final_result(expression: str, evaluator: Evaluator) -> EvaluationResult:
+    """Simple algorithms delegate their final evaluation to the platform.
 
-    Implementations must not depend on transient evaluation caches. Restoring
-    ``state`` and then calling ``build_final_result`` must return a complete
-    valid result whenever a best expression is available and the algorithm has
-    been prepared with the required evaluation context.
+    One-line ``SearchAlgorithm.build_final_result`` body for algorithms that
+    score through the platform evaluator: the returned
+    result's ``residuals`` live in the evaluator's LHS-target domain, so the
+    matching ``build_result_target`` is the evaluator's ``lhs_target``
+    (detach + clone it — see the protocol docstring's domain-consistency
+    contract).
     """
-
-    def build_final_result(self) -> EvaluationResult:
-        """Return the semantically correct final evaluation result."""
-        ...
+    return evaluator.evaluate_expression(expression)
 
 
-@runtime_checkable
-class ResultTargetProvider(Protocol):
-    """Optional protocol for algorithms with a private final target domain."""
+def invalid_evaluation_result(
+    error_message: str,
+    *,
+    score: float | None,
+    expression: str = "",
+    terms: list[str] | None = None,
+) -> EvaluationResult:
+    """Build a plugin-level invalid final evaluation result.
 
-    def build_result_target(self) -> Tensor:
-        """Return the target tensor used by ``build_final_result``."""
-        ...
+    ``residuals=None`` follows the EQGPT/L5 adjudication: ``None`` means
+    "no prediction" and the runner maps it to zero residuals where display
+    surfaces need tensors. ``score`` lands in ``.score``; callers must state
+    the score semantics explicitly.
+
+    None = not computed (score-semantics batch adjudication 2, 2026-07-07):
+    an invalid result computed nothing, so terms/selected_indices are None,
+    matching residuals=None (EQGPT/L5).
+    """
+    copied_terms = list(terms) if terms else None
+    return EvaluationResult(
+        mse=float("inf"),
+        nmse=float("inf"),
+        r2=-float("inf"),
+        score=score,
+        complexity=len(terms) if terms else 0,
+        coefficients=None,
+        is_valid=False,
+        error_message=error_message,
+        selected_indices=None,
+        residuals=None,
+        terms=copied_terms,
+        expression=expression,
+    )
 
 
 @dataclass
@@ -238,6 +305,7 @@ class ExperimentResult(RunResult):
     config: dict[str, Any]
     recorder: VizRecorder
     lhs_label: str = "u_t"
+    equation: Equation | None = None
     manifest: RunManifest | None = None
     score_kind: str = DEFAULT_SCORE_KIND
     score_direction: str = DEFAULT_SCORE_DIRECTION
@@ -257,6 +325,9 @@ class ExperimentResult(RunResult):
             "config": _make_json_safe(self.config, key="config"),
             "recorder": self.recorder.to_dict(),
             "lhs_label": self.lhs_label,
+            "equation": (
+                equation_to_dict(self.equation) if self.equation is not None else None
+            ),
 
 
             "manifest": self.manifest.to_dict() if self.manifest is not None else None,
@@ -309,6 +380,17 @@ class ExperimentResult(RunResult):
             RunManifest.from_dict(manifest_data) if manifest_data is not None else None
         )
 
+        final_eval = _deserialize_evaluation_result(data["final_eval"])
+        equation: Equation | None
+        if "equation" in data:
+            eq_data = data["equation"]
+            equation = equation_from_dict(eq_data) if eq_data is not None else None
+        else:
+            equation = _derive_equation_from_final_eval(
+                final_eval,
+                data.get("lhs_label"),
+            )
+
 
 
 
@@ -324,7 +406,7 @@ class ExperimentResult(RunResult):
             best_score=best_score,
             iterations=data["iterations"],
             early_stopped=data["early_stopped"],
-            final_eval=_deserialize_evaluation_result(data["final_eval"]),
+            final_eval=final_eval,
             actual=torch.as_tensor(data["actual"]),
             predicted=torch.as_tensor(data["predicted"]),
             dataset_name=data["dataset_name"],
@@ -332,6 +414,7 @@ class ExperimentResult(RunResult):
             config=data["config"],
             recorder=VizRecorder.from_dict(data["recorder"]),
             lhs_label=data.get("lhs_label", "u_t"),
+            equation=equation,
             manifest=manifest,
             score_kind=score_kind,
             score_direction=score_direction,

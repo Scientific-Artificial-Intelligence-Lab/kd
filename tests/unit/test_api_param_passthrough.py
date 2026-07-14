@@ -10,6 +10,7 @@ from kd.api import (
     _SUPPORTED_ALGORITHMS,
     Model,
 )
+from kd.search.eqgpt.config import EqGPTConfig
 
 if TYPE_CHECKING:
     from kd.search.discover import DiscoverConfig
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from kd.search.pysr.config import PySRConfig
     from kd.search.sga import SGAConfig
 
-    AnyConfig = SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig
+    AnyConfig = SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | EqGPTConfig
 
 
 
@@ -43,11 +44,26 @@ _CONFIG_BUILDER_BY_ALGORITHM: dict[str, str] = {
     "dlga": "_build_dlga_config",
     "discover": "_build_discover_config",
     "pysr": "_build_pysr_config",
+    "eqgpt": "_build_eqgpt_config",
+    "llm4ed": "_build_llm4ed_config",
 }
 
 
 def _build_config_for(algorithm: str, *, seed: int) -> AnyConfig:
-    model = Model(algorithm=algorithm, seed=seed, verbose=False)
+    if algorithm == "eqgpt":
+
+
+
+
+
+
+        model = Model(
+            algorithm=algorithm,
+            config=EqGPTConfig(seed=seed, sparsity_alpha=0.02),
+            verbose=False,
+        )
+    else:
+        model = Model(algorithm=algorithm, seed=seed, verbose=False)
     builder_name = _CONFIG_BUILDER_BY_ALGORITHM[algorithm]
     builder = getattr(model, builder_name)
     return builder()

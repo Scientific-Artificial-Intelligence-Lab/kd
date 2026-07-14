@@ -268,7 +268,15 @@ def evaluate_terms(
 
 
 
-    result = components.evaluator.evaluate_terms(report.valid, skip_invalid=False)
+
+
+
+    evaluator = components.evaluator
+    if evaluator is None:
+        raise TypeError(
+            "evaluate() requires components.evaluator (term fit); got None."
+        )
+    result = evaluator.evaluate_terms(report.valid, skip_invalid=False)
     if not result.is_valid:
         raise EvaluationFailedError(
             result.error_message or "Evaluation produced an invalid result"
@@ -329,7 +337,14 @@ def _resolve_lhs_order(dataset: PDEDataset, lhs_order: int | None) -> int:
     facade, where the dataset's order is authoritative and an unsupported
     ``(algorithm, lhs_order)`` fails loud.
     """
-    return dataset.lhs_order if lhs_order is None else lhs_order
+    resolved = dataset.lhs_order if lhs_order is None else lhs_order
+    if resolved == 0:
+        raise NotImplementedError(
+            "homogeneous (lhs_order=0) datasets are not supported by "
+            "evaluate_terms/validate_terms; the homogeneous path is "
+            "plugin-private (arch041 step 3c2)."
+        )
+    return resolved
 
 
 def _build_components(

@@ -161,6 +161,7 @@ class FunctionRegistry:
         reg.register("neg", _neg, arity=1)
         reg.register("n2", _square, arity=1)
         reg.register("n3", _cube, arity=1)
+        reg.register("recip", _recip, arity=1)
         reg.register("lap", _lap_stub, arity=1)
 
         return reg
@@ -171,6 +172,10 @@ class FunctionRegistry:
 
 def _safe_div_wrapper(a: Tensor, b: Tensor) -> Tensor:
     return safe_div(a, b)
+
+
+def _recip(x: Tensor) -> Tensor:
+    return safe_div(torch.ones_like(x), x)
 
 
 def _neg(x: Tensor) -> Tensor:

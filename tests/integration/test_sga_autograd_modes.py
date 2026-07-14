@@ -310,7 +310,7 @@ class TestHtmlAutogradDomainWarning:
         assert "domain" in joined
 
         html = report.report.read_text() if report.report is not None else ""
-        assert "use_autograd=True" in html
+        assert "Domain note: this run fitted derivatives in an autograd" in html
 
     def test_autograd_false_omits_domain_warning(
         self, dataset: PDEDataset, tmp_path: Path
@@ -319,7 +319,7 @@ class TestHtmlAutogradDomainWarning:
             dataset, use_autograd=False, tmp_path=tmp_path
         )
         joined = "\n".join(report.warnings).lower()
-        assert "use_autograd=true" not in joined, (
+        assert "domain note:" not in joined, (
             f"Did not expect autograd domain note for FD-only run; "
             f"got: {report.warnings}"
         )

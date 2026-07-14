@@ -37,7 +37,7 @@ def _make_result(n_samples: int = 50) -> ExperimentResult:
             mse=0.01,
             nmse=0.005,
             r2=0.95,
-            aic=-100.0,
+            score=-100.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,
@@ -170,3 +170,29 @@ class TestResidualTier2EdgeCases:
         plt.close(fig)
         figs_after = len(plt.get_fignums())
         assert figs_after <= figs_before
+
+
+class TestResidualInferGrid:
+
+    def _spatial_texts(self, fig: Figure) -> list[str]:
+
+        return [t.get_text() for t in fig.axes[1].texts]
+
+    def test_infer_grid_false_suppresses_square_guess(self) -> None:
+        result = _make_result(n_samples=16)
+        fig, warnings = plot_residual(result, field_shape=None, infer_grid=False)
+        try:
+            assert any("No spatial data" in t for t in self._spatial_texts(fig))
+            assert not any("does not match" in w for w in warnings)
+        finally:
+            plt.close(fig)
+
+    def test_infer_grid_true_still_guesses_square(self) -> None:
+
+
+        result = _make_result(n_samples=16)
+        fig, _ = plot_residual(result, field_shape=None, infer_grid=True)
+        try:
+            assert not any("No spatial data" in t for t in self._spatial_texts(fig))
+        finally:
+            plt.close(fig)

@@ -24,15 +24,13 @@ from tests.unit.search._runner_mocks import RecordingAlgorithm, StatefulAlgorith
 
 @pytest.fixture
 def mock_components() -> PlatformComponents:
-    components = PlatformComponents(
+    return PlatformComponents(
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
         context=MagicMock(),
         registry=MagicMock(),
     )
-    components.evaluator.lhs_target = torch.zeros(0)
-    return components
 
 
 @pytest.fixture

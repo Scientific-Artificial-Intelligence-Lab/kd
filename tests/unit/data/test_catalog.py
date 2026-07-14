@@ -16,6 +16,9 @@ EXPECTED_DATASET_IDS = {
     "chafee-infante",
     "convection-diffusion",
     "eq-6-2-12",
+    "eqgpt-laplacian-eitech",
+    "eqgpt-laplacian-smile",
+    "eqgpt-poisson-disk",
     "kdv",
     "klein-gordon",
     "llm4ed-fisher",
@@ -35,7 +38,8 @@ LOADABLE_DATASET_IDS = {
 }
 
 
-def _assert_nonempty(value: str, field_name: str, dataset_id: str) -> None:
+def _assert_nonempty(value: str | None, field_name: str, dataset_id: str) -> None:
+    assert value is not None, f"{dataset_id}.{field_name} must not be None"
     assert value.strip(), f"{dataset_id}.{field_name} must be non-empty"
 
 
@@ -61,7 +65,8 @@ class TestDatasetCatalog:
             assert isinstance(spec, data.DatasetSpec)
             _assert_nonempty(spec.id, "id", spec.id)
             _assert_nonempty(spec.equation, "equation", spec.id)
-            _assert_nonempty(spec.lhs, "lhs", spec.id)
+            if spec.lhs is not None:
+                _assert_nonempty(spec.lhs, "lhs", spec.id)
             _assert_nonempty(spec.fmt, "fmt", spec.id)
             _assert_nonempty(spec.source, "source", spec.id)
             _assert_nonempty(spec.license, "license", spec.id)
@@ -101,6 +106,41 @@ class TestDatasetCatalog:
             assert "EqGPT" in spec.source
             assert "EqGPT" in spec.license
             assert "eqgpt" in spec.tags
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("dataset_id", "equation", "file_name"),
+        [
+            (
+                "eqgpt-laplacian-eitech",
+                "u_xx + u_yy + 1 = 0",
+                "eqgpt_laplacian_eitech.xlsx",
+            ),
+            (
+                "eqgpt-laplacian-smile",
+                "u_xx + u_yy = 0",
+                "eqgpt_laplacian_smile.xlsx",
+            ),
+            (
+                "eqgpt-poisson-disk",
+                "u_xx + u_yy = 0",
+                "eqgpt_poisson_disk.xlsx",
+            ),
+        ],
+    )
+    def test_steady_eqgpt_specs_use_homogeneous_no_lhs_semantics(
+        self, dataset_id: str, equation: str, file_name: str
+    ) -> None:
+        spec = data.get_dataset(dataset_id)
+        assert spec.lhs is None
+        assert spec.axes == ("x", "y")
+        assert spec.fmt == "xlsx"
+        assert spec.equation == equation
+        assert spec.files == (file_name,)
+        assert "eqgpt" in spec.tags
+        assert "steady" in spec.tags
+        assert "homogeneous" in spec.tags
+        assert "scattered" in spec.tags
 
     @pytest.mark.unit
     def test_pde_compound_records_eqgpt_non_equivalence(self) -> None:

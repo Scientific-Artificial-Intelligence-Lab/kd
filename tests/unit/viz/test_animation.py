@@ -53,7 +53,7 @@ def _make_experiment_result() -> ExperimentResult:
             mse=0.0,
             nmse=0.0,
             r2=1.0,
-            aic=0.0,
+            score=0.0,
             complexity=1,
             coefficients=torch.tensor([1.0]),
             is_valid=True,

@@ -11,13 +11,15 @@ python examples/05_save_load.py
 python examples/06_realworld.py # showcase: 4 real benchmarks, autograd, full reports
 python examples/07_discover.py # DISCOVER (LSTM controller + RSPG) on Burgers
 python examples/08_dlga.py # DLGA (NN surrogate + GA) on Burgers
-python examples/09_compare_algorithms.py # SGA/DLGA/DISCOVER + PySR baseline (needs: uv sync --extra pysr)
+python examples/09_compare_algorithms.py # all 6 engines on one dataset, one ruler (optional engines skip gracefully)
 python examples/10_checkpoint_resume.py # checkpoint a run, resume it
 python examples/11_evaluate_terms.py # score your own terms, no search
 python examples/12_symbolic_regression.py # scalar SR bypass: PySR auto-search y=f(X) (needs: uv sync --extra pysr)
 python examples/13_sindy_basis_sr.py # scalar SR bypass: you supply the basis, one sparse solve
 python examples/14_field_animation_2d.py # 2D Burgers True|Predicted field animation GIF
 python examples/15_remote_dataset.py # on-demand HuggingFace dataset (needs network + uv sync --extra hub)
+python examples/16_eqgpt.py # EqGPT (pretrained GPT proposer) on Burgers (needs pretrained weights)
+python examples/17_llm4ed.py # LLM4ED (LLM equation proposer) on diffusion, offline canned provider (zero network)
 jupyter notebook examples/notebooks/getting_started.ipynb # narrated walkthrough with inline outputs
 ```
 
@@ -33,13 +35,15 @@ Each file is self-contained.
 | 06_realworld.py | **Showcase: 4 real benchmarks × 2 modes (FD + NN), full viz** | ~15-25 min |
 | 07_discover.py | **DISCOVER**: LSTM-controller symbolic regression (smoke run) | ~10 s |
 | 08_dlga.py | **DLGA**: NN_1 surrogate + GA, incl. surrogate training curve | ~3 min |
-| 09_compare_algorithms.py | **SGA / DLGA / DISCOVER on one dataset, one unified NMSE ruler**: with the external PySR as a reference baseline (needs the `pysr` extra) | ~10-15 min |
+| 09_compare_algorithms.py | **All 6 engines on one dataset, one unified NMSE ruler**: SGA / DLGA / DISCOVER always run; PySR (needs `pysr` extra) and EqGPT (needs `.pt` weights) skip gracefully when their asset is absent; llm4ed runs offline via a canned provider (a preset answer, tagged as such, not a live search) | ~6-12 min |
 | 10_checkpoint_resume.py | **Checkpoint a long run, resume after a crash** (`checkpoint_dir` / `fit(resume_from=...)`) | ~10 s |
 | 11_evaluate_terms.py | **Score candidate terms without a search**: the stateless, fail-loud `kd.evaluate_terms` / `kd.validate_terms` entry (agent-ready) | ~5 s |
 | 12_symbolic_regression.py | **Scalar SR bypass: PySR**: auto-search `y = f(X)` on the real-world TLC-CC chromatography dataset (`kd.load_tlc_cc`), no PDE/Theta/facade; fits constants *inside* functions. Needs the `pysr` extra | ~10-30 s |
 | 13_sindy_basis_sr.py | **Scalar SR bypass: SINDy**: you supply a candidate-term library, one STRidge sparse solve picks support + coefficients; fail-loud on bad terms | ~3 s |
 | 14_field_animation_2d.py | **2D Burgers field animation**: integrate the ground-truth RHS and save a True\|Predicted GIF | ~5 s |
 | 15_remote_dataset.py | **On-demand remote dataset**: list HuggingFace datasets, fetch one, preview it, and run a tiny SGA fit. Needs network and the `hub` extra | network dependent |
+| 16_eqgpt.py | **EqGPT**: pretrained generative GPT proposes candidate PDEs, kd scores + fine-tunes toward high-reward equations. Uses `EqGPTConfig.burgers_preset()` (per-problem `sparsity_alpha`, D5); needs the pretrained weights (see the script's asset hint) | ~1-2 min |
+| 17_llm4ed.py | **LLM4ED**: an LLM proposes candidate PDE right-hand sides as text, kd scores each by an EDL sparse-regression reward and evolves an elite pool. Runs offline with an inline canned `provider=` (zero network, no API key); the script comments show the real-backend path (`base_url` + `OPENAI_API_KEY`, optional `tape_record_path`) | ~10 sec |
 | notebooks/getting_started.ipynb | **Narrated getting-started notebook**: load Burgers, preview the field, fit SGA, compare against truth, and keep inline outputs for GitHub | ~1-2 min |
 
 ### Scalar symbolic regression (bypass)

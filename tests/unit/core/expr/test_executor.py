@@ -14,6 +14,7 @@ from kd.core.expr.executor import (
     _SPECIAL_OPERATORS,
     ExecutorResult,
     PythonExecutor,
+    _parse_expression,
     _should_use_full_path,
     has_open_form_diff,
 )
@@ -438,6 +439,33 @@ class TestFullPathExecution:
         expected = torch.tensor([0.01, 0.02, 0.03])
         torch.testing.assert_close(result.value, expected, rtol=1e-5, atol=1e-8)
 
+    def test_execute_pow_inside_diff(
+        self, executor: PythonExecutor, mock_context: MagicMock
+    ) -> None:
+
+        result = executor.execute("diff_x(u**2)", mock_context)
+        assert result.used_diff is True
+        expected = torch.tensor([0.1, 0.4, 0.9])
+        torch.testing.assert_close(result.value, expected, rtol=1e-5, atol=1e-8)
+
+    def test_execute_pow_mixed_with_diff(
+        self, executor: PythonExecutor, mock_context: MagicMock
+    ) -> None:
+
+        result = executor.execute("diff_x(u) + u**3", mock_context)
+        assert result.used_diff is True
+        expected = torch.tensor([1.1, 8.2, 27.3])
+        torch.testing.assert_close(result.value, expected, rtol=1e-5, atol=1e-8)
+
+    def test_pow_matches_fast_path_semantics(
+        self, executor: PythonExecutor, mock_context: MagicMock
+    ) -> None:
+        fast = executor.execute("u**2", mock_context)
+        full = executor.execute("u**2", mock_context, force_diff_path=True)
+        assert fast.used_diff is False
+        assert full.used_diff is True
+        torch.testing.assert_close(full.value, fast.value, rtol=1e-6, atol=1e-8)
+
     def test_diff_with_extra_positional_args_raises(
         self, executor: PythonExecutor, mock_context: MagicMock
     ) -> None:
@@ -455,6 +483,59 @@ class TestFullPathExecution:
     ) -> None:
         with pytest.raises(ValueError, match="diff_x.*1 argument"):
             executor.execute("diff_x()", mock_context)
+
+
+@pytest.mark.unit
+class TestParseMemoization:
+
+    def test_repeated_execute_parses_once(
+        self,
+        executor: PythonExecutor,
+        mock_context: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import ast
+
+
+        code = "add(u, 987654.321)"
+        seen: list[str] = []
+        real_parse = ast.parse
+
+        def counting_parse(source: object, *args: object, **kwargs: object):
+            if isinstance(source, str):
+                seen.append(source)
+            return real_parse(source, *args, **kwargs)
+
+        monkeypatch.setattr(ast, "parse", counting_parse)
+
+        first = executor.execute(code, mock_context)
+        second = executor.execute(code, mock_context)
+
+        torch.testing.assert_close(second.value, first.value)
+        assert seen.count(code) == 1, (
+            f"expected exactly one parse of {code!r}, got {seen.count(code)}"
+        )
+
+    def test_cached_expression_stays_context_dependent(
+        self, executor: PythonExecutor, mock_context: MagicMock
+    ) -> None:
+        code = "mul(u, 2.0)"
+        first = executor.execute(code, mock_context)
+
+        fresh = MagicMock()
+        type(fresh).device = PropertyMock(return_value=torch.device("cpu"))
+        fresh.get_variable = MagicMock(return_value=torch.tensor([10.0, 20.0, 30.0]))
+        second = executor.execute(code, fresh)
+
+        torch.testing.assert_close(first.value, torch.tensor([2.0, 4.0, 6.0]))
+        torch.testing.assert_close(second.value, torch.tensor([20.0, 40.0, 60.0]))
+
+    def test_syntax_error_still_raises_value_error(
+        self, executor: PythonExecutor, mock_context: MagicMock
+    ) -> None:
+        for _ in range(2):
+            with pytest.raises(ValueError, match="Syntax error"):
+                executor.execute("add(u,", mock_context)
 
 
 @pytest.mark.unit
@@ -900,10 +981,23 @@ class TestPathSelection:
     def test_should_use_full_path_for_lap(self) -> None:
         context = _make_lap_mock_context(["x"])
 
-        assert _should_use_full_path("lap(u)", context, force_diff_path=False) is True
-        assert _should_use_full_path("lap()", context, force_diff_path=False) is True
         assert (
-            _should_use_full_path("add(u, v)", context, force_diff_path=False) is False
+            _should_use_full_path(
+                _parse_expression("lap(u)"), context, force_diff_path=False
+            )
+            is True
+        )
+        assert (
+            _should_use_full_path(
+                _parse_expression("lap()"), context, force_diff_path=False
+            )
+            is True
+        )
+        assert (
+            _should_use_full_path(
+                _parse_expression("add(u, v)"), context, force_diff_path=False
+            )
+            is False
         )
 
 

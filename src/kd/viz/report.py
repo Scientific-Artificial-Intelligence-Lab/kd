@@ -148,7 +148,7 @@ def generate_report(
         algorithm_name=result.algorithm_name,
         best_expression=result.best_expression,
         best_expression_latex=_best_expression_latex(result),
-        best_score=f"{result.best_score:.2f}",
+        best_score=f"{result.best_score:.6g}",
 
 
         score_label=result.score_kind,

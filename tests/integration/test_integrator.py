@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-import sympy
 import torch
 
 from kd.core.integrator import IntegrationResult, integrate_pde
@@ -59,24 +58,18 @@ class TestAdvectionIntegration:
 
     def test_advection_returns_success(self, advection_dataset: PDEDataset) -> None:
 
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert isinstance(result, IntegrationResult)
         assert result.success is True
         assert result.predicted_field is not None
 
     def test_advection_output_is_tensor(self, advection_dataset: PDEDataset) -> None:
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert result.success
         assert isinstance(result.predicted_field, torch.Tensor)
 
     def test_advection_output_shape(self, advection_dataset: PDEDataset) -> None:
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert result.success
         assert result.predicted_field is not None
         assert result.predicted_field.shape == advection_dataset.get_shape()
@@ -84,9 +77,7 @@ class TestAdvectionIntegration:
     def test_advection_correlation_with_analytical(
         self, advection_dataset: PDEDataset
     ) -> None:
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert result.success
         assert result.predicted_field is not None
 
@@ -102,9 +93,7 @@ class TestAdvectionIntegration:
         assert corr.item() > 0.95, f"Correlation {corr.item():.4f} < 0.95"
 
     def test_advection_output_is_finite(self, advection_dataset: PDEDataset) -> None:
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert result.success
         assert result.predicted_field is not None
         assert torch.isfinite(result.predicted_field).all()
@@ -118,17 +107,13 @@ class TestAdvectionIntegration:
 class TestDiffusionIntegration:
 
     def test_diffusion_returns_success(self, diffusion_dataset: PDEDataset) -> None:
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 0.1 * u_xx
-        result = integrate_pde(rhs, diffusion_dataset)
+        result = integrate_pde("0.1*u_xx", diffusion_dataset)
         assert isinstance(result, IntegrationResult)
         assert result.success is True
         assert result.predicted_field is not None
 
     def test_diffusion_output_shape(self, diffusion_dataset: PDEDataset) -> None:
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 0.1 * u_xx
-        result = integrate_pde(rhs, diffusion_dataset)
+        result = integrate_pde("0.1*u_xx", diffusion_dataset)
         assert result.success
         assert result.predicted_field is not None
         assert result.predicted_field.shape == diffusion_dataset.get_shape()
@@ -136,9 +121,7 @@ class TestDiffusionIntegration:
     def test_diffusion_correlation_with_analytical(
         self, diffusion_dataset: PDEDataset
     ) -> None:
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 0.1 * u_xx
-        result = integrate_pde(rhs, diffusion_dataset)
+        result = integrate_pde("0.1*u_xx", diffusion_dataset)
         assert result.success
         assert result.predicted_field is not None
 
@@ -153,9 +136,7 @@ class TestDiffusionIntegration:
         assert corr.item() > 0.95, f"Correlation {corr.item():.4f} < 0.95"
 
     def test_diffusion_decays_over_time(self, diffusion_dataset: PDEDataset) -> None:
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 0.1 * u_xx
-        result = integrate_pde(rhs, diffusion_dataset)
+        result = integrate_pde("0.1*u_xx", diffusion_dataset)
         assert result.success
         assert result.predicted_field is not None
 
@@ -173,22 +154,14 @@ class TestDiffusionIntegration:
 class TestBurgersIntegration:
 
     def test_burgers_does_not_diverge(self, burgers_dataset: PDEDataset) -> None:
-        u = sympy.Symbol("u")
-        u_x = sympy.Symbol("u_x")
-        u_xx = sympy.Symbol("u_xx")
-        rhs = -u * u_x + 0.1 * u_xx
-        result = integrate_pde(rhs, burgers_dataset)
+        result = integrate_pde("-u*u_x + 0.1*u_xx", burgers_dataset)
         assert isinstance(result, IntegrationResult)
         assert result.success, f"Burgers integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         assert torch.isfinite(result.predicted_field).all()
 
     def test_burgers_output_shape(self, burgers_dataset: PDEDataset) -> None:
-        u = sympy.Symbol("u")
-        u_x = sympy.Symbol("u_x")
-        u_xx = sympy.Symbol("u_xx")
-        rhs = -u * u_x + 0.1 * u_xx
-        result = integrate_pde(rhs, burgers_dataset)
+        result = integrate_pde("-u*u_x + 0.1*u_xx", burgers_dataset)
         assert result.success, f"Burgers integration must succeed: {result.warning}"
         assert result.predicted_field is not None
         assert result.predicted_field.shape == burgers_dataset.get_shape()
@@ -221,8 +194,7 @@ class TestScatteredTopology:
             lhs_field="u",
             lhs_axis="t",
         )
-        rhs = sympy.Symbol("u_x")
-        result = integrate_pde(rhs, dataset)
+        result = integrate_pde("u_x", dataset)
         assert result.success is False
         assert result.predicted_field is None
         assert "SCATTERED" in result.warning or "scattered" in result.warning.lower()
@@ -237,16 +209,14 @@ class TestWrongEquations:
 
     def test_wrong_equation_does_not_crash(self, advection_dataset: PDEDataset) -> None:
 
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 100.0 * u_xx
-        result = integrate_pde(rhs, advection_dataset)
+
+        result = integrate_pde("100.0*u_xx", advection_dataset)
         assert isinstance(result, IntegrationResult)
 
 
     def test_unknown_symbols_in_rhs(self, advection_dataset: PDEDataset) -> None:
-        u_y = sympy.Symbol("u_y")
-        rhs = u_y
-        result = integrate_pde(rhs, advection_dataset)
+
+        result = integrate_pde("u_y", advection_dataset)
         assert isinstance(result, IntegrationResult)
 
 
@@ -259,9 +229,7 @@ class TestWrongEquations:
 class TestInitialCondition:
 
     def test_ic_matches_at_t0(self, advection_dataset: PDEDataset) -> None:
-        u_x = sympy.Symbol("u_x")
-        rhs = -u_x
-        result = integrate_pde(rhs, advection_dataset)
+        result = integrate_pde("-u_x", advection_dataset)
         assert result.success
         assert result.predicted_field is not None
 
@@ -270,9 +238,7 @@ class TestInitialCondition:
         torch.testing.assert_close(ic_predicted, ic_dataset, rtol=1e-5, atol=1e-8)
 
     def test_diffusion_ic_matches_at_t0(self, diffusion_dataset: PDEDataset) -> None:
-        u_xx = sympy.Symbol("u_xx")
-        rhs = 0.1 * u_xx
-        result = integrate_pde(rhs, diffusion_dataset)
+        result = integrate_pde("0.1*u_xx", diffusion_dataset)
         assert result.success
         assert result.predicted_field is not None
 
