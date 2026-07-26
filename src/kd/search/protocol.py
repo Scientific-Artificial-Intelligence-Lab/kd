@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 
+from kd.search.descriptor import InstrumentDescriptor
+
 if TYPE_CHECKING:
     from torch import Tensor
 
@@ -37,7 +39,9 @@ class ScoreContract(Protocol):
 class FacadeWiringContract(ScoreContract, Protocol):
 
     config_cls: ClassVar[type[Any]]
+    descriptor: ClassVar[InstrumentDescriptor]
     one_shot: ClassVar[bool]
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]]
 
     @property
     def runner_batch_size(self) -> int:

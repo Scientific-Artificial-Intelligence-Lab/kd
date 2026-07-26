@@ -44,6 +44,18 @@ _EXPECTED_SCORE_META = {
 
 
     "llm4ed": ("LLM4ED sparse reward", "max"),
+    "pysindy": ("NMSE", "min"),
+}
+
+
+
+
+
+
+
+
+_COMMENSURABLE_SHARED: dict[tuple[str, str], frozenset[str]] = {
+    ("NMSE", "min"): frozenset({"pysr", "pysindy"}),
 }
 
 
@@ -164,19 +176,27 @@ class TestPluginScoreContractValues:
         _kind, direction = _EXPECTED_SCORE_META[algorithm]
         assert cls.score_direction == direction
 
-    def test_builtin_score_kinds_are_pairwise_distinct(self) -> None:
-        identities = [
-            (cls.score_kind, cls.score_direction) for cls in _REGISTERED_PLUGIN_CLASSES
-        ]
+    def test_builtin_score_kinds_distinct_unless_adjudicated_commensurable(
+        self,
+    ) -> None:
+        by_identity: dict[tuple[str, str], set[str]] = {}
+        for algorithm, cls in _PLUGIN_CLASS_BY_ALGORITHM.items():
+            identity = (cls.score_kind, cls.score_direction)
+            by_identity.setdefault(identity, set()).add(algorithm)
+        for identity, algorithms in sorted(by_identity.items()):
+            if len(algorithms) == 1:
+                continue
+            assert algorithms == _COMMENSURABLE_SHARED.get(identity), (
+                f"score identity {identity} shared by {sorted(algorithms)} "
+                "without a commensurability adjudication (_COMMENSURABLE_SHARED)"
+            )
 
-        assert len(set(identities)) == len(identities), (
-            f"built-in score identities must be pairwise distinct; got {identities}"
-        )
 
-
+        identities = set(by_identity)
         assert ("DLGA fitness", "min") in identities
         assert ("AIC", "min") in identities
         assert ("reward", "max") in identities
+        assert ("NMSE", "min") in identities
 
     def test_no_builtin_uses_the_generic_fallback_kind(self) -> None:
         for cls in _REGISTERED_PLUGIN_CLASSES:

@@ -645,6 +645,7 @@ class TestInvalidExpressions:
         result = evaluator.evaluate_terms([])
 
         assert result.is_valid is False
+        assert result.invalid_reason == "structural_reject"
         assert result.mse >= evaluator._penalty_value or result.r2 < 0
 
     def test_invalid_expression_returns_penalty(
@@ -1401,6 +1402,7 @@ class TestSkipInvalid:
         )
 
         assert result.is_valid is False
+        assert result.invalid_reason == "structural_reject"
 
     def test_skip_false_exception_fails(
         self,
@@ -1426,6 +1428,7 @@ class TestSkipInvalid:
         )
 
         assert result.is_valid is False
+        assert result.invalid_reason == "evaluation_error"
 
     def test_skip_false_nan_fails(
         self,
@@ -1451,6 +1454,7 @@ class TestSkipInvalid:
         )
 
         assert result.is_valid is False
+        assert result.invalid_reason == "non_finite"
 
     def test_result_terms_alignment(
         self,

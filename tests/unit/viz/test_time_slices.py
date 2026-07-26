@@ -10,6 +10,8 @@ import torch
 
 matplotlib.use("Agg")
 
+from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.figure import Figure
 
 from kd.core.evaluator import EvaluationResult
@@ -117,6 +119,19 @@ def _make_experiment_result() -> ExperimentResult:
         config={},
         recorder=recorder,
     )
+
+
+_AMPLIFY = 100.0
+
+
+def _panels(fig: Figure, prefix: str) -> list[Axes]:
+    return [ax for ax in fig.get_axes() if ax.get_title().startswith(prefix)]
+
+
+def _mappable(ax: Axes) -> ScalarMappable:
+    if ax.images:
+        return ax.images[0]
+    return ax.collections[0]
 
 
 
@@ -540,5 +555,145 @@ class TestTimeSlicesNormalRegression:
         try:
             assert isinstance(fig, Figure)
             assert len(fig.get_axes()) >= 3
+        finally:
+            plt.close(fig)
+
+
+
+
+
+
+
+class TestTimeSlicesColorScale:
+
+    def test_true_and_predicted_share_clim_with_colorbars(self) -> None:
+        ds = _make_2d_dataset(nt=5)
+        ir = IntegrationResult(
+            success=True, predicted_field=ds.get_field("u") * _AMPLIFY
+        )
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            field_axes = _panels(fig, "True") + _panels(fig, "Predicted")
+            assert field_axes
+            clims = {_mappable(ax).get_clim() for ax in field_axes}
+            assert len(clims) == 1, f"panels disagree on scale: {clims}"
+            assert all(_mappable(ax).colorbar is not None for ax in field_axes)
+        finally:
+            plt.close(fig)
+
+    def test_snapshots_share_one_scale_so_amplitude_decay_stays_visible(self) -> None:
+        ds = _make_2d_dataset(nt=5)
+        ir = _make_integration_result(ds)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            true_axes = _panels(fig, "True")
+            assert len(true_axes) > 1
+            clims = {_mappable(ax).get_clim() for ax in true_axes}
+            assert len(clims) == 1, f"snapshots renormalised per column: {clims}"
+
+
+            _, vmax = clims.pop()
+            assert vmax == pytest.approx(float(ds.get_field("u").max()))
+        finally:
+            plt.close(fig)
+
+    def test_clipped_prediction_reports_its_real_range(self) -> None:
+        ds = _make_2d_dataset(nt=5)
+        ir = IntegrationResult(
+            success=True, predicted_field=ds.get_field("u") * _AMPLIFY
+        )
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            pred_axes = _panels(fig, "Predicted")
+            assert pred_axes
+            for ax in pred_axes:
+                assert "clipped" in ax.get_title()
+                assert _mappable(ax).colorbar.extend == "both"
+        finally:
+            plt.close(fig)
+
+    def test_failed_integration_still_leaves_true_panels_scaled(self) -> None:
+        ds = _make_2d_dataset(nt=5)
+        ir = _make_integration_result(ds, success=False)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            true_axes = _panels(fig, "True")
+            assert true_axes
+            clims = {_mappable(ax).get_clim() for ax in true_axes}
+            assert len(clims) == 1
+            assert all(_mappable(ax).colorbar is not None for ax in true_axes)
+        finally:
+            plt.close(fig)
+
+
+class TestTimeSlices1DYScale:
+
+    def test_columns_share_one_ylim_so_amplitude_decay_stays_visible(self) -> None:
+        ds = _make_1d_dataset(nt=10)
+        ir = _make_integration_result(ds)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            panels = [ax for ax in fig.get_axes() if ax.lines]
+            assert len(panels) > 1
+            ylims = {ax.get_ylim() for ax in panels}
+            assert len(ylims) == 1, f"columns renormalised independently: {ylims}"
+
+
+            _, top = ylims.pop()
+            assert top >= float(ds.get_field("u").max())
+        finally:
+            plt.close(fig)
+
+    def test_constant_true_field_does_not_shrink_the_prediction_away(self) -> None:
+        ds = _make_1d_dataset(nt=10)
+        ds.fields["u"] = FieldData(
+            name="u", values=torch.zeros_like(ds.get_field("u"))
+        )
+        x = ds.get_coords("x")
+        pred = (0.05 * torch.sin(x)).unsqueeze(1).expand_as(ds.get_field("u"))
+        ir = IntegrationResult(success=True, predicted_field=pred.contiguous())
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            panels = [ax for ax in fig.get_axes() if ax.lines]
+            assert panels
+            lo, hi = panels[0].get_ylim()
+            pred_span = float(pred.max() - pred.min())
+
+
+            assert pred_span / (hi - lo) > 0.5
+        finally:
+            plt.close(fig)
+
+    def test_prediction_inside_the_margin_is_not_called_clipped(self) -> None:
+        ds = _make_1d_dataset(nt=10)
+        ir = IntegrationResult(success=True, predicted_field=ds.get_field("u") * 1.02)
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            panels = [ax for ax in fig.get_axes() if ax.lines]
+            assert panels
+            assert not any("clipped" in ax.get_title() for ax in panels)
+        finally:
+            plt.close(fig)
+
+    def test_prediction_leaving_the_shared_range_is_disclosed(self) -> None:
+        ds = _make_1d_dataset(nt=10)
+        ir = IntegrationResult(
+            success=True, predicted_field=ds.get_field("u") * _AMPLIFY
+        )
+        result = _make_experiment_result()
+        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        try:
+            panels = [ax for ax in fig.get_axes() if ax.lines]
+            assert panels
+            for ax in panels:
+                assert "Predicted" in ax.get_title()
+                assert "clipped" in ax.get_title()
         finally:
             plt.close(fig)

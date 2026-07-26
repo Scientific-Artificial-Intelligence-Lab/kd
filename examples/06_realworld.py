@@ -1,4 +1,5 @@
 
+import shutil
 from pathlib import Path
 
 import kd
@@ -54,6 +55,9 @@ for loader in DATASETS:
 
             checkpoint_dir=out_dir / "checkpoints",
         )
+
+
+        shutil.rmtree(out_dir / "checkpoints", ignore_errors=True)
         model.fit(dataset)
 
         print(f"Discovered: {model.best_expr_}")

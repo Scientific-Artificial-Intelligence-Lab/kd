@@ -101,12 +101,13 @@ class TestResidualProgram:
             assert term_ir in program
 
     @pytest.mark.unit
-    def test_evolution_residual_is_reserved(self) -> None:
+    def test_evolution_residual_arm_is_implemented(self) -> None:
+
+
 
 
         evolution = make_evolution(LhsSpec("u", "t", 1), [("diff2_x(u)", Scalar(0.1))])
-        with pytest.raises(NotImplementedError):
-            residual_program(evolution)
+        assert residual_program(evolution) == "sub(mul(0.1, diff2_x(u)), u_t)"
 
     @pytest.mark.unit
     def test_non_finite_coefficient_rejected_at_render(self) -> None:

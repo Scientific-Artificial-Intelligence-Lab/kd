@@ -721,6 +721,28 @@ def test_render_surrogate_training_one_line_bound_to_recorder(ax: Axes) -> None:
 
 
 @pytest.mark.unit
+def test_render_surrogate_val_keeps_own_prefix_when_val_is_short(ax: Axes) -> None:
+    epochs = [1, 2, 3, 4, 5]
+    train = [200.0 / e for e in epochs]
+    val = [2.0, 1.0, 0.5]
+    recorder = _recorder_with_surrogate_curve(
+        with_val=True, with_best=False, epochs=epochs, train=train, val=val
+    )
+    dlga_viz.render(NEW_PLOT_NAME, ax, recorder)
+
+    val_line = _find_line_in_band(ax, 0.0, 10.0)
+    assert val_line is not None, "no line found in the val band (0, 10)"
+    np.testing.assert_allclose(
+        _line_xdata(val_line), np.asarray(epochs[: len(val)], dtype=float)
+    )
+    np.testing.assert_allclose(_line_ydata(val_line), np.asarray(val))
+
+    train_line = _find_line_in_band(ax, 10.0, 1000.0)
+    assert train_line is not None, "no line found in the train band (10, 1000)"
+    np.testing.assert_allclose(_line_xdata(train_line), np.asarray(epochs, dtype=float))
+
+
+@pytest.mark.unit
 def test_render_surrogate_training_best_epoch_marker_x_equals_best(ax: Axes) -> None:
     epochs = [1, 2, 4, 8, 16]
     train = [100.0 / e for e in epochs]
@@ -1015,6 +1037,84 @@ def test_get_data_surrogate_training_nonfinite_becomes_none() -> None:
     assert data["y_val"][1] == pytest.approx(5.0)
 
     json.dumps(data, allow_nan=False)
+
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_get_data_short_val_is_padded_to_x_length() -> None:
+    epochs = [1, 2, 3, 4, 5]
+    train = [100.0 / e for e in epochs]
+    val = [5.5, 4.5, 3.5]
+    recorder = _recorder_with_surrogate_curve(
+        with_val=True, with_best=False, epochs=epochs, train=train, val=val
+    )
+    data = dlga_viz.get_data(NEW_PLOT_NAME, recorder)
+
+    x = data["x"]
+    y_val = data["y_val"]
+    assert list(x) == epochs, f"x must stay the full epoch axis; got {list(x)!r}."
+    assert y_val is not None and len(y_val) == len(x), (
+        f"y_val must be reindexed onto x (len {len(x)}); got "
+        f"{None if y_val is None else len(y_val)} samples: {y_val!r}."
+    )
+    assert y_val[: len(val)] == pytest.approx(val), (
+        f"the logged val samples must keep positions 0..{len(val) - 1}; got {y_val!r}."
+    )
+    assert y_val[len(val):] == [None, None], (
+        f"epochs with no val sample must be None; got {y_val[len(val):]!r}."
+    )
+    json.dumps(data, allow_nan=False)
+
+
+@pytest.mark.unit
+def test_get_data_long_val_is_truncated_to_x_length() -> None:
+    epochs = [1, 2, 3, 4, 5]
+    train = [100.0, 50.0, 25.0]
+    val = [9.0, 8.0, 7.0, 6.0, 5.0]
+    recorder = _recorder_with_surrogate_curve(
+        with_val=True, with_best=False, epochs=epochs, train=train, val=val
+    )
+    data = dlga_viz.get_data(NEW_PLOT_NAME, recorder)
+
+    x = data["x"]
+    y_val = data["y_val"]
+    expected_x = epochs[: len(train)]
+    assert list(x) == expected_x, (
+        f"x must truncate to the train prefix {expected_x!r}; got {list(x)!r}."
+    )
+    assert y_val is not None and len(y_val) == len(x), (
+        f"y_val must truncate to x (len {len(x)}); got "
+        f"{None if y_val is None else len(y_val)} samples: {y_val!r}."
+    )
+    assert y_val == pytest.approx(val[: len(x)]), (
+        f"the surviving val samples must be the leading prefix; got {y_val!r}."
+    )
+    json.dumps(data, allow_nan=False)
+
+
+@pytest.mark.unit
+def test_get_data_equal_length_val_is_verbatim() -> None:
+    epochs = [1, 7, 23, 99, 250]
+    train = [100.0 / e for e in epochs]
+    val = [10.0 / e for e in epochs]
+    recorder = _recorder_with_surrogate_curve(
+        with_val=True, with_best=False, epochs=epochs, train=train, val=val
+    )
+    data = dlga_viz.get_data(NEW_PLOT_NAME, recorder)
+
+    y_val = data["y_val"]
+    assert y_val is not None and len(y_val) == len(data["x"]) == len(epochs)
+    assert y_val == pytest.approx(val), (
+        f"y_val must equal the logged val series; got {y_val!r}."
+    )
+    assert None not in y_val, (
+        f"the equal-length path must not inject any None; got {y_val!r}."
+    )
 
 
 @pytest.mark.unit

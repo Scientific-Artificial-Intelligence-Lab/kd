@@ -112,8 +112,8 @@ class TestRunnerPopulatesManifest:
         manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
-        assert isinstance(manifest.dataset_fingerprint, str)
-        assert manifest.dataset_fingerprint != ""
+        assert isinstance(manifest.dataset_cache_fingerprint, str)
+        assert manifest.dataset_cache_fingerprint != ""
         assert isinstance(manifest.kd_version, str)
         assert manifest.kd_version != ""
 
@@ -124,7 +124,7 @@ class TestRunnerPopulatesManifest:
         manifest = runner.run(_real_components(dataset)).manifest
 
         assert manifest is not None
-        assert manifest.dataset_fingerprint == compute_dataset_fingerprint(dataset)
+        assert manifest.dataset_cache_fingerprint == compute_dataset_fingerprint(dataset)
 
     def test_kd_version_matches_installed_version(self) -> None:
         import importlib.metadata
@@ -284,7 +284,7 @@ class TestManifestRobustnessToMock:
         result = runner.run(_fresh_mock_components())
 
         assert result.manifest is not None
-        assert isinstance(result.manifest.dataset_fingerprint, str)
+        assert isinstance(result.manifest.dataset_cache_fingerprint, str)
 
     def test_mock_dataset_fingerprint_is_deterministic(self) -> None:
         runner_a = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
@@ -295,7 +295,7 @@ class TestManifestRobustnessToMock:
 
         assert fp_a is not None
         assert fp_b is not None
-        assert fp_a.dataset_fingerprint == fp_b.dataset_fingerprint
+        assert fp_a.dataset_cache_fingerprint == fp_b.dataset_cache_fingerprint
 
     def test_mock_dataset_fingerprint_has_no_object_id(self) -> None:
         runner = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=1)
@@ -303,8 +303,8 @@ class TestManifestRobustnessToMock:
         manifest = runner.run(_fresh_mock_components()).manifest
 
         assert manifest is not None
-        assert _ID_LEAK_PATTERN.search(manifest.dataset_fingerprint) is None, (
-            f"mock fingerprint leaked an object id: {manifest.dataset_fingerprint!r}"
+        assert _ID_LEAK_PATTERN.search(manifest.dataset_cache_fingerprint) is None, (
+            f"mock fingerprint leaked an object id: {manifest.dataset_cache_fingerprint!r}"
         )
 
     def test_mock_dataset_manifest_is_json_safe(self) -> None:
@@ -349,7 +349,7 @@ class TestManifestThreeAlgorithmCompat:
 
         assert manifest.seed == seed
 
-        assert manifest.dataset_fingerprint == compute_dataset_fingerprint(dataset)
+        assert manifest.dataset_cache_fingerprint == compute_dataset_fingerprint(dataset)
         assert manifest.kd_version == kd.__version__
         assert manifest.terms is None
         assert RunManifest.from_dict(manifest.to_dict()) == manifest

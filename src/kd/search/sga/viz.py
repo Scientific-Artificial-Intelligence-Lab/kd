@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 
 from kd.search.dlga.viz import (
-    _render_surrogate,
-    _surrogate_data,
+    render_surrogate,
+    surrogate_data,
 )
 from kd.viz.extension import PlotInfo
 
@@ -118,7 +118,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 
 
     if name == _SURROGATE_PLOT_NAME:
-        _render_surrogate(ax, recorder)
+        render_surrogate(ax, recorder)
         return
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
@@ -163,7 +163,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
     _check_known_name(name)
     if name == _SURROGATE_PLOT_NAME:
-        return _surrogate_data(recorder)
+        return surrogate_data(recorder)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     return {

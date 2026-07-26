@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING, Any
 
 from kd.core.jsonsafe import sanitize_float
 from kd.viz.extension import PlotInfo
+from kd.viz.gap_notes import (
+    GapVocabulary,
+    annotate_gaps,
+    band_measured_flags,
+    measured_flags,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -53,6 +59,35 @@ _LINE_MARKER = "."
 _LINE_MARKER_SIZE = 3
 
 
+
+
+_SINGLE_SOURCE: dict[str, str] = {
+    "invalid_count": "n_invalid",
+    "llm_calls": "n_llm_calls",
+}
+
+
+
+
+
+
+_POOL_GAPS = GapVocabulary(
+    unit_plural="rounds", missing="had no pool", nothing="no pool"
+)
+_PANEL_GAPS: dict[str, GapVocabulary] = {
+    "invalid_count": GapVocabulary(
+        unit_plural="rounds",
+        missing="recorded no invalid count",
+        nothing="no invalid count",
+    ),
+    "llm_calls": GapVocabulary(
+        unit_plural="rounds",
+        missing="recorded no call count",
+        nothing="no call count",
+    ),
+}
+
+
 def list_plot_infos() -> list[PlotInfo]:
     return [
         PlotInfo(name=info.name, title=info.title, description=info.description)
@@ -84,6 +119,9 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
                 label=metric,
             )
         ax.legend()
+        annotate_gaps(
+            ax, band_measured_flags(series_by_metric.values(), max_len), _POOL_GAPS
+        )
         return
 
     series = _derived_series(name, recorder)
@@ -96,6 +134,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         marker=_LINE_MARKER,
         markersize=_LINE_MARKER_SIZE,
     )
+    annotate_gaps(ax, measured_flags(_gap_source(name, recorder)), _PANEL_GAPS[name])
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -128,9 +167,12 @@ def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
 
 def _derived_series(name: str, recorder: VizRecorder | None) -> list[float | None]:
     if name == "invalid_count":
-        return [float(value) for value in _safe_get_series(recorder, "n_invalid")]
+        return [
+            float(value)
+            for value in _safe_get_series(recorder, _SINGLE_SOURCE["invalid_count"])
+        ]
 
-    n_llm_calls = _safe_get_series(recorder, "n_llm_calls")
+    n_llm_calls = _safe_get_series(recorder, _SINGLE_SOURCE["llm_calls"])
     cumulative: list[float | None] = []
     running = 0.0
     for value in n_llm_calls:
@@ -139,10 +181,12 @@ def _derived_series(name: str, recorder: VizRecorder | None) -> list[float | Non
     return cumulative
 
 
+def _gap_source(name: str, recorder: VizRecorder | None) -> list[Any]:
+    return _safe_get_series(recorder, _SINGLE_SOURCE[name])
+
+
 def _sanitized(series: list[Any]) -> list[Any]:
-    return [
-        None if value is None else sanitize_float(float(value)) for value in series
-    ]
+    return [None if value is None else sanitize_float(float(value)) for value in series]
 
 
 def _check_known_name(name: str) -> None:

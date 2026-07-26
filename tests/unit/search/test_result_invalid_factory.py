@@ -291,6 +291,17 @@ def test_runner_invalid_final_eval_matches_factory() -> None:
     _assert_same_invalid_fields(actual, expected)
 
 
+def test_item6_invalid_final_eval_reason_is_unclassified() -> None:
+
+
+
+    from kd.search.runner import ExperimentRunner
+    from tests.unit.search._runner_mocks import RecordingAlgorithm
+
+    runner = ExperimentRunner(algorithm=RecordingAlgorithm())
+    assert runner._invalid_final_eval("boom").invalid_reason == "unclassified"
+
+
 def test_sga_invalid_result_matches_factory() -> None:
     from kd.search.result import invalid_evaluation_result
     from kd.search.sga.config import SGAConfig

@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz.plots._field_panels import (
+    _RESIDUAL_SIGN,
+    _heatmap_panel,
+    _pcolormesh_panel,
+    _range_note,
+    _reference_limits,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -22,7 +29,6 @@ logger = logging.getLogger(__name__)
 _RESIDUAL_FIGSIZE = (15, 4)
 _DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 12
-_RESIDUAL_PERCENTILE = 99.0
 
 
 def plot_pde_residual_field(
@@ -82,16 +88,32 @@ def plot_pde_residual_field(
             pred_2d = None
 
         if actual_2d is not None and pred_2d is not None:
-            _render_panel(axes[0], actual_2d, f"True ({lhs_label} actual)")
-            _render_panel(axes[1], pred_2d, f"Predicted ({lhs_label} predicted)")
-            residual = actual_2d - pred_2d
-            _render_panel(axes[2], residual, "Residual", residual=True)
+
+
+
+            limits = _reference_limits(actual_2d, pred_2d)
+            _render_panel(
+                axes[0], actual_2d, f"True ({lhs_label} actual)", limits=limits
+            )
+            _render_panel(
+                axes[1],
+                pred_2d,
+                f"Predicted ({lhs_label} predicted)",
+                limits=limits,
+            )
+
+
+
+            residual = pred_2d - actual_2d
+            _render_panel(
+                axes[2], residual, f"Residual ({_RESIDUAL_SIGN})", residual=True
+            )
         else:
 
             _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
             _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
-            residual_1d = actual - predicted
-            _line_fallback(axes[2], residual_1d, "Residual")
+            residual_1d = predicted - actual
+            _line_fallback(axes[2], residual_1d, f"Residual ({_RESIDUAL_SIGN})")
 
         fig.tight_layout()
 
@@ -157,7 +179,7 @@ def _render_axis_aware(
         axes: list[Axes] = list(axes_arr.flat)
         _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
         _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
-        _line_fallback(axes[2], actual - predicted, "Residual")
+        _line_fallback(axes[2], predicted - actual, f"Residual ({_RESIDUAL_SIGN})")
         fig.tight_layout()
         return fig
 
@@ -174,11 +196,11 @@ def _render_axis_aware(
         axes = list(axes_arr.flat)
         _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
         _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
-        _line_fallback(axes[2], actual - predicted, "Residual")
+        _line_fallback(axes[2], predicted - actual, f"Residual ({_RESIDUAL_SIGN})")
         fig.tight_layout()
         return fig
 
-    residual_nd = actual_nd - pred_nd
+    residual_nd = pred_nd - actual_nd
 
 
 
@@ -191,9 +213,14 @@ def _render_axis_aware(
             dpi=_DEFAULT_DPI,
         )
         axes = list(axes_arr.flat)
-        _render_panel(axes[0], actual_nd, f"True ({lhs_label} actual)")
-        _render_panel(axes[1], pred_nd, f"Predicted ({lhs_label} predicted)")
-        _render_panel(axes[2], residual_nd, "Residual", residual=True)
+        limits = _reference_limits(actual_nd, pred_nd)
+        _render_panel(axes[0], actual_nd, f"True ({lhs_label} actual)", limits=limits)
+        _render_panel(
+            axes[1], pred_nd, f"Predicted ({lhs_label} predicted)", limits=limits
+        )
+        _render_panel(
+            axes[2], residual_nd, f"Residual ({_RESIDUAL_SIGN})", residual=True
+        )
         fig.tight_layout()
         return fig
 
@@ -256,30 +283,37 @@ def _render_1d_axis_aware(
     )
     axes: list[Axes] = list(axes_arr.flat)
 
+
+
+
+    limits = _reference_limits(actual_display, pred_display)
+
     _pcolormesh_panel(
         axes[0],
         t_coords,
         s_coords,
         actual_display,
-        f"True ({lhs_label} actual)",
+        f"True ({lhs_label} actual)" + _range_note(actual_display, limits),
         time_axis=time_axis,
         spatial_axis=s_name,
+        limits=limits,
     )
     _pcolormesh_panel(
         axes[1],
         t_coords,
         s_coords,
         pred_display,
-        f"Predicted ({lhs_label} predicted)",
+        f"Predicted ({lhs_label} predicted)" + _range_note(pred_display, limits),
         time_axis=time_axis,
         spatial_axis=s_name,
+        limits=limits,
     )
     _pcolormesh_panel(
         axes[2],
         t_coords,
         s_coords,
         residual_display,
-        "Residual",
+        f"Residual ({_RESIDUAL_SIGN})",
         time_axis=time_axis,
         spatial_axis=s_name,
         residual=True,
@@ -297,11 +331,13 @@ def _render_2d_axis_aware(
     time_axis: str,
     time_dim: int,
 ) -> Figure:
-    from kd.viz.plots._dim_utils import _pick_time_steps, _slice_nd_to_2d
+    from kd.viz.plots._dim_utils import _slice_nd_to_2d
 
     n_t = actual_nd.shape[time_dim]
-    mid_indices = _pick_time_steps(n_t, 1)
-    mid_idx = mid_indices[0]
+
+
+
+    mid_idx = n_t // 2
 
     t_coords = dataset.get_coords(time_axis).detach().cpu().numpy()
     t_val = float(t_coords[mid_idx])
@@ -323,86 +359,29 @@ def _render_2d_axis_aware(
     )
     axes: list[Axes] = list(axes_arr.flat)
 
-    _heatmap_panel(axes[0], actual_slice, f"True ({time_axis}={t_val:.3g})")
-    _heatmap_panel(axes[1], pred_slice, f"Predicted ({time_axis}={t_val:.3g})")
+
+    limits = _reference_limits(actual_slice, pred_slice)
+    _heatmap_panel(
+        axes[0],
+        actual_slice,
+        f"True ({time_axis}={t_val:.3g})" + _range_note(actual_slice, limits),
+        limits=limits,
+    )
+    _heatmap_panel(
+        axes[1],
+        pred_slice,
+        f"Predicted ({time_axis}={t_val:.3g})" + _range_note(pred_slice, limits),
+        limits=limits,
+    )
     _heatmap_panel(
         axes[2],
         residual_slice,
-        f"Residual ({time_axis}={t_val:.3g})",
+        f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})",
         residual=True,
     )
 
     fig.tight_layout()
     return fig
-
-
-def _pcolormesh_panel(
-    ax: Axes,
-    t_coords: np.ndarray,
-    s_coords: np.ndarray,
-    data: np.ndarray,
-    title: str,
-    *,
-    time_axis: str,
-    spatial_axis: str,
-    residual: bool = False,
-) -> None:
-    display = np.where(np.isfinite(data), data, np.nan)
-    if residual:
-        vmax = _robust_abs_max(display)
-        mesh = ax.pcolormesh(
-            t_coords,
-            s_coords,
-            display,
-            shading="auto",
-            rasterized=True,
-            cmap="RdBu_r",
-            vmin=-vmax,
-            vmax=vmax,
-        )
-        ax.figure.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04)
-    else:
-        ax.pcolormesh(t_coords, s_coords, display, shading="auto", rasterized=True)
-    ax.set_xlabel(time_axis)
-    ax.set_ylabel(spatial_axis)
-    ax.set_title(title)
-
-
-def _heatmap_panel(
-    ax: Axes,
-    data: np.ndarray,
-    title: str,
-    *,
-    residual: bool = False,
-) -> None:
-    display = np.where(np.isfinite(data), data, np.nan)
-    if residual:
-        vmax = _robust_abs_max(display)
-        im = ax.imshow(
-            display,
-            aspect="auto",
-            origin="lower",
-            rasterized=True,
-            cmap="RdBu_r",
-            vmin=-vmax,
-            vmax=vmax,
-        )
-        ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    else:
-        ax.imshow(display, aspect="auto", origin="lower", rasterized=True)
-    ax.set_title(title)
-
-
-def _robust_abs_max(data: np.ndarray) -> float:
-    abs_data = np.abs(data[np.isfinite(data)])
-    if abs_data.size == 0:
-        return 1.0
-    vmax = float(np.percentile(abs_data, _RESIDUAL_PERCENTILE))
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = float(abs_data.max()) if abs_data.size else 1.0
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = 1.0
-    return vmax
 
 
 def _resolve_shape(
@@ -454,29 +433,15 @@ def _render_panel(
     title: str,
     *,
     residual: bool = False,
+    limits: tuple[float, float] | None = None,
 ) -> None:
     from kd.viz.plots._dim_utils import _slice_nd_to_2d
 
     render_data = data
     if render_data.ndim > 2:
         render_data = _slice_nd_to_2d(render_data, (0, 1))
-
-    display = np.where(np.isfinite(render_data), render_data, np.nan)
-    if residual:
-        vmax = _robust_abs_max(display)
-        im = ax.imshow(
-            display,
-            aspect="auto",
-            origin="lower",
-            rasterized=True,
-            cmap="RdBu_r",
-            vmin=-vmax,
-            vmax=vmax,
-        )
-        ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    else:
-        ax.imshow(display, aspect="auto", origin="lower", rasterized=True)
-    ax.set_title(title)
+    note = "" if residual or limits is None else _range_note(render_data, limits)
+    _heatmap_panel(ax, render_data, title + note, residual=residual, limits=limits)
 
 
 def _line_fallback(

@@ -4,32 +4,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from kd.core.expr.naming import parse_compound_derivative
-from kd.core.expr.sympy_bridge import are_equivalent, to_sympy
+from kd.core.expr.sympy_bridge import are_equivalent
 from kd.search.pysr.backend import HOFEntry, PySRBackend
 from kd.search.pysr.convert import pysr_sympy_to_kd_terms
+from kd.search.term_utils import fold_add as fold_add
+from kd.search.term_utils import infer_max_atomic_order as infer_max_atomic_order
 
 logger = logging.getLogger(__name__)
-
-
-
-_UNIT_INTERCEPT = "1"
-
-
-def fold_add(kd_terms: list[str]) -> str:
-    if not kd_terms:
-        return _UNIT_INTERCEPT
-    if len(kd_terms) == 1:
-        return kd_terms[0]
-    return _build_add_chain(kd_terms)
-
-
-def _build_add_chain(kd_terms: list[str]) -> str:
-    result = kd_terms[-1]
-    for term in reversed(kd_terms[:-1]):
-        result = f"add({term}, {result})"
-    return result
-
 
 def convert_best(
     backend: PySRBackend,
@@ -99,19 +80,6 @@ def match_selected_entry(
         if are_equivalent(candidate, best_expression):
             return complexity, loss
     return None, None
-
-
-def infer_max_atomic_order(terms: list[str]) -> int:
-    max_order = 0
-    for term in terms:
-        for symbol in to_sympy(term).free_symbols:
-            parsed = parse_compound_derivative(symbol.name)
-            if parsed is None:
-                continue
-            _field, segments = parsed
-            for _axis, order in segments:
-                max_order = max(max_order, order)
-    return max_order
 
 
 def reserved_names(dataset: Any) -> set[str]:

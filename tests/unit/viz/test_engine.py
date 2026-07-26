@@ -76,6 +76,22 @@ class TestRenderUniversal:
         assert len(report.warnings) == 0, f"Unexpected warnings: {report.warnings}"
 
 
+class _NoVizAlgorithm:
+    pass
+
+
+class _ZeroPlotsAlgorithm:
+
+    def list_plots(self):
+        return []
+
+    def render_plot(self, name, ax) -> None:
+        raise AssertionError("must not be called with zero plots")
+
+    def get_plot_data(self, name):
+        raise AssertionError("must not be called with zero plots")
+
+
 class TestRenderAll:
 
     def test_without_dataset(
@@ -87,6 +103,34 @@ class TestRenderAll:
 
         field_files = [f for f in report.figures if "field" in str(f)]
         assert len(field_files) == 0
+
+    def test_no_algorithm_emits_no_plugin_warning(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result)
+        assert not [w for w in report.warnings if "VizExtension" in w]
+
+    def test_non_viz_algorithm_warns_zero_plots(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(
+            mock_experiment_result, algorithm=_NoVizAlgorithm()
+        )
+        assert any(
+            "no VizExtension" in w and "_NoVizAlgorithm" in w
+            for w in report.warnings
+        )
+
+    def test_zero_plot_viz_algorithm_warns(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(
+            mock_experiment_result, algorithm=_ZeroPlotsAlgorithm()
+        )
+        assert any("declared zero plots" in w for w in report.warnings)
 
     def test_with_dataset_renders_field(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult

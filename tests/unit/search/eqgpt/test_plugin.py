@@ -217,6 +217,51 @@ def test_prepare_preserves_perturbed_restored_state() -> None:
 
 
 
+def _plugin_lr(finetune_lr: float) -> EqGPTPlugin:
+    config = EqGPTConfig(
+        sparsity_alpha=0.02,
+        seed=0,
+        samples_per_epoch=_BATCH,
+        top_k=4,
+        max_length=12,
+        finetune_lr=finetune_lr,
+    )
+    return EqGPTPlugin(config, backend=FakeGPTBackend(57, seed=0))
+
+
+def test_restore_reasserts_live_finetune_lr_and_keeps_moments() -> None:
+    donor_lr, live_lr = 1e-4, 5e-3
+    assert donor_lr != live_lr
+    donor = _plugin_lr(donor_lr)
+    donor.prepare(_components())
+    _run(donor, epochs=1)
+    donor_state = donor.state
+    donor_opt = donor_state["optimizer_state"]
+
+
+    assert all(group["lr"] == donor_lr for group in donor_opt["param_groups"])
+    assert donor_opt["state"]
+
+    subject = _plugin_lr(live_lr)
+    subject.state = donor_state
+    subject.prepare(_components())
+
+
+
+    assert subject._optimizer is not None
+    assert all(
+        group["lr"] == live_lr for group in subject._optimizer.param_groups
+    )
+    loaded = subject._optimizer.state_dict()["state"]
+    for idx, param_state in donor_opt["state"].items():
+        torch.testing.assert_close(loaded[idx]["exp_avg"], param_state["exp_avg"])
+
+
+
+
+
+
+
 
 
 

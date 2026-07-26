@@ -15,6 +15,7 @@ from kd.core.term_cache import TermColumnCache
 from kd.data.loaders.wave_breaking_eval import WaveBreakingFit
 from kd.search.eqgpt._scoring import PENALTY, invalid_final_result, invalid_result
 from kd.search.eqgpt.reward import compute_reward
+from kd.viz.gap_notes import NO_MEASUREMENT
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +256,7 @@ class MultiCaseEvaluator:
         for bundle in self._reward_bundles:
             rr = self._score_bundle(terms, bundle)
             if rr is None or not math.isfinite(rr.r2):
-                rewards[bundle.case_name] = float("nan")
+                rewards[bundle.case_name] = NO_MEASUREMENT
             else:
                 rewards[bundle.case_name] = rr.reward
         return rewards
@@ -266,17 +267,28 @@ class MultiCaseEvaluator:
         bundle = self._primary_coeff_bundle()
         if bundle is None:
             return invalid_final_result(
-                "no primary coeff bundle", best_reward, terms=terms
+                "no primary coeff bundle",
+                best_reward,
+                terms=terms,
+                reason="evaluation_error",
             )
         if not terms:
-            return invalid_final_result("no terms to fit", best_reward, terms=terms)
+            return invalid_final_result(
+                "no terms to fit",
+                best_reward,
+                terms=terms,
+                reason="structural_reject",
+            )
         try:
             matrix = self._assemble(terms, bundle)
             theta, target = matrix[:, 1:], -matrix[:, 0]
             coefficients = np.linalg.lstsq(theta, target, rcond=None)[0]
         except _CASE_ERRORS as exc:
             return invalid_final_result(
-                f"execution error: {exc}", best_reward, terms=terms
+                f"execution error: {exc}",
+                best_reward,
+                terms=terms,
+                reason="evaluation_error",
             )
         residuals = theta @ coefficients - target
         mse = float(np.mean(residuals**2))
@@ -286,6 +298,7 @@ class MultiCaseEvaluator:
                 "non-finite residuals from primary coeff-grid refit",
                 best_reward,
                 terms=terms,
+                reason="non_finite",
             )
         lhs_var = float(target.var()) if target.size > 1 else 0.0
         r2 = 1.0 - mse / lhs_var if lhs_var > 0 else -float("inf")

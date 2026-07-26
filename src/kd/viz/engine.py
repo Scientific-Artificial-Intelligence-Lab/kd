@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any
 import matplotlib.pyplot as plt
 from matplotlib.animation import PillowWriter
 
+from kd.core.equation import Form
 from kd.data.schema import DataTopology
-from kd.viz.extension import VizExtension
+from kd.viz.extension import HomogeneousVizExtension, VizExtension
 from kd.viz.plots.animation import plot_field_animation
 from kd.viz.plots.coefficient import plot_coefficient_bar
 from kd.viz.plots.comparison import (
@@ -29,7 +30,7 @@ from kd.viz.plots.parity import plot_parity
 from kd.viz.plots.pde_residual import plot_pde_residual_field
 from kd.viz.plots.residual import plot_residual
 from kd.viz.plots.time_slices import plot_time_slices
-from kd.viz.report import ReportResult, generate_report
+from kd.viz.report import FigureSpec, ReportResult, generate_report
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -296,7 +297,11 @@ class VizEngine:
         universal_figures = list(report.figures)
 
 
-        plugin_paths = self._render_plugin_plots(algorithm, report)
+
+        homogeneous_specs = self._render_homogeneous_plots(result, algorithm, report)
+
+
+        plugin_specs = homogeneous_specs + self._render_plugin_plots(algorithm, report)
 
 
         html_path = self._output_dir / "report.html"
@@ -304,7 +309,7 @@ class VizEngine:
             result,
             universal_figures,
             html_path,
-            plugin_figures=plugin_paths,
+            plugin_figures=plugin_specs,
             warnings=report.warnings,
         )
         report.report = html_path
@@ -440,24 +445,103 @@ class VizEngine:
 
 
 
+    def _render_homogeneous_plots(
+        self,
+        result: ExperimentResult,
+        algorithm: Any | None,
+        report: ReportResult,
+    ) -> list[FigureSpec]:
+        """Render producer-owned plots only for an explicit HOMOGENEOUS form.
+
+        Returns:
+            One ``FigureSpec`` per successfully rendered plot, carrying the
+            title and description the producer declared on its ``PlotInfo``.
+        """
+        equation = result.equation
+        if (
+            equation is None
+            or equation.form is not Form.HOMOGENEOUS
+            or algorithm is None
+            or not isinstance(algorithm, HomogeneousVizExtension)
+        ):
+            return []
+
+        specs: list[FigureSpec] = []
+        for plot_info in algorithm.list_homogeneous_plots():
+            subplot_kw = (
+                {"projection": plot_info.projection}
+                if plot_info.projection is not None
+                else None
+            )
+            fig, ax = plt.subplots(
+                figsize=_PLUGIN_FIGSIZE,
+                dpi=_DEFAULT_DPI,
+                subplot_kw=subplot_kw,
+            )
+            try:
+                with style_context(self._style):
+                    algorithm.render_homogeneous_plot(plot_info.name, ax, result)
+                path = self._output_dir / (
+                    f"homogeneous_{plot_info.name}.{_SVG_FORMAT}"
+                )
+                fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
+                specs.append(
+                    FigureSpec(
+                        path=path,
+                        title=plot_info.title,
+                        description=plot_info.description,
+                    )
+                )
+                report.figures.append(path)
+            except Exception as exc:
+                msg = f"Homogeneous plot '{plot_info.name}' failed: {exc}"
+                logger.warning(msg)
+                report.warnings.append(msg)
+            finally:
+                plt.close(fig)
+        return specs
+
     def _render_plugin_plots(
         self,
         algorithm: Any | None,
         report: ReportResult,
-    ) -> list[Path]:
+    ) -> list[FigureSpec]:
         """Render plugin plots if algorithm implements VizExtension.
 
         Per-plot error isolation: a failing plugin plot does not prevent
         other plots or the report from being generated.
 
         Returns:
-            List of paths to successfully rendered plugin figures.
+            One ``FigureSpec`` per successfully rendered plugin figure,
+            carrying the title and description the plugin declared on its
+            ``PlotInfo`` descriptor.
         """
-        plugin_paths: list[Path] = []
-        if algorithm is None or not isinstance(algorithm, VizExtension):
-            return plugin_paths
+        plugin_specs: list[FigureSpec] = []
+        if algorithm is None:
+            return plugin_specs
 
-        for plot_info in algorithm.list_plots():
+
+
+
+        if not isinstance(algorithm, VizExtension):
+            msg = (
+                f"Algorithm {type(algorithm).__name__} implements no "
+                "VizExtension; 0 plugin plots rendered"
+            )
+            logger.warning(msg)
+            report.warnings.append(msg)
+            return plugin_specs
+        plot_infos = algorithm.list_plots()
+        if not plot_infos:
+            msg = (
+                f"Algorithm {type(algorithm).__name__} implements VizExtension "
+                "but declared zero plots; 0 plugin plots rendered"
+            )
+            logger.warning(msg)
+            report.warnings.append(msg)
+            return plugin_specs
+
+        for plot_info in plot_infos:
             fig, ax = plt.subplots(
                 figsize=_PLUGIN_FIGSIZE,
                 dpi=_DEFAULT_DPI,
@@ -467,7 +551,13 @@ class VizEngine:
                     algorithm.render_plot(plot_info.name, ax)
                 path = self._output_dir / f"plugin_{plot_info.name}.{_SVG_FORMAT}"
                 fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
-                plugin_paths.append(path)
+                plugin_specs.append(
+                    FigureSpec(
+                        path=path,
+                        title=plot_info.title,
+                        description=plot_info.description,
+                    )
+                )
                 report.figures.append(path)
             except Exception as exc:
                 msg = f"Plugin plot '{plot_info.name}' failed: {exc}"
@@ -476,7 +566,7 @@ class VizEngine:
             finally:
                 plt.close(fig)
 
-        return plugin_paths
+        return plugin_specs
 
     def _render_field_comparison(
         self,

@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from kd.search.dlga.surrogate_log import (
-    _SURROGATE_BEST_EPOCH_KEY,
-    _SURROGATE_EPOCH_KEY,
-    _SURROGATE_TRAIN_LOSS_KEY,
-    _SURROGATE_VAL_LOSS_KEY,
+from kd.search.surrogate_log import (
+    SURROGATE_BEST_EPOCH_KEY,
+    SURROGATE_EPOCH_KEY,
+    SURROGATE_TRAIN_LOSS_KEY,
+    SURROGATE_VAL_LOSS_KEY,
 )
 from kd.viz.extension import PlotInfo
 
@@ -128,7 +128,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 
 
     if name == _SURROGATE_PLOT_NAME:
-        _render_surrogate(ax, recorder)
+        render_surrogate(ax, recorder)
         return
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
@@ -173,7 +173,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
     _check_known_name(name)
     if name == _SURROGATE_PLOT_NAME:
-        return _surrogate_data(recorder)
+        return surrogate_data(recorder)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     return {
@@ -203,9 +203,9 @@ def _safe_get_series(recorder: VizRecorder | None, metric: str) -> list[Any]:
     return recorder.get(metric)
 
 
-def _render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
-    epochs = _last_logged_list(recorder, _SURROGATE_EPOCH_KEY)
-    train = _last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY)
+def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
+    epochs = _last_logged_list(recorder, SURROGATE_EPOCH_KEY)
+    train = _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY)
 
     ax.set_xlabel(_SURROGATE_X_LABEL)
     ax.set_ylabel(_SURROGATE_Y_LABEL)
@@ -222,7 +222,7 @@ def _render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
         )
         return
 
-    train_x, train_y = _aligned_xy(epochs, train, _SURROGATE_TRAIN_LOSS_KEY)
+    train_x, train_y = _aligned_xy(epochs, train, SURROGATE_TRAIN_LOSS_KEY)
     ax.set_yscale("log")
     ax.plot(
         train_x,
@@ -231,9 +231,9 @@ def _render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
         markersize=_LINE_MARKER_SIZE,
         label=_SURROGATE_TRAIN_LABEL,
     )
-    val = _last_logged_list(recorder, _SURROGATE_VAL_LOSS_KEY)
+    val = _last_logged_list(recorder, SURROGATE_VAL_LOSS_KEY)
     if val:
-        val_x, val_y = _aligned_xy(epochs, val, _SURROGATE_VAL_LOSS_KEY)
+        val_x, val_y = _aligned_xy(epochs, val, SURROGATE_VAL_LOSS_KEY)
         ax.plot(
             val_x,
             _mask_for_log(val_y),
@@ -241,21 +241,23 @@ def _render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
             markersize=_LINE_MARKER_SIZE,
             label=_SURROGATE_VAL_LABEL,
         )
-    best_epoch = _last_logged_scalar(recorder, _SURROGATE_BEST_EPOCH_KEY)
+    best_epoch = _last_logged_scalar(recorder, SURROGATE_BEST_EPOCH_KEY)
     if isinstance(best_epoch, (int, float)) and not isinstance(best_epoch, bool):
         ax.axvline(float(best_epoch), label=_SURROGATE_BEST_EPOCH_LABEL)
     ax.legend()
 
 
-def _surrogate_data(recorder: VizRecorder | None) -> dict[str, Any]:
-    epochs = _last_logged_list(recorder, _SURROGATE_EPOCH_KEY)
-    train = _last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY)
-    val = _last_logged_list(recorder, _SURROGATE_VAL_LOSS_KEY)
-    best_epoch = _last_logged_scalar(recorder, _SURROGATE_BEST_EPOCH_KEY)
+def surrogate_data(recorder: VizRecorder | None) -> dict[str, Any]:
+    epochs = _last_logged_list(recorder, SURROGATE_EPOCH_KEY)
+    train = _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY)
+    val = _last_logged_list(recorder, SURROGATE_VAL_LOSS_KEY)
+    best_epoch = _last_logged_scalar(recorder, SURROGATE_BEST_EPOCH_KEY)
 
 
-    train_x, train_y = _aligned_xy(epochs, train, _SURROGATE_TRAIN_LOSS_KEY)
-    val_y = _aligned_xy(epochs, val, _SURROGATE_VAL_LOSS_KEY)[1] if val else None
+    train_x, train_y = _aligned_xy(epochs, train, SURROGATE_TRAIN_LOSS_KEY)
+    val_y = (
+        _val_aligned_to_x(val, len(train_x), SURROGATE_VAL_LOSS_KEY) if val else None
+    )
     return {
         "x": [_sanitize_x(value) for value in train_x],
         "y_train": [_sanitize_y(value) for value in train_y],
@@ -282,6 +284,23 @@ def _aligned_xy(
         common,
     )
     return epochs[:common], series[:common]
+
+
+def _val_aligned_to_x(series: list[Any], width: int, series_key: str) -> list[Any]:
+    if len(series) == width:
+        return series
+    logger.warning(
+        "dlga.viz: surrogate '%s' length %d != exported x length %d; %s to %d "
+        "(drifted recorder).",
+        series_key,
+        len(series),
+        width,
+        "truncating" if len(series) > width else "tail-padding with None",
+        width,
+    )
+    if len(series) > width:
+        return series[:width]
+    return [*series, *([None] * (width - len(series)))]
 
 
 def _last_logged_list(recorder: VizRecorder | None, key: str) -> list[Any]:

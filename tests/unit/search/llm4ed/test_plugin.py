@@ -9,6 +9,7 @@ import pytest
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.search.llm4ed import plugin as plugin_mod
+from kd.search.llm4ed import viz as llm4ed_viz
 from kd.search.llm4ed.config import Llm4edConfig
 from kd.search.llm4ed.plugin import STATE_KEYS, Llm4edPlugin
 from kd.search.result import invalid_evaluation_result
@@ -255,6 +256,24 @@ def test_update_logs_exactly_the_whitelisted_metrics_with_correct_values() -> No
     assert recorder.get("n_llm_calls")[-1] == len(provider.requests)
 
 
+def test_empty_pool_round_records_gaps_not_measured_zeros() -> None:
+    rounds = 2
+    plugin, components = prepared(provider=FakeProvider(ALL_INVALID))
+    recorder = components.recorder
+    assert recorder is not None
+
+    run(plugin, rounds)
+
+    for metric in ("pool_best", "pool_median", "pool_worst"):
+        series = recorder.get(metric)
+        assert len(series) == rounds, metric
+        assert all(math.isnan(value) for value in series), metric
+        assert 0.0 not in series, metric
+        assert recorder.to_dict()[metric] == [None] * rounds, metric
+    spread = llm4ed_viz.get_data("pool_reward_spread", recorder)
+    assert spread["y"]["pool_best"] == [None] * rounds
+
+
 
 
 
@@ -294,6 +313,14 @@ def test_build_final_result_with_no_candidates_is_invalid_with_sentinel() -> Non
     assert isinstance(result, EvaluationResult)
     assert result.is_valid is False
     assert result.score == 0.0
+    assert result.invalid_reason == "no_candidate"
+
+
+def test_known_abnormal_coefficient_rejection_is_structural() -> None:
+    from kd.search.llm4ed.plugin import _invalid_reason_for_score
+    from kd.search.llm4ed.score import ERROR_ABNORMAL_COEF
+
+    assert _invalid_reason_for_score(ERROR_ABNORMAL_COEF) == "structural_reject"
 
 
 

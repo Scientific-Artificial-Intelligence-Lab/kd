@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
-from markupsafe import Markup
 
-from kd.core.expr.sympy_bridge import format_pde, to_latex
+from kd.viz.equation_display import EquationDisplay, latex_display
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
@@ -31,16 +32,44 @@ class ReportResult:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class FigureSpec:
+
+    path: Path
+    title: str | None = None
+    description: str | None = None
+
+
 @dataclass
 class _FigureEntry:
 
     title: str
     data_uri: str
+    description: str = ""
 
 
 def _figure_title_from_path(path: Path) -> str:
     stem = path.stem
     return stem.replace("_", " ").replace("-", " ").title()
+
+
+def _build_figure_entries(
+    figures: Sequence[Path | FigureSpec],
+) -> list[_FigureEntry]:
+    entries: list[_FigureEntry] = []
+    for figure in figures:
+        spec = figure if isinstance(figure, FigureSpec) else FigureSpec(path=figure)
+        data_uri = _encode_figure(spec.path)
+        if data_uri is None:
+            continue
+        entries.append(
+            _FigureEntry(
+                title=spec.title or _figure_title_from_path(spec.path),
+                data_uri=data_uri,
+                description=spec.description or "",
+            )
+        )
+    return entries
 
 
 def _encode_figure(path: Path) -> str | None:
@@ -80,61 +109,31 @@ def _build_json_summary(result: ExperimentResult) -> str:
     return json.dumps(data, indent=_JSON_INDENT, default=str)
 
 
-def _best_expression_latex(result: ExperimentResult) -> str:
-    final_eval = result.final_eval
-    if final_eval.terms is not None and final_eval.coefficients is not None:
-        try:
-            return format_pde(
-                final_eval.terms,
-                final_eval.coefficients,
-                lhs=result.lhs_label,
-                selected_indices=final_eval.selected_indices,
-            ).latex
-        except ValueError:
-            logger.exception("Failed to format report equation as full PDE")
-    return to_latex(result.best_expression, strict=False)
+def _best_expression_display(result: ExperimentResult) -> EquationDisplay:
+    return latex_display(result, label=result.algorithm_name)
 
 
 def generate_report(
     result: ExperimentResult,
-    figures: list[Path],
+    figures: Sequence[Path | FigureSpec],
     output_path: Path,
     *,
-    plugin_figures: list[Path] | None = None,
+    plugin_figures: Sequence[Path | FigureSpec] | None = None,
     warnings: list[str] | None = None,
 ) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-
-    fig_entries: list[_FigureEntry] = []
-    for fig_path in figures:
-        data_uri = _encode_figure(fig_path)
-        if data_uri is None:
-            continue
-        fig_entries.append(
-            _FigureEntry(
-                title=_figure_title_from_path(fig_path),
-                data_uri=data_uri,
-            )
-        )
+    fig_entries = _build_figure_entries(figures)
+    plugin_entries = _build_figure_entries(plugin_figures or [])
 
 
-    plugin_entries: list[_FigureEntry] = []
-    if plugin_figures:
-        for fig_path in plugin_figures:
-            data_uri = _encode_figure(fig_path)
-            if data_uri is None:
-                continue
-            plugin_entries.append(
-                _FigureEntry(
-                    title=_figure_title_from_path(fig_path),
-                    data_uri=data_uri,
-                )
-            )
 
 
-    json_summary = Markup(_build_json_summary(result))
+
+
+    json_summary = _build_json_summary(result)
+    expression = _best_expression_display(result)
 
 
     env = Environment(
@@ -146,8 +145,12 @@ def generate_report(
     html = template.render(
         dataset_name=result.dataset_name,
         algorithm_name=result.algorithm_name,
-        best_expression=result.best_expression,
-        best_expression_latex=_best_expression_latex(result),
+
+
+
+        best_expression_latex=expression.text,
+        best_expression_is_math=expression.is_math,
+        best_expression_note=expression.note,
         best_score=f"{result.best_score:.6g}",
 
 

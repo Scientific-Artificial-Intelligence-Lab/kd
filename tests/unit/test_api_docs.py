@@ -15,6 +15,7 @@ _EXPECTED_CONFIG_CLASS_NAMES = (
     "PySRConfig",
     "EqGPTConfig",
     "Llm4edConfig",
+    "PySINDyConfig",
 )
 
 

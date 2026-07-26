@@ -11,6 +11,7 @@ import torch
 from kd.api import Model
 from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
 from kd.data.synthetic import generate_burgers_data
+from kd.search.iteration_events import IterationEvent, IterationEventEmitter
 from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 
@@ -104,6 +105,16 @@ def test_model_fit_burgers_smoke(small_burgers_dataset) -> None:
     assert isinstance(m.best_score_, float)
     assert math.isfinite(m.best_score_)
     assert isinstance(m.result_, ExperimentResult)
+
+
+def test_model_sga_fit_emits_iteration_events(small_burgers_dataset) -> None:
+    events: list[IterationEvent] = []
+    emitter = IterationEventEmitter(on_event=events.append)
+    m = _fast_model(callbacks=[emitter])
+    m.fit(small_burgers_dataset)
+
+    assert len(events) >= 1
+    assert events[-1].iteration == m.result_.iterations - 1
 
 
 
@@ -206,6 +217,68 @@ def test_model_dlga_fit_runs_through_facade(
     m.fit(small_burgers_dataset)
     assert m.result_ is not None
     assert isinstance(m.algorithm_, DLGAPlugin)
+
+
+def test_model_dlga_fit_emits_iteration_events(
+    small_burgers_dataset, dlga_pretrained_surrogate
+) -> None:
+    from kd.search.dlga import DLGAConfig
+
+    events: list[IterationEvent] = []
+    emitter = IterationEventEmitter(on_event=events.append)
+    cfg = DLGAConfig(pop_size=4, seed=0, epsilon=0.0)
+    m = Model(
+        algorithm="dlga",
+        generations=2,
+        verbose=False,
+        config=cfg,
+        surrogate_model=dlga_pretrained_surrogate,
+        callbacks=[emitter],
+    )
+    m.fit(small_burgers_dataset)
+
+    assert len(events) >= 1
+    assert events[-1].iteration == m.result_.iterations - 1
+
+
+def test_model_dlga_fit_records_preprocessing_and_surrogate_time(
+    small_burgers_dataset: PDEDataset,
+) -> None:
+    from kd.search.dlga import DLGAConfig
+
+    cfg = DLGAConfig(
+        library=["u"],
+        pop_size=2,
+        seed=0,
+        epsilon=0.0,
+        lhs_auto_select=False,
+        max_modules=1,
+        max_module_length=1,
+        surrogate_hidden_sizes=[4],
+        surrogate_activation="tanh",
+        surrogate_max_epochs=1,
+        surrogate_patience=None,
+        surrogate_val_ratio=0.0,
+        surrogate_restore_best=False,
+    )
+    model = Model(
+        algorithm="dlga",
+        generations=1,
+        verbose=False,
+        config=cfg,
+    )
+
+    model.fit(small_burgers_dataset)
+
+    record = model.result_.run_record
+    assert record is not None
+    cost = record.cost
+    assert cost.preprocessing_seconds is not None
+    assert cost.preprocessing_seconds >= 0.0
+    assert cost.wallclock_seconds == (
+        cost.search_seconds + cost.preprocessing_seconds
+    )
+    assert cost.surrogate_train_seconds is not None
 
 
 def test_model_dlga_default_config(
@@ -800,6 +873,10 @@ def test_top_level_byod_exports_present() -> None:
         "generate_diffusion_data",
         "ExperimentResult",
         "SGAConfig",
+
+        "law_signature",
+        "verify_equation",
+        "VerifyPolicy",
     )
     for symbol in expected:
         assert hasattr(kd, symbol), f"kd.{symbol} is missing"

@@ -46,6 +46,10 @@ def _sqrt_best_recipe(names: list[str]) -> sympy.Expr:
     return sympy.sqrt(sympy.Symbol(names[0]))
 
 
+def _log_recipe(names: list[str]) -> sympy.Expr:
+    return sympy.log(sympy.Symbol(names[0]))
+
+
 def _make_regressor(recipe) -> tuple[PySRSymbolicRegressor, FakePySRBackend]:
     backend = FakePySRBackend(best_recipe=recipe)
     factory = make_backend_factory(backend)
@@ -89,12 +93,12 @@ class TestFitPredictRoundTrip:
         assert np.isfinite(reg.best_score_)
         assert reg.best_score_ == pytest.approx(0.0, abs=1e-9)
 
-    def test_nmse_inf_when_target_has_nan(self) -> None:
-        reg, _ = _make_regressor(_linear_two_term_recipe)
+    def test_nmse_inf_when_predictions_non_finite(self) -> None:
+        reg, _ = _make_regressor(_log_recipe)
         rng = np.random.default_rng(13)
         X = rng.normal(size=(20, 2))
-        y = 3.0 * X[:, 0] - 2.0 * X[:, 1]
-        y[3] = np.nan
+        X[3, 0] = -1.0
+        y = np.abs(X[:, 0])
         reg.fit(X, y)
 
         assert reg.best_score_ == float("inf")
@@ -289,6 +293,43 @@ class TestInputValidation:
         y = np.zeros(10, dtype=float)
         with pytest.raises(ValueError, match="x-1"):
             reg.fit(X, y, var_names=["x-1", "r"])
+
+    def test_rejects_empty_features(self) -> None:
+        reg, _ = _make_regressor(_linear_two_term_recipe)
+        with pytest.raises(ValueError, match="non-empty"):
+            reg.fit(np.zeros((0, 2), dtype=float), np.zeros(0, dtype=float))
+        with pytest.raises(ValueError, match="non-empty"):
+            reg.fit(np.zeros((10, 0), dtype=float), np.zeros(10, dtype=float))
+
+    def test_rejects_non_finite_features(self) -> None:
+        reg, _ = _make_regressor(_linear_two_term_recipe)
+        X = np.zeros((10, 2), dtype=float)
+        X[3, 1] = float("nan")
+        y = np.zeros(10, dtype=float)
+        with pytest.raises(ValueError, match="finite"):
+            reg.fit(X, y)
+
+    def test_rejects_non_finite_targets(self) -> None:
+        reg, _ = _make_regressor(_linear_two_term_recipe)
+        X = np.zeros((10, 2), dtype=float)
+        y = np.zeros(10, dtype=float)
+        y[7] = float("inf")
+        with pytest.raises(ValueError, match="finite"):
+            reg.fit(X, y)
+
+    def test_var_names_reject_bare_string(self) -> None:
+        reg, _ = _make_regressor(_linear_two_term_recipe)
+        X = np.zeros((10, 2), dtype=float)
+        y = np.zeros(10, dtype=float)
+        with pytest.raises(ValueError, match="not a single string"):
+            reg.fit(X, y, var_names="xy")
+
+    def test_var_names_reject_python_keyword(self) -> None:
+        reg, _ = _make_regressor(_linear_two_term_recipe)
+        X = np.zeros((10, 2), dtype=float)
+        y = np.zeros(10, dtype=float)
+        with pytest.raises(ValueError, match="keyword"):
+            reg.fit(X, y, var_names=["lambda", "r"])
 
     def test_accepts_2d_column_y(self) -> None:
         reg, _ = _make_regressor(_linear_two_term_recipe)

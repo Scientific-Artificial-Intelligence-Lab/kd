@@ -151,3 +151,47 @@ class TestCarrierRoundTrip:
         assert loaded.equation is not None
         assert loaded.equation.form is Form.HOMOGENEOUS
         assert loaded.equation == original.equation
+
+
+
+
+
+
+
+def _sparse_homogeneous_algorithm() -> RecordingAlgorithm:
+    algo = RecordingAlgorithm(
+        score_sequence=[0.0],
+        expression_sequence=["diff2_x(u) + diff2_z(u)"],
+    )
+    algo.result_target = torch.zeros(4, dtype=torch.float64)
+    algo.final_eval_result = EvaluationResult(
+        mse=0.0,
+        nmse=0.0,
+        r2=1.0,
+        score=0.0,
+        complexity=2,
+        coefficients=torch.tensor([1.0, 0.0, 1.0], dtype=torch.float64),
+        is_valid=True,
+        selected_indices=[0, 2],
+        residuals=torch.zeros(4, dtype=torch.float64),
+        terms=["diff2_x(u)", "diff2_y(u)", "diff2_z(u)"],
+        expression="diff2_x(u) + diff2_z(u)",
+        lhs_name=None,
+        form=Form.HOMOGENEOUS,
+    )
+    return algo
+
+
+class TestHomogeneousActiveSupportCarry:
+    @pytest.mark.unit
+    def test_homogeneous_support_is_pivot_inclusive(self) -> None:
+        result = ExperimentRunner(
+            _sparse_homogeneous_algorithm(), max_iterations=1, batch_size=1
+        ).run(_real_components(_homogeneous_dataset()))
+
+        assert result.equation is not None
+        assert result.equation.active_indices == (0, 2)
+        active_terms = [
+            result.equation.terms[i][0] for i in result.equation.active_indices
+        ]
+        assert active_terms == ["diff2_x(u)", "diff2_z(u)"]

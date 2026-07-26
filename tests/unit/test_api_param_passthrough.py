@@ -15,10 +15,18 @@ from kd.search.eqgpt.config import EqGPTConfig
 if TYPE_CHECKING:
     from kd.search.discover import DiscoverConfig
     from kd.search.dlga import DLGAConfig
+    from kd.search.pysindy.config import PySINDyConfig
     from kd.search.pysr.config import PySRConfig
     from kd.search.sga import SGAConfig
 
-    AnyConfig = SGAConfig | DLGAConfig | DiscoverConfig | PySRConfig | EqGPTConfig
+    AnyConfig = (
+        SGAConfig
+        | DLGAConfig
+        | DiscoverConfig
+        | PySRConfig
+        | PySINDyConfig
+        | EqGPTConfig
+    )
 
 
 
@@ -46,6 +54,7 @@ _CONFIG_BUILDER_BY_ALGORITHM: dict[str, str] = {
     "pysr": "_build_pysr_config",
     "eqgpt": "_build_eqgpt_config",
     "llm4ed": "_build_llm4ed_config",
+    "pysindy": "_build_pysindy_config",
 }
 
 

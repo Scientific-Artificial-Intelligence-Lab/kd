@@ -1,30 +1,50 @@
 
 from __future__ import annotations
 
-import logging
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from kd.core.equation import TermDiff, structure, term_diff
+from kd.core.equation import structure, term_diff
+from kd.search.recorder import BEST_SCORE_KEY
 from kd.search.result import DEFAULT_SCORE_KIND
+from kd.viz.plots._comparison_cells import _expression_cell, _render_term_diff_cell
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.search.result import ExperimentResult
 
-logger = logging.getLogger(__name__)
+
+def _disambiguate_labels(raw_labels: list[str]) -> list[str]:
+    counts = Counter(raw_labels)
 
 
-def _safe_label(
-    results: list[ExperimentResult],
-    labels: list[str] | None,
-    index: int,
-) -> str:
-    if labels and index < len(labels):
-        return labels[index]
-    return results[index].algorithm_name
+    used = {label for label, count in counts.items() if count == 1}
+    seen: Counter[str] = Counter()
+    disambiguated: list[str] = []
+    for label in raw_labels:
+        if counts[label] == 1:
+            disambiguated.append(label)
+            continue
+        seen[label] += 1
+        candidate = f"{label} #{seen[label]}"
+        while candidate in used:
+            seen[label] += 1
+            candidate = f"{label} #{seen[label]}"
+        used.add(candidate)
+        disambiguated.append(candidate)
+    return disambiguated
+
+
+def _run_labels(results: list[ExperimentResult], labels: list[str] | None) -> list[str]:
+    return _disambiguate_labels(
+        [
+            labels[i] if labels and i < len(labels) else results[i].algorithm_name
+            for i in range(len(results))
+        ]
+    )
 
 
 def _shared_score_ylabel(results: list[ExperimentResult]) -> str:
@@ -52,20 +72,40 @@ def render_overlaid_convergence(
     any_data = False
     all_scores: list[list[float]] = []
     score_identities: list[tuple[str, str]] = []
+    run_labels = _run_labels(results, labels)
 
     for i, result in enumerate(results):
-        label = _safe_label(results, labels, i)
-        scores = result.recorder.get("_best_score")
+        label = run_labels[i]
+        scores = result.recorder.get(BEST_SCORE_KEY)
         if not scores:
             continue
+
+
+
+
+
+        finite_scores = [
+            float(s) if isinstance(s, (int, float)) and np.isfinite(s) else float("nan")
+            for s in scores
+        ]
+
+
+
+        if not any(np.isfinite(v) for v in finite_scores):
+            warnings.append(
+                f"Run {label!r} has no finite {BEST_SCORE_KEY} data; skipped"
+            )
+            continue
         any_data = True
-        all_scores.append([float(s) for s in scores])
+        all_scores.append(finite_scores)
 
 
 
         score_identities.append(_pooling_identity(result))
         iterations = list(range(len(scores)))
-        ax.plot(iterations, scores, label=label, marker=".", markersize=2, alpha=0.6)
+        ax.plot(
+            iterations, finite_scores, label=label, marker=".", markersize=2, alpha=0.6
+        )
 
 
 
@@ -129,16 +169,51 @@ def plot_score_bar(
     labels: list[str] | None = None,
 ) -> list[str]:
     warnings: list[str] = []
-    run_labels = [_safe_label(results, labels, i) for i in range(len(results))]
-    r2_values = []
-    for r in results:
+    run_labels = _run_labels(results, labels)
+    r2_values: list[float] = []
+    invalid_positions: list[int] = []
+    for i, r in enumerate(results):
         r2 = r.final_eval.r2
         if not np.isfinite(r2):
-            warnings.append(f"Non-finite R2 ({r2}) for {r.algorithm_name}")
-            r2 = 0.0
-        r2_values.append(r2)
 
-    ax.bar(run_labels, r2_values, color="steelblue", alpha=0.7)
+
+            warnings.append(f"Non-finite R2 ({r2}) for {run_labels[i]}; shown as N/A")
+
+
+
+
+            r2_values.append(float("nan"))
+            invalid_positions.append(i)
+        else:
+            r2_values.append(float(r2))
+
+
+
+
+
+    positions = np.arange(len(results), dtype=float)
+    ax.bar(positions, r2_values, color="steelblue", alpha=0.7)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(run_labels)
+    for i in invalid_positions:
+
+
+
+
+
+
+
+
+        ax.text(
+            positions[i],
+            0.02,
+            "N/A",
+            transform=ax.get_xaxis_transform(),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="gray",
+        )
     ax.set_ylabel("$R^2$")
     ax.set_title("Score Comparison")
     ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=0.5)
@@ -153,7 +228,7 @@ def plot_summary_table(
     labels: list[str] | None = None,
 ) -> list[str]:
     warnings: list[str] = []
-    run_labels = [_safe_label(results, labels, i) for i in range(len(results))]
+    run_labels = _run_labels(results, labels)
 
     col_labels = ["Run", "Expression", "NMSE", "R2", "Iterations", "Δ Terms vs Run 0"]
     table_data: list[list[Any]] = []
@@ -168,7 +243,7 @@ def plot_summary_table(
         table_data.append(
             [
                 run_labels[i],
-                _truncate(result.best_expression, max_len=30),
+                _expression_cell(result, run_labels[i], warnings),
                 f"{result.final_eval.nmse:.4g}",
                 f"{result.final_eval.r2:.4f}",
                 str(result.iterations),
@@ -259,35 +334,3 @@ def _summary_term_diff(
         return "n/a"
 
     return _render_term_diff_cell(delta, run_labels[index], warnings)
-
-
-def _render_term_diff_cell(delta: TermDiff, label: str, warnings: list[str]) -> str:
-    markers: list[str] = []
-    if delta.form_changed:
-        markers.append("form!")
-    if delta.lhs_changed:
-        markers.append("lhs!")
-    parts = (
-        markers
-        + [f"+{term}" for term in sorted(delta.added)]
-        + [f"-{term}" for term in sorted(delta.removed)]
-    )
-    if not parts:
-        return "="
-    full = " ".join(parts)
-    if len(full) <= _DEFAULT_MAX_LEN:
-        return full
-    warnings.append(f"{label} term diff abbreviated to counts; full diff: {full}")
-    return " ".join(
-        markers + [f"+{len(delta.added)}", f"-{len(delta.removed)}", "terms"]
-    )
-
-
-_TRUNCATE_SUFFIX = "..."
-_DEFAULT_MAX_LEN = 30
-
-
-def _truncate(text: str, *, max_len: int = _DEFAULT_MAX_LEN) -> str:
-    if len(text) <= max_len:
-        return text
-    return text[: max_len - len(_TRUNCATE_SUFFIX)] + _TRUNCATE_SUFFIX

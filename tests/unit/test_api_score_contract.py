@@ -16,10 +16,19 @@ from kd.search.discover import DISCOVERPlugin
 from kd.search.dlga import DLGAPlugin
 from kd.search.eqgpt.plugin import EqGPTPlugin
 from kd.search.protocol import ScoreContract
+from kd.search.pysindy import PySINDyPlugin
 from kd.search.pysr import PySRPlugin
 from kd.search.sga import SGAPlugin
 
-_EXPECTED_ORDER = ("sga", "dlga", "discover", "pysr", "eqgpt", "llm4ed")
+_EXPECTED_ORDER = (
+    "sga",
+    "dlga",
+    "discover",
+    "pysr",
+    "eqgpt",
+    "llm4ed",
+    "pysindy",
+)
 
 
 
@@ -41,6 +50,7 @@ class TestPluginRegistry:
         assert _PLUGIN_CLASS_BY_ALGORITHM["discover"] is DISCOVERPlugin
         assert _PLUGIN_CLASS_BY_ALGORITHM["pysr"] is PySRPlugin
         assert _PLUGIN_CLASS_BY_ALGORITHM["eqgpt"] is EqGPTPlugin
+        assert _PLUGIN_CLASS_BY_ALGORITHM["pysindy"] is PySINDyPlugin
 
     def test_supported_algorithms_derived_from_registry(self) -> None:
         assert tuple(_PLUGIN_CLASS_BY_ALGORITHM) == _SUPPORTED_ALGORITHMS

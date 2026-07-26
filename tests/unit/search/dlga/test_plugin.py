@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -66,6 +67,118 @@ class TestDLGAPluginProtocol:
                     DLGAConfig(mode=mode, pop_size=4),
                     surrogate_model=_ExactQuadraticModel(),
                 )
+
+    @pytest.mark.unit
+    def test_injected_surrogate_weights_are_content_addressed(self) -> None:
+        first_model = nn.Sequential(nn.Linear(2, 3), nn.Tanh()).to(
+            dtype=torch.bfloat16
+        )
+        second_model = nn.Sequential(nn.Linear(2, 3), nn.Tanh()).to(
+            dtype=torch.bfloat16
+        )
+        with torch.no_grad():
+            for parameter in first_model.parameters():
+                parameter.fill_(1.0)
+            for parameter in second_model.parameters():
+                parameter.fill_(2.0)
+
+        first = DLGAPlugin(surrogate_model=first_model)
+        second = DLGAPlugin(surrogate_model=second_model)
+
+        assert first.config["surrogate_model"] == {
+            "artifact": "surrogate_model",
+            "format": "kd-torch-module-v1",
+        }
+        json.dumps(first.config, allow_nan=False)
+        first_artifacts = first.artifacts
+        second_artifacts = second.artifacts
+        assert first_artifacts is not None
+        assert second_artifacts is not None
+        first_identity = first_artifacts["surrogate_model"]
+        second_identity = second_artifacts["surrogate_model"]
+        assert first_identity["format"] == "kd-torch-module-v1"
+        assert len(first_identity["sha256"]) == 64
+        assert first_identity["sha256"] != second_identity["sha256"]
+
+    @pytest.mark.unit
+    def test_injected_surrogate_behavior_attributes_are_content_addressed(
+        self,
+    ) -> None:
+        first_model = nn.Sequential(nn.Linear(2, 3), nn.LeakyReLU(0.1))
+        second_model = nn.Sequential(nn.Linear(2, 3), nn.LeakyReLU(0.4))
+        second_model.load_state_dict(first_model.state_dict())
+
+        first = DLGAPlugin(surrogate_model=first_model).artifacts
+        second = DLGAPlugin(surrogate_model=second_model).artifacts
+
+        assert first is not None
+        assert second is not None
+        assert first["surrogate_model"]["sha256"] != second["surrogate_model"][
+            "sha256"
+        ]
+
+    @pytest.mark.unit
+    def test_custom_scalar_attribute_changes_surrogate_identity(self) -> None:
+
+        class ScaledModel(nn.Module):
+            def __init__(self, scale: float) -> None:
+                super().__init__()
+                self.scale = scale
+
+            def forward(self, coords: torch.Tensor) -> torch.Tensor:
+                return coords * self.scale
+
+        first = DLGAPlugin(surrogate_model=ScaledModel(1.0)).artifacts
+        second = DLGAPlugin(surrogate_model=ScaledModel(2.0)).artifacts
+
+        assert first is not None
+        assert second is not None
+        assert first["surrogate_model"]["sha256"] != second["surrogate_model"][
+            "sha256"
+        ]
+
+    @pytest.mark.unit
+    def test_unsupported_surrogate_attribute_fails_loud(self) -> None:
+
+        class OpaqueModel(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.behavior = object()
+
+            def forward(self, coords: torch.Tensor) -> torch.Tensor:
+                return coords
+
+        plugin = DLGAPlugin(surrogate_model=OpaqueModel())
+        with pytest.raises(TypeError, match=r"behavior.*object"):
+            _ = plugin.artifacts
+
+    @pytest.mark.unit
+    def test_closure_callback_attribute_fails_loud(self) -> None:
+
+        class CallbackModel(nn.Module):
+            def __init__(self, offset: float) -> None:
+                super().__init__()
+
+                def callback(value: torch.Tensor) -> torch.Tensor:
+                    return value + offset
+
+                self.callback = callback
+
+            def forward(self, value: torch.Tensor) -> torch.Tensor:
+                return self.callback(value)
+
+        first_model = CallbackModel(1.0)
+        second_model = CallbackModel(2.0)
+        assert first_model.callback.__module__ == second_model.callback.__module__
+        assert first_model.callback.__qualname__ == second_model.callback.__qualname__
+
+        for model in (first_model, second_model):
+            plugin = DLGAPlugin(surrogate_model=model)
+            with pytest.raises(
+                TypeError,
+                match=r"modules\.<root>\.callback: builtins\.function",
+            ):
+                _ = plugin.artifacts
 
 
 class TestDLGAPluginLifecycle:

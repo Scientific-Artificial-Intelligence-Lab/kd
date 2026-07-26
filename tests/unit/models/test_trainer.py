@@ -50,6 +50,8 @@ class TestTrainerInterface:
         assert isinstance(result.final_loss, float)
         assert isinstance(result.epochs_run, int)
         assert isinstance(result.early_stopped, bool)
+        assert result.elapsed_seconds is not None
+        assert result.elapsed_seconds > 0.0
 
 
 class TestTrainerDetachesAutogradInputs:

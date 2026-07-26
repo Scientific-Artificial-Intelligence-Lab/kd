@@ -63,7 +63,7 @@ class _RunnerSpy:
         type(self).last_batch_size = batch_size
         self._algorithm = algorithm
 
-    def run(self, components: Any) -> Any:
+    def run(self, components: Any, *, preprocessing_seconds: float | None = None) -> Any:
         return type(self).sentinel_result
 
 

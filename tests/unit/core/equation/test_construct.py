@@ -10,6 +10,7 @@ from kd.core.equation import (
     Scalar,
     build_equation,
     make_evolution,
+    make_homogeneous,
 )
 
 _LHS = LhsSpec(field="u", axis="t", order=1)
@@ -107,3 +108,43 @@ class TestStillReservedFormConstructors:
             pytest.skip(f"{ctor_name} reserved by absence (acceptable, D1-3)")
         with pytest.raises(NotImplementedError):
             ctor(_LHS, _TERMS)
+
+
+class TestActiveIndices:
+
+    @pytest.mark.unit
+    def test_build_equation_threads_active_indices(self) -> None:
+        eq = build_equation(
+            ["a", "b", "c"], [1.0, 0.0, 2.0], _LHS, active_indices=[0, 2]
+        )
+        assert eq is not None
+        assert eq.active_indices == (0, 2)
+
+    @pytest.mark.unit
+    def test_build_equation_active_indices_default_none(self) -> None:
+        eq = build_equation(["u_x", "u_xx"], torch.tensor([1.0, -0.5]), _LHS)
+        assert eq is not None
+        assert eq.active_indices is None
+
+    @pytest.mark.unit
+    def test_build_equation_out_of_range_degrades_metadata_not_equation(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+
+        caplog.set_level("WARNING", logger="kd.core.equation.construct")
+
+        eq = build_equation(["u_x", "u_xx"], [1.0, -0.5], _LHS, active_indices=[5])
+
+        assert eq is not None
+        assert eq.active_indices is None
+        assert "active_indices" in caplog.text
+
+    @pytest.mark.unit
+    def test_make_evolution_rejects_out_of_range_active_index(self) -> None:
+        with pytest.raises(ValueError, match="active_indices"):
+            make_evolution(_LHS, _TERMS, active_indices=[2])
+
+    @pytest.mark.unit
+    def test_make_homogeneous_rejects_out_of_range_active_index(self) -> None:
+        with pytest.raises(ValueError, match="active_indices"):
+            make_homogeneous(_TERMS, active_indices=[2])

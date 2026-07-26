@@ -45,6 +45,7 @@ def _smoke_dataset() -> PDEDataset:
 @pytest.mark.slow
 def test_model_pysr_real_fit_smoke() -> None:
     from kd import Model
+    from kd.search.iteration_events import IterationEvent, IterationEventEmitter
 
     dataset = _smoke_dataset()
     config = PySRConfig(
@@ -58,8 +59,16 @@ def test_model_pysr_real_fit_smoke() -> None:
         terms=("u", "u_x", "u_xx"),
         seed=0,
     )
-    model = Model(algorithm="pysr", verbose=False, config=config)
+
+
+
+    events: list[IterationEvent] = []
+    emitter = IterationEventEmitter(on_event=events.append)
+    model = Model(algorithm="pysr", verbose=False, config=config, callbacks=[emitter])
     model.fit(dataset)
+
+    assert len(events) == 1
+    assert events[0].iteration == 0
 
     assert isinstance(model.best_expr_, str)
     assert model.best_expr_

@@ -6,11 +6,15 @@ import logging
 import pytest
 import torch
 
-from kd.search.recorder import VizRecorder
+from kd.search.recorder import BEST_SCORE_KEY, VizRecorder
 
 
 
 
+
+
+def test_best_score_key_value_is_a_persistence_contract() -> None:
+    assert BEST_SCORE_KEY == "_best_score"
 
 
 @pytest.mark.smoke

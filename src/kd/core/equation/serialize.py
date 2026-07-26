@@ -31,6 +31,7 @@ def to_dict(eq: Equation) -> JsonObject:
                 "lhs_spec": _lhs_spec_to_dict(eq.lhs_spec),
                 "terms": _terms_to_list(eq.terms),
                 "attrs": _attrs_to_dict(eq.attrs),
+                "active_indices": _active_indices_to_list(eq.active_indices),
             }
         case Homogeneous():
             return {
@@ -38,6 +39,7 @@ def to_dict(eq: Equation) -> JsonObject:
                 "lhs_spec": None,
                 "terms": _terms_to_list(eq.terms),
                 "attrs": None,
+                "active_indices": _active_indices_to_list(eq.active_indices),
             }
     assert_never(eq)
 
@@ -46,8 +48,15 @@ def from_dict(payload: Mapping[str, object]) -> Equation:
     form = _form_from_dict(payload)
     terms = _terms_from_list(_required(payload, "terms"))
     _attrs_from_dict(payload.get("attrs"))
+
+
+    active_indices = _active_indices_from_dict(payload.get("active_indices"))
     if form is Form.EVOLUTION:
-        return make_evolution(_lhs_spec_from_dict(payload.get("lhs_spec")), terms)
+        return make_evolution(
+            _lhs_spec_from_dict(payload.get("lhs_spec")),
+            terms,
+            active_indices=active_indices,
+        )
     if form is Form.HOMOGENEOUS:
 
 
@@ -55,7 +64,7 @@ def from_dict(payload: Mapping[str, object]) -> Equation:
 
         if payload.get("lhs_spec") is not None:
             raise ValueError("HOMOGENEOUS equations must not carry a lhs_spec")
-        return make_homogeneous(terms)
+        return make_homogeneous(terms, active_indices=active_indices)
     raise NotImplementedError(f"{form.name} equations are reserved")
 
 
@@ -71,6 +80,17 @@ def _lhs_spec_to_dict(lhs_spec: LhsSpec | None) -> JsonObject | None:
 
 def _attrs_to_dict(_attrs: EquationAttrs) -> JsonObject | None:
     return None
+
+
+def _active_indices_to_list(
+    active_indices: tuple[int, ...] | None,
+) -> list[JsonValue] | None:
+    if active_indices is None:
+        return None
+    payload: list[JsonValue] = []
+    for index in active_indices:
+        payload.append(index)
+    return payload
 
 
 def _terms_to_list(terms: Sequence[Term]) -> list[JsonValue]:
@@ -120,6 +140,18 @@ def _attrs_from_dict(value: object) -> EquationAttrs:
     if value is not None:
         raise ValueError("attrs must be null in step 1")
     return EquationAttrs()
+
+
+def _active_indices_from_dict(value: object) -> tuple[int, ...] | None:
+    if value is None:
+        return None
+    payload = _as_sequence(value, field="active_indices")
+    indices: list[int] = []
+    for index, item in enumerate(payload):
+        if not isinstance(item, int) or isinstance(item, bool):
+            raise ValueError(f"active_indices[{index}] must be an integer")
+        indices.append(item)
+    return tuple(indices)
 
 
 def _terms_from_list(value: object) -> tuple[Term, ...]:

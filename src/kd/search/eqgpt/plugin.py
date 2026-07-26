@@ -12,7 +12,9 @@ from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.term_cache import TermColumnCache
 from kd.data.schema import DataTopology
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.eqgpt import _scoring
+from kd.search.eqgpt import steady_viz as _steady_viz_helpers
 from kd.search.eqgpt import viz as _viz_helpers
 from kd.search.eqgpt._multicase import (
     WAVE_LHS_ORDER,
@@ -42,11 +44,13 @@ from kd.search.eqgpt.vocab import VOCAB_SHA256, Vocab, load_vocab
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import log_whitelisted_metrics
 from kd.viz.extension import PlotInfo
+from kd.viz.gap_notes import NO_MEASUREMENT
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.search.recorder import VizRecorder
+    from kd.search.result import ExperimentResult
 
 
 
@@ -77,13 +81,94 @@ _LOGGED_METRICS: Final[tuple[str, ...]] = (
 )
 
 
+
+
+
+
+
+
+
+
+_NO_MEASUREMENT: Final[float] = NO_MEASUREMENT
+
+
 class EqGPTPlugin:
 
     score_kind: ClassVar[str] = "EqGPT reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "native"
+    )
 
     config_cls: ClassVar[type[EqGPTConfig]] = EqGPTConfig
     one_shot: ClassVar[bool] = False
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="eqgpt",
+        summary="GPT-guided equation discovery across wave and steady modes.",
+        cost_class="heavy",
+        modes=(
+            InstrumentMode(
+                name="single_wave",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="finite_diff",
+                description="Default single-case evolution-equation path.",
+            ),
+            InstrumentMode(
+                name="wave_multicase",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset(
+                    {DataTopology.GRID, DataTopology.SCATTERED}
+                ),
+                provider_kind="none",
+                description="Private multi-case wave evaluation path.",
+            ),
+            InstrumentMode(
+                name="steady",
+                forms=frozenset({Form.HOMOGENEOUS}),
+                topologies=frozenset({DataTopology.SCATTERED}),
+                provider_kind="none",
+                description="Private steady homogeneous-equation path.",
+            ),
+        ),
+        knobs=(
+            Knob(
+                "samples_per_epoch",
+                "int",
+                "GPT samples per Runner iteration.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "top_k",
+                "int",
+                "Elite-pool and fine-tune slice size.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "sparsity_alpha",
+                "float",
+                "Problem-specific sparsity weight.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "finetune_lr",
+                "float",
+                "GPT fine-tuning learning rate.",
+
+
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "exploration_rate",
+                "float",
+                "Sampling exploration rate.",
+                resume_tier="resume_safe",
+            ),
+        ),
+    )
 
     def __init__(
         self, config: EqGPTConfig, *, backend: GPTBackend | None = None
@@ -107,6 +192,9 @@ class EqGPTPlugin:
 
 
         self._steady: SteadyEvaluator | None = None
+        self._steady_viz_cache: (
+            tuple[object | None, _steady_viz_helpers.SteadyVizData] | None
+        ) = None
 
 
         self._recorder: VizRecorder | None = None
@@ -174,6 +262,7 @@ class EqGPTPlugin:
 
     def prepare(self, components: PlatformComponents) -> None:
         dataset = components.dataset
+        self._steady_viz_cache = None
         self._components = components
         self._recorder = components.recorder
         self._variables = self._resolve_variables(dataset)
@@ -276,6 +365,13 @@ class EqGPTPlugin:
             optimizer_state = self._pending_state.get("optimizer_state")
             if optimizer_state:
                 self._optimizer.load_state_dict(optimizer_state)
+
+
+
+
+
+                for group in self._optimizer.param_groups:
+                    group["lr"] = self._config.finetune_lr
 
         self._restore_pending = False
         self._pending_state = None
@@ -409,8 +505,16 @@ class EqGPTPlugin:
         best_reward = self._pool_rewards[0] if self._pool_rewards else 0.0
         if not self._pool_sentences:
             if self._steady is not None:
-                return self._steady.build_final_result([], best_reward=best_reward)
-            return _scoring.invalid_final_result("no candidates found", best_reward)
+
+                return replace(
+                    _scoring.invalid_final_result(
+                        "no candidates found", best_reward, reason="no_candidate"
+                    ),
+                    form=Form.HOMOGENEOUS,
+                )
+            return _scoring.invalid_final_result(
+                "no candidates found", best_reward, reason="no_candidate"
+            )
 
         try:
             terms = sentence_to_rhs_terms(
@@ -418,7 +522,9 @@ class EqGPTPlugin:
             )
         except (MalformedSentenceError, UnmappedTokenError) as exc:
             result = _scoring.invalid_final_result(
-                f"best candidate malformed: {exc}", best_reward
+                f"best candidate malformed: {exc}",
+                best_reward,
+                reason="structural_reject",
             )
             if self._steady is not None:
                 return replace(result, form=Form.HOMOGENEOUS)
@@ -565,6 +671,27 @@ class EqGPTPlugin:
             return _viz_helpers.per_case_data(self._per_case_rewards())
         return _viz_helpers.get_data(name, self._recorder)
 
+    def list_homogeneous_plots(self) -> list[PlotInfo]:
+        if not self._config.is_steady:
+            return []
+        return [replace(info) for info in _steady_viz_helpers.PLOT_INFOS]
+
+    def render_homogeneous_plot(
+        self, name: str, ax: Axes, result: ExperimentResult
+    ) -> None:
+        data = _steady_viz_helpers.SteadyVizData()
+        if self._steady is not None:
+            cache_key = result.equation
+            if (
+                self._steady_viz_cache is None
+                or self._steady_viz_cache[0] is not cache_key
+            ):
+                data = self._steady.build_viz_data(result.equation)
+                self._steady_viz_cache = (cache_key, data)
+            else:
+                data = self._steady_viz_cache[1]
+        _steady_viz_helpers.render(name, ax, data)
+
     def _per_case_rewards(self) -> dict[str, float]:
         assert self._multicase is not None
         terms = self._best_terms()
@@ -610,20 +737,6 @@ class EqGPTPlugin:
         return tuple(self._config.variables)
 
     def _build_default_backend(self, vocab: Vocab) -> GPTBackend:
-        if self._config.is_steady and self._config.weights_path is None:
-
-
-
-
-
-
-
-            raise ValueError(
-                "steady mode has no shipped pretrained GPT: the default "
-                "checkpoint is the wave/canonical prior, a protocol mismatch for "
-                "homogeneous discovery. Set config.weights_path or inject a "
-                "backend (real steady weights are deferred to 3c2-ii)."
-            )
         gpt_config = GPTConfig(vocab_size=vocab.size)
         return RealGPTBackend.from_assets(
             gpt_config,
@@ -655,7 +768,7 @@ class EqGPTPlugin:
 
     def _epoch_metrics(self, finetune_loss: float | None) -> dict[str, float]:
         if not self._pool_rewards:
-            pool_best = pool_median = pool_worst = 0.0
+            pool_best = pool_median = pool_worst = _NO_MEASUREMENT
         else:
             pool_best = self._pool_rewards[0]
             pool_worst = self._pool_rewards[-1]
@@ -670,7 +783,9 @@ class EqGPTPlugin:
             "pool_best": float(pool_best),
             "pool_median": float(pool_median),
             "pool_worst": float(pool_worst),
-            "finetune_loss": float(finetune_loss) if finetune_loss is not None else 0.0,
+            "finetune_loss": (
+                float(finetune_loss) if finetune_loss is not None else _NO_MEASUREMENT
+            ),
         }
 
     def _build_fingerprints(self) -> dict[str, Any]:

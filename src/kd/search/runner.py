@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import logging
 import pickle
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 import torch
 from torch import Tensor
 
+from kd.core import safety_counters
 from kd.core.equation import (
     HOMOGENEOUS_LHS_LABEL,
     Equation,
@@ -23,10 +26,9 @@ from kd.core.evaluator import EvaluationResult
 from kd.core.expr.naming import build_derivative_name, parse_derivative_name
 from kd.core.platform.requirements import DerivativeReqs, assert_dataset_supported
 from kd.data.schema import PDEDataset, compute_dataset_fingerprint
-from kd.search.callbacks import (
+from kd.search.callbacks import RunnerCallback, VizDataCollector
+from kd.search.checkpoint_payload import (
     CHECKPOINT_VERSION,
-    RunnerCallback,
-    VizDataCollector,
     _algorithm_name,
     atomic_torch_save,
     build_checkpoint_payload,
@@ -39,7 +41,9 @@ from kd.search.protocol import (
     SearchAlgorithm,
     TerminatingSearchAlgorithm,
 )
+from kd.search.record_assembly import assemble_run_record, cpu_seconds_now
 from kd.search.recorder import VizRecorder
+from kd.search.records import RecordSchemaError, RunCost
 from kd.search.result import (
     DEFAULT_SCORE_DIRECTION,
     DEFAULT_SCORE_KIND,
@@ -48,6 +52,7 @@ from kd.search.result import (
     RunResult,
     invalid_evaluation_result,
 )
+from kd.search.run_spec import RunSpec, canonicalize_config
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +99,36 @@ _MISSING_ATTR: object = object()
 
 def _implements_member(algorithm: object, member: str) -> bool:
     attr = getattr(type(algorithm), member, _MISSING_ATTR)
-    if attr is not _MISSING_ATTR and attr is not getattr(
-        SearchAlgorithm, member, None
-    ):
+    if attr is not _MISSING_ATTR and attr is not getattr(SearchAlgorithm, member, None):
         return True
     return member in getattr(algorithm, "__dict__", {})
+
+
+
+
+
+_UNSET: Final = object()
+
+
+def _probe_optional(algorithm: object, member: str, default: object) -> object:
+    try:
+        return getattr(algorithm, member, default)
+    except Exception:
+        logger.warning(
+            "Optional cost telemetry %r raised; treating as unavailable",
+            member,
+            exc_info=True,
+        )
+        return default
+
+
+def _coerce_token_count(totals: object, key: str) -> int | None:
+    if not isinstance(totals, dict):
+        return None
+    value = totals.get(key)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
 
 
 class ExperimentRunner:
@@ -117,6 +147,10 @@ class ExperimentRunner:
             callbacks if callbacks is not None else []
         )
         self._current_iteration: int = 0
+        self._boundary_results = 0
+        self._boundary_invalid_results = 0
+        self._run_started = 0.0
+        self._cpu_started: float | None = None
 
 
 
@@ -126,23 +160,65 @@ class ExperimentRunner:
 
 
         self._pending_restore_state: dict[str, Any] | None = None
+        self._resumed = False
 
     @property
     def lifecycle(self) -> SearchLifecycle | None:
         return self._lifecycle
 
-    def run(self, components: PlatformComponents) -> ExperimentResult:
+    def run(
+        self,
+        components: PlatformComponents,
+        *,
+        preprocessing_seconds: float | None = None,
+    ) -> ExperimentResult:
         self._assert_algorithm_protocol()
         self._assert_dataset_supported(components)
+        self._assert_run_identity_serializable()
         self._current_iteration = 0
+        self._boundary_results = 0
+        self._boundary_invalid_results = 0
+
+
+
+
+        if safety_counters.counters_enabled():
+            safety_counters.reset()
+        self._run_started = time.perf_counter()
+        self._cpu_started = cpu_seconds_now()
 
 
 
         lifecycle = SearchLifecycle()
         self._lifecycle = lifecycle
         pending_restore = self._pending_restore_state
+
+
+
+        self._resumed = bool(pending_restore)
         if pending_restore is not None:
             lifecycle.restore(pending_restore)
+
+
+
+
+
+
+
+
+
+        recorder_before = getattr(components, "recorder", None)
+        try:
+            return self._run_search(components, lifecycle, preprocessing_seconds)
+        finally:
+            components.recorder = recorder_before
+
+    def _run_search(
+        self,
+        components: PlatformComponents,
+        lifecycle: SearchLifecycle,
+        preprocessing_seconds: float | None,
+    ) -> ExperimentResult:
         recorder = self._ensure_recorder(components)
         callbacks = self._callbacks_for_run(recorder)
         self._algorithm.prepare(components)
@@ -184,6 +260,15 @@ class ExperimentRunner:
             if _implements_member(self._algorithm, "is_done")
             else None
         )
+
+
+
+
+
+
+
+
+        crashed = False
         try:
             for iteration in range(self._max_iterations):
                 self._run_iteration(iteration, callbacks)
@@ -196,13 +281,32 @@ class ExperimentRunner:
                     break
                 if iterative_alg is not None and iteration < self._max_iterations - 1:
                     iterative_alg.between_iterations()
+        except BaseException:
+            crashed = True
+            raise
         finally:
-            self._finalize_callbacks(callbacks)
+            self._finalize_callbacks(callbacks, crashed=crashed)
 
 
 
         lifecycle.finish()
-        return self._build_experiment_result(components, recorder, early_stopped)
+
+
+
+
+        result = self._build_experiment_result(
+            components,
+            recorder,
+            early_stopped,
+            preprocessing_seconds,
+        )
+        self._emit_safety_counter_summary()
+        return result
+
+    def _emit_safety_counter_summary(self) -> None:
+        safety_counters.emit_run_summary(
+            f"runner:{type(self._algorithm).__name__}", logger
+        )
 
     def _assert_algorithm_protocol(self) -> None:
         cls = type(self._algorithm)
@@ -234,6 +338,19 @@ class ExperimentRunner:
                 dataset.lhs_order, dataset.topology, reqs, algorithm
             )
 
+    def _assert_run_identity_serializable(self) -> None:
+
+        canonicalize_config(self._result_config())
+        try:
+
+
+
+            getattr(self._algorithm, "artifacts", None)
+        except TypeError as exc:
+            raise RecordSchemaError(
+                f"Injected artifact cannot be serialized into a run identity: {exc}"
+            ) from exc
+
     def _run_iteration(
         self,
         iteration: int,
@@ -245,6 +362,10 @@ class ExperimentRunner:
         candidates = self._algorithm.propose(self._batch_size)
         results = self._algorithm.evaluate(candidates)
         self._validate_evaluation_results(candidates, results)
+        self._boundary_results += len(results)
+        self._boundary_invalid_results += sum(
+            1 for result in results if not result.is_valid
+        )
         self._algorithm.update(results)
 
         for cb in callbacks:
@@ -299,14 +420,28 @@ class ExperimentRunner:
         callbacks.append(VizDataCollector(recorder))
         return callbacks
 
-    def _finalize_callbacks(self, callbacks: list[RunnerCallback]) -> None:
+    def _finalize_callbacks(
+        self, callbacks: list[RunnerCallback], *, crashed: bool
+    ) -> None:
         for cb in callbacks:
+            member = (
+                "on_experiment_end_status"
+                if _implements_member(cb, "on_experiment_end_status")
+                else "on_experiment_end"
+            )
             try:
-                cb.on_experiment_end(self._algorithm)
+                if member == "on_experiment_end_status":
+
+
+                    handler = getattr(cb, member)
+                    handler(self._algorithm, crashed=crashed)
+                else:
+                    cb.on_experiment_end(self._algorithm)
             except Exception:
                 logger.exception(
-                    "Callback %r.on_experiment_end raised",
+                    "Callback %r.%s raised",
                     type(cb).__name__,
+                    member,
                 )
 
     def _build_experiment_result(
@@ -314,6 +449,7 @@ class ExperimentRunner:
         components: PlatformComponents,
         recorder: VizRecorder,
         early_stopped: bool,
+        preprocessing_seconds: float | None,
     ) -> ExperimentResult:
         final_eval = self._final_eval()
         actual = self._actual()
@@ -330,6 +466,93 @@ class ExperimentRunner:
             lhs_label = render_lhs_label(equation.lhs_spec)
         else:
             lhs_label = self._lhs_label(components, final_eval)
+        manifest = self._build_manifest(components)
+        config = self._result_config()
+        library_fingerprint = config.get("library_fingerprint")
+        run_spec = RunSpec(
+            kd_version=manifest.kd_version,
+            config=config,
+            library_fingerprint=library_fingerprint,
+            dataset_cache_fingerprint=manifest.dataset_cache_fingerprint,
+            artifacts=manifest.artifacts,
+        )
+        search_seconds = time.perf_counter() - self._run_started
+        cpu_now = cpu_seconds_now()
+        cpu_seconds = (
+            cpu_now - self._cpu_started
+            if cpu_now is not None and self._cpu_started is not None
+            else None
+        )
+
+
+
+
+
+
+
+        raw_surrogate_seconds = _probe_optional(
+            self._algorithm, "surrogate_train_seconds", _UNSET
+        )
+        if raw_surrogate_seconds is _UNSET:
+            raw_surrogate_seconds = getattr(
+                getattr(components.context, "training_result", None),
+                "elapsed_seconds",
+                None,
+            )
+
+
+
+
+
+        surrogate_seconds = (
+            float(raw_surrogate_seconds)
+            if isinstance(raw_surrogate_seconds, (int, float))
+            and not isinstance(raw_surrogate_seconds, bool)
+            else None
+        )
+
+
+
+
+        raw_token_totals = _probe_optional(self._algorithm, "llm_token_totals", None)
+        tokens_in = _coerce_token_count(raw_token_totals, "tokens_in")
+        tokens_out = _coerce_token_count(raw_token_totals, "tokens_out")
+        cost = RunCost(
+            wallclock_seconds=search_seconds + (preprocessing_seconds or 0.0),
+            search_seconds=search_seconds,
+            preprocessing_seconds=preprocessing_seconds,
+            surrogate_train_seconds=surrogate_seconds,
+            cpu_seconds=cpu_seconds,
+            boundary_results=self._boundary_results,
+            boundary_invalid_results=self._boundary_invalid_results,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+        )
+        dataset_name = self._dataset_name(components)
+        run_record = assemble_run_record(
+            instrument=(
+                _algorithm_name(self._algorithm) or type(self._algorithm).__name__
+            ),
+            dataset_name=dataset_name,
+            dataset_cache_fingerprint=manifest.dataset_cache_fingerprint,
+            seed=manifest.seed,
+            final_eval=final_eval,
+            equation=equation,
+            best_expression=self._algorithm.best_expression,
+            best_score=self._algorithm.best_score,
+            score_kind=score_kind,
+            score_direction=score_direction,
+
+
+            headline_coefficient_source=getattr(
+                self._algorithm,
+                "headline_coefficient_source",
+                "undeclared",
+            ),
+            run_spec=run_spec,
+            manifest_terms=manifest.terms,
+            cost=cost,
+        )
         return ExperimentResult(
             best_expression=self._algorithm.best_expression,
             best_score=self._algorithm.best_score,
@@ -338,13 +561,14 @@ class ExperimentRunner:
             final_eval=final_eval,
             actual=actual,
             predicted=predicted,
-            dataset_name=self._dataset_name(components),
+            dataset_name=dataset_name,
             algorithm_name=type(self._algorithm).__name__,
-            config=self._result_config(),
+            config=config,
             recorder=recorder,
             lhs_label=lhs_label,
             equation=equation,
-            manifest=self._build_manifest(components),
+            manifest=manifest,
+            run_record=run_record,
             score_kind=score_kind,
             score_direction=score_direction,
         )
@@ -358,6 +582,7 @@ class ExperimentRunner:
             return build_homogeneous(
                 final_eval.terms,
                 final_eval.coefficients,
+                active_indices=final_eval.selected_indices,
                 is_valid=final_eval.is_valid,
             )
         lhs_spec = self._equation_lhs_spec(components, final_eval)
@@ -365,6 +590,7 @@ class ExperimentRunner:
             final_eval.terms,
             final_eval.coefficients,
             lhs_spec,
+            active_indices=final_eval.selected_indices,
             is_valid=final_eval.is_valid,
         )
 
@@ -439,7 +665,7 @@ class ExperimentRunner:
         else:
             fingerprint = _NON_PDE_DATASET_FINGERPRINT
         return RunManifest(
-            dataset_fingerprint=fingerprint,
+            dataset_cache_fingerprint=fingerprint,
             kd_version=kd_version,
             seed=self._algorithm.config.get("seed"),
 
@@ -447,6 +673,7 @@ class ExperimentRunner:
 
             terms=getattr(self._algorithm, "terms", None),
             artifacts=getattr(self._algorithm, "artifacts", None),
+            resumed=self._resumed,
         )
 
     def _final_eval(self) -> EvaluationResult:
@@ -522,10 +749,15 @@ class ExperimentRunner:
         return _DEFAULT_LHS_LABEL
 
     def _invalid_final_eval(self, error_message: str) -> EvaluationResult:
+
+
+
+
         return invalid_evaluation_result(
             error_message,
             score=float("inf"),
             expression=self._algorithm.best_expression,
+            reason="unclassified",
         )
 
     def save_checkpoint(self, path: Path) -> None:
@@ -537,9 +769,16 @@ class ExperimentRunner:
         )
         logger.debug("Saved checkpoint to %s", path)
 
-    def load_checkpoint(self, path: Path) -> None:
+    def load_checkpoint(
+        self,
+        path: Path,
+        *,
+        config_guard: Callable[[object, object], None] | None = None,
+    ) -> None:
         raw = self._torch_load_checkpoint(Path(path))
         data = self._validate_checkpoint_payload(raw)
+        if config_guard is not None:
+            config_guard(data.get("config"), data.get("config_canon_scheme"))
         self._algorithm.state = data["algorithm_state"]
 
 

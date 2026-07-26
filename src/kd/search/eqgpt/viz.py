@@ -6,6 +6,18 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from kd.viz.extension import PlotInfo
+from kd.viz.gap_notes import (
+    NO_MEASUREMENT,
+    GapVocabulary,
+    all_gap_note,
+    annotate_gaps,
+    append_subtitle,
+    band_measured_flags,
+    gap_phrase,
+    is_measured,
+    measured_flags,
+    partial_gap_note,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -63,8 +75,7 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
         name="finetune_loss",
         title="Fine-tune Loss",
         description=(
-            "Mean cross-entropy loss of the per-epoch GPT fine-tune on the top-k "
-            "pool."
+            "Mean cross-entropy loss of the per-epoch GPT fine-tune on the top-k pool."
         ),
     ),
 )
@@ -74,6 +85,25 @@ _NO_DATA_TEXT = "No data"
 _X_LABEL = "Epoch"
 _LINE_MARKER = "."
 _LINE_MARKER_SIZE = 3
+
+
+
+
+
+
+_POOL_GAPS = GapVocabulary(
+    unit_plural="epochs", missing="had no pool", nothing="no pool"
+)
+_FINETUNE_GAPS = GapVocabulary(
+    unit_plural="epochs",
+    missing="skipped the fine-tune",
+    nothing="no fine-tune",
+)
+_PANEL_GAPS: dict[str, GapVocabulary] = {
+    "reward_convergence": _POOL_GAPS,
+    "pool_reward_spread": _POOL_GAPS,
+    "finetune_loss": _FINETUNE_GAPS,
+}
 
 
 
@@ -129,6 +159,9 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
                 label=metric,
             )
         ax.legend()
+        annotate_gaps(
+            ax, band_measured_flags(series_by_metric.values(), max_len), _POOL_GAPS
+        )
         return
 
     metric = _PLOT_METRIC[name]
@@ -143,7 +176,11 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         markersize=_LINE_MARKER_SIZE,
     )
     if name == "reward_convergence":
-        _annotate_if_flat(ax, series)
+
+
+        _annotate_reward_convergence(ax, series)
+    else:
+        annotate_gaps(ax, measured_flags(series), _PANEL_GAPS[name])
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -183,7 +220,7 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
     ax.set_ylabel(_PER_CASE_YLABEL)
     ax.set_title(_PER_CASE_TITLE)
     names = list(per_case)
-    if not names or not any(_is_finite(per_case[name]) for name in names):
+    if not names or not any(is_measured(per_case[name]) for name in names):
         reason = "no candidate" if not names else "no survivor cases"
         ax.text(
             0.5,
@@ -195,7 +232,14 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
         )
         return
     positions = list(range(len(names)))
-    heights = [per_case[name] if _is_finite(per_case[name]) else 0.0 for name in names]
+
+
+
+
+    heights = [
+        per_case[name] if is_measured(per_case[name]) else NO_MEASUREMENT
+        for name in names
+    ]
     ax.bar(positions, heights)
     ax.set_xticks(positions)
     ax.set_xticklabels(
@@ -204,11 +248,20 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
         fontsize=_PER_CASE_LABEL_FONTSIZE,
     )
     for position, name in enumerate(names):
-        if not _is_finite(per_case[name]):
+        if not is_measured(per_case[name]):
+
+
+
+
+
+
+
+
             ax.text(
                 position,
-                0.0,
+                0.02,
                 "n/a",
+                transform=ax.get_xaxis_transform(),
                 ha="center",
                 va="bottom",
                 fontsize=_PER_CASE_LABEL_FONTSIZE,
@@ -224,10 +277,6 @@ def per_case_data(per_case: dict[str, float]) -> dict[str, Any]:
         "ylabel": _PER_CASE_YLABEL,
         "title": _PER_CASE_TITLE,
     }
-
-
-def _is_finite(value: float) -> bool:
-    return isinstance(value, (int, float)) and math.isfinite(value)
 
 
 def _short_case(name: str) -> str:
@@ -270,17 +319,30 @@ def _sanitize_y(value: Any) -> float | None:
     return None
 
 
-def _annotate_if_flat(ax: Axes, series: list[Any]) -> None:
+def _annotate_reward_convergence(ax: Axes, series: list[Any]) -> None:
     from kd.viz.plots.convergence import flat_value
 
-    constant = flat_value(series)
-    if constant is None:
-        return
-    ax.set_title(
-        f"{ax.get_title()}\nbest reward constant at {constant:.4g} "
-        "(reached at the first epoch)",
-        fontsize="medium",
-    )
+    measured = [index for index, value in enumerate(series) if is_measured(value)]
+    gaps = len(series) - len(measured)
+    if not measured:
+        note = all_gap_note(len(series), _POOL_GAPS)
+    else:
+        constant = flat_value(series)
+        if constant is None:
+            if gaps == 0:
+                return
+            note = partial_gap_note(gaps, len(series), _POOL_GAPS)
+        elif gaps:
+            note = (
+                f"best reward constant at {constant:.4g} across the "
+                f"{len(measured)} measured epochs "
+                f"({gap_phrase(gaps, len(series), _POOL_GAPS)})"
+            )
+        else:
+            note = (
+                f"best reward constant at {constant:.4g} (reached at the first epoch)"
+            )
+    append_subtitle(ax, note)
 
 
 def _draw_no_data(ax: Axes, recorder: VizRecorder | None) -> None:

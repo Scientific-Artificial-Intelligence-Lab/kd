@@ -8,8 +8,12 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from torch import Tensor
 
+from kd.core.equation import Form
+from kd.core.equation.library import TermLibrarySpec
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
+from kd.data.schema import DataTopology
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.protocol import PlatformComponents
 from kd.search.pysr import assembly
 from kd.search.pysr import viz as _viz_helpers
@@ -51,6 +55,7 @@ _LOGGED_METRICS: tuple[str, ...] = (
 )
 
 
+_CONFIG_LIBRARY_FINGERPRINT = "library_fingerprint"
 _STATE_ALGORITHM = "algorithm"
 _STATE_BEST_EXPRESSION = "best_expression"
 _STATE_BEST_SCORE = "best_score"
@@ -67,12 +72,49 @@ class PySRPlugin:
 
     score_kind: ClassVar[str] = "NMSE"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "platform_refit"
+    )
 
     config_cls: ClassVar[type[PySRConfig]] = PySRConfig
 
 
 
     one_shot: ClassVar[bool] = True
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="pysr",
+        summary="One-shot PySR search over a configured kd term library.",
+        cost_class="medium",
+        modes=(
+            InstrumentMode(
+                name="default",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="finite_diff",
+            ),
+        ),
+        knobs=(
+            Knob(
+                "population_size",
+                "int",
+                "Members per PySR population.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "populations",
+                "int",
+                "Number of PySR populations.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "maxsize",
+                "int",
+                "Maximum generated expression size.",
+                resume_tier="init_only",
+            ),
+        ),
+    )
 
     def __init__(
         self,
@@ -81,6 +123,7 @@ class PySRPlugin:
         backend_factory: Callable[[PySRConfig], PySRBackend] | None = None,
     ) -> None:
         self._config = config or PySRConfig()
+        self._library: TermLibrarySpec = TermLibrarySpec.from_terms(self._config.terms)
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
         self._recorder: VizRecorder | None = None
@@ -161,6 +204,7 @@ class PySRPlugin:
     def config(self) -> dict[str, Any]:
         return {
             _STATE_ALGORITHM: ALGORITHM_NAME,
+            _CONFIG_LIBRARY_FINGERPRINT: self._library.fingerprint,
             **asdict(self._config),
         }
 
@@ -176,7 +220,7 @@ class PySRPlugin:
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
-        max_order = assembly.infer_max_atomic_order(list(self._config.terms))
+        max_order = assembly.infer_max_atomic_order(list(self._library.terms))
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),
@@ -188,6 +232,11 @@ class PySRPlugin:
     def state(self) -> dict[str, Any]:
         return {
             _STATE_ALGORITHM: ALGORITHM_NAME,
+
+
+
+
+            _CONFIG_LIBRARY_FINGERPRINT: self._library.fingerprint,
             _STATE_BEST_EXPRESSION: self._best_expression,
             _STATE_BEST_SCORE: self._best_score,
             _STATE_FITTED: self._fitted,
@@ -208,6 +257,25 @@ class PySRPlugin:
             self._reset_fit_state()
             self._restore_pending = False
             return
+
+
+
+
+        if _CONFIG_LIBRARY_FINGERPRINT in value:
+            stored_fingerprint = value[_CONFIG_LIBRARY_FINGERPRINT]
+            if stored_fingerprint != self._library.fingerprint:
+
+
+
+                raise ValueError(
+                    f"PySR checkpoint library_fingerprint {stored_fingerprint!r} "
+                    f"does not match this plugin's catalog "
+                    f"{self._library.fingerprint!r}; restore requires the same "
+                    "term catalog"
+                )
+
+
+
         self._reset_fit_state()
         self._best_expression = str(value.get(_STATE_BEST_EXPRESSION, ""))
         self._best_score = float(value.get(_STATE_BEST_SCORE, INITIAL_BEST_SCORE))
@@ -254,7 +322,7 @@ class PySRPlugin:
 
 
     def _run_fit(self, evaluator: Evaluator) -> None:
-        theta, valid_terms = evaluator.build_theta_matrix(list(self._config.terms))
+        theta, valid_terms = evaluator.build_theta_matrix(list(self._library.terms))
         self._terms = valid_terms
         x_matrix = theta.detach().cpu().numpy()
         y_vector = evaluator.lhs_target.detach().cpu().numpy().reshape(-1)

@@ -15,6 +15,13 @@ from kd.viz.plots._dim_utils import (
     _pick_time_steps,
     _slice_nd_to_2d,
 )
+from kd.viz.plots._field_panels import (
+    _RESIDUAL_SIGN,
+    _heatmap_panel,
+    _pcolormesh_panel,
+    _range_note,
+    _reference_limits,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -31,7 +38,6 @@ _N_TIME_SNAPSHOTS = 3
 _DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 9
 _WARNING_WRAP_WIDTH = 38
-_RESIDUAL_PERCENTILE = 99.0
 
 
 def plot_field_comparison(
@@ -178,14 +184,20 @@ def _render_1d_spatial(
         true_2d = true_field
         pred_2d = pred_field
 
+
+
+
+    limits = _reference_limits(true_2d, pred_2d)
+
     _pcolormesh_panel(
         axes[0],
         t_coords,
         s_coords,
         true_2d,
-        "True",
+        "True" + _range_note(true_2d, limits),
         time_axis=time_axis,
         spatial_axis=s_name,
+        limits=limits,
     )
 
     if pred_2d is not None:
@@ -193,7 +205,7 @@ def _render_1d_spatial(
             diverged,
             integration_result,
             time_axis=time_axis,
-        )
+        ) + _range_note(pred_2d, limits)
         _pcolormesh_panel(
             axes[1],
             t_coords,
@@ -202,14 +214,15 @@ def _render_1d_spatial(
             pred_title,
             time_axis=time_axis,
             spatial_axis=s_name,
+            limits=limits,
         )
-        residual = true_2d - pred_2d
+        residual = pred_2d - true_2d
         _pcolormesh_panel(
             axes[2],
             t_coords,
             s_coords,
             residual,
-            "Residual",
+            f"Residual ({_RESIDUAL_SIGN})",
             time_axis=time_axis,
             spatial_axis=s_name,
             residual=True,
@@ -254,6 +267,11 @@ def _render_2d_spatial(
     t_coords = dataset.get_coords(time_axis).detach().cpu().numpy()
     extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
+
+
+
+    limits = _reference_limits(true_field, pred_field)
+
     for col, t_idx in enumerate(time_indices):
 
         true_slice = np.take(true_field, t_idx, axis=time_dim)
@@ -266,10 +284,11 @@ def _render_2d_spatial(
         _heatmap_panel(
             axes_arr[0, col],
             true_slice,
-            f"True ({time_axis}={t_val:.3g})",
+            f"True ({time_axis}={t_val:.3g})" + _range_note(true_slice, limits),
             extent=extent,
             xlabel=xlabel,
             ylabel=ylabel,
+            limits=limits,
         )
 
         if pred_field is not None:
@@ -282,7 +301,7 @@ def _render_2d_spatial(
                 integration_result,
                 time_axis=time_axis,
                 t_val=t_val,
-            )
+            ) + _range_note(pred_slice, limits)
             _heatmap_panel(
                 axes_arr[1, col],
                 pred_slice,
@@ -290,13 +309,14 @@ def _render_2d_spatial(
                 extent=extent,
                 xlabel=xlabel,
                 ylabel=ylabel,
+                limits=limits,
             )
 
-            residual_slice = true_slice - pred_slice
+            residual_slice = pred_slice - true_slice
             _heatmap_panel(
                 axes_arr[2, col],
                 residual_slice,
-                f"Residual ({time_axis}={t_val:.3g})",
+                f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})",
                 residual=True,
                 extent=extent,
                 xlabel=xlabel,
@@ -323,98 +343,11 @@ def _predicted_title(
         return "Predicted"
 
     div_t = integration_result.diverged_at_t
-    tag = (
-        f"DIVERGED at {time_axis}={div_t:.3g}"
-        if div_t is not None
-        else "DIVERGED"
-    )
+    tag = f"DIVERGED at {time_axis}={div_t:.3g}" if div_t is not None else "DIVERGED"
 
     if t_val is not None:
         return f"Predicted ({tag}, {time_axis}={t_val:.3g})"
     return f"Predicted ({tag})"
-
-
-def _pcolormesh_panel(
-    ax: Axes,
-    t_coords: NDArray[np.floating],
-    s_coords: NDArray[np.floating],
-    data: NDArray[np.floating],
-    title: str,
-    *,
-    time_axis: str,
-    spatial_axis: str,
-    residual: bool = False,
-) -> None:
-    display = np.where(np.isfinite(data), data, np.nan)
-    if residual:
-        vmax = _robust_abs_max(display)
-        mesh = ax.pcolormesh(
-            t_coords,
-            s_coords,
-            display,
-            shading="auto",
-            rasterized=True,
-            cmap="RdBu_r",
-            vmin=-vmax,
-            vmax=vmax,
-        )
-        ax.figure.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04)
-    else:
-        ax.pcolormesh(t_coords, s_coords, display, shading="auto", rasterized=True)
-    ax.set_xlabel(time_axis)
-    ax.set_ylabel(spatial_axis)
-    ax.set_title(title)
-
-
-def _heatmap_panel(
-    ax: Axes,
-    data: NDArray[np.floating],
-    title: str,
-    *,
-    residual: bool = False,
-    extent: tuple[float, float, float, float] | None = None,
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-) -> None:
-    display = np.where(np.isfinite(data), data, np.nan)
-    if residual:
-        vmax = _robust_abs_max(display)
-        im = ax.imshow(
-            display,
-            aspect="auto",
-            origin="lower",
-            extent=extent,
-            rasterized=True,
-            cmap="RdBu_r",
-            vmin=-vmax,
-            vmax=vmax,
-        )
-        ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    else:
-        ax.imshow(
-            display,
-            aspect="auto",
-            origin="lower",
-            extent=extent,
-            rasterized=True,
-        )
-    if xlabel is not None:
-        ax.set_xlabel(xlabel)
-    if ylabel is not None:
-        ax.set_ylabel(ylabel)
-    ax.set_title(title)
-
-
-def _robust_abs_max(data: NDArray[np.floating]) -> float:
-    abs_data = np.abs(data[np.isfinite(data)])
-    if abs_data.size == 0:
-        return 1.0
-    vmax = float(np.percentile(abs_data, _RESIDUAL_PERCENTILE))
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = float(abs_data.max()) if abs_data.size else 1.0
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = 1.0
-    return vmax
 
 
 def _warning_panel(

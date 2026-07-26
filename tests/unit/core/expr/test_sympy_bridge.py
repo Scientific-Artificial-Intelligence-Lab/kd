@@ -415,6 +415,22 @@ class TestFormatPdeProperties:
 
         assert result.rhs == 0
 
+    def test_negative_selected_index_rejected(self) -> None:
+        with pytest.raises(ValueError, match="-1"):
+            format_pde(
+                ["u", "u_x"],
+                torch.tensor([1.0, 2.0]),
+                selected_indices=[-1],
+            )
+
+    def test_out_of_range_selected_index_rejected(self) -> None:
+        with pytest.raises(ValueError, match="selected_indices"):
+            format_pde(
+                ["u", "u_x"],
+                torch.tensor([1.0, 2.0]),
+                selected_indices=[0, 5],
+            )
+
 
 
 

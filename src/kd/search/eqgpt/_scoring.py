@@ -158,11 +158,14 @@ def invalid_final_result(
     best_reward: float,
     *,
     terms: list[str] | None = None,
+    reason: str = "unclassified",
 ) -> EvaluationResult:
+
     return invalid_evaluation_result(
         message,
         score=best_reward,
         terms=terms,
+        reason=reason,
     )
 
 
@@ -188,7 +191,10 @@ def refit_final(
         solution = torch.linalg.lstsq(theta, target64.unsqueeze(1)).solution.squeeze(1)
     except (ValueError, KeyError, RuntimeError, IndexError) as exc:
         return invalid_final_result(
-            f"execution error: {exc}", best_reward, terms=terms
+            f"execution error: {exc}",
+            best_reward,
+            terms=terms,
+            reason="evaluation_error",
         )
 
     predicted = (theta @ solution).float()
@@ -204,6 +210,7 @@ def refit_final(
             "rank-deficient lstsq)",
             best_reward,
             terms=terms,
+            reason="non_finite",
         )
     lhs_var = float(target.var(correction=0).item()) if target.numel() > 1 else 0.0
     r2 = 1.0 - mse / lhs_var if lhs_var > 0 else -float("inf")

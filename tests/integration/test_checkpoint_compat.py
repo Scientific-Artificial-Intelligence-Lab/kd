@@ -401,6 +401,32 @@ class TestCheckpointRoundTrip:
 
 
 @pytest.mark.integration
+class TestCheckpointManifestDegradeLock:
+
+    def test_mock_driven_manifest_loads_and_degrades_absent_fields(
+        self,
+        tmp_path: Path,
+        mock_components: PlatformComponents,
+    ) -> None:
+        from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+        algo = StatefulAlgorithm()
+        _run_experiment_with_checkpoint(
+            algo,
+            mock_components,
+            tmp_path,
+            max_iterations=3,
+            every_n=1,
+        )
+        entries = load_checkpoint_manifest(tmp_path)
+        assert entries, "expected periodic + final entries"
+        for entry in entries:
+
+
+            assert entry.seed is None
+
+
+@pytest.mark.integration
 class TestCheckpointBoundary:
 
     def test_first_iteration_checkpoint(

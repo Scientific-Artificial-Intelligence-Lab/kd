@@ -6,7 +6,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import torch
 from torch import Tensor
@@ -25,10 +25,12 @@ from kd.core.equation import (
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.expr.naming import parse_derivative_name
 from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
+from kd.search.records import RunRecord, validate_invalid_reason
 
 logger = logging.getLogger(__name__)
 
 _JSON_INDENT_SPACES = 2
+RESULT_SCHEMA_VERSION: Final[int] = 1
 
 
 
@@ -91,6 +93,7 @@ def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
         coefficients=_deserialize_tensor(data["coefficients"]),
         is_valid=data["is_valid"],
         error_message=data["error_message"],
+        invalid_reason=data.get("invalid_reason"),
         selected_indices=data["selected_indices"],
         residuals=_deserialize_tensor(data["residuals"]),
         terms=data["terms"],
@@ -123,6 +126,7 @@ def _derive_equation_from_final_eval(
         final_eval.terms,
         final_eval.coefficients,
         lhs_spec,
+        active_indices=final_eval.selected_indices,
         is_valid=final_eval.is_valid,
     )
 
@@ -179,6 +183,7 @@ def invalid_evaluation_result(
     score: float | None,
     expression: str = "",
     terms: list[str] | None = None,
+    reason: str = "unclassified",
 ) -> EvaluationResult:
     """Build a plugin-level invalid final evaluation result.
 
@@ -190,7 +195,10 @@ def invalid_evaluation_result(
     None = not computed (score-semantics batch adjudication 2, 2026-07-07):
     an invalid result computed nothing, so terms/selected_indices are None,
     matching residuals=None (EQGPT/L5).
+    ``reason`` is validated against the record-schema vocabulary at the
+    producer boundary and defaults to the explicit ``unclassified`` fallback.
     """
+    declared_reason = validate_invalid_reason(reason)
     copied_terms = list(terms) if terms else None
     return EvaluationResult(
         mse=float("inf"),
@@ -201,6 +209,7 @@ def invalid_evaluation_result(
         coefficients=None,
         is_valid=False,
         error_message=error_message,
+        invalid_reason=declared_reason,
         selected_indices=None,
         residuals=None,
         terms=copied_terms,
@@ -215,7 +224,7 @@ class RunManifest:
     Records exactly the facts needed to *reproduce* a run, with no
     non-deterministic content (no timestamp, no object id / memory address):
 
-    - ``dataset_fingerprint``: content+meta fingerprint of the dataset.
+    - ``dataset_cache_fingerprint``: content+meta fingerprint of the dataset.
     - ``kd_version``: installed kd package version (e.g. ``"0.1.0"``).
     - ``seed``: RNG seed for the run; ``None`` if the algorithm exposes none.
       How faithfully a seed replays a run is algorithm-dependent -- e.g.
@@ -226,15 +235,17 @@ class RunManifest:
       ``None``.
     - ``artifacts``: reserved for artifact-bearing algorithms (weights / data)
       to record ``{sha256, size, ...}`` per artifact; else ``None``.
+    - ``resumed``: whether this invocation consumed a runner checkpoint restore.
 
     The round-trip contract is ``RunManifest.from_dict(m.to_dict()) == m``.
     """
 
-    dataset_fingerprint: str
+    dataset_cache_fingerprint: str
     kd_version: str
     seed: int | None
     terms: list[str] | None = None
     artifacts: dict[str, Any] | None = None
+    resumed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation of this manifest.
@@ -242,18 +253,17 @@ class RunManifest:
         The scalar fields (str / int / None / list of str) are JSON-native by
         construction — unlike ``ExperimentResult`` which holds tensors and
         non-finite floats. ``artifacts`` is the one open-typed field
-        (``dict[str, Any]``) and is emitted verbatim: today it is always
-        ``None`` (reserved for artifact-bearing algorithms, e.g. EqGPT), and
-        whichever code starts filling it owns its JSON safety — keep values
-        JSON-native or route them through ``_make_json_safe`` as
-        ``ExperimentResult`` does.
+        (``dict[str, Any]``) and is emitted verbatim. Its producer owns JSON
+        safety; RunSpec construction subsequently enforces the strict
+        JSON-native identity whitelist and rejects unsupported values.
         """
         return {
-            "dataset_fingerprint": self.dataset_fingerprint,
+            "dataset_cache_fingerprint": self.dataset_cache_fingerprint,
             "kd_version": self.kd_version,
             "seed": self.seed,
             "terms": self.terms,
             "artifacts": self.artifacts,
+            "resumed": self.resumed,
         }
 
     @classmethod
@@ -265,11 +275,12 @@ class RunManifest:
         mirroring ``ExperimentResult.load``'s ``data.get`` backward-compat.
         """
         return cls(
-            dataset_fingerprint=data["dataset_fingerprint"],
+            dataset_cache_fingerprint=data["dataset_cache_fingerprint"],
             kd_version=data["kd_version"],
             seed=data["seed"],
             terms=data.get("terms"),
             artifacts=data.get("artifacts"),
+            resumed=data.get("resumed", False),
         )
 
 
@@ -290,11 +301,14 @@ class ExperimentResult(RunResult):
     ``score_kind`` / ``score_direction`` carry the algorithm's
     ``ScoreContract`` declaration (what quantity ``best_score`` is and which
     direction is better) so viz consumers read the result instead of keeping
-    per-algorithm lookup tables. The defaults mirror the historical fallback
-    semantics ("Score" / "min") so existing direct construction sites keep
-    working; correctness for the built-in algorithms is enforced by the
-    facade contract tests, not by these defaults. Typed plain ``str`` (not
-    ``Literal``) because the values round-trip through JSON.
+    per-algorithm lookup tables. ``score_kind`` is a STABLE metric identifier
+    consumed by comparison logic (it decides score commensurability), not a
+    display label; display formatting may derive a label from it but must not
+    replace it. The defaults mirror the historical fallback semantics
+    ("Score" / "min") so existing direct construction sites keep working;
+    correctness for the built-in algorithms is enforced by the facade contract
+    tests, not by these defaults. Typed plain ``str`` (not ``Literal``) because
+    the values round-trip through JSON.
     """
 
     final_eval: EvaluationResult
@@ -307,12 +321,14 @@ class ExperimentResult(RunResult):
     lhs_label: str = "u_t"
     equation: Equation | None = None
     manifest: RunManifest | None = None
+    run_record: RunRecord | None = None
     score_kind: str = DEFAULT_SCORE_KIND
     score_direction: str = DEFAULT_SCORE_DIRECTION
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe (RFC 8259) representation of the result."""
         return {
+            "result_schema_version": RESULT_SCHEMA_VERSION,
             "best_expression": self.best_expression,
             "best_score": _sanitize_float(self.best_score),
             "iterations": self.iterations,
@@ -331,6 +347,11 @@ class ExperimentResult(RunResult):
 
 
             "manifest": self.manifest.to_dict() if self.manifest is not None else None,
+
+
+            "run_record": (
+                self.run_record.to_dict() if self.run_record is not None else None
+            ),
             "score_kind": self.score_kind,
             "score_direction": self.score_direction,
         }
@@ -367,6 +388,17 @@ class ExperimentResult(RunResult):
         with input_path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
 
+        result_schema_version = data.get("result_schema_version")
+        if "result_schema_version" in data and (
+            type(result_schema_version) is not int
+            or not (1 <= result_schema_version <= RESULT_SCHEMA_VERSION)
+        ):
+            raise ValueError(
+                "Unsupported result_schema_version: "
+                f"got {result_schema_version!r}; "
+                f"supported range is 1..{RESULT_SCHEMA_VERSION}"
+            )
+
 
 
 
@@ -378,6 +410,12 @@ class ExperimentResult(RunResult):
         manifest_data = data.get("manifest")
         manifest = (
             RunManifest.from_dict(manifest_data) if manifest_data is not None else None
+        )
+
+
+        record_data = data.get("run_record")
+        run_record = (
+            RunRecord.from_dict(record_data) if record_data is not None else None
         )
 
         final_eval = _deserialize_evaluation_result(data["final_eval"])
@@ -416,6 +454,7 @@ class ExperimentResult(RunResult):
             lhs_label=data.get("lhs_label", "u_t"),
             equation=equation,
             manifest=manifest,
+            run_record=run_record,
             score_kind=score_kind,
             score_direction=score_direction,
         )

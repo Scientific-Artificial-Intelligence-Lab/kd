@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from kd.core.expr.sympy_bridge import format_pde, to_latex
+from kd.viz.equation_display import latex_display
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -16,23 +16,15 @@ logger = logging.getLogger(__name__)
 _EQUATION_FONT_SIZE = 16
 
 
+_MARKER_FONT_SIZE = 12
+_TITLE = "Best Expression"
+
+
 def _ensure_math_mode(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("$") and stripped.endswith("$") and len(stripped) >= 2:
         return text
     return f"${text}$"
-
-
-def _equation_latex(result: ExperimentResult) -> str:
-    final_eval = result.final_eval
-    if final_eval.terms is not None and final_eval.coefficients is not None:
-        return format_pde(
-            final_eval.terms,
-            final_eval.coefficients,
-            lhs=result.lhs_label,
-            selected_indices=final_eval.selected_indices,
-        ).latex
-    return to_latex(result.best_expression, strict=False)
 
 
 def plot_equation(
@@ -55,23 +47,20 @@ def plot_equation(
         )
         return warnings
 
-    try:
-        latex_str = _ensure_math_mode(_equation_latex(result))
-    except ValueError:
-        logger.exception("Failed to format equation as LaTeX")
-        warnings.append("Failed to format full PDE; falling back to expression LaTeX")
-        latex_str = _ensure_math_mode(to_latex(expr, strict=False))
+    display = latex_display(result, label=result.algorithm_name)
+    if display.note is not None:
+        warnings.append(f"Equation panel shows a degraded rendering: {display.note}")
 
     ax.text(
         0.5,
         0.5,
-        latex_str,
-        size=_EQUATION_FONT_SIZE,
+        _ensure_math_mode(display.text) if display.is_math else display.text,
+        size=_EQUATION_FONT_SIZE if display.is_math else _MARKER_FONT_SIZE,
         ha="center",
         va="center",
         transform=ax.transAxes,
     )
     ax.axis("off")
-    ax.set_title("Best Expression")
+    ax.set_title(_TITLE if display.note is None else f"{_TITLE}\n({display.note})")
 
     return warnings

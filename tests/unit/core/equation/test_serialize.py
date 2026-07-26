@@ -122,3 +122,43 @@ class TestDeserializeValidation:
     def test_non_null_attrs_raise(self) -> None:
         with pytest.raises(ValueError, match="attrs must be null"):
             from_dict(self._payload(attrs={"provenance": "legacy"}))
+
+
+class TestActiveIndicesSerialization:
+
+    @pytest.mark.unit
+    def test_round_trip_preserves_active_indices(self) -> None:
+        eq = make_evolution(
+            LhsSpec(field="u", axis="t", order=1),
+            (("u_x", Scalar(1.0)), ("u_xx", Scalar(-0.5))),
+            active_indices=[0],
+        )
+        rebuilt = from_dict(json.loads(json.dumps(to_dict(eq))))
+        assert rebuilt == eq
+        assert rebuilt.active_indices == (0,)
+
+    @pytest.mark.unit
+    def test_legacy_payload_without_active_indices_loads_as_none(self) -> None:
+
+        payload = {
+            "form": "EVOLUTION",
+            "lhs_spec": {"field": "u", "axis": "t", "order": 1},
+            "terms": [["u_x", {"kind": "Scalar", "value": 1.0}]],
+            "attrs": None,
+        }
+        eq = from_dict(payload)
+        assert eq.active_indices is None
+
+    @pytest.mark.unit
+    def test_from_dict_out_of_range_active_index_fails_loud(self) -> None:
+
+
+        payload = {
+            "form": "EVOLUTION",
+            "lhs_spec": {"field": "u", "axis": "t", "order": 1},
+            "terms": [["u_x", {"kind": "Scalar", "value": 1.0}]],
+            "attrs": None,
+            "active_indices": [5],
+        }
+        with pytest.raises(ValueError, match="active_indices"):
+            from_dict(payload)

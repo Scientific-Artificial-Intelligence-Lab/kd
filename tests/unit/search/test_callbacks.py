@@ -17,6 +17,11 @@ from kd.search.callbacks import (
     LoggingCallback,
     RunnerCallback,
 )
+from kd.search.iteration_events import IterationEvent, IterationEventEmitter
+from kd.search.protocol import PlatformComponents
+from kd.search.runner import ExperimentRunner
+
+from ._runner_mocks import RecordingAlgorithm
 
 
 
@@ -1070,6 +1075,8 @@ class TestCheckpointDesign:
             "best_score",
             "best_expression",
             "algorithm",
+            "config",
+            "config_canon_scheme",
         }
 
     @pytest.mark.unit
@@ -1528,3 +1535,290 @@ class TestAtomicTorchSave:
         assert (tmp_path / "checkpoint_000000.pt").exists()
         assert (tmp_path / "checkpoint_final.pt").exists()
         assert list(tmp_path.glob("*.tmp")) == []
+
+
+
+
+
+
+
+class _InvalidMixAlgorithm(RecordingAlgorithm):
+
+    def __init__(self, n_invalid: int) -> None:
+        super().__init__()
+        self._n_invalid = n_invalid
+
+    def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
+        self.call_log.append("evaluate")
+        return [
+            EvaluationResult(
+                mse=0.1, nmse=0.1, r2=0.9, is_valid=(i >= self._n_invalid)
+            )
+            for i in range(len(candidates))
+        ]
+
+
+class TestIterationEventEmitterRunnerIntegration:
+
+    @pytest.mark.unit
+    def test_stride_one_counts_one_to_one(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append)
+        runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(),
+            max_iterations=4,
+            batch_size=2,
+            callbacks=[emitter],
+        )
+        result = runner.run(mock_components)
+
+        assert result.iterations == 4
+        assert len(events) == 4
+        assert [e.iteration for e in events] == [0, 1, 2, 3]
+
+    @pytest.mark.unit
+    def test_stride_respected(self, mock_components: PlatformComponents) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append, every_n_iterations=3)
+        runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(),
+            max_iterations=10,
+            batch_size=2,
+            callbacks=[emitter],
+        )
+        runner.run(mock_components)
+
+        assert [e.iteration for e in events] == [0, 3, 6, 9]
+
+    @pytest.mark.unit
+    def test_one_shot_terminal_event(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append, every_n_iterations=5)
+        runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(),
+            max_iterations=1,
+            batch_size=2,
+            callbacks=[emitter],
+        )
+        runner.run(mock_components)
+
+        assert len(events) == 1
+        assert events[0].iteration == 0
+
+    @pytest.mark.unit
+    def test_early_stop_truncates_events(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append)
+
+
+        early = EarlyStoppingCallback(patience=1, min_delta=1e-6, mode="min")
+        runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(score_sequence=[1.0, 1.0, 1.0, 1.0, 1.0]),
+            max_iterations=10,
+            batch_size=2,
+            callbacks=[emitter, early],
+        )
+        result = runner.run(mock_components)
+
+        assert result.early_stopped is True
+        assert result.iterations < 10
+        assert len(events) == result.iterations
+        assert [e.iteration for e in events] == list(range(result.iterations))
+
+    @pytest.mark.unit
+    def test_n_invalid_same_source(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append)
+        runner = ExperimentRunner(
+            algorithm=_InvalidMixAlgorithm(n_invalid=1),
+            max_iterations=1,
+            batch_size=4,
+            callbacks=[emitter],
+        )
+        runner.run(mock_components)
+
+        assert len(events) == 1
+        assert events[0].n_candidates == 4
+        assert events[0].n_invalid == 1
+
+
+
+
+
+
+
+class TestCheckpointManifestWritePath:
+
+    @pytest.mark.unit
+    def test_start_creates_manifest_and_reuse_fails_loud(
+        self, tmp_path: Path
+    ) -> None:
+        from kd.search.checkpoint_manifest import (
+            MANIFEST_FILENAME,
+            CheckpointManifestError,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        cb.on_experiment_start(_MockAlgorithm())
+        assert (tmp_path / MANIFEST_FILENAME).exists()
+
+
+        second = CheckpointCallback(directory=tmp_path, every_n=1)
+        with pytest.raises(CheckpointManifestError, match="is not empty"):
+            second.on_experiment_start(_MockAlgorithm())
+
+    @pytest.mark.unit
+    def test_periodic_write_records_manifest_entry(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import (
+            KIND_PERIODIC,
+            load_checkpoint_manifest,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        cb.on_iteration_end(0, algo, [], [])
+
+        entries = load_checkpoint_manifest(tmp_path)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.kind == KIND_PERIODIC
+        assert entry.final_status is None
+        assert entry.filename == "checkpoint_000000.pt"
+        assert entry.iteration == 0
+
+    @pytest.mark.unit
+    def test_experiment_end_records_completed_final(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import (
+            FINAL_STATUS_COMPLETED,
+            KIND_FINAL,
+            load_checkpoint_manifest,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        cb.on_iteration_end(0, algo, [], [])
+        cb.on_experiment_end(algo)
+
+        entries = load_checkpoint_manifest(tmp_path)
+        finals = [e for e in entries if e.kind == KIND_FINAL]
+        assert len(finals) == 1
+        assert finals[0].final_status == FINAL_STATUS_COMPLETED
+        assert finals[0].filename == "checkpoint_final.pt"
+
+    @pytest.mark.unit
+    def test_experiment_end_status_crashed(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import (
+            FINAL_STATUS_CRASHED,
+            KIND_FINAL,
+            load_checkpoint_manifest,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        cb.on_iteration_end(0, algo, [], [])
+        cb.on_experiment_end_status(algo, crashed=True)
+
+        entries = load_checkpoint_manifest(tmp_path)
+        finals = [e for e in entries if e.kind == KIND_FINAL]
+        assert len(finals) == 1
+        assert finals[0].final_status == FINAL_STATUS_CRASHED
+
+    @pytest.mark.unit
+    def test_drive_without_start_fails_loud(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import CheckpointManifestError
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        with pytest.raises(CheckpointManifestError, match="no checkpoint manifest"):
+            cb.on_iteration_end(0, _MockAlgorithm(), [], [])
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.unit
+    def test_degraded_mock_writer_yields_none_identity(
+        self, tmp_path: Path
+    ) -> None:
+        from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        cb.on_iteration_end(0, algo, [], [])
+        cb.on_experiment_end(algo)
+
+        entries = load_checkpoint_manifest(tmp_path)
+        assert entries
+        for entry in entries:
+            assert entry.algorithm is None
+            assert entry.seed is None
+            assert entry.config_hash is None
+
+
+
+
+
+
+
+class TestCheckpointRetention:
+
+    @pytest.mark.unit
+    def test_keep_last_n_prunes_oldest_periodic(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import (
+            KIND_PERIODIC,
+            load_checkpoint_manifest,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1, keep_last_n=2)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        for i in range(4):
+            cb.on_iteration_end(i, algo, [], [])
+
+        entries = load_checkpoint_manifest(tmp_path)
+        periodic = [e for e in entries if e.kind == KIND_PERIODIC]
+        assert [e.iteration for e in periodic] == [2, 3]
+
+        assert not (tmp_path / "checkpoint_000000.pt").exists()
+        assert not (tmp_path / "checkpoint_000001.pt").exists()
+        assert (tmp_path / "checkpoint_000002.pt").exists()
+        assert (tmp_path / "checkpoint_000003.pt").exists()
+
+    @pytest.mark.unit
+    def test_final_is_exempt_from_retention(self, tmp_path: Path) -> None:
+        from kd.search.checkpoint_manifest import (
+            KIND_FINAL,
+            KIND_PERIODIC,
+            load_checkpoint_manifest,
+        )
+
+        cb = CheckpointCallback(directory=tmp_path, every_n=1, keep_last_n=1)
+        algo = _MockAlgorithm()
+        cb.on_experiment_start(algo)
+        for i in range(3):
+            cb.on_iteration_end(i, algo, [], [])
+        cb.on_experiment_end(algo)
+
+        entries = load_checkpoint_manifest(tmp_path)
+        periodic = [e for e in entries if e.kind == KIND_PERIODIC]
+        finals = [e for e in entries if e.kind == KIND_FINAL]
+        assert len(periodic) <= 1
+        assert len(finals) == 1
+        assert (tmp_path / "checkpoint_final.pt").exists()
+
+    @pytest.mark.unit
+    def test_keep_last_n_zero_raises_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="keep_last_n"):
+            CheckpointCallback(directory=tmp_path, every_n=1, keep_last_n=0)
+
+    def test_keep_last_n_float_raises_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="keep_last_n"):
+            CheckpointCallback(directory=tmp_path, every_n=1, keep_last_n=2.0)

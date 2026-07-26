@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr.executor import PythonExecutor
@@ -21,8 +22,13 @@ from kd.core.linear_solve import (
 )
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
-from kd.data.schema import PDEDataset
-from kd.search.dlga import surrogate_log as _surrogate_log
+from kd.data.schema import DataTopology, PDEDataset
+from kd.search import surrogate_log as _surrogate_log
+from kd.search._torch_module_artifact import (
+    TORCH_MODULE_ARTIFACT_FORMAT,
+    torch_module_artifact,
+)
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.dlga import viz as _viz_helpers
 from kd.search.dlga.config import DLGAConfig
 from kd.search.dlga.genes import (
@@ -91,7 +97,7 @@ _LOGGED_METRICS: tuple[str, ...] = (
 
 
 
-_SURROGATE_METRICS = _surrogate_log._SURROGATE_METRICS
+_SURROGATE_METRICS = _surrogate_log.SURROGATE_METRICS
 
 
 class DLGAPlugin:
@@ -103,9 +109,58 @@ class DLGAPlugin:
 
     score_kind: ClassVar[str] = "DLGA fitness"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "platform_refit"
+    )
 
     config_cls: ClassVar[type[DLGAConfig]] = DLGAConfig
     one_shot: ClassVar[bool] = False
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="dlga",
+        summary="Neural-surrogate genetic search for constant-coefficient PDEs.",
+        cost_class="heavy",
+        modes=(
+            InstrumentMode(
+                name="default",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="autograd",
+            ),
+        ),
+        knobs=(
+            Knob(
+                "pop_size",
+                "int",
+                "Genetic population size.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "epsilon",
+                "float",
+                "Expression-length penalty.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "mutation_rate",
+                "float",
+                "Genome mutation probability.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "crossover_rate",
+                "float",
+                "Genome crossover probability.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "surrogate_lr",
+                "float",
+                "Neural-surrogate learning rate.",
+                resume_tier="init_only",
+            ),
+        ),
+    )
 
     def __init__(
         self,
@@ -139,7 +194,21 @@ class DLGAPlugin:
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"algorithm": "dlga", **asdict(self._config)}
+        config = asdict(self._config)
+        if self._provided_model is not None:
+            config["surrogate_model"] = {
+                "artifact": "surrogate_model",
+                "format": TORCH_MODULE_ARTIFACT_FORMAT,
+            }
+        return {"algorithm": "dlga", **config}
+
+    @property
+    def artifacts(self) -> dict[str, dict[str, str | int]] | None:
+        if self._provided_model is None:
+            return None
+        return {
+            "surrogate_model": torch_module_artifact(self._provided_model),
+        }
 
     @property
     def runner_batch_size(self) -> int:
@@ -333,11 +402,14 @@ class DLGAPlugin:
 
     def build_final_result(self) -> EvaluationResult:
         if not self._best_expression:
-            return self._invalid_result("", "No best DLGA expression available")
+            return self._invalid_result(
+                "", "No best DLGA expression available", reason="no_candidate"
+            )
         if not self._evaluators:
             return self._invalid_result(
                 self._best_expression,
                 "DLGA evaluators are not prepared",
+                reason="evaluation_error",
             )
         try:
             result = self._evaluate_one(self._best_expression, self._best_genome)
@@ -346,6 +418,7 @@ class DLGAPlugin:
             return self._invalid_result(
                 self._best_expression,
                 f"Final result evaluation failed: {exc}",
+                reason="evaluation_error",
             )
         if result.is_valid:
             self._maybe_warn_expression_bloat(result)
@@ -353,6 +426,7 @@ class DLGAPlugin:
         return self._invalid_result(
             self._best_expression,
             result.error_message or "No valid DLGA result",
+            reason=result.invalid_reason or "unclassified",
         )
 
     def _maybe_warn_expression_bloat(self, result: EvaluationResult) -> None:
@@ -598,11 +672,18 @@ class DLGAPlugin:
             raise RuntimeError("prepare() must be called before using DLGAPlugin")
 
     @staticmethod
-    def _invalid_result(expression: str, message: str) -> EvaluationResult:
+    def _invalid_result(
+        expression: str,
+        message: str,
+        *,
+        reason: str = "unclassified",
+    ) -> EvaluationResult:
+
         return invalid_evaluation_result(
             message,
             score=float("inf"),
             expression=expression,
+            reason=reason,
         )
 
 

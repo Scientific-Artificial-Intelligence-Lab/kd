@@ -23,6 +23,14 @@ if TYPE_CHECKING:
     from kd.core.linear_solve import SparseSolver
 
 
+class _ThetaStructuralError(ValueError):
+    pass
+
+
+class _ThetaNonFiniteError(ValueError):
+    pass
+
+
 @dataclass
 class EvaluationResult:
 
@@ -34,6 +42,7 @@ class EvaluationResult:
     coefficients: Tensor | None = None
     is_valid: bool = True
     error_message: str = ""
+    invalid_reason: str | None = None
     selected_indices: list[int] | None = None
     residuals: Tensor | None = None
     terms: list[str] | None = None
@@ -60,6 +69,7 @@ class EvaluationResult:
             ),
             "is_valid": self.is_valid,
             "error_message": self.error_message,
+            "invalid_reason": self.invalid_reason,
             "selected_indices": self.selected_indices,
             "residuals": residuals,
             "terms": self.terms,
@@ -162,7 +172,9 @@ class Evaluator:
     ) -> EvaluationResult:
 
         if not terms:
-            return self._make_invalid_result("Empty term list")
+            return self._make_invalid_result(
+                "Empty term list", reason="structural_reject"
+            )
 
 
 
@@ -180,7 +192,7 @@ class Evaluator:
                 exc,
             )
             _release_cuda_memory()
-            return self._make_invalid_result("autograd OOM")
+            return self._make_invalid_result("autograd OOM", reason="evaluation_error")
 
     def _build_theta(
         self, terms: list[str], *, skip_invalid: bool = False
@@ -255,8 +267,8 @@ class Evaluator:
 
         if not theta_columns:
             if skip_invalid:
-                raise ValueError("All terms filtered by skip_invalid")
-            raise ValueError("No valid terms")
+                raise _ThetaStructuralError("All terms filtered by skip_invalid")
+            raise _ThetaStructuralError("No valid terms")
 
         try:
             theta = torch.stack(theta_columns, dim=1)
@@ -268,7 +280,7 @@ class Evaluator:
 
 
         if not skip_invalid and (torch.isnan(theta).any() or torch.isinf(theta).any()):
-            raise ValueError("Theta contains NaN or Inf")
+            raise _ThetaNonFiniteError("Theta contains NaN or Inf")
 
         return theta, valid_terms
 
@@ -282,6 +294,10 @@ class Evaluator:
     ) -> EvaluationResult:
         try:
             theta, valid_terms = self._build_theta(terms, skip_invalid=skip_invalid)
+        except _ThetaStructuralError as e:
+            return self._make_invalid_result(str(e), reason="structural_reject")
+        except _ThetaNonFiniteError as e:
+            return self._make_invalid_result(str(e), reason="non_finite")
         except ValueError as e:
             return self._make_invalid_result(str(e))
 
@@ -303,7 +319,7 @@ class Evaluator:
         mse = ((self._lhs_flat - y_pred) ** 2).mean().item()
 
         if not math.isfinite(mse):
-            return self._make_invalid_result("MSE is NaN or Inf")
+            return self._make_invalid_result("MSE is NaN or Inf", reason="non_finite")
 
         nmse_val = _metrics_nmse(mse, self._lhs_var)
         r2 = solve_result.r2
@@ -332,7 +348,9 @@ class Evaluator:
         try:
             terms = split_terms(expr, self._executor.registry)
         except Exception as e:
-            result = self._make_invalid_result(f"split_terms error: {e}")
+            result = self._make_invalid_result(
+                f"split_terms error: {e}", reason="structural_reject"
+            )
             result.expression = expr
             return result
 
@@ -340,7 +358,17 @@ class Evaluator:
         result.expression = expr
         return result
 
-    def _make_invalid_result(self, error_message: str) -> EvaluationResult:
+    def _make_invalid_result(
+        self,
+        error_message: str,
+
+
+
+
+
+        *,
+        reason: str = "evaluation_error",
+    ) -> EvaluationResult:
         return EvaluationResult(
             mse=self._penalty_value,
             nmse=self._penalty_value,
@@ -350,6 +378,7 @@ class Evaluator:
             coefficients=None,
             is_valid=False,
             error_message=error_message,
+            invalid_reason=reason,
             selected_indices=None,
             residuals=None,
             terms=None,

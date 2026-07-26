@@ -80,3 +80,5 @@ def test_steady_prepare_does_not_require_platform_evaluator() -> None:
     plugin = EqGPTPlugin(_steady_config(), backend=FakeGPTBackend(57, seed=0))
 
     plugin.prepare(_steady_components(evaluator=None))
+    final = plugin.build_final_result()
+    assert final.invalid_reason == "no_candidate"

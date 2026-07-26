@@ -56,7 +56,7 @@ class _ArtifactAlgorithm(RecordingAlgorithm):
 def test_run_manifest_round_trips_artifacts() -> None:
     artifacts = {"vocab": {"sha256": "abc", "size": 1, "path": "v.json"}}
     manifest = RunManifest(
-        dataset_fingerprint="fp", kd_version="0.1.0", seed=0, artifacts=artifacts
+        dataset_cache_fingerprint="fp", kd_version="0.1.0", seed=0, artifacts=artifacts
     )
     assert RunManifest.from_dict(manifest.to_dict()) == manifest
     assert manifest.to_dict()["artifacts"] == artifacts

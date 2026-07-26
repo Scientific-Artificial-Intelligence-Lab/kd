@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -10,7 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from kd.core.equation import Form
+from kd.core.equation import Equation, Form, residual_program
 from kd.core.evaluator import EvaluationResult
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.term_cache import TermColumnCache
@@ -19,7 +18,9 @@ from kd.data.schema import PDEDataset, compute_dataset_fingerprint
 from kd.models.field_model import FieldModel
 from kd.search.eqgpt import _scoring
 from kd.search.eqgpt._multicase import assemble_pinned_matrix
+from kd.search.eqgpt._steady_domain import build_steady_eval_dataset
 from kd.search.eqgpt.config import EqGPTConfig
+from kd.search.eqgpt.steady_viz import SteadyVizData
 from kd.search.eqgpt.vocab import Vocab, load_vocab
 from kd.search.result import invalid_evaluation_result
 
@@ -29,17 +30,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 STEADY_MAX_ATOMIC_ORDER: Final[int] = 5
-DISK_R_RANGE: Final[tuple[float, float]] = (0.5, 1.45)
-DISK_N_R: Final[int] = 100
-DISK_N_THETA: Final[int] = 100
 SURROGATE_HIDDEN_SIZES: Final[tuple[int, ...]] = (50, 50, 50, 50, 50)
 SURROGATE_CHECKPOINT_EVERY: Final[int] = 500
-
-
-
-
-
-_MAX_LATTICE_CELLS: Final[int] = 16_000_000
 _STEADY_AXES: Final[tuple[str, str]] = ("x", "y")
 _STEADY_FIELD: Final[str] = "u"
 
@@ -50,7 +42,7 @@ _STEADY_ERRORS: Final = (
     IndexError,
     np.linalg.LinAlgError,
 )
-
+_STEADY_VIZ_ERRORS: Final = _STEADY_ERRORS + (NotImplementedError, TypeError)
 
 class SteadyEvaluator:
 
@@ -63,6 +55,8 @@ class SteadyEvaluator:
         config: EqGPTConfig,
         n_points: int,
         dataset_fingerprint: str,
+        training_dataset: PDEDataset,
+        eval_dataset: PDEDataset,
         vocab: Vocab,
         cache: TermColumnCache | None = None,
     ) -> None:
@@ -72,6 +66,8 @@ class SteadyEvaluator:
         self._config = config
         self._n_points = n_points
         self._dataset_fingerprint = dataset_fingerprint
+        self._training_dataset = training_dataset
+        self._eval_dataset = eval_dataset
 
 
 
@@ -114,13 +110,17 @@ class SteadyEvaluator:
         if trained is None:
             trained = _train_surrogate(dataset, config, resolved_device)
         else:
-            trained = trained.to(device=resolved_device, dtype=torch.float32)
+
+
+
+            trained = trained.to(device=resolved_device)
             trained.eval()
 
-        eval_dataset = _build_eval_dataset(dataset, config)
+        eval_dataset = build_steady_eval_dataset(dataset, config)
+        surrogate_dtype = next(trained.parameters()).dtype
         coords = {
             axis: eval_dataset.get_coords(axis)
-            .to(device=resolved_device, dtype=torch.float32)
+            .to(device=resolved_device, dtype=surrogate_dtype)
             .detach()
             .clone()
             .requires_grad_(True)
@@ -145,6 +145,8 @@ class SteadyEvaluator:
             config=config,
             n_points=eval_dataset.get_shape()[0],
             dataset_fingerprint=compute_dataset_fingerprint(dataset),
+            training_dataset=dataset,
+            eval_dataset=eval_dataset,
             vocab=load_vocab(),
         )
 
@@ -159,6 +161,72 @@ class SteadyEvaluator:
     @property
     def dataset_fingerprint(self) -> str:
         return self._dataset_fingerprint
+
+    def evaluation_points(self) -> np.ndarray:
+        return np.column_stack(
+            (
+                self._eval_dataset.get_coords("x").detach().cpu().numpy(),
+                self._eval_dataset.get_coords("y").detach().cpu().numpy(),
+            )
+        ).astype(np.float64, copy=False)
+
+    def assemble_terms(self, terms: list[str]) -> np.ndarray:
+        return np.asarray(self._assemble(terms), dtype=np.float64)
+
+    def build_viz_data(self, equation: Equation | None) -> SteadyVizData:
+        observed: np.ndarray | None = None
+        predicted: np.ndarray | None = None
+        try:
+            observed, predicted = self._surrogate_fit_values()
+        except _STEADY_VIZ_ERRORS as exc:
+            logger.warning("EqGPT steady surrogate-fit data unavailable: %s", exc)
+        if equation is None or equation.form is not Form.HOMOGENEOUS:
+            return SteadyVizData(observed=observed, predicted=predicted)
+        terms = tuple(term for term, _coefficient in equation.terms)
+        points = self.evaluation_points()
+        matrix: np.ndarray | None = None
+        residual: np.ndarray | None = None
+        try:
+            matrix = self.assemble_terms(list(terms))
+        except _STEADY_VIZ_ERRORS as exc:
+            logger.warning("EqGPT steady term-balance data unavailable: %s", exc)
+        try:
+            result = self._executor.execute(residual_program(equation), self._context)
+            residual = (
+                result.value.detach().cpu().numpy().reshape(-1).astype(np.float64)
+            )
+        except _STEADY_VIZ_ERRORS as exc:
+            logger.warning("EqGPT steady residual data unavailable: %s", exc)
+        return SteadyVizData(
+            x=points[:, 0],
+            y=points[:, 1],
+            residual=residual,
+            matrix=matrix,
+            terms=terms,
+            pivot_index=0,
+            observed=observed,
+            predicted=predicted,
+        )
+
+    def _surrogate_fit_values(self) -> tuple[np.ndarray | None, np.ndarray | None]:
+        observed = (
+            self._training_dataset.get_field("u")
+            .detach()
+            .cpu()
+            .numpy()
+            .reshape(-1)
+            .astype(np.float64)
+        )
+        parameter = next(self._surrogate.parameters())
+        coords = {
+            axis: self._training_dataset.get_coords(axis).to(
+                device=parameter.device, dtype=parameter.dtype
+            )
+            for axis in ("x", "y")
+        }
+        with torch.no_grad():
+            predicted = self._surrogate(**coords)["u"].detach().cpu().numpy()
+        return observed, predicted.reshape(-1).astype(np.float64)
 
     def _matrix_terms(self, terms: list[str]) -> list[str]:
         constant = self._config.steady_constant_column
@@ -198,14 +266,22 @@ class SteadyEvaluator:
     ) -> EvaluationResult:
         matrix_terms = self._matrix_terms(terms)
         if not terms:
-            return _invalid_final("no terms to fit", best_reward, terms=terms)
+            return _invalid_final(
+                "no terms to fit",
+                best_reward,
+                terms=terms,
+                reason="structural_reject",
+            )
         try:
             matrix = self._assemble(matrix_terms)
             theta, target = matrix[:, 1:], -matrix[:, 0]
             coefficients = np.linalg.lstsq(theta, target, rcond=None)[0]
         except _STEADY_ERRORS as exc:
             return _invalid_final(
-                f"execution error: {exc}", best_reward, terms=matrix_terms
+                f"execution error: {exc}",
+                best_reward,
+                terms=matrix_terms,
+                reason="evaluation_error",
             )
 
         residuals = theta @ coefficients - target
@@ -215,6 +291,7 @@ class SteadyEvaluator:
                 "non-finite residuals from steady refit",
                 best_reward,
                 terms=matrix_terms,
+                reason="non_finite",
             )
         target_var = float(target.var()) if target.size > 1 else 0.0
         r2 = 1.0 - mse / target_var if target_var > 0.0 else -float("inf")
@@ -259,8 +336,15 @@ def _invalid_final(
     best_reward: float,
     *,
     terms: list[str],
+    reason: str = "unclassified",
 ) -> EvaluationResult:
-    result = invalid_evaluation_result(message, score=best_reward, terms=terms)
+
+    result = invalid_evaluation_result(
+        message,
+        score=best_reward,
+        terms=terms,
+        reason=reason,
+    )
     return replace(result, form=Form.HOMOGENEOUS)
 
 
@@ -393,94 +477,7 @@ def _split_training_data(
     return select(train_indices), select(validate_indices)
 
 
-def _build_eval_dataset(dataset: PDEDataset, config: EqGPTConfig) -> PDEDataset:
-    if config.steady_polar_eval:
-        return _polar_eval_dataset(dataset)
-    delete_num = config.steady_boundary_delete_num
-    if delete_num is not None:
-        return _corroded_eval_dataset(dataset, int(delete_num))
-    return PDEDataset.from_scatter(
-        coords={axis: dataset.get_coords(axis) for axis in dataset.axis_order or []},
-        fields={"u": dataset.get_field("u")},
-        lhs="",
-        name=f"{dataset.name}-steady-eval",
-    )
-
-
-def _polar_eval_dataset(dataset: PDEDataset) -> PDEDataset:
-    radii = torch.linspace(*DISK_R_RANGE, DISK_N_R, dtype=torch.float32)
-    theta = torch.linspace(0.0, 2.0 * math.pi, DISK_N_THETA, dtype=torch.float32)
-    r_flat = radii.repeat_interleave(DISK_N_THETA)
-    theta_flat = theta.repeat(DISK_N_R)
-    x = r_flat * torch.cos(theta_flat)
-    y = r_flat * torch.sin(theta_flat)
-    return PDEDataset.from_scatter(
-        coords={"x": x, "y": y},
-        fields={"u": torch.zeros_like(x)},
-        lhs="",
-        name=f"{dataset.name}-steady-polar-eval",
-    )
-
-
-def _corroded_eval_dataset(dataset: PDEDataset, delete_num: int) -> PDEDataset:
-    x = dataset.get_coords("x").detach().cpu().numpy()
-    y = dataset.get_coords("y").detach().cpu().numpy()
-    u = dataset.get_field("u").detach().cpu().numpy()
-    x_idx, n_x = _lattice_indices(x)
-    y_idx, n_y = _lattice_indices(y)
-    if n_x * n_y > _MAX_LATTICE_CELLS:
-        raise ValueError(
-            f"steady boundary corrosion: reconstructed lattice {n_x}x{n_y} "
-            f"({n_x * n_y} cells) exceeds {_MAX_LATTICE_CELLS} -- the axis "
-            f"coordinates are not a clean uniform grid (floating-point jitter "
-            f"collapsed the inferred spacing, or the data is genuinely scattered). "
-            f"Corrosion requires gridded steady data."
-        )
-    occupancy = np.zeros((n_x, n_y), dtype=np.int64)
-    occupancy[x_idx, y_idx] = 1
-    prefix = np.pad(occupancy, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
-    kept: list[int] = []
-    window_area = (2 * delete_num) ** 2
-    for index in np.lexsort((y_idx, x_idx)):
-        i, j = int(x_idx[index]), int(y_idx[index])
-        if not (delete_num <= i < n_x - delete_num):
-            continue
-        if not (delete_num <= j < n_y - delete_num):
-            continue
-        lo_i, hi_i = i - delete_num, i + delete_num
-        lo_j, hi_j = j - delete_num, j + delete_num
-        occupied = (
-            prefix[hi_i, hi_j]
-            - prefix[lo_i, hi_j]
-            - prefix[hi_i, lo_j]
-            + prefix[lo_i, lo_j]
-        )
-        if int(occupied) == window_area:
-            kept.append(int(index))
-    if not kept:
-        raise ValueError("steady boundary corrosion removed every evaluation point")
-    return PDEDataset.from_scatter(
-        coords={"x": x[kept], "y": y[kept]},
-        fields={"u": u[kept]},
-        lhs="",
-        name=f"{dataset.name}-steady-corroded-eval",
-    )
-
-
-def _lattice_indices(values: np.ndarray) -> tuple[np.ndarray, int]:
-    unique = np.unique(values)
-    if unique.size < 2:
-        raise ValueError("steady boundary corrosion needs at least two axis values")
-    differences = np.diff(unique)
-    spacing = float(np.min(differences[differences > 0.0]))
-    indices = np.rint((values - unique[0]) / spacing).astype(np.int64)
-    return indices, int(indices.max()) + 1
-
-
 __all__ = [
-    "DISK_N_R",
-    "DISK_N_THETA",
-    "DISK_R_RANGE",
     "STEADY_MAX_ATOMIC_ORDER",
     "SURROGATE_CHECKPOINT_EVERY",
     "SURROGATE_HIDDEN_SIZES",

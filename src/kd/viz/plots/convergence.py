@@ -5,6 +5,8 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
+from kd.search.recorder import BEST_SCORE_KEY
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -41,13 +43,15 @@ def plot_convergence(
     ax: Axes,
 ) -> list[str]:
     warnings: list[str] = []
-    scores = result.recorder.get("_best_score")
+    scores = result.recorder.get(BEST_SCORE_KEY)
 
 
     ylabel = f"Best {result.score_kind}"
 
     if not scores:
-        warnings.append("No _best_score data in recorder; skipping convergence plot")
+        warnings.append(
+            f"No {BEST_SCORE_KEY} data in recorder; skipping convergence plot"
+        )
         ax.set_xlabel("Iteration")
         ax.set_ylabel(ylabel)
         ax.set_title("Convergence")
@@ -62,7 +66,32 @@ def plot_convergence(
         return warnings
 
     iterations = list(range(len(scores)))
-    ax.plot(iterations, scores, marker=".", markersize=3)
+
+
+
+
+
+    finite_scores = [
+        float(v) if isinstance(v, (int, float)) and math.isfinite(v) else float("nan")
+        for v in scores
+    ]
+
+
+
+    finite_indices = [i for i, v in enumerate(finite_scores) if not math.isnan(v)]
+    if not finite_indices:
+        warnings.append(
+            f"No finite {BEST_SCORE_KEY} data in recorder; skipping convergence plot"
+        )
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel(ylabel)
+        ax.set_title("Convergence")
+        ax.text(
+            0.5, 0.5, "No finite data", transform=ax.transAxes, ha="center", va="center"
+        )
+        return warnings
+
+    ax.plot(iterations, finite_scores, marker=".", markersize=3)
     ax.set_xlabel("Iteration")
     ax.set_ylabel(ylabel)
 
@@ -73,9 +102,15 @@ def plot_convergence(
     if constant is None:
         ax.set_title("Convergence")
     else:
+
+
+        first_finite = finite_indices[0]
+        reached = (
+            "the first iteration" if first_finite == 0 else f"iteration {first_finite}"
+        )
         ax.set_title(
             f"Convergence\nbest {result.score_kind} constant at {constant:.4g} "
-            "(reached at the first iteration)",
+            f"(reached at {reached})",
             fontsize="medium",
         )
 

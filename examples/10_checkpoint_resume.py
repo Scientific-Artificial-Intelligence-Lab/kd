@@ -5,7 +5,11 @@ from pathlib import Path
 import kd
 
 CKPT_DIR = Path(__file__).parent / "out" / "10_checkpoints"
+CKPT_DIR_PHASE2 = Path(__file__).parent / "out" / "10_checkpoints_phase2"
+
+
 shutil.rmtree(CKPT_DIR, ignore_errors=True)
+shutil.rmtree(CKPT_DIR_PHASE2, ignore_errors=True)
 
 
 dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
@@ -44,7 +48,9 @@ resumed = kd.Model(
     verbose=False,
 
 
-    checkpoint_dir=CKPT_DIR,
+
+
+    checkpoint_dir=CKPT_DIR_PHASE2,
     checkpoint_every=4,
 )
 resumed.fit(dataset, resume_from=CKPT_DIR / "checkpoint_final.pt")

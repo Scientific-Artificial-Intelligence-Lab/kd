@@ -21,16 +21,16 @@ from kd.models.field_model import FieldModel
 
 
 
-from kd.search.dlga.surrogate_log import (
-    _SURROGATE_BEST_EPOCH_KEY,
-    _SURROGATE_EARLY_STOPPED_KEY,
-    _SURROGATE_EPOCH_KEY,
-    _SURROGATE_EPOCHS_RUN_KEY,
-    _SURROGATE_TRAIN_LOSS_KEY,
-    _SURROGATE_VAL_LOSS_KEY,
+from kd.search.surrogate_log import (
+    SURROGATE_BEST_EPOCH_KEY,
+    SURROGATE_EARLY_STOPPED_KEY,
+    SURROGATE_EPOCH_KEY,
+    SURROGATE_EPOCHS_RUN_KEY,
+    SURROGATE_TRAIN_LOSS_KEY,
+    SURROGATE_VAL_LOSS_KEY,
 )
-from kd.search.dlga.surrogate_log import (
-    _SURROGATE_METRICS as _DLGA_SURROGATE_METRICS,
+from kd.search.surrogate_log import (
+    SURROGATE_METRICS as _DLGA_SURROGATE_METRICS,
 )
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder
@@ -54,14 +54,14 @@ _NEW_PLOT_NAME = "surrogate_training"
 
 _SURROGATE_KEYS_ALWAYS: frozenset[str] = frozenset(
     {
-        _SURROGATE_EPOCH_KEY,
-        _SURROGATE_TRAIN_LOSS_KEY,
-        _SURROGATE_EPOCHS_RUN_KEY,
-        _SURROGATE_EARLY_STOPPED_KEY,
+        SURROGATE_EPOCH_KEY,
+        SURROGATE_TRAIN_LOSS_KEY,
+        SURROGATE_EPOCHS_RUN_KEY,
+        SURROGATE_EARLY_STOPPED_KEY,
     }
 )
 _SURROGATE_KEYS_CONDITIONAL: frozenset[str] = frozenset(
-    {_SURROGATE_VAL_LOSS_KEY, _SURROGATE_BEST_EPOCH_KEY}
+    {SURROGATE_VAL_LOSS_KEY, SURROGATE_BEST_EPOCH_KEY}
 )
 _SURROGATE_KEYS_ALL: frozenset[str] = (
     _SURROGATE_KEYS_ALWAYS | _SURROGATE_KEYS_CONDITIONAL
@@ -100,18 +100,18 @@ def _recorder_with_surrogate_curve(
     recorder = VizRecorder(enabled=True)
     epochs = epochs if epochs is not None else [1, 2, 4, 8, 16]
     train = train if train is not None else [200.0 / e for e in epochs]
-    recorder.log(_SURROGATE_EPOCH_KEY, list(epochs))
-    recorder.log(_SURROGATE_TRAIN_LOSS_KEY, list(train))
+    recorder.log(SURROGATE_EPOCH_KEY, list(epochs))
+    recorder.log(SURROGATE_TRAIN_LOSS_KEY, list(train))
     if with_val:
         val = val if val is not None else [2.0 / e for e in epochs]
-        recorder.log(_SURROGATE_VAL_LOSS_KEY, list(val))
+        recorder.log(SURROGATE_VAL_LOSS_KEY, list(val))
     if with_best:
         marker = (
             best_epoch if best_epoch is not None else float(epochs[len(epochs) // 2])
         )
-        recorder.log(_SURROGATE_BEST_EPOCH_KEY, marker)
-    recorder.log(_SURROGATE_EPOCHS_RUN_KEY, float(epochs[-1]))
-    recorder.log(_SURROGATE_EARLY_STOPPED_KEY, 0.0)
+        recorder.log(SURROGATE_BEST_EPOCH_KEY, marker)
+    recorder.log(SURROGATE_EPOCHS_RUN_KEY, float(epochs[-1]))
+    recorder.log(SURROGATE_EARLY_STOPPED_KEY, 0.0)
     return recorder
 
 
@@ -362,7 +362,7 @@ def test_render_surrogate_training_best_epoch_marker_x_equals_best(ax: Axes) -> 
     recorder = _recorder_with_surrogate_curve(
         with_val=False, with_best=False, epochs=epochs
     )
-    recorder.log(_SURROGATE_BEST_EPOCH_KEY, best)
+    recorder.log(SURROGATE_BEST_EPOCH_KEY, best)
     sga_viz.render(_NEW_PLOT_NAME, ax, recorder)
 
     marker_xs = {
@@ -443,10 +443,10 @@ def test_render_surrogate_training_absent_curve_no_data_panel(
 def test_render_surrogate_training_length_mismatch_does_not_raise(ax: Axes) -> None:
     recorder = VizRecorder(enabled=True)
 
-    recorder.log(_SURROGATE_EPOCH_KEY, [1, 2, 3, 4, 5])
-    recorder.log(_SURROGATE_TRAIN_LOSS_KEY, [100.0, 50.0, 25.0])
-    recorder.log(_SURROGATE_EPOCHS_RUN_KEY, 5.0)
-    recorder.log(_SURROGATE_EARLY_STOPPED_KEY, 0.0)
+    recorder.log(SURROGATE_EPOCH_KEY, [1, 2, 3, 4, 5])
+    recorder.log(SURROGATE_TRAIN_LOSS_KEY, [100.0, 50.0, 25.0])
+    recorder.log(SURROGATE_EPOCHS_RUN_KEY, 5.0)
+    recorder.log(SURROGATE_EARLY_STOPPED_KEY, 0.0)
     try:
         result = sga_viz.render(_NEW_PLOT_NAME, ax, recorder)
     except Exception as exc:
@@ -565,7 +565,7 @@ def test_autograd_prepare_logs_surrogate_curve_with_epochs_run_length() -> None:
         f"TrainingResult)."
     )
 
-    curve = _last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY)
+    curve = _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY)
     assert len(curve) == n_epochs, (
         f"the train curve length must equal epochs_run ({n_epochs}); got "
         f"{len(curve)} (no early stop / downsample expected for {n_epochs} "
@@ -573,14 +573,14 @@ def test_autograd_prepare_logs_surrogate_curve_with_epochs_run_length() -> None:
     )
 
 
-    epochs = _last_logged_list(recorder, _SURROGATE_EPOCH_KEY)
+    epochs = _last_logged_list(recorder, SURROGATE_EPOCH_KEY)
     assert epochs == list(range(1, n_epochs + 1)), (
         f"surrogate_epoch must be 1..epochs_run ({list(range(1, n_epochs + 1))}); "
         f"got {epochs!r}."
     )
     assert len(epochs) == len(curve), "epoch axis must align 1:1 with the train series"
 
-    assert _last_logged_scalar(recorder, _SURROGATE_EPOCHS_RUN_KEY) == float(n_epochs)
+    assert _last_logged_scalar(recorder, SURROGATE_EPOCHS_RUN_KEY) == float(n_epochs)
 
 
 @pytest.mark.unit
@@ -598,20 +598,20 @@ def test_autograd_prepare_logs_val_curve_when_val_ratio_set() -> None:
     plugin.prepare(_real_components(dataset, recorder))
 
     keys = set(recorder.keys())
-    assert _SURROGATE_VAL_LOSS_KEY in keys, (
+    assert SURROGATE_VAL_LOSS_KEY in keys, (
         "a val split (val_ratio=0.25) must log surrogate_val_loss; missing it "
         f"(keys={sorted(k for k in keys if k.startswith('surrogate'))})."
     )
-    assert _SURROGATE_BEST_EPOCH_KEY in keys, (
+    assert SURROGATE_BEST_EPOCH_KEY in keys, (
         "a val split must log surrogate_best_epoch (the best-validate epoch)."
     )
-    train = _last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY)
-    val = _last_logged_list(recorder, _SURROGATE_VAL_LOSS_KEY)
+    train = _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY)
+    val = _last_logged_list(recorder, SURROGATE_VAL_LOSS_KEY)
     assert len(val) == len(train), (
         f"surrogate_val_loss length ({len(val)}) must match surrogate_train_loss "
         f"length ({len(train)})."
     )
-    best = _last_logged_scalar(recorder, _SURROGATE_BEST_EPOCH_KEY)
+    best = _last_logged_scalar(recorder, SURROGATE_BEST_EPOCH_KEY)
     assert 1 <= best <= n_epochs, (
         f"surrogate_best_epoch must be a 1..epochs_run epoch number; got {best}."
     )
@@ -629,7 +629,7 @@ def test_autograd_prepare_logs_surrogate_curve_once() -> None:
     results = plugin.evaluate(candidates)
     plugin.update(results)
 
-    train_log = recorder.get(_SURROGATE_TRAIN_LOSS_KEY)
+    train_log = recorder.get(SURROGATE_TRAIN_LOSS_KEY)
     assert len(train_log) == 1, (
         f"surrogate_train_loss must be logged exactly once (one-shot in "
         f"prepare); got {len(train_log)} log entries."
@@ -645,8 +645,8 @@ def test_surrogate_curve_is_complete_after_prepare_and_stable_across_updates() -
     plugin.prepare(_real_components(dataset, recorder))
 
 
-    after_prepare_train = list(_last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY))
-    after_prepare_epoch = list(_last_logged_list(recorder, _SURROGATE_EPOCH_KEY))
+    after_prepare_train = list(_last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY))
+    after_prepare_epoch = list(_last_logged_list(recorder, SURROGATE_EPOCH_KEY))
     assert len(after_prepare_train) == n_epochs, (
         "the curve must be COMPLETE after prepare(), before any update()."
     )
@@ -657,12 +657,12 @@ def test_surrogate_curve_is_complete_after_prepare_and_stable_across_updates() -
 
 
     assert (
-        _last_logged_list(recorder, _SURROGATE_TRAIN_LOSS_KEY) == after_prepare_train
+        _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY) == after_prepare_train
     ), (
         "the surrogate train curve must NOT change across update() (logging "
         "belongs to prepare, not update)."
     )
-    assert _last_logged_list(recorder, _SURROGATE_EPOCH_KEY) == after_prepare_epoch, (
+    assert _last_logged_list(recorder, SURROGATE_EPOCH_KEY) == after_prepare_epoch, (
         "the surrogate epoch axis must NOT change across update()."
     )
 
@@ -716,3 +716,56 @@ def test_pretrained_field_model_prepare_logs_no_surrogate_keys() -> None:
         f"a pre-trained field_model has no training history; no surrogate key "
         f"may appear, found {sorted(present)}."
     )
+
+
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_autograd_prepare_exposes_surrogate_train_seconds() -> None:
+    dataset = _tiny_dataset()
+    components = _real_components(dataset, VizRecorder(enabled=True))
+    plugin = SGAPlugin(_autograd_config(autograd_train_epochs=4))
+    plugin.prepare(components)
+
+    seconds = plugin.surrogate_train_seconds
+    assert isinstance(seconds, float), (
+        "a trained autograd prepare() must expose numeric surrogate_train_seconds "
+        f"(RunCost source); got {seconds!r}."
+    )
+    assert seconds >= 0.0
+
+
+@pytest.mark.unit
+def test_pretrained_field_model_prepare_surrogate_train_seconds_none() -> None:
+    dataset = _tiny_dataset()
+    components = _real_components(dataset, VizRecorder(enabled=True))
+    model = _pretrained_model(dataset)
+    plugin = SGAPlugin(_autograd_config(field_model=model))
+    plugin.prepare(components)
+
+    assert plugin.surrogate_train_seconds is None, (
+        "a pre-trained field_model trains nothing this run; "
+        "surrogate_train_seconds must stay None (honest invocation-local cost)."
+    )
+
+
+@pytest.mark.unit
+def test_surrogate_train_seconds_is_plugin_local_not_shared_via_context() -> None:
+    dataset = _tiny_dataset()
+    components = _real_components(dataset, VizRecorder(enabled=True))
+
+
+    trained = SGAPlugin(_autograd_config(autograd_train_epochs=4))
+    trained.prepare(components)
+    assert trained.surrogate_train_seconds is not None
+
+
+
+    fd = SGAPlugin(SGAConfig(num=4, depth=2, width=2, seed=42, maxit=2))
+    fd.prepare(components)
+    assert fd.surrogate_train_seconds is None

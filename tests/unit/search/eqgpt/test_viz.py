@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 
 import matplotlib
 
@@ -208,6 +209,213 @@ def test_reward_convergence_flat_curve_gets_subtitle(ax) -> None:
 def test_reward_convergence_rising_curve_has_plain_title(ax) -> None:
     eqgpt_viz.render("reward_convergence", ax, _disjoint_recorder())
     assert "constant" not in ax.get_title().lower()
+
+
+
+
+
+
+
+
+
+
+
+
+
+_GAP_EPOCHS = 5
+
+
+def _empty_pool_recorder() -> VizRecorder:
+    recorder = VizRecorder(enabled=True)
+    plugin = _plugin()
+    plugin.prepare(_components(recorder))
+    for _ in range(_GAP_EPOCHS):
+        plugin.update([])
+    return recorder
+
+
+def _gapped_recorder(pool_best: list[float]) -> VizRecorder:
+    recorder = VizRecorder(enabled=True)
+    for value in pool_best:
+        recorder.log("pool_best", value)
+    return recorder
+
+
+def test_empty_pool_epochs_record_gaps_not_measured_zeros() -> None:
+    recorder = _empty_pool_recorder()
+    for metric in _LOGGED_METRICS:
+        series = recorder.get(metric)
+        assert len(series) == _GAP_EPOCHS, metric
+        assert all(math.isnan(value) for value in series), metric
+        assert 0.0 not in series, metric
+
+
+def test_empty_pool_gaps_export_as_json_null() -> None:
+    recorder = _empty_pool_recorder()
+    assert recorder.to_dict()["pool_best"] == [None] * _GAP_EPOCHS
+
+    convergence = eqgpt_viz.get_data("reward_convergence", recorder)
+    assert convergence["y"] == [None] * _GAP_EPOCHS
+    spread = eqgpt_viz.get_data("pool_reward_spread", recorder)
+    for key in _SPREAD_KEYS:
+        assert spread["y"][key] == [None] * _GAP_EPOCHS, key
+    json.dumps([convergence, spread])
+
+
+def test_measured_zero_reward_stays_a_measured_zero() -> None:
+    recorder = VizRecorder(enabled=True)
+    plugin = _plugin()
+    plugin.prepare(_components(recorder))
+    scored = plugin.evaluate(plugin.propose(_BATCH))
+    zeroed = [dataclasses.replace(r, score=0.0) for r in scored if r.is_valid]
+    assert zeroed
+
+    plugin.update(zeroed)
+
+    for key in _SPREAD_KEYS:
+        assert recorder.get(key) == [0.0], key
+    assert eqgpt_viz.get_data("reward_convergence", recorder)["y"] == [0.0]
+
+    assert all(math.isfinite(v) for v in recorder.get("finetune_loss"))
+
+
+def test_reward_convergence_all_gap_series_is_not_called_constant(ax) -> None:
+    eqgpt_viz.render(
+        "reward_convergence", ax, _gapped_recorder([float("nan")] * _GAP_EPOCHS)
+    )
+    title = ax.get_title().lower()
+    assert "constant" not in title
+    assert "no pool" in title
+    assert all(math.isnan(value) for value in _ydata(ax.lines[0]))
+
+
+def test_reward_convergence_partial_gap_does_not_claim_the_first_epoch(ax) -> None:
+    nan = float("nan")
+    eqgpt_viz.render("reward_convergence", ax, _gapped_recorder([nan, nan, 0.9, 0.9]))
+    title = ax.get_title().lower()
+    assert "0.9" in title
+    assert "first epoch" not in title
+    assert "no pool" in title
+
+
+def test_reward_convergence_moving_series_with_gaps_reports_the_gaps(ax) -> None:
+    eqgpt_viz.render(
+        "reward_convergence", ax, _gapped_recorder([float("nan"), 0.1, 0.5, 0.9])
+    )
+    title = ax.get_title().lower()
+    assert "constant" not in title
+    assert "no pool" in title
+
+
+def test_spread_band_draws_gaps_not_zeros(ax) -> None:
+    recorder = VizRecorder(enabled=True)
+    for key, measured in zip(_SPREAD_KEYS, (0.9, 0.5, 0.1), strict=True):
+        recorder.log(key, float("nan"))
+        recorder.log(key, measured)
+
+    eqgpt_viz.render("pool_reward_spread", ax, recorder)
+    assert len(ax.lines) == 3
+    for line, measured in zip(ax.lines, (0.9, 0.5, 0.1), strict=True):
+        ydata = _ydata(line)
+        assert math.isnan(ydata[0])
+        assert ydata[1] == pytest.approx(measured)
+
+    data = eqgpt_viz.get_data("pool_reward_spread", recorder)
+    for key, measured in zip(_SPREAD_KEYS, (0.9, 0.5, 0.1), strict=True):
+        assert data["y"][key] == [None, pytest.approx(measured)], key
+    json.dumps(data)
+
+
+def test_spread_band_pads_a_short_series_with_gaps(ax) -> None:
+    recorder = VizRecorder(enabled=True)
+    recorder.log("pool_best", float("nan"))
+    recorder.log("pool_best", 0.9)
+    recorder.log("pool_median", 0.5)
+    recorder.log("pool_worst", 0.1)
+
+    data = eqgpt_viz.get_data("pool_reward_spread", recorder)
+    assert data["x"] == [0, 1]
+    assert data["y"]["pool_best"] == [None, pytest.approx(0.9)]
+    assert data["y"]["pool_median"] == [pytest.approx(0.5), None]
+    assert data["y"]["pool_worst"] == [pytest.approx(0.1), None]
+    eqgpt_viz.render("pool_reward_spread", ax, recorder)
+    assert len(ax.lines) == 3
+
+
+
+
+
+
+
+
+
+
+
+def _band_recorder(**series: list[float]) -> VizRecorder:
+    recorder = VizRecorder(enabled=True)
+    for key, values in series.items():
+        for value in values:
+            recorder.log(key, value)
+    return recorder
+
+
+def _subtitle(ax) -> str:
+    lines = ax.get_title().split("\n")
+    return lines[1] if len(lines) > 1 else ""
+
+
+def test_spread_band_all_gap_epochs_are_disclosed(ax) -> None:
+    eqgpt_viz.render("pool_reward_spread", ax, _empty_pool_recorder())
+    assert len(ax.lines) == 3
+    assert all(math.isnan(v) for v in _ydata(ax.lines[0]))
+    subtitle = _subtitle(ax)
+    assert "no pool" in subtitle
+    assert str(_GAP_EPOCHS) in subtitle
+
+
+def test_spread_band_partial_gaps_are_counted(ax) -> None:
+    nan = float("nan")
+    eqgpt_viz.render(
+        "pool_reward_spread",
+        ax,
+        _band_recorder(
+            pool_best=[nan, 0.9, 0.9],
+            pool_median=[nan, 0.5, 0.5],
+            pool_worst=[nan, 0.1, 0.1],
+        ),
+    )
+    assert "1 of 3 epochs had no pool" in _subtitle(ax)
+
+
+def test_spread_band_padding_is_not_reported_as_an_empty_pool(ax) -> None:
+    eqgpt_viz.render(
+        "pool_reward_spread",
+        ax,
+        _band_recorder(pool_best=[0.9, 0.8], pool_median=[0.5], pool_worst=[0.1]),
+    )
+    assert _subtitle(ax) == ""
+
+
+def test_finetune_loss_all_gap_names_the_fine_tune_not_the_pool(ax) -> None:
+    eqgpt_viz.render("finetune_loss", ax, _empty_pool_recorder())
+    subtitle = _subtitle(ax)
+    assert "fine-tune" in subtitle
+    assert "no pool" not in subtitle
+    assert str(_GAP_EPOCHS) in subtitle
+
+
+def test_finetune_loss_partial_gap_counts_the_skipped_epochs(ax) -> None:
+    eqgpt_viz.render(
+        "finetune_loss", ax, _band_recorder(finetune_loss=[float("nan"), 2.0, 1.0])
+    )
+    assert "1 of 3 epochs" in _subtitle(ax)
+
+
+@pytest.mark.parametrize("name", _PLOT_NAMES)
+def test_gapless_panel_keeps_its_plain_title(name, ax) -> None:
+    eqgpt_viz.render(name, ax, _disjoint_recorder())
+    titles = {info.name: info.title for info in eqgpt_viz.list_plot_infos()}
+    assert ax.get_title() == titles[name]
 
 
 
@@ -448,9 +656,21 @@ def test_get_plot_data_per_case_shape_and_nan(monkeypatch) -> None:
 
 def test_render_per_case_reward_marks_nan_case(ax) -> None:
     eqgpt_viz.render_per_case_reward(ax, {"N_a": 0.9, "N_b": float("nan"), "N_c": 0.8})
-    assert len(ax.patches) == 3
-    assert ax.patches[1].get_height() == 0.0
+    assert math.isnan(ax.patches[1].get_height())
     assert any(t.get_text() == "n/a" for t in ax.texts)
+
+
+def test_render_per_case_reward_na_mark_visible_when_all_rewards_negative(ax) -> None:
+    eqgpt_viz.render_per_case_reward(
+        ax, {"N_a": -5.0, "N_b": float("nan"), "N_c": -6.0}
+    )
+    ax.figure.canvas.draw()
+    marks = [t for t in ax.texts if t.get_text() == "n/a"]
+    assert len(marks) == 1
+    text_box = marks[0].get_window_extent()
+    axes_box = ax.get_window_extent()
+    assert axes_box.contains(text_box.x0, text_box.y0)
+    assert axes_box.contains(text_box.x1, text_box.y1)
 
 
 @pytest.mark.parametrize("per_case", [{}, {"N_a": float("nan")}])

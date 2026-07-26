@@ -68,11 +68,13 @@ class TestEvolutionTypeIdentity:
 
 
 
+
 class TestEvolutionFields:
     @pytest.mark.unit
     def test_evolution_fields_are_lhs_terms_attrs(self) -> None:
         names = {f.name for f in dataclasses.fields(Evolution)}
-        assert names == {"lhs_spec", "terms", "attrs"}
+
+        assert names == {"lhs_spec", "terms", "attrs", "active_indices"}
 
     @pytest.mark.unit
     def test_evolution_has_no_form_field(self) -> None:

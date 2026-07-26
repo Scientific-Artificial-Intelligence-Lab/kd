@@ -14,6 +14,11 @@ from kd.viz.plots._dim_utils import (
     _pick_time_steps,
     _slice_nd_to_2d,
 )
+from kd.viz.plots._field_panels import (
+    _heatmap_panel,
+    _range_note,
+    _reference_limits,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -28,6 +33,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 9
 _WARNING_WRAP_WIDTH = 38
+_YLIM_PAD_FRACTION = 0.05
 
 
 def plot_time_slices(
@@ -192,6 +198,12 @@ def _render_1d_slices(
 
     div_tag = _diverged_tag(diverged, integration_result, time_axis)
 
+
+
+
+    limits = _reference_limits(true_field, pred_field)
+    ylim = _padded_ylim(limits)
+
     for col, t_idx in enumerate(time_indices):
         ax: Axes = axes_arr[0, col]
         t_val = float(t_coords[t_idx])
@@ -201,11 +213,16 @@ def _render_1d_slices(
         true_display = np.where(np.isfinite(true_slice), true_slice, np.nan)
         ax.plot(s_coords, true_display, "b-", label="True", linewidth=1.5)
 
+        note = ""
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
             pred_display = np.where(np.isfinite(pred_slice), pred_slice, np.nan)
             pred_label = f"Predicted{div_tag}"
             ax.plot(s_coords, pred_display, "r--", label=pred_label, linewidth=1.5)
+
+
+
+            note = _pred_range_note(pred_display, ylim)
         else:
             _add_warning_text(ax, "No prediction")
 
@@ -214,7 +231,8 @@ def _render_1d_slices(
             if div_tag
             else f"{time_axis} = {t_val:.3g}"
         )
-        ax.set_title(title)
+        ax.set_title(title + note)
+        ax.set_ylim(*ylim)
         ax.set_xlabel(s_name)
         if col == 0:
             ax.set_ylabel(dataset.lhs_field)
@@ -222,6 +240,17 @@ def _render_1d_slices(
 
     fig.tight_layout()
     return fig
+
+
+def _padded_ylim(limits: tuple[float, float]) -> tuple[float, float]:
+    lo, hi = limits
+    pad = (hi - lo) * _YLIM_PAD_FRACTION
+    return lo - pad, hi + pad
+
+
+def _pred_range_note(pred_display: np.ndarray, limits: tuple[float, float]) -> str:
+    note = _range_note(pred_display, limits)
+    return f"\nPredicted {note.strip()}" if note else ""
 
 
 def _render_2d_slices(
@@ -251,41 +280,43 @@ def _render_2d_slices(
     div_tag = _diverged_tag(diverged, integration_result, time_axis)
     extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
+
+
+
+
+
+    limits = _reference_limits(true_field, pred_field)
+
     for col, t_idx in enumerate(time_indices):
         t_val = float(t_coords[t_idx])
 
         true_slice = np.take(true_field, t_idx, axis=time_dim)
         if true_slice.ndim > 2:
             true_slice = _slice_nd_to_2d(true_slice, (0, 1))
-        true_display = np.where(np.isfinite(true_slice), true_slice, np.nan)
-        axes_arr[0, col].imshow(
-            true_display,
-            aspect="auto",
-            origin="lower",
+        _heatmap_panel(
+            axes_arr[0, col],
+            true_slice,
+            f"True ({time_axis}={t_val:.3g})" + _range_note(true_slice, limits),
             extent=extent,
-            rasterized=True,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            limits=limits,
         )
-        axes_arr[0, col].set_title(f"True ({time_axis}={t_val:.3g})")
-        axes_arr[0, col].set_xlabel(xlabel)
-        axes_arr[0, col].set_ylabel(ylabel)
 
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
             if pred_slice.ndim > 2:
                 pred_slice = _slice_nd_to_2d(pred_slice, (0, 1))
-            pred_display = np.where(np.isfinite(pred_slice), pred_slice, np.nan)
-            axes_arr[1, col].imshow(
-                pred_display,
-                aspect="auto",
-                origin="lower",
-                extent=extent,
-                rasterized=True,
-            )
-            axes_arr[1, col].set_title(
+            _heatmap_panel(
+                axes_arr[1, col],
+                pred_slice,
                 f"Predicted{div_tag} ({time_axis}={t_val:.3g})"
+                + _range_note(pred_slice, limits),
+                extent=extent,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                limits=limits,
             )
-            axes_arr[1, col].set_xlabel(xlabel)
-            axes_arr[1, col].set_ylabel(ylabel)
         else:
             _warning_panel(axes_arr[1, col])
 

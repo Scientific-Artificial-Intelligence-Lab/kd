@@ -97,6 +97,18 @@ class TestLegacyLoadDerivesEquation:
         assert loaded.lhs_label == "u_t"
 
     @pytest.mark.unit
+    def test_legacy_load_preserves_sparse_active_support(self, tmp_path: Path) -> None:
+        path = tmp_path / "legacy_sparse.json"
+        final_eval = _valid_final_eval()
+        final_eval.selected_indices = [0, 2]
+        _write_legacy_json(_experiment_result(final_eval), path)
+
+        loaded = ExperimentResult.load(path)
+
+        assert loaded.equation is not None
+        assert loaded.equation.active_indices == (0, 2)
+
+    @pytest.mark.unit
     def test_legacy_lhs_name_derives_second_order_lhs(self, tmp_path: Path) -> None:
         path = tmp_path / "legacy_u_tt.json"
         result = _experiment_result(

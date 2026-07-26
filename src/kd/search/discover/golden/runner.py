@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from kd.core import safety_counters
 from kd.search.discover.golden.pde1d import run_burgers_mode1, run_chafee_mode1
 from kd.search.discover.golden.summarise import GoldenRunResult
 
@@ -18,8 +19,16 @@ def run_golden(
     *,
     data_path: Path | None = None,
 ) -> tuple[GoldenRunResult, dict[str, Any]]:
+
+
+
+
+    if safety_counters.counters_enabled():
+        safety_counters.reset()
     if mode == "mode1":
-        return _run_mode1(pde, seed, data_path=data_path)
+        outcome = _run_mode1(pde, seed, data_path=data_path)
+        safety_counters.emit_run_summary(f"golden:{pde}:{mode}:seed={seed}", logger)
+        return outcome
     raise ValueError(f"Unknown mode: {mode!r}")
 
 

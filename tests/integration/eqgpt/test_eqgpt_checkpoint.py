@@ -96,6 +96,13 @@ def test_runner_checkpoint_resume_equals_straight(tmp_path: Path) -> None:
 
     ckpt_dir = tmp_path / "ckpt"
     _runner(2, [CheckpointCallback(directory=ckpt_dir, every_n=2)]).run(components)
+
+    from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+    for entry in load_checkpoint_manifest(ckpt_dir):
+        assert entry.algorithm == "eqgpt"
+        assert type(entry.seed) is int
+        assert entry.config_hash is not None and len(entry.config_hash) == 64
     latest = max(ckpt_dir.glob("*.pt"), key=lambda p: p.stat().st_mtime)
 
 

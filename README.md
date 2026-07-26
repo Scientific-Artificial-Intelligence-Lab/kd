@@ -73,9 +73,11 @@ EqGPT needs its pretrained GPT weights, which are not vendored; see
 LLM4ED runs fully offline with an injected provider, or against any
 OpenAI-compatible API (see [`examples/17_llm4ed.py`](examples/17_llm4ed.py)).
 
-The external PySR regressor can also be driven through the same facade as an
-optional fallback for cross-checking (`algorithm="pysr"`, needs
-`uv sync --extra pysr`).
+Two external baselines can also be driven through the same facade for
+cross-checking: the PySR symbolic regressor (`algorithm="pysr"`, needs
+`uv sync --extra pysr`) and PySINDy's native STLSQ sparse-regression optimizer
+over the KD term library (`algorithm="pysindy"`, needs
+`uv sync --extra pysindy`).
 
 ## Datasets
 
@@ -211,6 +213,57 @@ model.fit(dataset, resume_from="ckpts/checkpoint_final.pt")
 The checkpoint restores search state (population / controller weights /
 best); generations and other settings come from the new `Model`.
 
+The checkpoint directory also carries a `manifest.json` ledger: one entry per
+checkpoint recording filename, iteration, best score and expression, algorithm,
+seed, config hash and write time. Read it instead of globbing filenames:
+
+```python
+for entry in kd.load_checkpoint_manifest("ckpts"):
+    print(entry.filename, entry.iteration, entry.best_score)
+```
+
+The reader is read-only and fail-loud, and verifies the whole directory
+contract. Call it on a directory whose run has terminated: during a live run a
+checkpoint file can briefly exist before its ledger entry is appended.
+
+## Batch Experiments
+
+`kd.harness` runs a declarative experiment matrix and stores sealed evidence:
+
+```python
+from pathlib import Path
+
+from kd.harness import ExperimentPlan, PlanEntry, run_plan
+
+plan = ExperimentPlan(
+    name="burgers-sweep",
+    entries=tuple(
+        PlanEntry(
+            instrument=engine,
+            dataset_ref="burgers",
+            seed=seed,
+            model_kwargs={"generations": 50},
+        )
+        for engine in ("sga", "dlga")
+        for seed in (0, 1, 2)
+    ),
+)
+result = run_plan(
+    plan, datasets={"burgers": dataset}, store_root=Path("evidence")
+)
+```
+
+Entry order is part of the plan's identity, so a plan hash pins the exact
+execution matrix. Each run's evidence is stored with an environment
+fingerprint; `build_consensus` aggregates a sealed store across runs, and both
+dispatch and consensus results render to markdown or to versioned JSON
+artifacts. Execution is serial: the package composes the existing `Model`
+surface and adds no routing or budget logic.
+
+The full chain (plan, run, re-open the sealed store, consensus, Markdown +
+JSON) runs in about five seconds in
+[`examples/19_batch_harness.py`](examples/19_batch_harness.py).
+
 ## Visualization
 
 After a fit, render a full HTML report (universal figures plus the fitted
@@ -249,7 +302,9 @@ src/kd/
 ├── api.py        # Model facade: one-line fit() for every engine
 ├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
 ├── data/         # PDEDataset, synthetic generators, dataset loaders
-├── search/       # sga / dlga / discover / eqgpt / llm4ed / pysr engines + configs
+├── search/       # sga / dlga / discover / eqgpt / llm4ed / pysr / pysindy
+│                 #   engines + configs
+├── harness/      # batch experiment plans, evidence store, consensus reports
 ├── viz/          # VizEngine: HTML reports & figures
 └── inspect.py    # preview() dataset sanity checks
 ```
@@ -270,8 +325,9 @@ methods belongs to the original works:
 - **LLM4ED**: Du et al., [LLM4ED](https://github.com/menggedu/EDL),
   *Phys. Fluids* **36**, 097121 (2024)
 
-KD also builds on [PySR](https://github.com/MilesCranmer/PySR) (optional
-fallback engine), [SymPy](https://github.com/sympy/sympy), and
+KD also builds on [PySR](https://github.com/MilesCranmer/PySR) and
+[PySINDy](https://github.com/dynamicslab/pysindy) (optional external
+baselines), [SymPy](https://github.com/sympy/sympy), and
 [PyTorch](https://github.com/pytorch/pytorch).
 
 ## License

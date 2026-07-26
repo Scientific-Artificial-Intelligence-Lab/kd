@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import pickle
 from unittest.mock import MagicMock
@@ -2225,6 +2226,7 @@ class TestAICLowerBound:
             assert r.is_valid is False, (
                 f"Expected is_valid=False for AIC=-200, got is_valid={r.is_valid}"
             )
+            assert r.invalid_reason == "structural_reject"
 
 
             assert r.score == pytest.approx(-200.0), (
@@ -2702,6 +2704,32 @@ class TestSGAPluginConfig:
         pickled = pickle.dumps(cfg)
         restored = pickle.loads(pickled)
         assert restored == cfg
+
+    @pytest.mark.unit
+    def test_injected_field_model_is_bound_as_artifact(self) -> None:
+        from kd.models.field_model import FieldModel
+        from kd.search.sga.plugin import SGAPlugin
+
+        model = FieldModel(["x", "t"], ["u"], hidden_sizes=[2])
+        plugin = SGAPlugin(SGAConfig(use_autograd=True, field_model=model))
+
+        assert plugin.config["field_model"] == {
+            "artifact": "field_model",
+            "format": "kd-field-model-v1",
+        }
+        json.dumps(plugin.config, allow_nan=False)
+        artifacts_before = plugin.artifacts
+        assert artifacts_before is not None
+        assert len(artifacts_before["field_model"]["sha256"]) == 64
+
+        with torch.no_grad():
+            next(model.parameters()).add_(1.0)
+        artifacts_after = plugin.artifacts
+        assert artifacts_after is not None
+        assert (
+            artifacts_after["field_model"]["sha256"]
+            != artifacts_before["field_model"]["sha256"]
+        )
 
     @pytest.mark.unit
     def test_config_before_and_after_prepare_same_params(

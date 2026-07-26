@@ -14,8 +14,10 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
+from kd.data.schema import DataTopology
 from kd.llm import (
     BudgetedProvider,
     LLMBudgetExhausted,
@@ -24,6 +26,7 @@ from kd.llm import (
     OpenAICompatProvider,
     TapeRecordingProvider,
 )
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.llm4ed import viz as _viz_helpers
 from kd.search.llm4ed.config import (
     ALGORITHM_NAME,
@@ -43,9 +46,20 @@ from kd.search.llm4ed.prompts import (
     parse_response,
     permute_terms,
 )
-from kd.search.llm4ed.score import EquationScore, score_equation
+from kd.search.llm4ed.score import (
+    ERROR_ABNORMAL_COEF,
+    ERROR_INEXPRESSIBLE,
+    ERROR_LSTSQ,
+    ERROR_NON_FINITE,
+    ERROR_PARSE,
+    ERROR_UNDEFINED_OPERANDS,
+    ERROR_UNDEFINED_OPERATORS,
+    EquationScore,
+    score_equation,
+)
 from kd.search.recorder import log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
+from kd.viz.gap_notes import NO_MEASUREMENT
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -59,6 +73,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 FloatArray = npt.NDArray[np.float64]
+
+_STRUCTURAL_SCORE_ERRORS: Final[frozenset[str]] = frozenset(
+    {
+        ERROR_ABNORMAL_COEF,
+        ERROR_INEXPRESSIBLE,
+        ERROR_PARSE,
+        ERROR_UNDEFINED_OPERANDS,
+        ERROR_UNDEFINED_OPERATORS,
+    }
+)
+
+
+def _invalid_reason_for_score(error_type: str | None) -> str:
+    if error_type in _STRUCTURAL_SCORE_ERRORS:
+        return "structural_reject"
+    if error_type == ERROR_NON_FINITE:
+        return "non_finite"
+    if error_type == ERROR_LSTSQ:
+        return "evaluation_error"
+    return "unclassified"
 
 
 
@@ -96,6 +130,16 @@ _LOGGED_METRICS: Final[tuple[str, ...]] = (
     "n_llm_calls",
     "n_valid",
 )
+
+
+
+
+
+
+
+
+
+_NO_MEASUREMENT: Final[float] = NO_MEASUREMENT
 
 
 @dataclass(frozen=True)
@@ -145,9 +189,58 @@ class Llm4edPlugin:
 
     score_kind: ClassVar[str] = "LLM4ED sparse reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "native"
+    )
 
     config_cls: ClassVar[type[Llm4edConfig]] = Llm4edConfig
     one_shot: ClassVar[bool] = False
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="llm4ed",
+        summary="Budgeted LLM proposal and sparse-reward PDE search.",
+        cost_class="medium",
+        modes=(
+            InstrumentMode(
+                name="default",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="finite_diff",
+            ),
+        ),
+        knobs=(
+            Knob(
+                "temperature",
+                "float",
+                "LLM sampling temperature.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "max_tokens",
+                "int",
+                "Maximum decoded tokens per request.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "stop_threshold",
+                "float",
+                "Reward threshold for completion.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "reward_limit",
+                "float",
+                "Minimum admitted sparse reward.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "pool_size",
+                "int",
+                "Elite-pool capacity.",
+                resume_tier="init_only",
+            ),
+        ),
+    )
 
     def __init__(
         self, config: Llm4edConfig, *, provider: LLMProvider | None = None
@@ -200,6 +293,16 @@ class Llm4edPlugin:
         self._round_llm_calls: int = 0
 
 
+
+
+
+
+        self._tokens_in: int = 0
+        self._tokens_out: int = 0
+        self._usage_reporting_calls: int = 0
+        self._completed_calls: int = 0
+
+
     def list_plots(self) -> list[PlotInfo]:
         return _viz_helpers.list_plot_infos()
 
@@ -227,6 +330,14 @@ class Llm4edPlugin:
     def runner_batch_size(self) -> int:
         return self._config.samples_per_epoch
 
+    @property
+    def llm_token_totals(self) -> dict[str, int] | None:
+        if self._completed_calls == 0:
+            return None
+        if self._usage_reporting_calls != self._completed_calls:
+            return None
+        return {"tokens_in": self._tokens_in, "tokens_out": self._tokens_out}
+
 
     def prepare(self, components: PlatformComponents) -> None:
         self._components = components
@@ -234,6 +345,12 @@ class Llm4edPlugin:
         self._lhs, self._features, self._lhs_name = _dataset_columns(
             components.dataset
         )
+
+
+
+
+
+        self._reset_token_totals()
 
         is_restore = self._restore_pending and self._pending_state is not None
 
@@ -334,12 +451,14 @@ class Llm4edPlugin:
 
 
 
+
                 results.append(
                     invalid_evaluation_result(
                         cached.error_type or "invalid candidate",
                         score=None,
                         expression=candidate,
                         terms=list(cached.term_strs) or None,
+                        reason=_invalid_reason_for_score(cached.error_type),
                     )
                 )
                 continue
@@ -396,17 +515,22 @@ class Llm4edPlugin:
     def build_final_result(self) -> EvaluationResult:
         self._require_prepared()
         if not self._best_expression:
+
             return invalid_evaluation_result(
-                "no candidates found", score=self._best_reward
+                "no candidates found",
+                score=self._best_reward,
+                reason="no_candidate",
             )
         assert self._lhs is not None and self._features is not None
         rescored = score_equation(self._best_expression, self._lhs, self._features)
         if not rescored.valid:
+
             return invalid_evaluation_result(
                 "best candidate re-scoring failed: "
                 f"{rescored.error_type or 'unknown'}",
                 score=self._best_reward,
                 expression=self._best_expression,
+                reason=_invalid_reason_for_score(rescored.error_type),
             )
         return self._result_from_score(self._best_expression, rescored)
 
@@ -547,6 +671,12 @@ class Llm4edPlugin:
         if not self._prepared:
             raise RuntimeError("prepare() must be called before using the plugin.")
 
+    def _reset_token_totals(self) -> None:
+        self._tokens_in = 0
+        self._tokens_out = 0
+        self._usage_reporting_calls = 0
+        self._completed_calls = 0
+
     def _reset_search_state(self) -> None:
         self._population = []
         self._pool = ElitePool(self._config.pool_size)
@@ -664,6 +794,15 @@ class Llm4edPlugin:
         response = self._provider.complete(request)
         self._call_counts += 1
         self._round_llm_calls += 1
+
+
+
+
+        self._completed_calls += 1
+        if response.usage is not None:
+            self._tokens_in += response.usage.prompt_tokens
+            self._tokens_out += response.usage.completion_tokens
+            self._usage_reporting_calls += 1
         return response.text
 
     def _score_response(self, text: str) -> list[PoolItem]:
@@ -702,7 +841,7 @@ class Llm4edPlugin:
     def _pool_summary(self) -> tuple[float, float, float]:
         top = self._pool.get_top_samples()
         if not top:
-            return 0.0, 0.0, 0.0
+            return _NO_MEASUREMENT, _NO_MEASUREMENT, _NO_MEASUREMENT
         best = top[0].score
         worst = top[-1].score
         mid = len(top) // 2

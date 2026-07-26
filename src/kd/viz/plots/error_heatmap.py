@@ -14,6 +14,7 @@ from kd.viz.plots._dim_utils import (
     _pick_time_steps,
     _slice_nd_to_2d,
 )
+from kd.viz.plots._field_panels import _RESIDUAL_SIGN, _robust_abs_max
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -26,8 +27,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 11
 _WARNING_WRAP_WIDTH = 60
-_RESIDUAL_PERCENTILE = 99.0
 _N_TIME_SNAPSHOTS = 3
+_COLORBAR_LABEL = f"Error ({_RESIDUAL_SIGN})"
 
 
 def plot_error_heatmap(
@@ -97,7 +98,8 @@ def plot_error_heatmap(
         return fig, warnings
 
 
-    error = true_field - pred_field
+
+    error = pred_field - true_field
     error = np.where(np.isfinite(error), error, np.nan)
 
 
@@ -220,7 +222,7 @@ def _render_1d_error(
         vmax=vmax,
         rasterized=True,
     )
-    fig.colorbar(im, ax=ax, label="Error (True - Predicted)")
+    fig.colorbar(im, ax=ax, label=_COLORBAR_LABEL)
     ax.set_xlabel(time_axis)
     ax.set_ylabel(s_name)
     ax.set_title(f"Error Heatmap{div_tag}")
@@ -285,19 +287,7 @@ def _render_2d_error(
         fig.colorbar(
             mappable,
             ax=list(axes_arr.flat),
-            label="Error (True - Predicted)",
+            label=_COLORBAR_LABEL,
         )
 
     return fig
-
-
-def _robust_abs_max(data: np.ndarray) -> float:
-    abs_data = np.abs(data[np.isfinite(data)])
-    if abs_data.size == 0:
-        return 1.0
-    vmax = float(np.percentile(abs_data, _RESIDUAL_PERCENTILE))
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = float(abs_data.max()) if abs_data.size else 1.0
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = 1.0
-    return vmax

@@ -54,12 +54,31 @@ class TestConstruct:
 
 class TestBuildHomogeneous:
     @pytest.mark.unit
-    def test_pivot_coefficient_pinned_to_one(self) -> None:
+    def test_unnormalized_pivot_degrades_to_none(self) -> None:
+
+
+
+
+
+        assert (
+            build_homogeneous(["diff2_x(u)", "diff2_y(u)", "one"], [7.0, 1.0, 0.5])
+            is None
+        )
+
+    @pytest.mark.unit
+    def test_unnormalized_pivot_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("WARNING"):
+            build_homogeneous(["diff2_x(u)", "one"], [0.7, 0.5])
+        assert any("pivot" in message for message in caplog.messages)
+
+    @pytest.mark.unit
+    def test_pivot_within_tolerance_canonicalized_to_exact_one(self) -> None:
+
 
 
         eq = build_homogeneous(
             ["diff2_x(u)", "diff2_y(u)", "one"],
-            [7.0, 1.0, 0.5],
+            [1.0 + 1e-7, 1.0, 0.5],
         )
         assert isinstance(eq, Homogeneous)
         assert eq.terms[0] == ("diff2_x(u)", Scalar(1.0))
@@ -83,9 +102,7 @@ class TestBuildHomogeneous:
 class TestLowering:
     @pytest.mark.unit
     def test_homogeneous_lowers_to_pivot_form(self) -> None:
-        eq = make_homogeneous(
-            [*_LAPLACE_TERMS, ("one", Scalar(0.5))]
-        )
+        eq = make_homogeneous([*_LAPLACE_TERMS, ("one", Scalar(0.5))])
         form = lower_to_regression(eq)
         assert isinstance(form, PivotRegressionForm)
 

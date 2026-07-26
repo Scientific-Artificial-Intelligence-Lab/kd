@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 import pytest
@@ -183,13 +184,29 @@ def test_render_all_includes_plugin_plots(tmp_path: Path) -> None:
 
 
 
+
+
+
+
     html_content = html_path.read_text()
-    for plot_name in _EXPECTED_PLUGIN_PLOTS:
-        expected_title = (
-            f"plugin_{plot_name}".replace("_", " ").replace("-", " ").title()
+    rendered_text = html.unescape(html_content)
+    declared = model.algorithm_.list_plots()
+    assert {info.name for info in declared} == _EXPECTED_PLUGIN_PLOTS
+
+    for info in declared:
+        assert info.title in rendered_text, (
+            f"HTML report must reference plugin plot by its declared title "
+            f"{info.title!r} (plot name {info.name!r}), but it was not found "
+            f"in {html_path}."
         )
-        assert expected_title in html_content, (
-            f"HTML report must reference plugin plot {expected_title!r} "
-            f"(derived from name {plot_name!r}), but it was not found in "
-            f"{html_path}."
+        assert info.description in rendered_text, (
+            f"HTML report must carry the declared description for plot "
+            f"{info.name!r}, but it was not found in {html_path}."
+        )
+
+        fallback_title = f"plugin_{info.name}".replace("_", " ").title()
+        assert fallback_title not in rendered_text, (
+            f"Declared title {info.title!r} must win over the filename-derived "
+            f"fallback {fallback_title!r}, but the fallback is still rendered "
+            f"in {html_path}."
         )

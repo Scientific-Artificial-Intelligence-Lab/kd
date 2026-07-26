@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz.plots._field_panels import _RESIDUAL_SIGN
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -103,7 +104,10 @@ def _render_histogram(
         fontsize=9,
     )
 
-    ax.set_xlabel("Residual")
+
+
+
+    ax.set_xlabel(f"Residual ({_RESIDUAL_SIGN})")
     ax.set_ylabel("Count")
     ax.set_title("Residual Distribution")
 
@@ -159,9 +163,17 @@ def _render_spatial(
         rasterized=True,
     )
     ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    ax.set_title("Spatial Residual (predicted - actual)")
-    ax.set_xlabel("time index")
-    ax.set_ylabel("space index")
+
+
+
+    ax.set_title(f"Spatial Residual ({_RESIDUAL_SIGN})")
+
+
+
+
+
+    ax.set_xlabel("axis-1 index")
+    ax.set_ylabel("axis-0 index")
 
 
 def _resolve_shape(

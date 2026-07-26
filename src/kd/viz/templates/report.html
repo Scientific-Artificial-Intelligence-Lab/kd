@@ -42,6 +42,15 @@
     max-width: 100%;
     height: auto;
   }
+  span.expression-note {
+    color: #a15c00;
+    font-size: 0.85rem;
+  }
+  p.figure-description {
+    margin: -0.5rem 0 1.5rem 0;
+    color: #555;
+    font-size: 0.9rem;
+  }
   pre.json-summary {
     background: #f5f5f5;
     border: 1px solid #ddd;
@@ -99,7 +108,16 @@
 <table class="metadata">
   <tr><th>Algorithm</th><td>{{ algorithm_name }}</td></tr>
   <tr><th>Dataset</th><td>{{ dataset_name }}</td></tr>
-  <tr><th>Expression</th><td>\( {{ best_expression_latex }} \)</td></tr>
+  <tr><th>Expression</th><td>
+    {%- if best_expression_is_math -%}
+    \( {{ best_expression_latex }} \)
+    {%- else -%}
+    {{ best_expression_latex }}
+    {%- endif -%}
+    {%- if best_expression_note %}
+    <span class="expression-note">({{ best_expression_note }})</span>
+    {%- endif -%}
+  </td></tr>
   <tr><th>Best {{ score_label | default("Score") }}</th><td>{{ best_score }}</td></tr>
   <tr><th>R&sup2;</th><td>{{ r2 }}</td></tr>
   <tr><th>NMSE</th><td>{{ nmse }}</td></tr>
@@ -115,6 +133,9 @@
 <div class="figure-container">
   <img src="{{ fig.data_uri }}" alt="{{ fig.title }}"/>
 </div>
+{% if fig.description %}
+<p class="figure-description">{{ fig.description }}</p>
+{% endif %}
 {% endfor %}
 
 {% if plugin_figures %}
@@ -124,6 +145,9 @@
 <div class="figure-container">
   <img src="{{ fig.data_uri }}" alt="{{ fig.title }}"/>
 </div>
+{% if fig.description %}
+<p class="figure-description">{{ fig.description }}</p>
+{% endif %}
 {% endfor %}
 {% endif %}
 

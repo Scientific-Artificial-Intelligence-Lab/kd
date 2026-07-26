@@ -206,3 +206,68 @@ class TestEquationThroughputGuard:
         ).run(mock_components)
 
         assert calls["n"] == 1
+
+
+
+
+
+
+
+def _sparse_terms_algorithm() -> RecordingAlgorithm:
+    term_irs = [
+        "u", "u_x", "u_xx", "u_xxx", "u*u_x",
+        "u*u_xx", "u_x*u_xx", "u^2", "u_xxxx", "u*u_xxx",
+    ]
+    coefficients = torch.tensor(
+        [0.0, 0.0, 1.5, 0.0, 0.0, -0.3, 0.0, 0.7, 0.0, 0.0],
+        dtype=torch.float64,
+    )
+    algo = RecordingAlgorithm(
+        score_sequence=[0.0],
+        expression_sequence=["u_xx - 0.3*u*u_xx + 0.7*u^2"],
+    )
+    algo.result_target = torch.ones(4, dtype=torch.float64)
+    algo.final_eval_result = EvaluationResult(
+        mse=0.0,
+        nmse=0.0,
+        r2=1.0,
+        score=0.0,
+        complexity=3,
+        coefficients=coefficients,
+        is_valid=True,
+        selected_indices=[2, 5, 7],
+        residuals=torch.zeros(4, dtype=torch.float64),
+        terms=term_irs,
+        expression="u_xx - 0.3*u*u_xx + 0.7*u^2",
+        lhs_name=None,
+    )
+    return algo
+
+
+class TestActiveSupportCarry:
+    @pytest.mark.unit
+    def test_equation_carries_sparse_active_support(self) -> None:
+        result = ExperimentRunner(
+            _sparse_terms_algorithm(), max_iterations=1, batch_size=1
+        ).run(_real_components(_evolution_dataset("u_t")))
+
+        assert result.equation is not None
+        assert result.equation.active_indices == (2, 5, 7)
+
+
+        active_terms = [
+            result.equation.terms[i][0] for i in result.equation.active_indices
+        ]
+        assert active_terms == ["u_xx", "u*u_xx", "u^2"]
+
+    @pytest.mark.unit
+    def test_dense_fit_leaves_active_support_none(self) -> None:
+        algo = _sparse_terms_algorithm()
+        algo.final_eval_result.selected_indices = None
+
+        result = ExperimentRunner(
+            algo, max_iterations=1, batch_size=1
+        ).run(_real_components(_evolution_dataset("u_t")))
+
+        assert result.equation is not None
+        assert result.equation.active_indices is None

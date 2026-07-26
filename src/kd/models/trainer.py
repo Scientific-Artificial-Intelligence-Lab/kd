@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 import torch
@@ -25,6 +26,7 @@ class TrainingResult:
     best_restored: bool = False
     loss_history: list[float] = field(default_factory=list)
     val_loss_history: list[float] | None = None
+    elapsed_seconds: float | None = None
 
 
 class FieldModelTrainer:
@@ -50,6 +52,7 @@ class FieldModelTrainer:
         restore_best: bool = False,
         device: str | torch.device | None = None,
     ) -> TrainingResult:
+        started = time.perf_counter()
         _validate_val_ratio(val_ratio)
         entry_device = next(self._model.parameters()).device
         target_device = _normalize_device(device)
@@ -83,6 +86,7 @@ class FieldModelTrainer:
                     seed,
                     restore_best,
                     target_device,
+                    started,
                 )
         finally:
             self._model = self._model.to(entry_device)
@@ -100,6 +104,7 @@ class FieldModelTrainer:
         seed: int,
         restore_best: bool,
         target_device: torch.device | None,
+        started: float,
     ) -> TrainingResult:
 
         _reinit_parameters(self._model)
@@ -220,6 +225,7 @@ class FieldModelTrainer:
             best_restored=best_restored,
             loss_history=loss_history,
             val_loss_history=val_loss_history,
+            elapsed_seconds=time.perf_counter() - started,
         )
 
     def _set_normalization(

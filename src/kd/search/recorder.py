@@ -78,6 +78,13 @@ def _detach_recursive(value: Any) -> Any:
     return value
 
 
+
+
+
+
+BEST_SCORE_KEY = "_best_score"
+
+
 class VizRecorder:
 
     def __init__(self, enabled: bool = True) -> None:

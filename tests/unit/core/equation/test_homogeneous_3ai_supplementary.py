@@ -64,5 +64,6 @@ class TestHomogeneousJsonWire:
                 ["diff2_y(u)", {"kind": "Scalar", "value": -0.5}],
             ],
             "attrs": None,
+            "active_indices": None,
         }
         assert from_dict(json.loads(json.dumps(payload))) == equation

@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
+import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -27,6 +29,12 @@ from kd.search.callbacks import (
     EarlyStoppingCallback,
     RunnerCallback,
 )
+from kd.search.checkpoint_manifest import (
+    MANIFEST_FILENAME,
+    CheckpointManifestError,
+    load_checkpoint_manifest,
+)
+from kd.search.descriptor import tool_schema
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
     DEFAULT_N_ITERATIONS,
@@ -39,9 +47,12 @@ from kd.search.eqgpt.plugin import EqGPTPlugin
 from kd.search.llm4ed.config import Llm4edConfig
 from kd.search.llm4ed.plugin import Llm4edPlugin
 from kd.search.protocol import FacadeWiringContract, PlatformComponents
+from kd.search.pysindy.config import PySINDyConfig
+from kd.search.pysindy.plugin import PySINDyPlugin
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
 from kd.search.result import DEFAULT_SCORE_KIND
+from kd.search.resume_policy import CONFIG_ARTIFACT_KEYS, check_resume_config
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 
@@ -55,10 +66,12 @@ if TYPE_CHECKING:
     from kd.search.protocol import SearchAlgorithm
     from kd.search.result import ExperimentResult
 
-__all__ = ["Model"]
+__all__ = ["Model", "instrument_schemas"]
 
 
 _ConfigT = TypeVar("_ConfigT")
+
+
 
 
 
@@ -85,8 +98,19 @@ _PLUGIN_CLASS_BY_ALGORITHM: dict[str, type[FacadeWiringContract]] = {
     "pysr": PySRPlugin,
     "eqgpt": EqGPTPlugin,
     "llm4ed": Llm4edPlugin,
+    "pysindy": PySINDyPlugin,
 }
 _SUPPORTED_ALGORITHMS = tuple(_PLUGIN_CLASS_BY_ALGORITHM)
+
+
+def instrument_schemas() -> list[dict[str, Any]]:
+    """Return agent-facing schemas for facade plugins in registration order."""
+    return [
+        tool_schema(plugin_cls)
+        for plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.values()
+    ]
+
+
 _DEFAULT_LHS_FIELD = "u"
 _DEFAULT_LHS_AXIS = "t"
 
@@ -239,7 +263,10 @@ class Model:
             ``"llm4ed"`` (an LLM equation proposer, driven through
             ``config=Llm4edConfig(...)``; the real backend needs
             ``base_url=`` + an ``OPENAI_API_KEY`` env var, or inject an offline
-            ``provider=`` for deterministic runs).
+            ``provider=`` for deterministic runs), or ``"pysindy"`` (native
+            PySINDy STLSQ over the kd term library, driven through
+            ``config=PySINDyConfig(...)``; ``generations`` does not map to the
+            optimizer's ``max_iter``).
             For non-SGA algorithms the individual facade parameters below
             (population/depth/width/aic_ratio/derivatives) are SGA-only.
         generations: Maximum number of search iterations (all algorithms).
@@ -255,7 +282,7 @@ class Model:
             derivative operators. SGA-only — DLGA always uses autograd,
             discover uses finite-diff.
         seed: Random seed for reproducibility. It threads into the default
-            config for dlga / discover / pysr (and SGA) when ``config=`` is
+            config for dlga / discover / pysr / pysindy (and SGA) when ``config=`` is
             unset, otherwise the config's own seed wins. For eqgpt the seed
             comes ONLY via ``EqGPTConfig(seed=...)``: passing the facade
             ``seed=`` together with ``config=`` is rejected by
@@ -263,11 +290,13 @@ class Model:
         verbose: When True, print per-iteration progress to stdout. The label
             is algorithm-aware (``AIC`` for SGA, ``DLGA fitness`` for DLGA,
             ``reward`` for discover, ``NMSE`` for pysr, ``EqGPT reward`` for
-            eqgpt, ``LLM4ED sparse reward`` for llm4ed).
+            eqgpt, ``LLM4ED sparse reward`` for llm4ed, and native STLSQ
+            ``NMSE`` for pysindy, lower is better).
         config: Optional pre-built ``SGAConfig``, ``DLGAConfig``,
-            ``DiscoverConfig``, ``PySRConfig``, ``EqGPTConfig``, or
-            ``Llm4edConfig``. When provided, it is the single source of
-            plugin settings; passing any non-default SGA-related facade
+            ``DiscoverConfig``, ``PySRConfig``, ``EqGPTConfig``,
+            ``Llm4edConfig``, or ``PySINDyConfig``. When provided, it is the
+            single source of plugin settings; passing any non-default
+            SGA-related facade
             parameters (``population``, ``depth``, ``width``, ``aic_ratio``,
             ``derivatives``, ``seed``) or extra ``kwargs`` raises
             ``ValueError`` (SGA path) / ``TypeError`` (DLGA + discover paths).
@@ -315,17 +344,27 @@ class Model:
             algorithms). When set, every ``fit`` attaches a fresh
             ``CheckpointCallback`` writing ``checkpoint_{iteration:06d}.pt``
             every ``checkpoint_every`` iterations plus a
-            ``checkpoint_final.pt`` at experiment end. ``None`` (default)
-            disables checkpointing entirely. A user-supplied
-            ``CheckpointCallback`` in ``callbacks=`` coexists with this
-            (two streams to different directories is legitimate), but
-            pointing both at the SAME directory interleaves/overwrites
-            files.
+            ``checkpoint_final.pt`` at experiment end, alongside a
+            ``manifest.json`` evidence ledger (``kd-ckptman-v1``): the ledger
+            is the only entry point a controller uses to select a resumable
+            checkpoint (R2.1-O4). The directory is manifest-managed and refuses
+            reuse: pointing ``checkpoint_dir`` at a non-empty directory fails
+            loud with a ``CheckpointManifestError`` (a ``ValueError``), so use a
+            FRESH directory per run. ``None`` (default) disables checkpointing
+            entirely. A user-supplied ``CheckpointCallback`` in ``callbacks=``
+            must write to a DIFFERENT directory (a shared directory is now
+            rejected, not interleaved).
         checkpoint_every: Save a per-iteration checkpoint every N
             iterations (0-indexed: saves at 0, N, 2N, ...; default 10).
             Requires ``checkpoint_dir`` — passing ``checkpoint_every``
             without it raises ``ValueError`` at construction (a silent
             no-op would be a bug-attractor), as does any value < 1.
+        checkpoint_keep_last: Retention bound on PERIODIC checkpoints. ``None``
+            (default) keeps all of them (存证优先); an ``int >= 1`` keeps only the
+            N most recent periodic checkpoints, pruning older ones from both the
+            manifest and disk. The final checkpoint is exempt (never counted,
+            never pruned). Requires ``checkpoint_dir``: a value < 1, or passing
+            it without ``checkpoint_dir``, raises ``ValueError`` at construction.
         **kwargs: Forwarded to ``SGAConfig`` if the field name matches an
             allowed (non-explicitly-mapped) field. Unknown or colliding
             kwargs raise ``TypeError``. SGA-only — DLGA and discover paths
@@ -375,6 +414,7 @@ class Model:
         | DLGAConfig
         | DiscoverConfig
         | PySRConfig
+        | PySINDyConfig
         | EqGPTConfig
         | Llm4edConfig
         | None = None,
@@ -383,6 +423,8 @@ class Model:
         provider: LLMProvider | None = None,
         checkpoint_dir: str | Path | None = None,
         checkpoint_every: int = _UNSET,
+        checkpoint_keep_last: int | None = None,
+        device: str | None = None,
         **kwargs: Any,
     ) -> None:
 
@@ -405,7 +447,10 @@ class Model:
             else checkpoint_every
         )
 
-        self._validate_checkpoint_params(checkpoint_dir, checkpoint_every)
+        self._validate_checkpoint_params(
+            checkpoint_dir, checkpoint_every, checkpoint_keep_last
+        )
+        self._validate_device(device)
         self._validate_derivatives(derivatives_resolved)
         self._validate_kwargs(kwargs)
         self._validate_field_model(kwargs, derivatives_resolved)
@@ -449,10 +494,18 @@ class Model:
         self.derivatives = derivatives_resolved
         self.seed = seed_resolved
         self.verbose = verbose
+
+
+
+
+        self.device: str | None = device
         self.checkpoint_dir: Path | None = (
             Path(checkpoint_dir) if checkpoint_dir is not None else None
         )
         self.checkpoint_every = checkpoint_every_resolved
+
+
+        self.checkpoint_keep_last = checkpoint_keep_last
 
 
 
@@ -492,6 +545,7 @@ class Model:
     def _validate_checkpoint_params(
         checkpoint_dir: str | Path | None,
         checkpoint_every: Any,
+        checkpoint_keep_last: int | None = None,
     ) -> None:
         """Validate the checkpoint parameters at construction.
 
@@ -507,12 +561,34 @@ class Model:
         ``Path("") == Path(".")`` would silently checkpoint into the CWD —
         the same silent-attractor the ``checkpoint_every`` orphan check
         guards against.
+
+        ``checkpoint_keep_last`` (G2c retention): ``None`` = keep_all (the
+        meaningful default, so NO ``_UNSET`` sentinel is needed). Passing it
+        without ``checkpoint_dir`` is rejected (same silent-no-op rule as
+        ``checkpoint_every``); a value ``< 1`` is rejected at construction.
         """
         if isinstance(checkpoint_dir, str) and checkpoint_dir == "":
             raise ValueError(
                 "checkpoint_dir='' is not a valid directory (it would resolve "
                 "to the current working directory). Pass a real path, or None "
                 "to disable checkpointing."
+            )
+        if checkpoint_keep_last is not None and checkpoint_dir is None:
+            raise ValueError(
+                "checkpoint_keep_last was passed without checkpoint_dir; "
+                "checkpointing is enabled by checkpoint_dir=..., so "
+                "checkpoint_keep_last alone would be a silent no-op. "
+                "Pass checkpoint_dir as well (or drop checkpoint_keep_last)."
+            )
+
+
+
+        if checkpoint_keep_last is not None and (
+            type(checkpoint_keep_last) is not int or checkpoint_keep_last < 1
+        ):
+            raise ValueError(
+                f"checkpoint_keep_last must be an int >= 1 or None, got "
+                f"{checkpoint_keep_last!r}"
             )
         if checkpoint_every is _UNSET:
             return
@@ -525,6 +601,29 @@ class Model:
             )
         if checkpoint_every < 1:
             raise ValueError(f"checkpoint_every must be >= 1, got {checkpoint_every}")
+
+    @staticmethod
+    def _validate_device(device: str | None) -> None:
+        """Syntactically validate the ``device`` knob (None passes through).
+
+        Only the SYNTAX is checked: a non-str is rejected, and a string that
+        ``torch.device`` cannot parse raises ``ValueError``. Constructing
+        ``"cuda"`` on a CUDA-less host is legal (so a plan can be built /
+        validated anywhere); actual unavailability fails loud at fit time when
+        a tensor ``.to(device)`` runs (GPU efficacy is validated per instrument).
+        """
+        if device is None:
+            return
+        if not isinstance(device, str):
+            raise ValueError(
+                f"device must be None or a torch device string; got {device!r}"
+            )
+        try:
+            torch.device(device)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"device must be None or a torch device string; got {device!r}"
+            ) from exc
 
     @staticmethod
     def _validate_derivatives(derivatives: str) -> None:
@@ -571,6 +670,7 @@ class Model:
         | DLGAConfig
         | DiscoverConfig
         | PySRConfig
+        | PySINDyConfig
         | EqGPTConfig
         | Llm4edConfig
         | None,
@@ -730,6 +830,7 @@ class Model:
         | DLGAConfig
         | DiscoverConfig
         | PySRConfig
+        | PySINDyConfig
         | EqGPTConfig
         | Llm4edConfig
         | None,
@@ -877,26 +978,77 @@ class Model:
             dataset: The PDE dataset to discover an equation for.
             resume_from: Optional path to a checkpoint file written by a
                 previous run (``checkpoint_*.pt``). The checkpoint restores
-                **search state** (population / controller weights / best),
-                NOT config — generations, algorithm settings, seed etc. come
-                from THIS Model, so "resume with more generations" works.
+                **search state** (population / controller weights / best);
+                generations, algorithm settings and seed come from THIS Model.
                 The checkpoint's algorithm must match this Model's (legacy
                 checkpoints without the recorded name load unchecked).
-                Iteration numbering restarts at 0: resuming into the same
-                ``checkpoint_dir`` progressively overwrites
-                ``checkpoint_{i:06d}.pt`` and ``checkpoint_final.pt`` — note
-                ``checkpoint_final.pt`` is also written when a run CRASHES
-                (the runner's finally-block), so a failed resume can overwrite
-                a pristine final and its ``iteration`` field can regress;
-                per-iteration files from a longer prior run also linger.
-                Resume restores SEARCH STATE only, so *structural* config
-                changes that alter that state's shape (e.g. a DISCOVER
-                controller ``num_layers`` / hidden size differing from the
-                checkpoint) raise ``RuntimeError`` from the state_dict load;
-                value-only changes (e.g. SGA ``population`` 5 -> 10) resume
-                fine. Cross-DATA resume re-prices the best-score gate onto the
-                new data for DISCOVER only; SGA/DLGA keep the restored best
-                as their ratchet baseline.
+
+                Resume is tier-gated (G2b) against a ``kd-config-v1`` config
+                snapshot the checkpoint now carries. Each config field has a
+                resume tier and a changed field is handled by its tier:
+
+                - ``resume_safe`` fields (e.g. SGA ``population`` / DISCOVER
+                  ``entropy_weight``) may change and the NEW value takes effect.
+                - ``init_only`` fields raise ``ValueError`` naming the field(s):
+                  they are only settable on a fresh fit (drop ``resume_from``).
+                - ``identity_breaking`` fields (a science-identity change:
+                  catalog / derivative semantics) raise ``ValueError`` pointing
+                  at a new lineage — a fresh fit in a NEW checkpoint directory;
+                  the checkpoint cannot be resumed under the changed config.
+
+                An injected model (SGA ``field_model`` / DLGA ``surrogate_model``)
+                is content-hashed for its resume identity AS SUPPLIED, before any
+                in-place data alignment; supply the same dtype as the original run
+                (DLGA aligns to the data's float64 by default) or the byte-same
+                model is rejected as a new lineage.
+
+                Because ``generations`` maps into ``max_iterations`` (not the
+                config) for every iterative plugin, "resume with more
+                generations" keeps working — EXCEPT for PySR (one-shot), where
+                ``generations`` maps into ``niterations`` (``init_only``):
+                changing it is rejected by the diff, so a controller must
+                special-case one-shot instruments (no "add more generations"
+                action for PySR).
+
+                A checkpoint written under a DIFFERENT kd config schema (a field
+                was added or removed since it was written) is fail-closed: the
+                diff sees the field on only one side and raises; the remedy is a
+                fresh fit / new lineage, not a field revert (there is no value to
+                revert to). If THIS Model's config cannot be canonicalized, the
+                guard raises ``ValueError`` (``ConfigCanonicalizationError``)
+                before the expensive component build.
+
+                Legacy checkpoints predating the snapshot key carry no config
+                and load unchecked (the tier gate is skipped). Iteration
+                numbering restarts at 0. A ``checkpoint_dir`` is now a
+                manifest-managed evidence directory (``manifest.json``,
+                ``kd-ckptman-v1``) that refuses reuse: a fit pointing
+                ``checkpoint_dir`` at a non-empty directory fails loud with a
+                ``CheckpointManifestError`` (a ``ValueError``), so each run uses
+                a FRESH directory. Each run's final manifest entry records a
+                ``final_status`` (``completed`` vs ``crashed``), so a
+                ``checkpoint_final.pt`` written by the runner's finally-block on a
+                CRASH is distinguishable from a clean final and cannot
+                masquerade as a good resume point; and because reuse is refused
+                there is no prior good final in the same directory for a failed
+                resume to clobber. ``final_status`` qualifies the CHECKPOINT
+                only, not the segment: the flag wraps just the iteration loop, so
+                a post-loop raise (result building) can leave ``fit()`` raising
+                while the final entry reads ``completed``. Whether ``fit()``
+                raised is the segment verdict; ``final_status`` is only the
+                checkpoint's own qualifier. When ``resume_from`` lives in a
+                manifest-managed directory it must be listed in that manifest (a
+                controller selects checkpoints ONLY via the manifest, else
+                ``CheckpointManifestError``); a directory with no
+                ``manifest.json`` (legacy / pre-G2c) resumes exactly as before.
+                A *structural* config change on a LEGACY checkpoint (e.g. a
+                DISCOVER controller ``num_layers`` / hidden size differing from
+                the checkpoint) still raises ``RuntimeError`` from the state_dict
+                load — but for a modern (snapshot-bearing) checkpoint that field
+                is ``init_only``, so the tier gate rejects it with a named
+                ``ValueError`` first. Cross-DATA resume re-prices the best-score
+                gate onto the new data for DISCOVER only; SGA/DLGA keep the
+                restored best as their ratchet baseline.
 
         Returns:
             ``self`` for sklearn-style chaining.
@@ -906,12 +1058,26 @@ class Model:
             ValueError: If the dataset is missing the required LHS field
                 or axis; or if ``resume_from`` is not a kd checkpoint payload
                 / has a mismatched version or algorithm / is a corrupt or
-                truncated file.
+                truncated file; or if a resumed config changes an
+                ``init_only`` / ``identity_breaking`` field, carries a foreign
+                config-canon scheme, or THIS Model's config cannot be
+                canonicalized (G2b resume guard); or if ``checkpoint_dir`` /
+                ``resume_from`` lives in a manifest-managed directory that is
+                torn or that does not list the resumed file
+                (``CheckpointManifestError``, a ``ValueError``).
             FileNotFoundError: If ``resume_from`` does not exist.
             IsADirectoryError: If ``resume_from`` points at a directory.
-            RuntimeError: If ``resume_from`` was written by a structurally
-                different config (state_dict shape mismatch on restore).
+            RuntimeError: If a LEGACY ``resume_from`` (no config snapshot) was
+                written by a structurally different config (state_dict shape
+                mismatch on restore); a snapshot-bearing checkpoint hits the
+                ``ValueError`` tier gate first.
         """
+
+
+
+
+
+
 
 
         self._fitted = False
@@ -922,6 +1088,22 @@ class Model:
             raise NotImplementedError(
                 f"Algorithm '{self.algorithm}' is not implemented. "
                 f"Supported algorithms: {list(_SUPPORTED_ALGORITHMS)}"
+            )
+
+
+
+
+
+
+
+        if (
+            self.checkpoint_dir is not None
+            and self.checkpoint_dir.is_dir()
+            and any(self.checkpoint_dir.iterdir())
+        ):
+            raise CheckpointManifestError(
+                "checkpoint directory is not empty (reuse is not supported; "
+                f"use a fresh directory per run): {self.checkpoint_dir}"
             )
 
 
@@ -958,10 +1140,58 @@ class Model:
 
 
 
+
+
+
+
+
+
+
+
         if resume_from is not None:
-            runner.load_checkpoint(Path(resume_from))
+            config_guard = functools.partial(
+                check_resume_config,
+                algorithm=self.algorithm,
+                plugin_cls=_PLUGIN_CLASS_BY_ALGORITHM[self.algorithm],
+                live_config=plugin.config,
+
+
+
+
+
+                live_artifacts=(
+                    getattr(plugin, "artifacts", None)
+                    if CONFIG_ARTIFACT_KEYS.get(self.algorithm)
+                    else None
+                ),
+            )
+
+
+
+
+
+
+
+
+            resume_path = Path(resume_from)
+            manifest_parent = resume_path.parent
+            if (manifest_parent / MANIFEST_FILENAME).exists():
+                entries = load_checkpoint_manifest(manifest_parent)
+                if resume_path.name not in {entry.filename for entry in entries}:
+                    raise CheckpointManifestError(
+                        f"{resume_path.name!r} is not listed in the checkpoint "
+                        f"manifest at {manifest_parent}; a controller must "
+                        "select a resumable checkpoint via the manifest "
+                        "(charter §4.3), not by naming an unlisted file."
+                    )
+            runner.load_checkpoint(resume_path, config_guard=config_guard)
+        build_started = time.perf_counter()
         components = self._build_components(dataset)
-        self._result = runner.run(components)
+        preprocessing_seconds = time.perf_counter() - build_started
+        self._result = runner.run(
+            components,
+            preprocessing_seconds=preprocessing_seconds,
+        )
         self._fitted = True
         return self
 
@@ -979,6 +1209,7 @@ class Model:
         "pysr": "_build_pysr_config",
         "eqgpt": "_build_eqgpt_config",
         "llm4ed": "_build_llm4ed_config",
+        "pysindy": "_build_pysindy_config",
     }
 
     def _build_plugin(self) -> tuple[SearchAlgorithm, int]:
@@ -1108,6 +1339,18 @@ class Model:
             lambda: PySRConfig(niterations=self.generations, seed=self.seed),
         )
 
+    def _build_pysindy_config(self) -> PySINDyConfig:
+        """Resolve PySINDy config without mapping facade generations.
+
+        ``max_iter`` is the native STLSQ convergence cap, not the kd search
+        loop length. Configure it only through ``config=PySINDyConfig(...)``.
+        The default path threads the facade seed into manifest bookkeeping.
+        """
+        return self._resolve_config(
+            PySINDyConfig,
+            lambda: PySINDyConfig(seed=self.seed),
+        )
+
     def _build_eqgpt_config(self) -> EqGPTConfig:
         """Resolve the EqGPTConfig: user override (deep-copied), required.
 
@@ -1165,6 +1408,8 @@ class Model:
         - ``"eqgpt"``: EqGPT reward in roughly ``[0, 1]``, **higher is better**.
         - ``"llm4ed"``: LLM4ED sparse reward in roughly ``(0, 1]``, **higher is
           better** (0.0 is the empty-pool sentinel).
+        - ``"pysindy"``: native PySINDy STLSQ NMSE on the kd term library,
+          coefficients preserved, **lower is better**.
 
         ``EarlyStoppingCallback(mode="min"|"max")`` should be set accordingly.
         """
@@ -1282,7 +1527,7 @@ class Model:
 
         reqs = _resolve_derivative_requirements(self._algorithm)
         self._check_dataset_supported(dataset, reqs)
-        return PlatformBuilder(dataset, reqs).build()
+        return PlatformBuilder(dataset, reqs, device=self.device).build()
 
     def _check_dataset_supported(
         self,
@@ -1327,6 +1572,7 @@ class Model:
                 CheckpointCallback(
                     directory=self.checkpoint_dir,
                     every_n=self.checkpoint_every,
+                    keep_last_n=self.checkpoint_keep_last,
                 )
             )
         if self.verbose:

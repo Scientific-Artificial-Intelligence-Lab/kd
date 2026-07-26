@@ -9,8 +9,22 @@ from kd.search.callbacks import (
     RunnerCallback,
     VizDataCollector,
 )
+from kd.search.checkpoint_manifest import (
+    CKPTMAN_SCHEMA_VERSION,
+    CKPTMAN_SCHEME,
+    CheckpointManifestEntry,
+    CheckpointManifestError,
+    load_checkpoint_manifest,
+)
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.dlga import DLGAConfig, DLGAPlugin
+from kd.search.iteration_events import (
+    ITEREVENT_SCHEMA_VERSION,
+    ITEREVENT_SCHEME,
+    IterationEvent,
+    IterationEventEmitter,
+    IterationEventSinkError,
+)
 from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
@@ -27,7 +41,11 @@ from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 
 __all__ = [
+    "CKPTMAN_SCHEMA_VERSION",
+    "CKPTMAN_SCHEME",
     "CheckpointCallback",
+    "CheckpointManifestEntry",
+    "CheckpointManifestError",
     "DISCOVERPlugin",
     "DLGAConfig",
     "DLGAPlugin",
@@ -35,6 +53,11 @@ __all__ = [
     "EarlyStoppingCallback",
     "ExperimentResult",
     "ExperimentRunner",
+    "ITEREVENT_SCHEMA_VERSION",
+    "ITEREVENT_SCHEME",
+    "IterationEvent",
+    "IterationEventEmitter",
+    "IterationEventSinkError",
     "IterativeSearchAlgorithm",
     "LoggingCallback",
     "PlatformComponents",
@@ -47,4 +70,5 @@ __all__ = [
     "VizDataCollector",
     "VizRecorder",
     "default_final_result",
+    "load_checkpoint_manifest",
 ]

@@ -171,3 +171,23 @@ def test_example_11_evaluate_terms() -> None:
         f"Example 11 did not demonstrate the strict fail-loud mode.\n"
         f"--- stdout ---\n{result.stdout}"
     )
+
+
+@pytest.mark.smoke
+def test_example_19_batch_harness() -> None:
+    result = _run_example("19_batch_harness.py", _FAST_TIMEOUT_SEC)
+
+
+
+    assert "completed" in result.stdout, (
+        f"Example 19 reported no completed episode.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "Store sealed at" in result.stdout, (
+        f"Example 19 did not re-open the evidence store.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )
+    assert "runs signable" in result.stdout, (
+        f"Example 19 printed no instrument stability line.\n"
+        f"--- stdout ---\n{result.stdout}"
+    )

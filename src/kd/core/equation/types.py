@@ -75,6 +75,7 @@ class Evolution:
     lhs_spec: LhsSpec
     terms: tuple[Term, ...]
     attrs: EquationAttrs
+    active_indices: tuple[int, ...] | None = None
 
     @property
     def form(self) -> Form:
@@ -84,6 +85,7 @@ class Evolution:
         assert isinstance(self.lhs_spec, LhsSpec)
         assert isinstance(self.terms, tuple)
         assert isinstance(self.attrs, EquationAttrs)
+        assert self.active_indices is None or isinstance(self.active_indices, tuple)
         for term in self.terms:
             assert isinstance(term, tuple)
             assert len(term) == 2
@@ -97,6 +99,7 @@ class Homogeneous:
 
     terms: tuple[Term, ...]
     attrs: EquationAttrs
+    active_indices: tuple[int, ...] | None = None
 
     @property
     def form(self) -> Form:
@@ -105,6 +108,7 @@ class Homogeneous:
     def __post_init__(self) -> None:
         assert isinstance(self.terms, tuple)
         assert isinstance(self.attrs, EquationAttrs)
+        assert self.active_indices is None or isinstance(self.active_indices, tuple)
         for term in self.terms:
             assert isinstance(term, tuple)
             assert len(term) == 2

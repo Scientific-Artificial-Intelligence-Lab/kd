@@ -4,21 +4,25 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import torch
 from torch import Tensor
 
+from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import DX_ZERO_FLOOR, UNIFORM_GRID_RTOL
+from kd.data.schema import DataTopology
 from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer, TrainingResult
-from kd.search.dlga import surrogate_log as _surrogate_log
+from kd.search import surrogate_log as _surrogate_log
+from kd.search._torch_module_artifact import torch_module_artifact
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
@@ -38,6 +42,19 @@ logger = logging.getLogger(__name__)
 
 _INVALID_AIC = float("inf")
 
+_FIELD_MODEL_ARTIFACT_FORMAT = "kd-field-model-v1"
+
+
+def _field_model_artifact(model: FieldModel) -> dict[str, str | int]:
+    return torch_module_artifact(
+        model,
+        format_name=_FIELD_MODEL_ARTIFACT_FORMAT,
+        metadata={
+            "coord_names": list(model.coord_names),
+            "field_names": list(model.field_names),
+        },
+    )
+
 _AIC_LOWER_BOUND = -100.0
 
 _MAX_RESAMPLE_PER_INDIVIDUAL = 50
@@ -55,6 +72,12 @@ class _ScoredPDE:
 
 def _is_valid_aic(aic: float) -> bool:
     return math.isfinite(aic) and aic >= _AIC_LOWER_BOUND
+
+
+def _invalid_reason_for_aic_mse(aic: float, mse: float) -> str:
+    if not math.isfinite(aic) or not math.isfinite(mse):
+        return "non_finite"
+    return "structural_reject"
 
 
 def _aic_of(result: EvaluationResult) -> float:
@@ -84,7 +107,7 @@ _LOGGED_METRICS: tuple[str, ...] = (
 
 
 
-_SURROGATE_METRICS = _surrogate_log._SURROGATE_METRICS
+_SURROGATE_METRICS = _surrogate_log.SURROGATE_METRICS
 
 
 def _product(shape: tuple[int, ...]) -> int:
@@ -132,10 +155,54 @@ class SGAPlugin:
 
     score_kind: ClassVar[str] = "AIC"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "native"
+    )
 
 
     config_cls: ClassVar[type[SGAConfig]] = SGAConfig
     one_shot: ClassVar[bool] = False
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="sga",
+        summary="Genetic PDE structure search with SGA's internal sparse fit.",
+        cost_class="medium",
+        modes=(
+            InstrumentMode(
+                name="default",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="finite_diff",
+            ),
+        ),
+        knobs=(
+            Knob("num", "int", "Population size.", resume_tier="resume_safe"),
+            Knob(
+                "depth",
+                "int",
+                "Maximum term-tree depth.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "width",
+                "int",
+                "Maximum terms per candidate equation.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "aic_ratio",
+                "float",
+                "AIC complexity-penalty ratio.",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "lam",
+                "float",
+                "Internal STRidge ridge strength.",
+                resume_tier="init_only",
+            ),
+        ),
+    )
 
     def __init__(self, config: SGAConfig | None = None) -> None:
         self._config = config or SGAConfig()
@@ -183,14 +250,38 @@ class SGAPlugin:
 
     @property
     def config(self) -> dict[str, Any]:
-        return {
-            "algorithm": "sga",
-            **asdict(self._config),
+        config = {
+            field.name: getattr(self._config, field.name)
+            for field in fields(self._config)
         }
+        if self._config.field_model is not None:
+            config["field_model"] = {
+                "artifact": "field_model",
+                "format": _FIELD_MODEL_ARTIFACT_FORMAT,
+            }
+        return {"algorithm": "sga", **config}
+
+    @property
+    def artifacts(self) -> dict[str, dict[str, str | int]] | None:
+        if self._config.field_model is None:
+            return None
+        return {"field_model": _field_model_artifact(self._config.field_model)}
 
     @property
     def runner_batch_size(self) -> int:
         return self._config.num
+
+    @property
+    def surrogate_train_seconds(self) -> float | None:
+        result = self._surrogate_training_result
+        if result is None:
+            return None
+        seconds = result.elapsed_seconds
+        return (
+            float(seconds)
+            if isinstance(seconds, (int, float)) and not isinstance(seconds, bool)
+            else None
+        )
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
@@ -378,7 +469,10 @@ class SGAPlugin:
                     results.append(self._to_eval_result(cr, expr_str))
                 except Exception:
                     logger.debug("Evaluation failed for candidate %d", i)
-                    results.append(self._invalid_result(expr_str))
+
+                    results.append(
+                        self._invalid_result(expr_str, reason="evaluation_error")
+                    )
             else:
                 results.append(self._invalid_result(expr_str))
         return results
@@ -459,7 +553,9 @@ class SGAPlugin:
     def build_final_result(self) -> EvaluationResult:
         best_pde = self._best_pde()
         if best_pde is None or self._y is None:
-            return self._invalid_final_result("No best PDE available for final result")
+            return self._invalid_final_result(
+                "No best PDE available for final result", reason="no_candidate"
+            )
 
         try:
             candidate = evaluate_candidate(
@@ -473,7 +569,9 @@ class SGAPlugin:
             predicted = self._predict_rhs(candidate.pruned_pde, candidate.coefficients)
         except Exception as exc:
             logger.debug("Failed to build final result", exc_info=exc)
-            return self._invalid_final_result(f"Final result evaluation failed: {exc}")
+            return self._invalid_final_result(
+                f"Final result evaluation failed: {exc}", reason="evaluation_error"
+            )
 
         residuals = (predicted - self._y).detach()
         is_valid = _is_valid_aic(candidate.aic_score) and math.isfinite(candidate.mse)
@@ -486,6 +584,13 @@ class SGAPlugin:
             coefficients=candidate.coefficients.detach(),
             is_valid=is_valid,
             error_message="" if is_valid else "Invalid AIC or MSE",
+            invalid_reason=(
+                None
+                if is_valid
+                else _invalid_reason_for_aic_mse(
+                    candidate.aic_score, candidate.mse
+                )
+            ),
             selected_indices=list(candidate.selected_indices),
             residuals=residuals,
             terms=self._build_term_list(candidate.pruned_pde),
@@ -645,11 +750,18 @@ class SGAPlugin:
             return -float("inf")
         return r2_score(predicted, self._y)
 
-    def _invalid_final_result(self, error_message: str) -> EvaluationResult:
+    def _invalid_final_result(
+        self,
+        error_message: str,
+        *,
+        reason: str = "unclassified",
+    ) -> EvaluationResult:
+
         return invalid_evaluation_result(
             error_message,
             score=float("inf"),
             expression=self._best_expression,
+            reason=reason,
         )
 
     def _broadcast_coord(
@@ -798,11 +910,24 @@ class SGAPlugin:
         if self._config.field_model is not None:
             field_model: FieldModel = self._config.field_model
             self._validate_field_model(field_model, coord_names, field_names)
+
+
+
+            field_model = self._align_field_model_to_data(field_model, flat_coords)
         else:
             field_model = FieldModel(
                 coord_names=coord_names,
                 field_names=field_names,
             )
+
+
+
+
+
+
+
+
+            field_model = self._align_field_model_to_data(field_model, flat_coords)
             trainer = FieldModelTrainer(field_model, lr=self._config.autograd_train_lr)
 
 
@@ -830,6 +955,19 @@ class SGAPlugin:
             dataset=dataset,
             max_order=1,
         )
+
+    @staticmethod
+    def _align_field_model_to_data(
+        field_model: FieldModel,
+        flat_coords: dict[str, Tensor],
+    ) -> FieldModel:
+        any_coord = next(iter(flat_coords.values()))
+        target_device = any_coord.device
+        target_dtype = any_coord.dtype
+        current = next(field_model.parameters())
+        if current.device != target_device or current.dtype != target_dtype:
+            field_model = field_model.to(device=target_device, dtype=target_dtype)
+        return field_model
 
     @staticmethod
     def _validate_field_model(
@@ -1242,20 +1380,30 @@ class SGAPlugin:
             coefficients=result.coefficients,
             is_valid=is_valid,
             error_message="" if is_valid else "Invalid AIC or MSE",
+            invalid_reason=(
+                None if is_valid else _invalid_reason_for_aic_mse(aic, mse)
+            ),
             selected_indices=result.selected_indices,
             residuals=None,
             terms=None,
             expression=expression,
         )
 
-    def _invalid_result(self, expression: str) -> EvaluationResult:
+    def _invalid_result(
+        self,
+        expression: str,
+        *,
+        reason: str = "structural_reject",
+    ) -> EvaluationResult:
+
         return invalid_evaluation_result(
             "No corresponding PDE for evaluation",
             score=float("inf"),
             expression=expression,
+            reason=reason,
         )
 
     def _evaluation_failed_result(self, expression: str) -> EvaluationResult:
-        result = self._invalid_result(expression)
+        result = self._invalid_result(expression, reason="evaluation_error")
         result.error_message = _FAILED_EVAL_ERROR_MESSAGE
         return result

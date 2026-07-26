@@ -981,6 +981,54 @@ class TestStateRoundTrip:
         assert plugin.propose(1) != []
         assert backend.fit_calls == 2
 
+    def test_state_carries_library_fingerprint(
+        self, real_pysr_components: PlatformComponents
+    ) -> None:
+        plugin = _prepared_plugin(real_pysr_components, FakePySRBackend())
+        plugin.propose(1)
+        state = plugin.state
+        assert state["library_fingerprint"] == plugin.config["library_fingerprint"]
+
+    def test_restore_rejects_checkpoint_from_a_different_catalog(
+        self, real_pysr_components: PlatformComponents
+    ) -> None:
+        donor = _prepared_plugin(real_pysr_components, FakePySRBackend())
+        donor.propose(1)
+        saved = donor.state
+
+        other = _make_plugin(FakePySRBackend(), terms=("u", "u_x"))
+        with pytest.raises(ValueError, match="library_fingerprint"):
+            other.state = saved
+
+    def test_restore_rejects_present_but_null_fingerprint(
+        self, real_pysr_components: PlatformComponents
+    ) -> None:
+        donor = _prepared_plugin(real_pysr_components, FakePySRBackend())
+        donor.propose(1)
+        saved = dict(donor.state)
+        saved["library_fingerprint"] = None
+
+        other = _make_plugin(FakePySRBackend())
+        with pytest.raises(ValueError, match="library_fingerprint"):
+            other.state = saved
+
+    def test_legacy_payload_without_fingerprint_restores(
+        self, real_pysr_components: PlatformComponents
+    ) -> None:
+        donor = _prepared_plugin(real_pysr_components, FakePySRBackend())
+        donor.propose(1)
+        saved = dict(donor.state)
+        saved.pop("library_fingerprint")
+
+        fresh_backend = FakePySRBackend()
+        fresh = _make_plugin(fresh_backend)
+        fresh.state = saved
+        assert are_equivalent(fresh.best_expression, donor.best_expression)
+        fresh.prepare(real_pysr_components)
+
+        assert fresh.propose(1) == []
+        assert fresh_backend.fit_calls == 0
+
 
 
 

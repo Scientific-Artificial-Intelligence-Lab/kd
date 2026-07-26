@@ -88,12 +88,24 @@ def test_model_eqgpt_rejects_mismatched_config_type() -> None:
 @pytest.mark.slow
 @_skip_no_pretrained_assets
 def test_model_eqgpt_fit_runs(tmp_path) -> None:
+
+
+
+    from kd.search.iteration_events import IterationEvent, IterationEventEmitter
+
+    events: list[IterationEvent] = []
+    emitter = IterationEventEmitter(on_event=events.append)
     model = Model(
-        algorithm="eqgpt", generations=3, config=EqGPTConfig(sparsity_alpha=0.02)
+        algorithm="eqgpt",
+        generations=3,
+        config=EqGPTConfig(sparsity_alpha=0.02),
+        callbacks=[emitter],
     )
     model.fit(_tiny_dataset())
     assert model.result_.iterations == 3
     assert model.best_expr_
+    assert len(events) >= 1
+    assert events[-1].iteration == model.result_.iterations - 1
 
 
 

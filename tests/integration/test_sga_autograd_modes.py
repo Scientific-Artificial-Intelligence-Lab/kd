@@ -246,6 +246,34 @@ class TestThreeLayerSemantics:
 
 
 @pytest.mark.integration
+def test_runner_publishes_autograd_surrogate_train_seconds(
+    dataset: PDEDataset,
+) -> None:
+    config = SGAConfig(
+        num=4,
+        depth=2,
+        width=2,
+        seed=_SEED,
+        maxit=1,
+        str_iters=1,
+        use_autograd=True,
+        field_model=None,
+        autograd_train_epochs=3,
+    )
+    plugin = SGAPlugin(config)
+    runner = ExperimentRunner(plugin, max_iterations=1, batch_size=4)
+    result = runner.run(_build_components(dataset))
+
+    assert result.run_record is not None
+    surrogate_seconds = result.run_record.cost.surrogate_train_seconds
+    assert surrogate_seconds is not None, (
+        "an internally-trained autograd run must publish a numeric "
+        "surrogate_train_seconds (context.training_result.elapsed_seconds)."
+    )
+    assert surrogate_seconds >= 0.0
+
+
+@pytest.mark.integration
 class TestAutogradConfigValidation:
 
     def test_field_model_coord_mismatch_rejected(self, dataset: PDEDataset) -> None:

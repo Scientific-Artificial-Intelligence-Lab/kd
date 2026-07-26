@@ -33,6 +33,8 @@ _PYSR_SAVED_NMSE = 0.125
 
 _PYSR_SAVED_HOF = ("u", "add(u, u_x)")
 
+_PYSINDY_SAVED_NMSE = 0.0625
+
 
 
 
@@ -350,11 +352,154 @@ def _build_pysr_scenario() -> _RestoreScenario:
 
 
 
+
+def _build_pysindy_scenario() -> _RestoreScenario:
+    from kd.search.pysindy.config import PySINDyConfig
+    from kd.search.pysindy.plugin import PySINDyPlugin
+
+
+
+    components = PlatformComponents(
+        dataset=MagicMock(),
+        executor=MagicMock(),
+        evaluator=MagicMock(),
+        context=MagicMock(),
+        registry=MagicMock(),
+        recorder=None,
+    )
+
+    def make_plugin() -> Any:
+        return PySINDyPlugin(PySINDyConfig(terms=("u", "u_x", "u_xx"), seed=0))
+
+    def probe(plugin: Any) -> dict[str, Any]:
+
+
+
+
+        state = plugin.state
+        return {
+            "best_expression": state["best_expression"],
+            "fitted": state["fitted"],
+        }
+
+    donor = make_plugin()
+    donor.prepare(components)
+    payload = donor.state
+    payload["best_expression"] = _SAVED_EXPRESSION
+    payload["best_score"] = _PYSINDY_SAVED_NMSE
+    payload["fitted"] = True
+    payload["terms"] = ["u", "u_x", "u_xx"]
+    payload["support"] = [0, 2]
+    payload["coefficient_values"] = [1.0, 1.0]
+    donor.state = payload
+    saved = donor.state
+    return _RestoreScenario(
+        components=components,
+        make_plugin=make_plugin,
+        saved_payload=saved,
+        expected=probe(donor),
+        probe=probe,
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _build_eqgpt_scenario() -> _RestoreScenario:
+    from tests.unit.search import _resume_conformance_helpers as rc
+
+    components = rc.eqgpt_components()
+
+    def make_plugin() -> Any:
+        return rc.make_eqgpt_plugin()
+
+    def probe(plugin: Any) -> dict[str, Any]:
+        pending = getattr(plugin, "_pending_state", None)
+        if pending:
+            rewards = list(pending.get("top_k", {}).get("rewards", []))
+        else:
+            try:
+                rewards = list(plugin.state["top_k"]["rewards"])
+            except (RuntimeError, KeyError, TypeError):
+                rewards = []
+        return {"pool_rewards": rewards}
+
+    donor = make_plugin()
+    donor.prepare(components)
+    rc.run_eqgpt_epochs(donor, 2)
+    saved = donor.state
+    return _RestoreScenario(
+        components=components,
+        make_plugin=make_plugin,
+        saved_payload=saved,
+        expected=probe(donor),
+        probe=probe,
+    )
+
+
+def _build_llm4ed_scenario() -> _RestoreScenario:
+    from kd.search.llm4ed.plugin import Llm4edPlugin
+    from tests.unit.search.llm4ed._plugin_helpers import (
+        GOOD,
+        FakeProvider,
+        components_for,
+        make_config,
+        run,
+    )
+
+    components = components_for()
+
+    def make_plugin() -> Any:
+        return Llm4edPlugin(make_config(), provider=FakeProvider(GOOD))
+
+    def probe(plugin: Any) -> dict[str, Any]:
+        pending = getattr(plugin, "_pending_state", None)
+        if pending:
+            best = pending.get("best", {})
+            return {
+                "best_reward": float(best.get("reward", 0.0)),
+                "best_expression": str(best.get("expression", "")),
+            }
+        return {
+            "best_reward": float(plugin.best_score),
+            "best_expression": str(plugin.best_expression),
+        }
+
+    donor = make_plugin()
+    donor.prepare(components)
+    run(donor, rounds=2)
+    saved = donor.state
+    return _RestoreScenario(
+        components=components,
+        make_plugin=make_plugin,
+        saved_payload=saved,
+        expected=probe(donor),
+        probe=probe,
+    )
+
+
+
+
+
+
 _SCENARIO_BUILDERS: dict[str, Callable[[], _RestoreScenario]] = {
     "sga": _build_sga_scenario,
     "dlga": _build_dlga_scenario,
     "discover": _build_discover_scenario,
     "pysr": _build_pysr_scenario,
+    "pysindy": _build_pysindy_scenario,
+    "eqgpt": _build_eqgpt_scenario,
+    "llm4ed": _build_llm4ed_scenario,
 }
 
 

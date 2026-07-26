@@ -16,19 +16,19 @@ logger = logging.getLogger(__name__)
 
 
 
-_SURROGATE_EPOCH_KEY = "surrogate_epoch"
-_SURROGATE_TRAIN_LOSS_KEY = "surrogate_train_loss"
-_SURROGATE_VAL_LOSS_KEY = "surrogate_val_loss"
-_SURROGATE_BEST_EPOCH_KEY = "surrogate_best_epoch"
-_SURROGATE_EPOCHS_RUN_KEY = "surrogate_epochs_run"
-_SURROGATE_EARLY_STOPPED_KEY = "surrogate_early_stopped"
-_SURROGATE_METRICS: tuple[str, ...] = (
-    _SURROGATE_EPOCH_KEY,
-    _SURROGATE_TRAIN_LOSS_KEY,
-    _SURROGATE_VAL_LOSS_KEY,
-    _SURROGATE_BEST_EPOCH_KEY,
-    _SURROGATE_EPOCHS_RUN_KEY,
-    _SURROGATE_EARLY_STOPPED_KEY,
+SURROGATE_EPOCH_KEY = "surrogate_epoch"
+SURROGATE_TRAIN_LOSS_KEY = "surrogate_train_loss"
+SURROGATE_VAL_LOSS_KEY = "surrogate_val_loss"
+SURROGATE_BEST_EPOCH_KEY = "surrogate_best_epoch"
+SURROGATE_EPOCHS_RUN_KEY = "surrogate_epochs_run"
+SURROGATE_EARLY_STOPPED_KEY = "surrogate_early_stopped"
+SURROGATE_METRICS: tuple[str, ...] = (
+    SURROGATE_EPOCH_KEY,
+    SURROGATE_TRAIN_LOSS_KEY,
+    SURROGATE_VAL_LOSS_KEY,
+    SURROGATE_BEST_EPOCH_KEY,
+    SURROGATE_EPOCHS_RUN_KEY,
+    SURROGATE_EARLY_STOPPED_KEY,
 )
 
 
@@ -51,7 +51,7 @@ def log_surrogate_training(
         return
     if training_result is None:
         return
-    if recorder.get(_SURROGATE_TRAIN_LOSS_KEY):
+    if recorder.get(SURROGATE_TRAIN_LOSS_KEY):
         return
 
     loss_history = getattr(training_result, "loss_history", None) or []
@@ -77,25 +77,25 @@ def log_surrogate_training(
 
 
     epochs = [index + 1 for index in keep]
-    recorder.log(_SURROGATE_EPOCH_KEY, epochs)
+    recorder.log(SURROGATE_EPOCH_KEY, epochs)
     recorder.log(
-        _SURROGATE_TRAIN_LOSS_KEY,
+        SURROGATE_TRAIN_LOSS_KEY,
         [float(loss_history[index]) for index in keep],
     )
     if val_history is not None:
         recorder.log(
-            _SURROGATE_VAL_LOSS_KEY,
+            SURROGATE_VAL_LOSS_KEY,
             [float(val_history[index]) for index in keep],
         )
 
     best_epoch = getattr(training_result, "best_epoch", None)
     if best_epoch is not None:
-        recorder.log(_SURROGATE_BEST_EPOCH_KEY, float(best_epoch))
+        recorder.log(SURROGATE_BEST_EPOCH_KEY, float(best_epoch))
     recorder.log(
-        _SURROGATE_EPOCHS_RUN_KEY, float(getattr(training_result, "epochs_run", 0))
+        SURROGATE_EPOCHS_RUN_KEY, float(getattr(training_result, "epochs_run", 0))
     )
     recorder.log(
-        _SURROGATE_EARLY_STOPPED_KEY,
+        SURROGATE_EARLY_STOPPED_KEY,
         _EARLY_STOPPED_TRUE
         if getattr(training_result, "early_stopped", False)
         else _EARLY_STOPPED_FALSE,
@@ -117,4 +117,13 @@ def _downsample_indices(n: int, cap: int) -> list[int]:
     return indices
 
 
-__all__ = ["log_surrogate_training"]
+__all__ = [
+    "SURROGATE_BEST_EPOCH_KEY",
+    "SURROGATE_EARLY_STOPPED_KEY",
+    "SURROGATE_EPOCHS_RUN_KEY",
+    "SURROGATE_EPOCH_KEY",
+    "SURROGATE_METRICS",
+    "SURROGATE_TRAIN_LOSS_KEY",
+    "SURROGATE_VAL_LOSS_KEY",
+    "log_surrogate_training",
+]

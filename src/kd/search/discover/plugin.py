@@ -8,8 +8,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 import torch
 from torch import Tensor
 
+from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
+from kd.data.schema import DataTopology
+from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
 from kd.search.discover.config import DiscoverConfig
@@ -154,9 +157,62 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     score_kind: ClassVar[str] = "reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
+    headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
+        "platform_refit"
+    )
 
     config_cls: ClassVar[type[DiscoverConfig]] = DiscoverConfig
     one_shot: ClassVar[bool] = False
+
+    descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
+        algorithm="discover",
+        summary="Risk-seeking reinforcement-learning search over PDE expressions.",
+        cost_class="heavy",
+        modes=(
+            InstrumentMode(
+                name="mode1",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="finite_diff",
+                description="Facade-reachable finite-difference search mode.",
+            ),
+        ),
+        knobs=(
+            Knob(
+                "batch_size",
+                "int",
+                "Controller samples per Runner iteration.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "learning_rate",
+                "float",
+                "Controller learning rate.",
+
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "entropy_weight",
+                "float",
+                "Exploration-entropy weight.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "reward_alpha",
+                "float",
+                "Reward sparsity trade-off.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "max_length",
+                "int",
+                "Maximum generated expression length.",
+                resume_tier="init_only",
+            ),
+        ),
+    )
 
     def __init__(self, config: DiscoverConfig | None = None) -> None:
         self._config = config or DiscoverConfig()

@@ -89,10 +89,16 @@ class RSPGStrategy:
     def optimizer_state(self, state: dict[str, Any]) -> None:
         if self._optimizer is not None:
             self._optimizer.load_state_dict(state)
+            self._reassert_live_lr()
             self._pending_optimizer_state = None
         else:
 
             self._pending_optimizer_state = state
+
+    def _reassert_live_lr(self) -> None:
+        assert self._optimizer is not None
+        for group in self._optimizer.param_groups:
+            group["lr"] = self._learning_rate
 
     def reset_optimizer(self) -> None:
         self._optimizer = None
@@ -298,6 +304,7 @@ class RSPGStrategy:
             self._optimizer = Adam(controller.parameters(), lr=self._learning_rate)
             if self._pending_optimizer_state is not None:
                 self._optimizer.load_state_dict(self._pending_optimizer_state)
+                self._reassert_live_lr()
                 self._pending_optimizer_state = None
             return self._optimizer
         if controller is not self._controller:

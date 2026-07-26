@@ -59,7 +59,7 @@ class TestPySRFacadeEndToEnd:
 
         assert result.manifest is not None
         assert isinstance(result.manifest, RunManifest)
-        assert result.manifest.dataset_fingerprint != ""
+        assert result.manifest.dataset_cache_fingerprint != ""
         assert result.manifest.terms is not None
         assert isinstance(result.manifest.terms, list)
         assert result.manifest.terms == plugin.terms

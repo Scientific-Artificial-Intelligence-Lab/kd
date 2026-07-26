@@ -156,6 +156,12 @@ def to_latex(code: str, *, strict: bool = True) -> str:
     return str(sympy.latex(to_sympy(code, strict=strict)))
 
 
+def to_unicode(code: str, *, strict: bool = True) -> str:
+    return str(
+        sympy.pretty(to_sympy(code, strict=strict), use_unicode=True, wrap_line=False)
+    )
+
+
 def _coefficients_to_list(coefficients: Tensor | Sequence[float]) -> list[float]:
     if isinstance(coefficients, Tensor):
         values = coefficients.detach().cpu().flatten().tolist()
@@ -167,9 +173,15 @@ def _selected_indices(
     n_terms: int,
     selected_indices: Sequence[int] | None,
 ) -> list[int]:
-    if selected_indices is not None:
-        return list(selected_indices)
-    return list(range(n_terms))
+    if selected_indices is None:
+        return list(range(n_terms))
+    resolved = list(selected_indices)
+    invalid = [i for i in resolved if not 0 <= i < n_terms]
+    if invalid:
+        raise ValueError(
+            f"selected_indices out of range for {n_terms} terms: {invalid}"
+        )
+    return resolved
 
 
 def _round_sig(value: float, sig_figs: int) -> float:
@@ -336,4 +348,5 @@ __all__ = [
     "symbolic_diff",
     "to_latex",
     "to_sympy",
+    "to_unicode",
 ]

@@ -836,3 +836,73 @@ class TestObservabilityWarnings:
             "_grad_norm DEBUG should be sticky (one per strategy); "
             f"got {len(traces)} traces: {[t.message for t in traces]}"
         )
+
+
+
+
+
+
+
+class TestOptimizerRestoreReassertsLiveLR:
+
+    @staticmethod
+    def _donor_state(
+        controller: LSTMController, batch: Batch, lr: float
+    ) -> dict[str, object]:
+
+
+        donor = _make_strategy(epsilon=0.5, learning_rate=lr)
+        rewards = torch.linspace(0.1, 1.0, BATCH_SIZE)
+        donor.train_step(controller, batch, rewards, BaselineState())
+        state = donor.optimizer_state
+        assert state is not None
+        return state
+
+    @pytest.mark.unit
+    def test_deferred_load_reasserts_live_lr_and_keeps_moments(
+        self, controller: LSTMController, batch: Batch,
+    ) -> None:
+        donor_lr, live_lr = 0.001, 0.01
+        donor_state = self._donor_state(controller, batch, donor_lr)
+
+
+        assert all(g["lr"] == donor_lr for g in donor_state["param_groups"])
+        assert donor_state["state"]
+        assert donor_lr != live_lr
+
+        subject = _make_strategy(epsilon=0.5, learning_rate=live_lr)
+
+
+        subject.optimizer_state = donor_state
+
+
+
+
+        optimizer = subject._get_optimizer(controller)
+        assert all(g["lr"] == live_lr for g in optimizer.param_groups)
+        loaded = optimizer.state_dict()["state"]
+        assert loaded
+        for idx, param_state in donor_state["state"].items():
+            torch.testing.assert_close(
+                loaded[idx]["exp_avg"], param_state["exp_avg"]
+            )
+
+    @pytest.mark.unit
+    def test_immediate_load_reasserts_live_lr_and_keeps_moments(
+        self, controller: LSTMController, batch: Batch,
+    ) -> None:
+        donor_lr, live_lr = 0.001, 0.01
+        donor_state = self._donor_state(controller, batch, donor_lr)
+
+        subject = _make_strategy(epsilon=0.5, learning_rate=live_lr)
+
+
+        optimizer = subject._get_optimizer(controller)
+        subject.optimizer_state = donor_state
+        assert all(g["lr"] == live_lr for g in optimizer.param_groups)
+        loaded = optimizer.state_dict()["state"]
+        assert loaded
+        for idx, param_state in donor_state["state"].items():
+            torch.testing.assert_close(
+                loaded[idx]["exp_avg"], param_state["exp_avg"]
+            )

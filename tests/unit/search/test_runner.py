@@ -885,6 +885,92 @@ class TestRunnerVizDataCollectorInjection:
 
         assert len(result.recorder.get("_best_score")) == 2
 
+    @pytest.mark.unit
+    def test_reused_components_do_not_share_a_runner_created_recorder(
+        self,
+        recording_algorithm: RecordingAlgorithm,
+        mock_components: PlatformComponents,
+    ) -> None:
+        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=2)
+        first = runner.run(mock_components)
+        second = runner.run(mock_components)
+
+        assert first.recorder is not second.recorder
+        assert len(first.recorder.get("_best_score")) == 2
+        assert len(second.recorder.get("_best_score")) == 2
+
+    @pytest.mark.unit
+    def test_two_runners_sharing_components_get_independent_histories(
+        self,
+        mock_components: PlatformComponents,
+    ) -> None:
+        first = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=2).run(
+            mock_components
+        )
+        second = ExperimentRunner(algorithm=RecordingAlgorithm(), max_iterations=2).run(
+            mock_components
+        )
+
+        assert first.recorder is not second.recorder
+        assert len(first.recorder.get("_best_score")) == 2
+        assert len(second.recorder.get("_best_score")) == 2
+
+    @pytest.mark.unit
+    def test_alternating_components_do_not_resurrect_an_earlier_recorder(
+        self,
+        recording_algorithm: RecordingAlgorithm,
+        mock_components: PlatformComponents,
+    ) -> None:
+        other = PlatformComponents(
+            dataset=MagicMock(),
+            executor=MagicMock(),
+            evaluator=MagicMock(),
+            context=MagicMock(),
+            registry=MagicMock(),
+        )
+        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=2)
+
+        first = runner.run(mock_components)
+        runner.run(other)
+        third = runner.run(mock_components)
+
+        assert first.recorder is not third.recorder
+        assert len(first.recorder.get("_best_score")) == 2
+        assert len(third.recorder.get("_best_score")) == 2
+
+    @pytest.mark.unit
+    def test_caller_can_rehand_a_runner_created_recorder_to_collect_history(
+        self,
+        recording_algorithm: RecordingAlgorithm,
+        mock_components: PlatformComponents,
+    ) -> None:
+        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=2)
+        first = runner.run(mock_components)
+
+        mock_components.recorder = first.recorder
+        second = runner.run(mock_components)
+
+        assert second.recorder is first.recorder
+        assert len(first.recorder.get("_best_score")) == 4
+        assert mock_components.recorder is first.recorder
+
+    @pytest.mark.unit
+    def test_caller_supplied_recorder_is_still_shared_across_runs(
+        self,
+        recording_algorithm: RecordingAlgorithm,
+        mock_components: PlatformComponents,
+    ) -> None:
+        explicit_recorder = VizRecorder()
+        mock_components.recorder = explicit_recorder
+
+        runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=2)
+        first = runner.run(mock_components)
+        second = runner.run(mock_components)
+
+        assert first.recorder is explicit_recorder
+        assert second.recorder is explicit_recorder
+        assert len(explicit_recorder.get("_best_score")) == 4
+
 
 
 
@@ -1413,7 +1499,7 @@ class TestEnsureRecorderBackfill:
         )
 
     @pytest.mark.unit
-    def test_backfills_callback_recorder_to_components(self) -> None:
+    def test_backfills_callback_recorder_for_prepare(self) -> None:
         rec = VizRecorder(enabled=True)
         algo = _RecorderCapturingAlgorithm()
         runner = ExperimentRunner(
@@ -1425,10 +1511,8 @@ class TestEnsureRecorderBackfill:
         runner.run(components)
 
 
-        assert components.recorder is rec, (
-            "components.recorder must be backfilled with the callback's "
-            "recorder so algorithm.prepare() and the callbacks share one."
-        )
+
+
 
         assert algo.prepared_recorder is rec, (
             "algorithm.prepare() must see the backfilled recorder (not None); "
@@ -1441,9 +1525,19 @@ class TestEnsureRecorderBackfill:
         runner = ExperimentRunner(algorithm=algo, max_iterations=1)
         components = self._components_no_recorder()
 
+        result = runner.run(components)
+
+        assert algo.prepared_recorder is result.recorder, (
+            "prepare() must see the same fresh recorder the result carries."
+        )
+
+    @pytest.mark.unit
+    def test_backfill_does_not_outlive_the_run(self) -> None:
+        algo = _RecorderCapturingAlgorithm()
+        runner = ExperimentRunner(algorithm=algo, max_iterations=1)
+        components = self._components_no_recorder()
+
         runner.run(components)
 
-        assert components.recorder is not None
-        assert algo.prepared_recorder is components.recorder, (
-            "prepare() must see the same fresh recorder backfilled to components."
-        )
+        assert components.recorder is None
+        assert algo.prepared_recorder is not None

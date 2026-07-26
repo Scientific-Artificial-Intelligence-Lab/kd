@@ -23,6 +23,14 @@ class RewardResult:
     n_terms: int
 
 
+@dataclass(frozen=True)
+class ColumnDeduplication:
+
+    matrix: np.ndarray
+    keep_indices: np.ndarray
+    provenance: np.ndarray
+
+
 def _invalid(n_terms: int) -> RewardResult:
     return RewardResult(
         reward=INVALID_REWARD,
@@ -32,15 +40,38 @@ def _invalid(n_terms: int) -> RewardResult:
     )
 
 
-def _dedup_columns(matrix: np.ndarray) -> np.ndarray:
-    kept: list[np.ndarray] = []
+def deduplicate_columns(matrix: np.ndarray) -> ColumnDeduplication:
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError("column deduplication requires a two-dimensional matrix")
+    kept_columns: list[np.ndarray] = []
+    keep_indices: list[int] = []
+    provenance: list[int] = []
     for col_idx in range(matrix.shape[1]):
         col = matrix[:, col_idx]
-        if not any(np.array_equal(col, existing) for existing in kept):
-            kept.append(col)
-    if not kept:
-        return np.empty((matrix.shape[0], 0), dtype=matrix.dtype)
-    return np.column_stack(kept)
+        match = next(
+            (
+                kept_index
+                for kept_index, existing in enumerate(kept_columns)
+                if np.array_equal(col, existing)
+            ),
+            None,
+        )
+        if match is None:
+            keep_indices.append(col_idx)
+            kept_columns.append(col)
+            match = len(kept_columns) - 1
+        provenance.append(match)
+    deduped = (
+        np.column_stack(kept_columns)
+        if kept_columns
+        else np.empty((matrix.shape[0], 0), dtype=matrix.dtype)
+    )
+    return ColumnDeduplication(
+        matrix=deduped,
+        keep_indices=np.asarray(keep_indices, dtype=np.int64),
+        provenance=np.asarray(provenance, dtype=np.int64),
+    )
 
 
 def _drop_inf_rows(matrix: np.ndarray) -> np.ndarray:
@@ -53,7 +84,7 @@ def compute_reward(A: np.ndarray, *, sparsity_alpha: float) -> RewardResult:
     if A.ndim != 2 or A.shape[1] == 0:
         return _invalid(0)
 
-    deduped = _dedup_columns(A)
+    deduped = deduplicate_columns(A).matrix
     n_terms = deduped.shape[1]
 
     filtered = _drop_inf_rows(deduped)

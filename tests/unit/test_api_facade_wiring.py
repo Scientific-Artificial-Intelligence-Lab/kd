@@ -7,13 +7,23 @@ from kd.api import _PLUGIN_CLASS_BY_ALGORITHM, Model
 from kd.search.discover import DiscoverConfig
 from kd.search.dlga import DLGAConfig
 from kd.search.eqgpt.config import EqGPTConfig
+from kd.search.iteration_events import IterationEventEmitter
 from kd.search.llm4ed.config import Llm4edConfig
+from kd.search.pysindy import PySINDyConfig
 from kd.search.pysr import PySRConfig
 from kd.search.sga import SGAConfig
 
 pytestmark = pytest.mark.unit
 
-_EXPECTED_ORDER = ("sga", "dlga", "discover", "pysr", "eqgpt", "llm4ed")
+_EXPECTED_ORDER = (
+    "sga",
+    "dlga",
+    "discover",
+    "pysr",
+    "eqgpt",
+    "llm4ed",
+    "pysindy",
+)
 
 
 _EXPECTED_CONFIG_CLS = {
@@ -23,6 +33,7 @@ _EXPECTED_CONFIG_CLS = {
     "pysr": PySRConfig,
     "eqgpt": EqGPTConfig,
     "llm4ed": Llm4edConfig,
+    "pysindy": PySINDyConfig,
 }
 
 
@@ -35,6 +46,21 @@ _EXPECTED_BATCH = {
     "pysr": 1,
     "eqgpt": EqGPTConfig(sparsity_alpha=0.02).samples_per_epoch,
     "llm4ed": Llm4edConfig().samples_per_epoch,
+    "pysindy": 1,
+}
+
+
+
+
+
+_EXPECTED_HEADLINE_COEFFICIENT_SOURCE = {
+    "sga": "native",
+    "dlga": "platform_refit",
+    "discover": "platform_refit",
+    "pysr": "platform_refit",
+    "eqgpt": "native",
+    "llm4ed": "native",
+    "pysindy": "native",
 }
 
 
@@ -67,13 +93,26 @@ class TestPluginClassVarDeclarations:
         assert config_cls is _EXPECTED_CONFIG_CLS[algorithm]
 
     @pytest.mark.parametrize("algorithm", _EXPECTED_ORDER)
-    def test_one_shot_is_bool_true_iff_pysr(self, algorithm: str) -> None:
+    def test_one_shot_is_bool_true_for_one_shot_plugins(self, algorithm: str) -> None:
         plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[algorithm]
         one_shot = plugin_cls.one_shot
         assert isinstance(one_shot, bool), (
             f"{algorithm}: one_shot must be a bool, got {one_shot!r}"
         )
-        assert one_shot is (algorithm == "pysr")
+        assert one_shot is (algorithm in {"pysr", "pysindy"})
+
+    @pytest.mark.parametrize("algorithm", tuple(_PLUGIN_CLASS_BY_ALGORITHM))
+    def test_registry_headline_coefficient_source_matches_build_final_result_path(
+        self,
+        algorithm: str,
+    ) -> None:
+        assert set(_EXPECTED_HEADLINE_COEFFICIENT_SOURCE) == set(
+            _PLUGIN_CLASS_BY_ALGORITHM
+        )
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[algorithm]
+        assert plugin_cls.headline_coefficient_source == (
+            _EXPECTED_HEADLINE_COEFFICIENT_SOURCE[algorithm]
+        )
 
     def test_every_registry_entry_declares_both_classvars(self) -> None:
         missing: list[str] = []
@@ -132,6 +171,17 @@ class TestRunnerBatchSizeProperty:
 
 
 
+class TestIterationEventEmitterFacadeWiring:
+
+    @pytest.mark.parametrize("algorithm", _EXPECTED_ORDER)
+    def test_emitter_passes_facade_callback_gate(self, algorithm: str) -> None:
+        emitter = IterationEventEmitter(on_event=lambda _e: None)
+
+
+
+        Model._validate_callbacks([emitter])
+
+
 class TestFacadeWiringContractProtocol:
 
     def test_exists_and_extends_score_contract(self) -> None:
@@ -144,6 +194,9 @@ class TestFacadeWiringContractProtocol:
         annotations = getattr(FacadeWiringContract, "__annotations__", {})
         assert "config_cls" in annotations, "config_cls ClassVar not declared"
         assert "one_shot" in annotations, "one_shot ClassVar not declared"
+        assert "headline_coefficient_source" in annotations, (
+            "headline_coefficient_source ClassVar not declared"
+        )
         assert hasattr(FacadeWiringContract, "runner_batch_size"), (
             "runner_batch_size property not declared"
         )

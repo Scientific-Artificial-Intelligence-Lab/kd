@@ -156,7 +156,12 @@ class SGAConfig:
     field_model: FieldModel | None = None
     """Optional pre-trained FieldModel surrogate (skips auto-training when
     ``use_autograd=True``). Must have matching ``coord_names`` /
-    ``field_names``. Ignored when ``use_autograd=False``."""
+    ``field_names``. Ignored when ``use_autograd=False``.
+
+    The plugin aligns this model **in place** (``nn.Module.to``) to the
+    dataset's device and dtype when they differ — e.g. a CPU float32 model
+    passed with cuda float64 data ends up on cuda:0 in float64 after
+    ``fit()``. Pass a dedicated copy if the original placement matters."""
 
     autograd_train_epochs: int = 1000
     """Maximum training epochs for the auto-trained FieldModel. Only used when

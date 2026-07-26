@@ -12,9 +12,22 @@ from kd.core.evaluator import (
 )
 from kd.core.metrics import make_aic_scorer
 from kd.core.metrics import nmse as kd_nmse
-from kd.search.discover.evaluation.magnitude import magnitude_reject_reason
+from kd.search.discover.evaluation.magnitude import (
+    magnitude_reject_reason as magnitude_reject_reason,
+)
+from kd.search.discover.evaluation.magnitude import (
+    magnitude_rejection,
+)
 
 _RANK_CHECK_REL_TOL = 1e-8
+
+
+class _SampledStructuralError(ValueError):
+    pass
+
+
+class _SampledNonFiniteError(ValueError):
+    pass
 
 
 class SampledEvaluator:
@@ -49,7 +62,9 @@ class SampledEvaluator:
         skip_invalid: bool = False,
     ) -> EvaluationResult:
         if not terms:
-            return self._make_invalid_result("Empty term list")
+            return self._make_invalid_result(
+                "Empty term list", reason="structural_reject"
+            )
         with torch.no_grad():
             return self._evaluate_terms_impl(terms, skip_invalid=skip_invalid)
 
@@ -59,7 +74,9 @@ class SampledEvaluator:
         try:
             terms = split_terms(expr, self._base.executor.registry)
         except Exception as exc:
-            result = self._make_invalid_result(f"split_terms error: {exc}")
+            result = self._make_invalid_result(
+                f"split_terms error: {exc}", reason="structural_reject"
+            )
             result.expression = expr
             return result
 
@@ -76,20 +93,27 @@ class SampledEvaluator:
         try:
             theta, valid_terms = self._build_theta(terms, skip_invalid=skip_invalid)
             solve_result = self._base.solver.solve(theta, self._lhs)
+        except _SampledStructuralError as exc:
+            return self._make_invalid_result(str(exc), reason="structural_reject")
+        except _SampledNonFiniteError as exc:
+            return self._make_invalid_result(str(exc), reason="non_finite")
         except Exception as exc:
             return self._make_invalid_result(str(exc))
 
         coefficients = solve_result.coefficients
         if self._magnitude_filter:
-            reason = magnitude_reject_reason(
+            rejection = magnitude_rejection(
                 coefficients, solve_result.selected_indices
             )
-            if reason is not None:
-                return self._make_invalid_result(reason)
+            if rejection is not None:
+                detail, invalid_reason = rejection
+                return self._make_invalid_result(detail, reason=invalid_reason)
         y_pred = theta @ coefficients
         mse = float(((self._lhs - y_pred) ** 2).mean().item())
         if not math.isfinite(mse):
-            return self._make_invalid_result("MSE is NaN or Inf")
+            return self._make_invalid_result(
+                "MSE is NaN or Inf", reason="non_finite"
+            )
 
         complexity = _complexity(solve_result.selected_indices, len(valid_terms))
         return EvaluationResult(
@@ -127,10 +151,10 @@ class SampledEvaluator:
             columns.append(column)
             valid_terms.append(term)
         if not columns:
-            raise ValueError("No valid terms")
+            raise _SampledStructuralError("No valid terms")
         theta = torch.stack(columns, dim=1)
         if not skip_invalid and not torch.isfinite(theta).all():
-            raise ValueError("Theta contains NaN or Inf")
+            raise _SampledNonFiniteError("Theta contains NaN or Inf")
         if self._rank_check and theta.shape[1] > 1:
             self._assert_full_rank(theta)
         return theta, valid_terms
@@ -145,7 +169,7 @@ class SampledEvaluator:
             raise ValueError(f"Could not compute SVD for rank check: {exc}") from exc
         s_max = float(singular_values[0].item())
         if s_max == 0.0:
-            raise ValueError(
+            raise _SampledStructuralError(
                 "Theta has zero largest singular value (all-zero matrix); "
                 "likely degenerate basis."
             )
@@ -154,7 +178,7 @@ class SampledEvaluator:
         n_cols = int(theta.shape[1])
         if eff_rank < n_cols:
             s_min = float(singular_values[-1].item())
-            raise ValueError(
+            raise _SampledStructuralError(
                 f"Theta is rank-deficient: effective rank {eff_rank} < "
                 f"{n_cols} columns (smallest singular value {s_min:.3e}, "
                 f"largest {s_max:.3e}, ratio {s_min / s_max:.3e}). "
@@ -173,7 +197,11 @@ class SampledEvaluator:
         return column
 
     @staticmethod
-    def _make_invalid_result(error_message: str) -> EvaluationResult:
+    def _make_invalid_result(
+        error_message: str,
+        *,
+        reason: str = "evaluation_error",
+    ) -> EvaluationResult:
         return EvaluationResult(
             mse=1e10,
             nmse=1e10,
@@ -183,6 +211,7 @@ class SampledEvaluator:
             coefficients=None,
             is_valid=False,
             error_message=error_message,
+            invalid_reason=reason,
             selected_indices=None,
             residuals=None,
             terms=None,

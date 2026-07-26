@@ -3,12 +3,35 @@ from __future__ import annotations
 
 import logging
 import math
-import os
-from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
-import torch
+from kd.search.checkpoint_manifest import (
+    FINAL_STATUS_COMPLETED,
+    FINAL_STATUS_CRASHED,
+    KIND_FINAL,
+    KIND_PERIODIC,
+    CheckpointManifestError,
+    CheckpointManifestWriter,
+    build_manifest_entry,
+)
+from kd.search.checkpoint_payload import (
+    _CHECKPOINT_FINAL,
+    _CHECKPOINT_PATTERN,
+)
+from kd.search.checkpoint_payload import (
+    CHECKPOINT_VERSION as CHECKPOINT_VERSION,
+)
+from kd.search.checkpoint_payload import (
+    _algorithm_name as _algorithm_name,
+)
+from kd.search.checkpoint_payload import (
+    atomic_torch_save as atomic_torch_save,
+)
+from kd.search.checkpoint_payload import (
+    build_checkpoint_payload as build_checkpoint_payload,
+)
+from kd.search.recorder import BEST_SCORE_KEY
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
@@ -134,7 +157,7 @@ class VizDataCollector:
         candidates: list[str],
         results: list[Any],
     ) -> None:
-        self._recorder.log("_best_score", algorithm.best_score)
+        self._recorder.log(BEST_SCORE_KEY, algorithm.best_score)
         self._recorder.log("_best_expr", algorithm.best_expression)
         self._recorder.log("_n_candidates", len(candidates))
 
@@ -236,62 +259,37 @@ class EarlyStoppingCallback:
 
 
 
-CHECKPOINT_VERSION = 1
-_CHECKPOINT_PATTERN = "checkpoint_{iteration:06d}.pt"
-_CHECKPOINT_FINAL = "checkpoint_final.pt"
-
-
-
-_CHECKPOINT_TMP_SUFFIX = ".tmp"
-
-
-def atomic_torch_save(payload: dict[str, Any], path: Path) -> None:
-    tmp_path = path.with_name(path.name + _CHECKPOINT_TMP_SUFFIX)
-    try:
-        torch.save(payload, tmp_path)
-        os.replace(tmp_path, path)
-    except BaseException:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError:
-            logger.debug("Failed to clean up staging file %s", tmp_path)
-        raise
-
-
-def build_checkpoint_payload(iteration: int, algorithm: Any) -> dict[str, Any]:
-    return {
-        "version": CHECKPOINT_VERSION,
-        "iteration": iteration,
-        "algorithm_state": algorithm.state,
-        "best_score": algorithm.best_score,
-        "best_expression": algorithm.best_expression,
-        "algorithm": _algorithm_name(algorithm),
-    }
-
-
-def _algorithm_name(algorithm: Any) -> str | None:
-    config = getattr(algorithm, "config", None)
-    if not isinstance(config, Mapping):
-        return None
-    name = config.get("algorithm")
-    return name if isinstance(name, str) else None
-
 
 class CheckpointCallback:
 
-    def __init__(self, directory: Path, every_n: int = 10) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        every_n: int = 10,
+        keep_last_n: int | None = None,
+    ) -> None:
         if every_n < _MIN_EVERY_N:
             raise ValueError(f"every_n must be >= 1, got {every_n}")
+
+
+        if keep_last_n is not None and (
+            type(keep_last_n) is not int or keep_last_n < 1
+        ):
+            raise ValueError(
+                f"keep_last_n must be an int >= 1 or None, got {keep_last_n!r}"
+            )
         self._directory = Path(directory)
         self._every_n = every_n
+        self._keep_last_n = keep_last_n
         self._last_iteration: int = -1
+        self._manifest: CheckpointManifestWriter | None = None
 
     @property
     def should_stop(self) -> bool:
         return False
 
     def on_experiment_start(self, algorithm: Any) -> None:
-        self._directory.mkdir(parents=True, exist_ok=True)
+        self._manifest = CheckpointManifestWriter.create(self._directory)
         self._last_iteration = -1
 
     def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
@@ -306,12 +304,47 @@ class CheckpointCallback:
     ) -> None:
         self._last_iteration = iteration
         if iteration % self._every_n == 0:
-            path = self._directory / _CHECKPOINT_PATTERN.format(iteration=iteration)
-            atomic_torch_save(build_checkpoint_payload(iteration, algorithm), path)
-            logger.debug("Saved checkpoint to %s", path)
+            filename = _CHECKPOINT_PATTERN.format(iteration=iteration)
+            manifest = self._require_manifest()
+            payload = build_checkpoint_payload(iteration, algorithm)
+            atomic_torch_save(payload, self._directory / filename)
+            manifest.append(
+                build_manifest_entry(
+                    payload,
+                    filename=filename,
+                    kind=KIND_PERIODIC,
+                    final_status=None,
+                )
+            )
+            if self._keep_last_n is not None:
+                manifest.prune_periodic(self._keep_last_n)
+            logger.debug("Saved checkpoint to %s", self._directory / filename)
 
     def on_experiment_end(self, algorithm: Any) -> None:
-        path = self._directory / _CHECKPOINT_FINAL
-        iteration = max(self._last_iteration, 0)
-        atomic_torch_save(build_checkpoint_payload(iteration, algorithm), path)
-        logger.debug("Saved final checkpoint to %s", path)
+        self.on_experiment_end_status(algorithm, crashed=False)
+
+    def on_experiment_end_status(self, algorithm: Any, *, crashed: bool) -> None:
+        manifest = self._require_manifest()
+        payload = build_checkpoint_payload(max(self._last_iteration, 0), algorithm)
+        atomic_torch_save(payload, self._directory / _CHECKPOINT_FINAL)
+        manifest.append(
+            build_manifest_entry(
+                payload,
+                filename=_CHECKPOINT_FINAL,
+                kind=KIND_FINAL,
+                final_status=(
+                    FINAL_STATUS_CRASHED if crashed else FINAL_STATUS_COMPLETED
+                ),
+            )
+        )
+        logger.debug(
+            "Saved final checkpoint to %s", self._directory / _CHECKPOINT_FINAL
+        )
+
+    def _require_manifest(self) -> CheckpointManifestWriter:
+        if self._manifest is None:
+            raise CheckpointManifestError(
+                "CheckpointCallback used before on_experiment_start "
+                "(no checkpoint manifest)"
+            )
+        return self._manifest

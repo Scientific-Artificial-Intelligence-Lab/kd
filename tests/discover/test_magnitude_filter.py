@@ -78,6 +78,7 @@ class TestApplyMagnitudeFilterCore:
         coefs = torch.tensor([1.0, 1e-6], dtype=torch.float64)
         gated = apply_magnitude_filter(_make_result(coefs))
         assert not gated.is_valid
+        assert gated.invalid_reason == "structural_reject"
         assert "magnitude" in (gated.error_message or "").lower()
 
     @pytest.mark.unit
@@ -87,6 +88,7 @@ class TestApplyMagnitudeFilterCore:
         coefs = torch.tensor([1.0, 2e4], dtype=torch.float64)
         gated = apply_magnitude_filter(_make_result(coefs))
         assert not gated.is_valid
+        assert gated.invalid_reason == "structural_reject"
         assert "magnitude" in (gated.error_message or "").lower()
 
     @pytest.mark.unit
@@ -198,6 +200,7 @@ class TestMagnitudeFilterRobustness:
         coefs = torch.tensor([1.0, float("inf")], dtype=torch.float64)
         gated = apply_magnitude_filter(_make_result(coefs))
         assert not gated.is_valid
+        assert gated.invalid_reason == "non_finite"
 
 
 

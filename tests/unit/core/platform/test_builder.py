@@ -1000,3 +1000,75 @@ def _install_fake_trainer(
         _FakeTrainer,
         raising=True,
     )
+
+
+
+
+
+
+
+
+
+
+skip_no_cuda = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="no CUDA device available"
+)
+
+
+class TestDeviceKnob:
+    def test_device_none_fd_context_on_cpu(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        comps = PlatformBuilder(
+            small_dataset_with_lhs, DerivativeReqs(), device=None
+        ).build()
+        assert comps.context is not None
+        assert comps.context.device == torch.device("cpu")
+
+    def test_device_cpu_fd_context_and_lhs_on_cpu(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        comps = PlatformBuilder(
+            small_dataset_with_lhs, DerivativeReqs(), device="cpu"
+        ).build()
+        assert comps.context is not None and comps.evaluator is not None
+        assert comps.context.device == torch.device("cpu")
+
+        assert comps.evaluator.lhs.device == comps.context.device
+
+    def test_device_none_autograd_coords_on_cpu(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        reqs = DerivativeReqs(provider_kind="autograd", needs_surrogate=False)
+        comps = PlatformBuilder(
+            small_dataset_with_lhs, reqs, device=None
+        ).build()
+        provider = comps.context.derivative_provider
+        coord = next(iter(provider.coords.values()))
+        assert coord.device == torch.device("cpu")
+
+    @skip_no_cuda
+    def test_device_cuda_fd_context_and_lhs_on_cuda(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        comps = PlatformBuilder(
+            small_dataset_with_lhs, DerivativeReqs(), device="cuda"
+        ).build()
+        assert comps.context is not None and comps.evaluator is not None
+        assert comps.context.device.type == "cuda"
+        assert comps.evaluator.lhs.device == comps.context.device
+
+    @skip_no_cuda
+    def test_device_cuda_autograd_coords_are_leaf_on_cuda(
+        self, small_dataset_with_lhs: PDEDataset
+    ) -> None:
+        reqs = DerivativeReqs(provider_kind="autograd", needs_surrogate=False)
+        comps = PlatformBuilder(
+            small_dataset_with_lhs, reqs, device="cuda"
+        ).build()
+        provider = comps.context.derivative_provider
+        coord = next(iter(provider.coords.values()))
+
+        assert coord.is_cuda
+        assert coord.requires_grad is True
+        assert coord.is_leaf is True

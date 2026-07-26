@@ -68,6 +68,24 @@ def test_model_llm4ed_fit_recovers_u_xx() -> None:
     assert model.result_.iterations == 2
 
 
+def test_model_llm4ed_fit_emits_iteration_events() -> None:
+    from kd.search.iteration_events import IterationEvent, IterationEventEmitter
+
+    events: list[IterationEvent] = []
+    emitter = IterationEventEmitter(on_event=events.append)
+    model = Model(
+        algorithm="llm4ed",
+        generations=2,
+        config=make_config(),
+        provider=FakeProvider(GOOD),
+        callbacks=[emitter],
+    )
+    model.fit(heat_dataset())
+
+    assert len(events) >= 1
+    assert events[-1].iteration == model.result_.iterations - 1
+
+
 def test_model_llm4ed_fit_then_resume_recovers_u_xx(tmp_path) -> None:
     first = Model(
         algorithm="llm4ed",
@@ -79,6 +97,15 @@ def test_model_llm4ed_fit_then_resume_recovers_u_xx(tmp_path) -> None:
     first.fit(heat_dataset())
     checkpoint = tmp_path / "checkpoint_final.pt"
     assert checkpoint.is_file(), "facade did not write a final checkpoint"
+
+
+
+    from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+    for entry in load_checkpoint_manifest(tmp_path):
+        assert entry.algorithm == "llm4ed"
+        assert type(entry.seed) is int
+        assert entry.config_hash is not None and len(entry.config_hash) == 64
 
     resumed = Model(
         algorithm="llm4ed",

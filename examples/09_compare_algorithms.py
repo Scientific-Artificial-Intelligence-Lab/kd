@@ -72,6 +72,23 @@ else:
 
 
 
+if importlib.util.find_spec("pysindy") is not None:
+    from kd.search.pysindy.config import PySINDyConfig
+
+    MODELS["PySINDy"] = kd.Model(
+        algorithm="pysindy",
+        config=PySINDyConfig(
+            terms=("u", "u_x", "u_xx", "mul(u, u_x)"),
+            threshold=0.05,
+            seed=0,
+        ),
+    )
+else:
+    skipped["PySINDy"] = "needs the `pysindy` extra (uv sync --extra pysindy)"
+
+
+
+
 
 try:
     resolve_asset_path()
@@ -235,7 +252,7 @@ for name, result in results.items():
             equation_cell(name),
             f"{ev.nmse:.2e}" if ok else "--",
             f"{ev.r2:.4f}" if ok else "--",
-            "1 (one-shot)" if name == "PySR" else str(result.iterations),
+            "1 (one-shot)" if name in ("PySR", "PySINDy") else str(result.iterations),
         ]
     )
 table = ax_t.table(

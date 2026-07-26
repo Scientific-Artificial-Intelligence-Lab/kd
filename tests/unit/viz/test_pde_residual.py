@@ -10,6 +10,8 @@ import torch
 
 matplotlib.use("Agg")
 
+from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.figure import Figure
 
 from kd.core.evaluator import EvaluationResult
@@ -101,6 +103,31 @@ def _make_result(n_samples: int = 50, lhs_label: str = "u_t") -> ExperimentResul
         recorder=recorder,
         lhs_label=lhs_label,
     )
+
+
+_AMPLIFY = 100.0
+
+
+def _amplified_result(n_samples: int) -> ExperimentResult:
+    result = _make_result(n_samples=n_samples)
+    result.predicted = result.actual * _AMPLIFY
+    return result
+
+
+def _panels(fig: Figure, prefix: str) -> list[Axes]:
+    return [ax for ax in fig.get_axes() if ax.get_title().startswith(prefix)]
+
+
+def _one_panel(fig: Figure, prefix: str) -> Axes:
+    matches = _panels(fig, prefix)
+    assert len(matches) == 1, f"expected one {prefix!r} panel, got {len(matches)}"
+    return matches[0]
+
+
+def _mappable(ax: Axes) -> ScalarMappable:
+    if ax.images:
+        return ax.images[0]
+    return ax.collections[0]
 
 
 
@@ -360,3 +387,75 @@ class TestPdeResidualSilentFallbackWarning:
         assert len(fallback_warnings) == 0, (
             f"Should not warn about fallback with dataset: {fallback_warnings}"
         )
+
+
+
+
+
+
+
+class TestPdeResidualColorScale:
+
+    def test_1d_axis_aware_shares_clim_with_colorbars(self) -> None:
+        ds = _make_1d_dataset(nx=10, nt=5)
+        result = _amplified_result(n_samples=10 * 5)
+        fig, _ = plot_pde_residual_field(result, field_shape=(10, 5), dataset=ds)
+        try:
+            true_m = _mappable(_one_panel(fig, "True"))
+            pred_m = _mappable(_one_panel(fig, "Predicted"))
+            assert true_m.get_clim() == pred_m.get_clim()
+            assert true_m.colorbar is not None
+            assert pred_m.colorbar is not None
+        finally:
+            plt.close(fig)
+
+    def test_1d_axis_aware_scale_tracks_the_actual_not_the_prediction(self) -> None:
+        ds = _make_1d_dataset(nx=10, nt=5)
+        result = _amplified_result(n_samples=10 * 5)
+        actual_max = float(result.actual.abs().max())
+        fig, _ = plot_pde_residual_field(result, field_shape=(10, 5), dataset=ds)
+        try:
+            vmin, vmax = _mappable(_one_panel(fig, "True")).get_clim()
+            assert max(abs(vmin), abs(vmax)) == pytest.approx(actual_max)
+
+            assert "clipped" in _one_panel(fig, "Predicted").get_title()
+        finally:
+            plt.close(fig)
+
+    def test_2d_axis_aware_shares_clim_with_colorbars(self) -> None:
+        ds = _make_2d_dataset(nx=5, ny=5, nt=4)
+        result = _amplified_result(n_samples=5 * 5 * 4)
+        fig, _ = plot_pde_residual_field(result, field_shape=(5, 5, 4), dataset=ds)
+        try:
+            true_m = _mappable(_one_panel(fig, "True"))
+            pred_m = _mappable(_one_panel(fig, "Predicted"))
+            assert true_m.get_clim() == pred_m.get_clim()
+            assert true_m.colorbar is not None
+            assert pred_m.colorbar is not None
+        finally:
+            plt.close(fig)
+
+    def test_generic_fallback_shares_clim_with_colorbars(self) -> None:
+        result = _amplified_result(n_samples=10 * 5)
+        fig, _ = plot_pde_residual_field(result, field_shape=(10, 5))
+        try:
+            true_m = _mappable(_one_panel(fig, "True"))
+            pred_m = _mappable(_one_panel(fig, "Predicted"))
+            assert true_m.get_clim() == pred_m.get_clim()
+            assert true_m.colorbar is not None
+            assert pred_m.colorbar is not None
+        finally:
+            plt.close(fig)
+
+    def test_residual_keeps_independent_symmetric_scale(self) -> None:
+        ds = _make_1d_dataset(nx=10, nt=5)
+        result = _amplified_result(n_samples=10 * 5)
+        fig, _ = plot_pde_residual_field(result, field_shape=(10, 5), dataset=ds)
+        try:
+            res_vmin, res_vmax = _mappable(_one_panel(fig, "Residual")).get_clim()
+            shared = _mappable(_one_panel(fig, "True")).get_clim()
+            assert res_vmin == pytest.approx(-res_vmax)
+
+            assert res_vmax > max(abs(v) for v in shared)
+        finally:
+            plt.close(fig)

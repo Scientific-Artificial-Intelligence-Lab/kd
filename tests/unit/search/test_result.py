@@ -9,7 +9,17 @@ from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
 from kd.search.recorder import VizRecorder
+from kd.search.records import (
+    EVIDENCE_HASH_SCHEME,
+    RECORD_HASH_SCHEME,
+    RUN_RECORD_SCHEMA_VERSION,
+    EvidenceRecord,
+    RunCost,
+    RunRecord,
+    seal_record_hash,
+)
 from kd.search.result import ExperimentResult, RunManifest, default_final_result
+from kd.search.run_spec import RUN_SPEC_HASH_SCHEME, RunSpec
 
 
 
@@ -43,6 +53,45 @@ def sample_recorder() -> VizRecorder:
     rec.log("iteration", 2)
     rec.log("iteration", 3)
     return rec
+
+
+def _sample_run_record() -> RunRecord:
+    evidence = EvidenceRecord(
+        instrument="sga",
+        dataset_name="burgers_1d",
+        dataset_cache_fingerprint="sha256:dataset",
+        seed=0,
+        is_valid=True,
+        expression="mul(u, u_x)",
+        score_kind="AIC",
+        score_direction="min",
+        headline_coefficient_source="native",
+    )
+    run_spec = RunSpec(
+        kd_version="0.1.0",
+        config={"algorithm": "sga"},
+        dataset_cache_fingerprint="sha256:dataset",
+    )
+    return seal_record_hash(
+        RunRecord(
+            schema_version=RUN_RECORD_SCHEMA_VERSION,
+            evidence_hash_scheme=EVIDENCE_HASH_SCHEME,
+            created_at="2026-07-17T00:00:00+00:00",
+            cost=RunCost(
+                wallclock_seconds=1.0,
+                search_seconds=1.0,
+                boundary_results=0,
+                boundary_invalid_results=0,
+            ),
+            evidence=evidence,
+            evidence_hash=evidence.content_hash(),
+            run_spec=run_spec,
+            run_spec_hash=run_spec.run_spec_hash,
+            run_spec_hash_scheme=RUN_SPEC_HASH_SCHEME,
+            record_hash="",
+            record_hash_scheme=RECORD_HASH_SCHEME,
+        )
+    )
 
 
 @pytest.fixture
@@ -149,6 +198,9 @@ class TestExperimentResultSerialization:
 
 
             "manifest",
+
+
+            "run_record",
         ]:
             assert key in d, f"Missing key: {key}"
 
@@ -236,6 +288,33 @@ class TestExperimentResultSerialization:
         assert isinstance(loaded.recorder, VizRecorder)
         assert loaded.recorder.get("loss") == [0.5, 0.3, 0.1]
         assert loaded.recorder.keys() == {"loss", "iteration"}
+
+    def test_save_load_preserves_attached_run_record(
+        self, sample_experiment_result: ExperimentResult, tmp_path: Path
+    ) -> None:
+        record = _sample_run_record()
+        sample_experiment_result.run_record = record
+        fpath = tmp_path / "result.json"
+
+        sample_experiment_result.save(fpath)
+        loaded = ExperimentResult.load(fpath)
+
+        assert loaded.run_record == record
+
+    def test_legacy_payload_without_run_record_loads_none(
+        self, sample_experiment_result: ExperimentResult, tmp_path: Path
+    ) -> None:
+        import json
+
+        payload = sample_experiment_result.to_dict()
+        payload.pop("run_record")
+        fpath = tmp_path / "legacy_result.json"
+        with fpath.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, allow_nan=False)
+
+        loaded = ExperimentResult.load(fpath)
+
+        assert loaded.run_record is None
 
     def test_save_creates_parent_dirs(
         self, sample_experiment_result: ExperimentResult, tmp_path: Path
@@ -428,7 +507,7 @@ class TestExperimentResultNegative:
 @pytest.fixture
 def sample_manifest() -> RunManifest:
     return RunManifest(
-        dataset_fingerprint="burgers_1d:grid:u:t:x,t_u(64, 32)_a1b2c3d4",
+        dataset_cache_fingerprint="burgers_1d:grid:u:t:x,t_u(64, 32)_a1b2c3d4",
         kd_version="0.1.0",
         seed=42,
         terms=["u", "u_x", "u_xx"],
@@ -439,7 +518,7 @@ def sample_manifest() -> RunManifest:
 @pytest.fixture
 def minimal_manifest() -> RunManifest:
     return RunManifest(
-        dataset_fingerprint="heat:grid:u:x:x_u(100,)_00000000",
+        dataset_cache_fingerprint="heat:grid:u:x:x_u(100,)_00000000",
         kd_version="0.1.0",
         seed=None,
     )
@@ -458,14 +537,14 @@ class TestRunManifestSmoke:
 
     def test_field_values(self, sample_manifest: RunManifest) -> None:
         m = sample_manifest
-        assert m.dataset_fingerprint.startswith("burgers_1d:")
+        assert m.dataset_cache_fingerprint.startswith("burgers_1d:")
         assert m.kd_version == "0.1.0"
         assert m.seed == 42
         assert m.terms == ["u", "u_x", "u_xx"]
         assert m.artifacts == {"weights.pt": {"sha256": "deadbeef", "size": 12345}}
 
     def test_optional_fields_default_none(self) -> None:
-        m = RunManifest(dataset_fingerprint="fp", kd_version="0.1.0", seed=7)
+        m = RunManifest(dataset_cache_fingerprint="fp", kd_version="0.1.0", seed=7)
         assert m.terms is None
         assert m.artifacts is None
 
@@ -491,7 +570,7 @@ class TestRunManifestRoundTrip:
 
     @pytest.mark.parametrize("seed", [0, 1, 42, -1, 2**31])
     def test_round_trip_preserves_seed_int(self, seed: int) -> None:
-        m = RunManifest(dataset_fingerprint="fp", kd_version="0.1.0", seed=seed)
+        m = RunManifest(dataset_cache_fingerprint="fp", kd_version="0.1.0", seed=seed)
         restored = RunManifest.from_dict(m.to_dict())
         assert restored.seed == seed
         assert restored == m
@@ -500,17 +579,21 @@ class TestRunManifestRoundTrip:
         d = sample_manifest.to_dict()
         assert isinstance(d, dict)
         for key in [
-            "dataset_fingerprint",
+            "dataset_cache_fingerprint",
             "kd_version",
             "seed",
             "terms",
             "artifacts",
+            "resumed",
         ]:
             assert key in d, f"manifest dict missing key: {key}"
 
     def test_to_dict_carries_field_values(self, sample_manifest: RunManifest) -> None:
         d = sample_manifest.to_dict()
-        assert d["dataset_fingerprint"] == sample_manifest.dataset_fingerprint
+        assert (
+            d["dataset_cache_fingerprint"]
+            == sample_manifest.dataset_cache_fingerprint
+        )
         assert d["kd_version"] == sample_manifest.kd_version
         assert d["seed"] == sample_manifest.seed
         assert d["terms"] == sample_manifest.terms
@@ -520,9 +603,9 @@ class TestRunManifestRoundTrip:
 
     def test_from_dict_tolerates_missing_optional_keys(self) -> None:
         m = RunManifest.from_dict(
-            {"dataset_fingerprint": "fp", "kd_version": "0.1.0", "seed": 7}
+            {"dataset_cache_fingerprint": "fp", "kd_version": "0.1.0", "seed": 7}
         )
-        assert m.dataset_fingerprint == "fp"
+        assert m.dataset_cache_fingerprint == "fp"
         assert m.kd_version == "0.1.0"
         assert m.seed == 7
         assert m.terms is None
@@ -647,8 +730,8 @@ class TestExperimentResultManifest:
         assert isinstance(encoded, str)
 
         reloaded = json.loads(encoded)
-        assert reloaded["manifest"]["dataset_fingerprint"] == (
-            sample_manifest.dataset_fingerprint
+        assert reloaded["manifest"]["dataset_cache_fingerprint"] == (
+            sample_manifest.dataset_cache_fingerprint
         )
 
     def test_save_load_preserves_manifest(

@@ -36,7 +36,20 @@ _DEFAULT_SURROGATE_HIDDEN_SIZES: tuple[int, ...] = (64, 64, 64, 64, 64)
 _DEFAULT_SURROGATE_ACTIVATION = "tanh"
 
 
-__all__ = ["PlatformBuilder", "_resolve_derivative_requirements"]
+__all__ = [
+    "PlatformBuilder",
+    "_resolve_derivative_requirements",
+    "resolve_lhs_defaults",
+]
+
+
+def _resolve_device(device: str | None) -> torch.device | None:
+    if device is None:
+        return None
+    resolved = torch.device(device)
+    if resolved.type == "cuda" and resolved.index is None:
+        resolved = torch.device("cuda", torch.cuda.current_device())
+    return resolved
 
 
 def _resolve_derivative_requirements(plugin: Any) -> DerivativeReqs:
@@ -57,11 +70,48 @@ def _resolve_derivative_requirements(plugin: Any) -> DerivativeReqs:
     return raw
 
 
+def resolve_lhs_defaults(dataset: PDEDataset) -> PDEDataset:
+    if dataset.lhs_order == 0:
+        return dataset
+
+    lhs_field = dataset.lhs_field or _DEFAULT_LHS_FIELD
+    lhs_axis = dataset.lhs_axis or _DEFAULT_LHS_AXIS
+
+    field_names = set(dataset.fields.keys()) if dataset.fields else set()
+    axis_names = set(dataset.axes.keys()) if dataset.axes else set()
+
+    if lhs_field not in field_names:
+        raise ValueError(
+            f"LHS field '{lhs_field}' not found in dataset (available "
+            f"fields: {sorted(field_names)}). Set dataset.lhs_field "
+            f"explicitly."
+        )
+    if lhs_axis not in axis_names:
+        raise ValueError(
+            f"LHS axis '{lhs_axis}' not found in dataset (available "
+            f"axes: {sorted(axis_names)}). Set dataset.lhs_axis "
+            f"explicitly."
+        )
+
+
+
+
+    if dataset.lhs_field != lhs_field or dataset.lhs_axis != lhs_axis:
+        return dataclasses.replace(dataset, lhs_field=lhs_field, lhs_axis=lhs_axis)
+    return dataset
+
+
 class PlatformBuilder:
 
-    def __init__(self, dataset: PDEDataset, reqs: DerivativeReqs) -> None:
+    def __init__(
+        self,
+        dataset: PDEDataset,
+        reqs: DerivativeReqs,
+        device: str | None = None,
+    ) -> None:
         self._dataset = dataset
         self._reqs = reqs
+        self._device: torch.device | None = _resolve_device(device)
 
 
 
@@ -112,41 +162,14 @@ class PlatformBuilder:
 
     @staticmethod
     def _resolve_lhs(dataset: PDEDataset) -> PDEDataset:
-        if dataset.lhs_order == 0:
-            return dataset
-
-        lhs_field = dataset.lhs_field or _DEFAULT_LHS_FIELD
-        lhs_axis = dataset.lhs_axis or _DEFAULT_LHS_AXIS
-
-        field_names = set(dataset.fields.keys()) if dataset.fields else set()
-        axis_names = set(dataset.axes.keys()) if dataset.axes else set()
-
-        if lhs_field not in field_names:
-            raise ValueError(
-                f"LHS field '{lhs_field}' not found in dataset (available "
-                f"fields: {sorted(field_names)}). Set dataset.lhs_field "
-                f"explicitly."
-            )
-        if lhs_axis not in axis_names:
-            raise ValueError(
-                f"LHS axis '{lhs_axis}' not found in dataset (available "
-                f"axes: {sorted(axis_names)}). Set dataset.lhs_axis "
-                f"explicitly."
-            )
-
-
-
-
-        if dataset.lhs_field != lhs_field or dataset.lhs_axis != lhs_axis:
-            return dataclasses.replace(dataset, lhs_field=lhs_field, lhs_axis=lhs_axis)
-        return dataset
+        return resolve_lhs_defaults(dataset)
 
     def _build_provider(self, dataset: PDEDataset) -> DerivativeProvider:
         kind = self._reqs.provider_kind
         if kind == "finite_diff":
             return FiniteDiffProvider(dataset, max_order=self._reqs.max_atomic_order)
         if kind == "autograd":
-            coords = self._build_autograd_coords(dataset)
+            coords = self._build_autograd_coords(dataset, device=self._device)
             model = self._resolve_surrogate_model(dataset, coords)
 
 
@@ -177,11 +200,22 @@ class PlatformBuilder:
 
 
 
+
+
             return SurrogateContext(
                 dataset,
                 provider,
                 surrogate_field=dataset.lhs_field,
                 training_result=self._surrogate_training,
+                device=self._device,
+            )
+
+
+        if self._device is not None:
+            return ExecutionContext(
+                dataset=dataset,
+                derivative_provider=provider,
+                device=self._device,
             )
         return ExecutionContext(dataset=dataset, derivative_provider=provider)
 
@@ -208,6 +242,10 @@ class PlatformBuilder:
             .detach()
             .flatten()
         )
+
+
+
+        lhs = lhs.to(context.device)
         return Evaluator(
             executor=executor,
             solver=solver,
@@ -333,12 +371,21 @@ class PlatformBuilder:
         }
 
     @staticmethod
-    def _build_autograd_coords(dataset: PDEDataset) -> dict[str, torch.Tensor]:
+    def _build_autograd_coords(
+        dataset: PDEDataset, device: torch.device | None = None
+    ) -> dict[str, torch.Tensor]:
         if dataset.axes is None or dataset.axis_order is None:
             raise ValueError("Dataset must have axes and axis_order")
         axis_values = [dataset.axes[name].values for name in dataset.axis_order]
         grids = torch.meshgrid(*axis_values, indexing="ij")
+
+        def _coord(grid: torch.Tensor) -> torch.Tensor:
+            flat = grid.flatten().detach().clone()
+            if device is not None:
+                flat = flat.to(device)
+            return flat.requires_grad_(True)
+
         return {
-            name: grid.flatten().detach().clone().requires_grad_(True)
+            name: _coord(grid)
             for name, grid in zip(dataset.axis_order, grids, strict=True)
         }

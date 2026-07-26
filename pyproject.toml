@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.4.0"
+version = "0.5.0"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -58,6 +58,12 @@ pysr = [
     # API depends on PySR 1.5.x surface (equations_ columns complexity/loss/
     # sympy_format, model.sympy()); the adapter asserts those columns at fit.
     "pysr>=1.5,<2",
+]
+# Optional PySINDy optimizer backend. Install with ``pip install kd[pysindy]``
+# only when using ``Model(algorithm="pysindy")``. The adapter targets the
+# STLSQ ``coef_`` and typed-knob surface verified on PySINDy 2.1.0.
+pysindy = [
+    "pysindy>=2.1,<3",
 ]
 # Optional LLM proposer backend for the LLM4ED (EDL) plugin. The
 # RealLlm4edBackend targets any OpenAI-compatible chat endpoint (OpenAI,
@@ -120,6 +126,7 @@ markers = [
     "mode2_aggregate: 3-seed STRICT MODE2 aggregate (discover §B.2 contract)",
     "phase3_e2e: full discover plugin e2e (slow, requires GPU; research suite)",
     "pysr: tests requiring the optional PySR/Julia backend (excluded from default smoke)",
+    "pysindy: tests requiring the optional PySINDy backend (skip when not installed)",
     "eqgpt: tests requiring the EqGPT pretrained assets / reference source (skip gracefully when absent)",
     "exploration: open-question probes that are NOT quality gates — never run by default or nightly; run on demand with -m exploration",
 ]
@@ -140,6 +147,17 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "kd.search.pysr.backend"
+warn_unused_ignores = false
+
+# pysindy is an optional extra (kd[pysindy]); the real adapter imports it only
+# inside fit. The paired backend override permits its conditional import ignore
+# to remain valid whether the untyped dependency is installed or absent.
+[[tool.mypy.overrides]]
+module = "pysindy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "kd.search.pysindy.backend"
 warn_unused_ignores = false
 
 [tool.ruff]

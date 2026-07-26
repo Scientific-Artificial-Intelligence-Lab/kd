@@ -100,6 +100,19 @@ def _fit_sga_with_checkpoints(
     return m
 
 
+def _assert_manifest_honesty(ckpt_dir: Path, algorithm: str) -> None:
+    from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+    entries = load_checkpoint_manifest(ckpt_dir)
+    assert entries, "expected at least one manifest entry"
+    for entry in entries:
+        assert entry.algorithm == algorithm
+        assert type(entry.seed) is int
+        assert entry.config_hash is not None
+        assert len(entry.config_hash) == 64
+        assert all(ch in "0123456789abcdef" for ch in entry.config_hash)
+
+
 
 
 
@@ -173,6 +186,8 @@ class TestCheckpointDirWritesFiles:
         assert payload["best_expression"] == m.best_expr_
         assert payload["best_score"] == pytest.approx(m.best_score_)
 
+        _assert_manifest_honesty(ckpt_dir, "sga")
+
 
 
 
@@ -204,6 +219,22 @@ class TestCheckpointParamValidation:
         with pytest.raises(ValueError) as exc_info:
             _fast_model(checkpoint_dir="")
         assert "checkpoint_dir" in str(exc_info.value)
+
+    def test_keep_last_zero_raises_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="checkpoint_keep_last"):
+            _fast_model(checkpoint_dir=tmp_path, checkpoint_keep_last=0)
+
+    def test_keep_last_float_raises_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="checkpoint_keep_last"):
+            _fast_model(checkpoint_dir=tmp_path, checkpoint_keep_last=1.0)
+
+    def test_keep_last_bool_raises_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="checkpoint_keep_last"):
+            _fast_model(checkpoint_dir=tmp_path, checkpoint_keep_last=True)
+
+    def test_keep_last_without_dir_raises(self) -> None:
+        with pytest.raises(ValueError, match="without checkpoint_dir"):
+            _fast_model(checkpoint_keep_last=2)
 
     def test_b_default_attaches_no_checkpoint_callback(self) -> None:
         m = _fast_model()
@@ -270,20 +301,98 @@ class TestResumeEndToEnd:
         assert isinstance(resumed.best_expr_, str) and resumed.best_expr_
         assert resumed.best_score_ <= saved_state["best_score"]
 
-    def test_c_resume_into_same_dir_overwrites_progressively(
+    def test_c_resume_into_same_dir_fails_loud(
         self, small_burgers_dataset: PDEDataset, tmp_path: Path
     ) -> None:
+        from kd.search.checkpoint_manifest import CheckpointManifestError
+
         ckpt_dir = tmp_path / "ckpts"
         _fit_sga_with_checkpoints(small_burgers_dataset, ckpt_dir, checkpoint_every=1)
         final = ckpt_dir / _FINAL_NAME
 
         resumed = _fast_model(checkpoint_dir=ckpt_dir, checkpoint_every=1)
+        with pytest.raises(CheckpointManifestError, match="is not empty"):
+            resumed.fit(small_burgers_dataset, resume_from=final)
+
+    def test_c_resume_into_fresh_dir_succeeds(
+        self, small_burgers_dataset: PDEDataset, tmp_path: Path
+    ) -> None:
+        from kd.search.checkpoint_manifest import load_checkpoint_manifest
+
+        phase1 = tmp_path / "phase1"
+        _fit_sga_with_checkpoints(small_burgers_dataset, phase1, checkpoint_every=1)
+        final = phase1 / _FINAL_NAME
+
+        phase2 = tmp_path / "phase2"
+        resumed = _fast_model(checkpoint_dir=phase2, checkpoint_every=1)
         resumed.fit(small_burgers_dataset, resume_from=final)
 
-        payload = torch.load(final, weights_only=False)
-        assert payload["iteration"] == _FAST_GENERATIONS - 1
-        expected = {_iter_name(i) for i in range(_FAST_GENERATIONS)} | {_FINAL_NAME}
-        assert _pt_files(ckpt_dir) == expected
+
+        entries = load_checkpoint_manifest(phase2)
+        assert any(e.kind == "final" for e in entries)
+
+
+class TestFacadeRetentionAndPrecheck:
+
+    def test_facade_threads_keep_last(
+        self, small_burgers_dataset: PDEDataset, tmp_path: Path
+    ) -> None:
+        from kd.search.checkpoint_manifest import (
+            KIND_FINAL,
+            KIND_PERIODIC,
+            load_checkpoint_manifest,
+        )
+
+        ckpt_dir = tmp_path / "ckpts"
+        _fit_sga_with_checkpoints(
+            small_burgers_dataset, ckpt_dir, checkpoint_every=1, checkpoint_keep_last=1
+        )
+        entries = load_checkpoint_manifest(ckpt_dir)
+        periodic = [e for e in entries if e.kind == KIND_PERIODIC]
+        finals = [e for e in entries if e.kind == KIND_FINAL]
+        assert len(periodic) == 1
+        assert len(finals) == 1
+
+    def test_precheck_fires_before_component_build(
+        self, small_burgers_dataset: PDEDataset, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        from kd.search.checkpoint_manifest import CheckpointManifestError
+
+        def _exploding_build(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("components built before fresh-dir pre-check")
+
+        monkeypatch.setattr(Model, "_build_components", _exploding_build)
+
+        ckpt_dir = tmp_path / "ckpts"
+        ckpt_dir.mkdir()
+        (ckpt_dir / "occupied.txt").write_text("x")
+
+        m = _fast_model(checkpoint_dir=ckpt_dir)
+        with pytest.raises(CheckpointManifestError, match="is not empty"):
+            m.fit(small_burgers_dataset)
+
+    def test_precheck_applies_to_resume_fit(
+        self, small_burgers_dataset: PDEDataset, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        from kd.search.checkpoint_manifest import CheckpointManifestError
+
+
+        phase1 = tmp_path / "phase1"
+        _fit_sga_with_checkpoints(small_burgers_dataset, phase1, checkpoint_every=1)
+        final = phase1 / _FINAL_NAME
+
+        def _exploding_build(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("components built before fresh-dir pre-check")
+
+        monkeypatch.setattr(Model, "_build_components", _exploding_build)
+
+
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "occupied.txt").write_text("x")
+        m = _fast_model(checkpoint_dir=target, checkpoint_every=1)
+        with pytest.raises(CheckpointManifestError, match="is not empty"):
+            m.fit(small_burgers_dataset, resume_from=final)
 
 
 
@@ -487,6 +596,8 @@ class TestPySRResumeRecoverWithoutRerun:
         assert payload["algorithm"] == "pysr"
         assert payload["algorithm_state"]["fitted"] is True
 
+        _assert_manifest_honesty(ckpt_dir, "pysr")
+
         m2 = Model(algorithm="pysr", generations=2, seed=0, verbose=False)
         m2.fit(dataset, resume_from=final)
 
@@ -555,6 +666,8 @@ class TestDiscoverFacadeResume:
         assert payload["best_expression"] != ""
         honest_reward = payload["best_score"]
         assert honest_reward > 0.0
+
+        _assert_manifest_honesty(ckpt_dir, "discover")
 
 
 

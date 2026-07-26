@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import keyword
 import re
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -94,10 +95,20 @@ class PySRSymbolicRegressor:
             raise ValueError(
                 f"PySRSymbolicRegressor.fit expects 2-D X, got {x_arr.shape}"
             )
+        if x_arr.shape[0] == 0 or x_arr.shape[1] == 0:
+            raise ValueError(
+                f"PySRSymbolicRegressor.fit expects non-empty X, got {x_arr.shape}"
+            )
         if x_arr.shape[0] != y_arr.shape[0]:
             raise ValueError(
                 "PySRSymbolicRegressor.fit received mismatched sample counts: "
                 f"X.shape[0]={x_arr.shape[0]}, y.shape[0]={y_arr.shape[0]}"
+            )
+        _raise_if_not_finite(x_arr, name="X")
+        _raise_if_not_finite(y_arr, name="y")
+        if isinstance(var_names, str):
+            raise ValueError(
+                "var_names must be a sequence of names, not a single string"
             )
         names = (
             _generic_feature_names(x_arr.shape[1])
@@ -159,6 +170,8 @@ def _validate_var_names(names: Sequence[str]) -> None:
             raise ValueError(
                 f"var_names must be valid Python identifiers, got {name!r}"
             )
+        if keyword.iskeyword(name):
+            raise ValueError(f"var_name {name!r} is a Python keyword")
         if name in _KD_IR_RESERVED_NAMES or _is_diff_reserved_name(name):
             raise ValueError(f"var_name {name!r} collides with a reserved kd-IR token")
         if name in seen and name not in duplicates:
@@ -171,6 +184,11 @@ def _validate_var_names(names: Sequence[str]) -> None:
 
 def _is_diff_reserved_name(name: str) -> bool:
     return _DIFF_RESERVED_PATTERN.match(name) is not None
+
+
+def _raise_if_not_finite(values: np.ndarray, *, name: str) -> None:
+    if not np.all(np.isfinite(values)):
+        raise ValueError(f"{name} must contain only finite values")
 
 
 def _convert_to_kd_ir(expr: sympy.Expr) -> str:
