@@ -162,10 +162,6 @@ class RunSpec:
         payload = f"{RUN_SPEC_HASH_SCHEME}:{canonical}".encode()
         return hashlib.sha256(payload).hexdigest()
 
-    def content_hash(self) -> str:
-        return self.run_spec_hash
-
-
 __all__ = [
     "CONFIG_CANON_SCHEME",
     "RUN_SPEC_HASH_SCHEME",

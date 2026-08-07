@@ -286,3 +286,31 @@ class TestCursorSeam:
         assert replay.complete(requests[0]) == recorded[0]
         path.unlink()
         assert replay.complete(requests[1]) == recorded[1]
+
+
+
+
+
+
+
+class TestExportSurface:
+    def test_wire_codec_exported_from_kd_llm(self) -> None:
+        import kd.llm
+
+        for name in (
+            "load_tape_entries",
+            "request_from_json",
+            "request_to_json",
+            "response_from_json",
+            "response_to_json",
+            "usage_to_json",
+        ):
+            assert hasattr(kd.llm, name), f"kd.llm.{name} is missing"
+            assert name in kd.llm.__all__, f"kd.llm.__all__ missing '{name}'"
+
+    def test_manifest_vocabulary_exported_from_kd(self) -> None:
+        import kd
+
+        for name in ("KIND_FINAL", "FINAL_STATUS_COMPLETED"):
+            assert hasattr(kd, name), f"kd.{name} is missing"
+            assert name in kd.__all__, f"kd.__all__ missing '{name}'"

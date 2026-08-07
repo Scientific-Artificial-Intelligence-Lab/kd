@@ -60,12 +60,9 @@ def test_sga_pde_output_is_canonicalizable_and_stable(pde: PDE) -> None:
     assert canonicalize_expression(canonical) == canonical
 
 
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_sga_coefficients_path_is_outside_canonicalizable_subset() -> None:
-    pde = PDE(terms=[Tree(root=_leaf("u"))])
-    emitted = pde_to_kd_expr(pde, coefficients=[0.5])
+def test_constant_carrying_ir_is_outside_canonicalizable_subset() -> None:
     with pytest.raises(ValueError):
-        canonicalize_expression(emitted)
+        canonicalize_expression("mul(0.5, u)")
 
 
 

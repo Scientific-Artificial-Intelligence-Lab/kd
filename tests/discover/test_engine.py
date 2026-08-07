@@ -157,7 +157,7 @@ def engine(
 ) -> DiscoverEngine:
     torch.manual_seed(SEED)
     return DiscoverEngine(
-        controller=controller,
+        generator=controller,
         strategy=strategy,
         reward_adapter=compute_reward,
         validator=validator,
@@ -174,7 +174,7 @@ def engine_no_dedup(
 ) -> DiscoverEngine:
     torch.manual_seed(SEED)
     return DiscoverEngine(
-        controller=controller,
+        generator=controller,
         strategy=strategy,
         reward_adapter=compute_reward,
         validator=validator,
@@ -635,7 +635,7 @@ class TestInvalidFilter:
     ) -> None:
         torch.manual_seed(SEED)
         engine = DiscoverEngine(
-            controller=controller,
+            generator=controller,
             strategy=strategy,
             reward_adapter=compute_reward,
             validator=validator,
@@ -743,7 +743,7 @@ class TestInvalidFilter:
     ) -> None:
         torch.manual_seed(SEED)
         engine = DiscoverEngine(
-            controller=controller,
+            generator=controller,
             strategy=strategy,
             reward_adapter=compute_reward,
             validator=validator,

@@ -30,8 +30,9 @@ from kd.viz.extension import PlotInfo, VizExtension
 SEED = 42
 
 
+
 EXPECTED_PLOT_NAMES: frozenset[str] = frozenset(
-    {"reward_convergence", "entropy_loss_decay", "baseline_ewma"},
+    {"reward_convergence", "reward_full_mean", "entropy_loss_decay", "baseline_ewma"},
 )
 
 
@@ -39,6 +40,7 @@ EXPECTED_PLOT_NAMES: frozenset[str] = frozenset(
 
 PLOT_TO_METRIC: dict[str, str] = {
     "reward_convergence": "reward",
+    "reward_full_mean": "reward_full",
     "entropy_loss_decay": "entropy_loss",
     "baseline_ewma": "baseline",
 }
@@ -75,7 +77,7 @@ def _make_components(recorder: VizRecorder | None) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=_MockEvaluator(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=recorder,
     )
@@ -85,6 +87,7 @@ def _populate_recorder(recorder: VizRecorder, n_iters: int = N_SYNTHETIC_ITERS) 
     for i in range(n_iters):
 
         recorder.log("reward", float(100.0 + 10.0 * i))
+        recorder.log("reward_full", float(30.0 + 2.0 * i))
         recorder.log("entropy_loss", float(-2.0 + 0.5 * i))
         recorder.log("baseline", float(0.001 * (i + 1)))
 
@@ -198,15 +201,15 @@ def test_plugin_is_runtime_checkable_viz_extension() -> None:
 
 
 @pytest.mark.unit
-def test_list_plots_returns_three_plotinfo() -> None:
+def test_list_plots_returns_expected_plotinfo() -> None:
     plugin = DISCOVERPlugin(DiscoverConfig())
     plots = plugin.list_plots()
 
     assert isinstance(plots, list), (
         f"list_plots() must return list, got {type(plots).__name__}"
     )
-    assert len(plots) == 3, (
-        f"list_plots() must return exactly 3 PlotInfo descriptors; got {len(plots)}: "
+    assert len(plots) == 4, (
+        f"list_plots() must return exactly 4 PlotInfo descriptors; got {len(plots)}: "
         f"{[getattr(p, 'name', '?') for p in plots]}"
     )
 
@@ -238,12 +241,12 @@ def test_list_plots_returns_three_plotinfo() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
-def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
+def test_render_plot_returns_empty_warnings(plot_name: str, ax: Axes) -> None:
     plugin, _ = _make_plugin_with_recorder()
     result = plugin.render_plot(plot_name, ax)
-    assert result is None, (
-        f"render_plot({plot_name!r}, ax) must return None per Tier 1 contract; "
-        f"got {type(result).__name__}: {result!r}"
+    assert result == [], (
+        f"render_plot({plot_name!r}, ax) must return no warnings on a clean "
+        f"render; got {type(result).__name__}: {result!r}"
     )
 
 
@@ -486,7 +489,7 @@ def test_render_plot_empty_recorder_does_not_crash(
 
 
     try:
-        plugin.render_plot(plot_name, ax)
+        channel = plugin.render_plot(plot_name, ax)
     except Exception as exc:
         pytest.fail(
             f"render_plot({plot_name!r}) with {recorder_state} recorder must "
@@ -503,6 +506,9 @@ def test_render_plot_empty_recorder_does_not_crash(
         f"surface a warning panel containing one of {signals}. "
         f"ax.texts={text_strs!r}, title={title_lower!r}"
     )
+
+
+    assert any("no data" in note.lower() for note in channel), channel
 
     assert len(ax.lines) == 0, (
         f"With {recorder_state} recorder, render_plot({plot_name!r})'s "

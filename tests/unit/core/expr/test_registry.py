@@ -2,7 +2,7 @@
 import pytest
 import torch
 
-from kd.core.expr.registry import FunctionRegistry
+from kd.core.expr.registry import PROTECTED_OPERATORS, FunctionRegistry
 
 
 
@@ -800,3 +800,22 @@ class TestProtectedN2N3:
         y = n3(x)
         y.backward()
         torch.testing.assert_close(x.grad, torch.tensor([0.0]))
+
+
+
+
+
+
+
+@pytest.mark.unit
+class TestProtectedOperators:
+
+    def test_locked_member_set(self) -> None:
+        assert frozenset(
+            {"div", "exp", "log", "recip", "n2", "n3"}
+        ) == PROTECTED_OPERATORS
+
+    def test_every_member_resolves_in_default_registry(self) -> None:
+        reg = FunctionRegistry.create_default()
+        for name in sorted(PROTECTED_OPERATORS):
+            assert reg.has(name), f"protected operator {name!r} not registered"

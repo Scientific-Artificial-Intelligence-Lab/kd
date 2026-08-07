@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from kd.harness.plan import ExperimentPlan
 from kd.search.mini_table import build_mini_table
+from kd.search.mini_table import escape_cell as _escape_cell
 from kd.search.records import RunRecord
 
 if TYPE_CHECKING:
@@ -16,10 +17,6 @@ _FAILURE_HEADER = (
     "| entry_index | instrument | dataset_ref | seed | status | error_type |"
 )
 _FAILURE_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
-
-
-def _escape_cell(value: str) -> str:
-    return value.replace("|", r"\|").replace("\r", " ").replace("\n", " ")
 
 
 def _instrument_order(plan: ExperimentPlan) -> list[str]:

@@ -3,7 +3,7 @@
 from kd.api import Model, instrument_schemas
 from kd.core.equation import law_signature
 from kd.core.evaluator import EvaluationResult
-from kd.core.verify import VerifyPolicy, verify_equation
+from kd.core.verify import VerificationReport, VerifyPolicy, verify_equation
 from kd.data import (
     DATASET_CATALOG,
     AxisInfo,
@@ -45,41 +45,67 @@ from kd.evaluate import (
     evaluate_terms,
     validate_terms,
 )
-from kd.inspect import preview
+from kd.inspect import (
+    AxisReport,
+    DatasetReport,
+    FieldReport,
+    preview,
+    preview_report,
+)
 from kd.search.checkpoint_manifest import (
+    FINAL_STATUS_COMPLETED,
+    KIND_FINAL,
     CheckpointManifestEntry,
     CheckpointManifestError,
     load_checkpoint_manifest,
 )
 from kd.search.discover import DiscoverConfig
 from kd.search.dlga import DLGAConfig
+from kd.search.eqgpt import EqGPTConfig
+from kd.search.llm4ed import Llm4edConfig
+from kd.search.pysindy import PySINDyConfig
+from kd.search.pysr import PySRConfig
 from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
+
+
+
+
 
 __all__ = [
     "AxisInfo",
+    "AxisReport",
     "CheckpointManifestEntry",
     "CheckpointManifestError",
     "DATASET_CATALOG",
     "DLGAConfig",
     "DataTopology",
+    "DatasetReport",
     "DatasetSpec",
     "DiscoverConfig",
+    "EqGPTConfig",
     "EvaluationFailedError",
     "EvaluationResult",
     "ExperimentResult",
+    "FINAL_STATUS_COMPLETED",
     "FieldData",
+    "FieldReport",
     "InvalidTermsError",
+    "KIND_FINAL",
+    "Llm4edConfig",
     "Model",
     "PDEDataset",
+    "PySINDyConfig",
+    "PySRConfig",
     "SGAConfig",
     "TabularDataset",
     "TaskType",
     "TermRejection",
     "TermValidationReport",
+    "VerificationReport",
     "VerifyPolicy",
     "VizEngine",
     "__version__",
@@ -111,6 +137,7 @@ __all__ = [
     "load_wave",
     "load_wave_breaking",
     "preview",
+    "preview_report",
     "validate_terms",
     "verify_equation",
 ]

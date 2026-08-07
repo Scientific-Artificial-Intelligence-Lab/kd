@@ -13,6 +13,7 @@ import pytest
 from kd.search.protocol import PlatformComponents
 
 
+from kd.search.pysr import plugin as pysr_plugin
 from kd.search.pysr import viz as pysr_viz
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
@@ -202,7 +203,7 @@ class TestGetPlotDataAppendSemantics:
         recorder.log(_SELECTED_NMSE_KEY, None)
         fig, ax = plt.subplots()
         try:
-            assert pysr_viz.render("pareto_front", ax, recorder) is None
+            assert pysr_viz.render("pareto_front", ax, recorder) == []
         finally:
             plt.close(fig)
 
@@ -260,7 +261,11 @@ class TestNonFinitePairsDropped:
         for name in ("kd_audit_path", "score_agreement"):
             fig, ax = plt.subplots()
             try:
-                assert pysr_viz.render(name, ax, recorder) is None
+                warnings = pysr_viz.render(name, ax, recorder)
+                assert len(warnings) == 1
+
+
+                assert "1 of 3" in warnings[0] and "dropped" in warnings[0]
             finally:
                 plt.close(fig)
 
@@ -268,7 +273,10 @@ class TestNonFinitePairsDropped:
         recorder = _recorder_with_nmse([0.6, float("inf"), 0.002])
         fig, ax = plt.subplots()
         try:
-            assert pysr_viz.render("score_agreement", ax, recorder) is None
+            warnings = pysr_viz.render("score_agreement", ax, recorder)
+            assert len(warnings) == 1
+
+            assert "1 of 3" in warnings[0] and "dropped" in warnings[0]
         finally:
             plt.close(fig)
 
@@ -319,7 +327,12 @@ class TestSerializationRoundTrip:
         for name in _PLOT_NAMES:
             fig, ax = plt.subplots()
             try:
-                assert pysr_viz.render(name, ax, restored) is None
+                warnings = pysr_viz.render(name, ax, restored)
+                if name == "pareto_front":
+                    assert warnings == []
+                else:
+
+                    assert len(warnings) == 1 and "1 of 3" in warnings[0]
             finally:
                 plt.close(fig)
 
@@ -463,11 +476,11 @@ class TestGetPlotDataDegradation:
 
 class TestRenderPlot:
 
-    def test_render_returns_none(self) -> None:
+    def test_render_returns_empty_warnings(self) -> None:
         recorder = _populated_recorder()
         fig, ax = plt.subplots()
         try:
-            assert pysr_viz.render("pareto_front", ax, recorder) is None
+            assert pysr_viz.render("pareto_front", ax, recorder) == []
         finally:
             plt.close(fig)
 
@@ -496,7 +509,8 @@ class TestRenderPlot:
     def test_render_none_recorder_no_raise(self) -> None:
         fig, ax = plt.subplots()
         try:
-            assert pysr_viz.render("pareto_front", ax, None) is None
+            warnings = pysr_viz.render("pareto_front", ax, None)
+            assert warnings and "No data" in warnings[0]
         finally:
             plt.close(fig)
 
@@ -549,3 +563,17 @@ class TestPluginVizDelegation:
         )
         with pytest.raises(ValueError):
             plugin.get_plot_data("not_a_plot")
+
+
+
+
+
+
+
+def test_plot_spec_keys_are_within_the_logged_whitelist() -> None:
+    used = {
+        key
+        for spec in pysr_viz._PLOT_SPECS
+        for key in (spec.x_key, spec.y_key, spec.selected_x_key, spec.selected_y_key)
+    }
+    assert used <= set(pysr_plugin._LOGGED_METRICS)

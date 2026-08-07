@@ -178,6 +178,13 @@ def load_wave_breaking(
     peak period 1.2 s, amplitude sum 100 mm). Case names encode these
     JONSWAP paddle parameters.
 
+    See also: :func:`kd.data.loaders.load_wave_breaking_cases` returns ALL
+    shipped cases (12 ``N_*`` + 11 ``L_*``) as raw
+    ``dict[str, WaveBreakingCase]`` from the scatter pickle, with no
+    ``TabularDataset`` assembly. Reach for that instead of this function
+    when you need per-case metadata or want to iterate every case rather
+    than get the single case this function returns.
+
     Args:
         case: Experiment identifier. Defaults to the bundled case.
         data_dir: Directory holding ``wave_breaking_<case>.npz`` files for

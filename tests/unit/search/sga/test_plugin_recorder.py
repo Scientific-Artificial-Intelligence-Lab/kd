@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import pytest
@@ -29,6 +30,7 @@ EXPECTED_METRICS_ORDERED: tuple[str, ...] = (
     "n_valid",
     "n_unique",
     "gen_mean_complexity",
+    "pop_mean_aic",
 )
 EXPECTED_METRICS: frozenset[str] = frozenset(EXPECTED_METRICS_ORDERED)
 
@@ -207,7 +209,7 @@ def test_logged_metrics_constant_strict_equals_whitelist() -> None:
 
 
     assert logged == EXPECTED_METRICS_ORDERED, (
-        f"_LOGGED_METRICS must equal the 6-field whitelist exactly (order "
+        f"_LOGGED_METRICS must equal the 7-field whitelist exactly (order "
         f"matters).\n expected: {EXPECTED_METRICS_ORDERED}\n got: {logged}"
     )
 
@@ -231,7 +233,7 @@ def test_commit_logs_exactly_the_whitelist_plus_best_aic(
 
 
     assert logged == per_gen_expected, (
-        f"a commit with no surrogate training must log exactly the 6-field "
+        f"a commit with no surrogate training must log exactly the 7-field "
         f"whitelist + the legacy {_LEGACY_SGA_KEY!r} series (surrogate keys "
         f"are logged in prepare, not per-generation).\n"
         f" missing: {sorted(per_gen_expected - logged)}\n"
@@ -461,9 +463,14 @@ def test_all_invalid_generation_still_logs_all_series(
     )
 
     mean_complexity = recorder.get("gen_mean_complexity")[-1]
-    assert mean_complexity == pytest.approx(0.0, abs=1e-12), (
-        f"gen_mean_complexity is LOCKED to 0.0 for the no-valid case; got "
-        f"{mean_complexity!r}."
+    assert isinstance(mean_complexity, float) and math.isnan(mean_complexity), (
+        f"gen_mean_complexity is LOCKED to NaN (not-measured) for the "
+        f"no-valid case; got {mean_complexity!r}."
+    )
+    pop_mean = recorder.get("pop_mean_aic")[-1]
+    assert pop_mean == float("inf"), (
+        f"pop_mean_aic must be +inf when the population has no finite-scored "
+        f"survivor; got {pop_mean!r}."
     )
 
 
@@ -584,7 +591,7 @@ def test_empty_offspring_logs_full_whitelist_with_sentinels(
 
     metric_keys = keys - {_LEGACY_SGA_KEY}
     assert metric_keys == EXPECTED_METRICS, (
-        f"Empty generation must log the FULL 6-field whitelist (an empty "
+        f"Empty generation must log the FULL 7-field whitelist (an empty "
         f"batch is still a generation; dropping it would contradict the "
         f"all-invalid logging contract).\n"
         f" missing: {sorted(EXPECTED_METRICS - metric_keys)}\n"
@@ -598,15 +605,16 @@ def test_empty_offspring_logs_full_whitelist_with_sentinels(
         assert recorder.get(name)[-1] == 0, (
             f"{name} must be 0 for an empty batch; got {recorder.get(name)[-1]!r}."
         )
-    for name in ("gen_best_aic", "gen_mean_aic", "gen_best_nmse"):
+    for name in ("gen_best_aic", "gen_mean_aic", "gen_best_nmse", "pop_mean_aic"):
         value = recorder.get(name)[-1]
         assert value == float("inf"), (
             f"{name} must be +inf for an empty batch (no valid individual); "
             f"got {value!r}."
         )
     mean_complexity = recorder.get("gen_mean_complexity")[-1]
-    assert mean_complexity == pytest.approx(0.0, abs=1e-12), (
-        f"gen_mean_complexity must be 0.0 for an empty batch; got {mean_complexity!r}."
+    assert isinstance(mean_complexity, float) and math.isnan(mean_complexity), (
+        f"gen_mean_complexity must be NaN (not-measured) for an empty batch; "
+        f"got {mean_complexity!r}."
     )
 
 

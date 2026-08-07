@@ -1,9 +1,17 @@
 """EqGPT proposer plugin (foundation layer: vocab + GPT + backend).
 
-Everything here is plugin-private. The EqGPT vocabulary tokens are an internal
-representation and are deliberately NOT re-exported into the public ``kd`` /
-``kd.search`` namespaces; anything leaving the plugin converts to platform
-funcall-IR strings at the boundary.
+This facade is the PLUGIN level of the two-tier export surface: it publishes
+the package's own machinery (config, plugin, GPT + backend seam, sampler,
+reward, gates, vocabulary and token mapping) for plugin-level consumers such as
+``examples/16_eqgpt.py`` and this package's tests. The ENGINE level
+(``kd.search``) carries
+only :class:`EqGPTConfig` + :class:`EqGPTPlugin`; the top-level ``kd``
+namespace carries :class:`EqGPTConfig` alone.
+
+The vocabulary tokens stay at this level on purpose (SPEC L-3): they are an
+internal representation, are never re-exported into ``kd`` or ``kd.search``,
+and anything leaving the plugin converts to platform funcall-IR strings at the
+boundary.
 """
 
 from __future__ import annotations

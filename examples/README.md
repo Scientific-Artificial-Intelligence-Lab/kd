@@ -1,28 +1,28 @@
 # kd Examples
 
-Run any of these end-to-end:
+Run any of these end-to-end (`uv run` uses the project environment created by
+`uv sync`; no manual venv activation needed):
 
 ```bash
-python examples/01_quickstart.py
-python examples/02_your_data.py
-python examples/03_visualize.py
-python examples/04_noisy_data.py
-python examples/05_save_load.py
-python examples/06_realworld.py # showcase: 4 real benchmarks, autograd, full reports
-python examples/07_discover.py # DISCOVER (LSTM controller + RSPG) on Burgers
-python examples/08_dlga.py # DLGA (NN surrogate + GA) on Burgers
-python examples/09_compare_algorithms.py # all 7 engines on one dataset, one ruler (optional engines skip gracefully)
-python examples/10_checkpoint_resume.py # checkpoint a run, resume it
-python examples/11_evaluate_terms.py # score your own terms, no search
-python examples/12_symbolic_regression.py # scalar SR bypass: PySR auto-search y=f(X) (needs: uv sync --extra pysr)
-python examples/13_sindy_basis_sr.py # scalar SR bypass: you supply the basis, one sparse solve
-python examples/14_field_animation_2d.py # 2D Burgers True|Predicted field animation GIF
-python examples/15_remote_dataset.py # on-demand HuggingFace dataset (needs network + uv sync --extra hub)
-python examples/16_eqgpt.py # EqGPT (pretrained GPT proposer) on Burgers (needs pretrained weights)
-python examples/17_llm4ed.py # LLM4ED (LLM equation proposer) on diffusion, offline canned provider (zero network)
-python examples/18_eqgpt_wave_breaking.py # EqGPT wave-breaking reproduction on real scattered data (needs .pt weights + KD_V1_WAVE_ASSETS surrogate tree)
-python examples/19_batch_harness.py # kd.harness: run a plan of fits, seal the evidence, read the consensus
-jupyter notebook examples/notebooks/getting_started.ipynb # narrated walkthrough with inline outputs
+uv run python examples/01_quickstart.py
+uv run python examples/02_your_data.py
+uv run python examples/03_visualize.py
+uv run python examples/04_noisy_data.py
+uv run python examples/05_save_load.py
+uv run python examples/06_realworld.py # showcase: 4 real benchmarks, autograd, full reports
+uv run python examples/07_discover.py # DISCOVER (LSTM controller + RSPG) on Burgers
+uv run python examples/08_dlga.py # DLGA (NN surrogate + GA) on Burgers
+uv run python examples/09_compare_algorithms.py # all 7 engines on one dataset, one ruler (optional engines skip gracefully)
+uv run python examples/10_checkpoint_resume.py # checkpoint a run, resume it
+uv run python examples/11_evaluate_terms.py # score your own terms, no search
+uv run python examples/12_symbolic_regression.py # scalar SR bypass: PySR auto-search y=f(X) (needs: uv sync --extra pysr)
+uv run python examples/13_sindy_basis_sr.py # scalar SR bypass: you supply the basis, one sparse solve
+uv run python examples/14_field_animation_2d.py # 2D Burgers True|Predicted field animation GIF
+uv run python examples/15_remote_dataset.py # on-demand HuggingFace dataset (needs network + uv sync --extra hub)
+uv run python examples/16_eqgpt.py # EqGPT (pretrained GPT proposer) on Burgers (needs pretrained weights)
+uv run python examples/17_llm4ed.py # LLM4ED (LLM equation proposer) on diffusion, offline canned provider (zero network)
+uv run python examples/19_batch_harness.py # kd.harness: run a plan of fits, seal the evidence, read the consensus
+uv run --with jupyter jupyter notebook examples/notebooks/getting_started.ipynb # narrated walkthrough with inline outputs
 ```
 
 Each file is self-contained.
@@ -46,7 +46,7 @@ Each file is self-contained.
 | 15_remote_dataset.py | **On-demand remote dataset**: list HuggingFace datasets, fetch one, preview it, and run a tiny SGA fit. Needs network and the `hub` extra | network dependent |
 | 16_eqgpt.py | **EqGPT**: pretrained generative GPT proposes candidate PDEs, kd scores + fine-tunes toward high-reward equations. Uses `EqGPTConfig.burgers_preset()` (per-problem `sparsity_alpha`, D5); needs the pretrained weights (see the script's asset hint) | ~1-2 min |
 | 17_llm4ed.py | **LLM4ED**: an LLM proposes candidate PDE right-hand sides as text, kd scores each by an EDL sparse-regression reward and evolves an elite pool. Runs offline with an inline canned `provider=` (zero network, no API key); the script comments show the real-backend path (`base_url` + `OPENAI_API_KEY`, optional `tape_record_path`) | ~10 sec |
-| 18_eqgpt_wave_breaking.py | **EqGPT wave-breaking reproduction (flagship)**: EqGPT proposes one RHS structure and kd scores it per case across the paper's 12 wave-tank experiments, recovering `eta_t + c1*eta_x + c2*eta_xxx + c3*(eta*eta_x)_xx = 0` on real SCATTERED `(t, x, eta)` data; the report leads with the per-case reward hero panel. Needs the pretrained `.pt` weights, the WaveBreaking pickle, and the per-case v1 surrogate tree (`KD_V1_WAVE_ASSETS`) | ~minutes |
+| 18 (retired) | Retired (numbering gaps stay retired; no renumbering) | - |
 | 19_batch_harness.py | **Batch a plan of fits and aggregate it** (`kd.harness`): an ordered (instrument, dataset, seed) matrix runs into a fresh evidence store, the store re-opens read-only and self-verifies, and `build_consensus` groups the runs into structure classes with a Markdown + JSON rendering. Also shows how to read a class split that is only a notation difference | ~5 s |
 | notebooks/getting_started.ipynb | **Narrated getting-started notebook**: load Burgers, preview the field, fit SGA, compare against truth, and keep inline outputs for GitHub | ~1-2 min |
 

@@ -52,7 +52,7 @@ def test_residual_domain_draws_one_honest_scatter_on_caller_axes(ax3d) -> None:
 
     returned = eqgpt_viz.render_steady_residual_domain(ax3d, x, y, residual)
 
-    assert returned is None
+    assert returned == []
     assert len(ax3d.collections) == 1
     scatter = ax3d.collections[0]
     scatter_x, scatter_y, scatter_z = scatter._offsets3d
@@ -102,12 +102,14 @@ def test_term_balance_plots_column_rms_and_highlights_pivot(ax) -> None:
         ax, matrix, terms, pivot_index=1
     )
 
-    assert returned is None
+    assert returned == []
     assert len(ax.patches) == len(terms)
     heights = np.array([patch.get_height() for patch in ax.patches])
     np.testing.assert_allclose(heights, np.sqrt(np.mean(matrix**2, axis=0)))
     labels = [tick.get_text() for tick in ax.get_xticklabels()]
-    assert labels == terms
+
+
+    assert labels == ["u_xx", "u_yy", "1"]
     pivot_face = np.asarray(ax.patches[1].get_facecolor())
     other_faces = [np.asarray(ax.patches[i].get_facecolor()) for i in (0, 2)]
     assert any(not np.allclose(pivot_face, face) for face in other_faces)
@@ -141,7 +143,7 @@ def test_surrogate_fit_draws_observed_predicted_scatter_and_r2(ax) -> None:
 
     returned = eqgpt_viz.render_steady_surrogate_fit(ax, observed, predicted)
 
-    assert returned is None
+    assert returned == []
     assert len(ax.collections) == 1
     np.testing.assert_allclose(
         ax.collections[0].get_offsets(), np.column_stack((observed, predicted))

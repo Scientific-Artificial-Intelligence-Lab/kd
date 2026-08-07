@@ -63,9 +63,12 @@ def build_checkpoint_payload(iteration: int, algorithm: Any) -> dict[str, Any]:
 
 
 def _config_snapshot(algorithm: Any) -> dict[str, Any] | None:
-    config = getattr(algorithm, "config", None)
+    config = algorithm.config
     if not isinstance(config, Mapping):
-        return None
+        raise TypeError(
+            "checkpoint writer requires a Mapping algorithm.config; "
+            f"got {type(config).__name__}"
+        )
     try:
         snapshot = canonicalize_config(dict(config))
     except ConfigCanonicalizationError:
@@ -78,8 +81,11 @@ def _config_snapshot(algorithm: Any) -> dict[str, Any] | None:
 
 
 def _algorithm_name(algorithm: Any) -> str | None:
-    config = getattr(algorithm, "config", None)
+    config = algorithm.config
     if not isinstance(config, Mapping):
-        return None
+        raise TypeError(
+            "checkpoint writer requires a Mapping algorithm.config; "
+            f"got {type(config).__name__}"
+        )
     name = config.get("algorithm")
     return name if isinstance(name, str) else None

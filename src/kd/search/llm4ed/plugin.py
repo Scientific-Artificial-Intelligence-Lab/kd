@@ -122,14 +122,16 @@ STATE_KEYS: Final[frozenset[str]] = frozenset(
 
 
 
-_LOGGED_METRICS: Final[tuple[str, ...]] = (
-    "pool_best",
-    "pool_median",
-    "pool_worst",
-    "n_invalid",
-    "n_llm_calls",
-    "n_valid",
-)
+
+
+
+_LOGGED_METRICS: Final[tuple[str, ...]] = _viz_helpers.LOGGED_METRICS
+_POOL_BEST_KEY: Final[str] = _viz_helpers.POOL_BEST_KEY
+_POOL_MEDIAN_KEY: Final[str] = _viz_helpers.POOL_MEDIAN_KEY
+_POOL_WORST_KEY: Final[str] = _viz_helpers.POOL_WORST_KEY
+_N_INVALID_KEY: Final[str] = _viz_helpers.N_INVALID_KEY
+_N_LLM_CALLS_KEY: Final[str] = _viz_helpers.N_LLM_CALLS_KEY
+_N_VALID_KEY: Final[str] = _viz_helpers.N_VALID_KEY
 
 
 
@@ -306,8 +308,8 @@ class Llm4edPlugin:
     def list_plots(self) -> list[PlotInfo]:
         return _viz_helpers.list_plot_infos()
 
-    def render_plot(self, name: str, ax: Axes) -> None:
-        _viz_helpers.render(name, ax, self._recorder)
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
         return _viz_helpers.get_data(name, self._recorder)
@@ -502,12 +504,12 @@ class Llm4edPlugin:
             self._recorder,
             _LOGGED_METRICS,
             {
-                "pool_best": pool_best,
-                "pool_median": pool_median,
-                "pool_worst": pool_worst,
-                "n_invalid": self._round_invalid,
-                "n_llm_calls": self._round_llm_calls,
-                "n_valid": len(members),
+                _POOL_BEST_KEY: pool_best,
+                _POOL_MEDIAN_KEY: pool_median,
+                _POOL_WORST_KEY: pool_worst,
+                _N_INVALID_KEY: self._round_invalid,
+                _N_LLM_CALLS_KEY: self._round_llm_calls,
+                _N_VALID_KEY: len(members),
             },
         )
 

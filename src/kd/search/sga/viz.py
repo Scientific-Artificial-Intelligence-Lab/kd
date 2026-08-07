@@ -34,10 +34,52 @@ logger = logging.getLogger(__name__)
 
 
 
+
+
+
+
+GEN_BEST_AIC_KEY = "gen_best_aic"
+GEN_MEAN_AIC_KEY = "gen_mean_aic"
+GEN_BEST_NMSE_KEY = "gen_best_nmse"
+N_VALID_KEY = "n_valid"
+N_UNIQUE_KEY = "n_unique"
+GEN_MEAN_COMPLEXITY_KEY = "gen_mean_complexity"
+
+
+
+
+POP_MEAN_AIC_KEY = "pop_mean_aic"
+LOGGED_METRICS: tuple[str, ...] = (
+    GEN_BEST_AIC_KEY,
+    GEN_MEAN_AIC_KEY,
+    GEN_BEST_NMSE_KEY,
+    N_VALID_KEY,
+    N_UNIQUE_KEY,
+    GEN_MEAN_COMPLEXITY_KEY,
+    POP_MEAN_AIC_KEY,
+)
+
+
+
+
+
+BEST_AIC_KEY = "best_aic"
+
+
+
+
+
+
+
+
+
+
+
+
 _PLOT_METRIC: dict[str, str] = {
-    "population_diversity": "n_unique",
-    "complexity_evolution": "gen_mean_complexity",
-    "fitness_spread": "gen_mean_aic",
+    "population_diversity": N_UNIQUE_KEY,
+    "complexity_evolution": GEN_MEAN_COMPLEXITY_KEY,
+    "fitness_spread": POP_MEAN_AIC_KEY,
 }
 
 
@@ -45,31 +87,37 @@ _PLOT_METRIC: dict[str, str] = {
 _PLOT_INFOS: tuple[PlotInfo, ...] = (
     PlotInfo(
         name="population_diversity",
-        title="Population Diversity",
+        title="Offspring Diversity",
         description=(
             "Distinct candidate-expression count among this generation's "
-            "evaluated offspring (the staged batch, post-dedup). A collapsing "
-            "count signals premature convergence / loss of search diversity."
+            "evaluated offspring (the staged batch, post-dedup; failed "
+            "evaluations count too). A collapsing count signals premature "
+            "convergence / loss of search diversity. NOT a population "
+            "statistic — the count can exceed the population size."
         ),
     ),
     PlotInfo(
         name="complexity_evolution",
         title="Complexity Evolution",
         description=(
-            "Mean number of STRidge-selected (non-zero) terms across valid "
-            "individuals per generation — a sparsity / bloat monitor for the "
-            "evolving PDE candidates."
+            "Mean number of STRidge-selected (non-zero) terms across this "
+            "generation's valid offspring — a sparsity / bloat monitor for "
+            "the evolving PDE candidates. All-invalid generations appear as "
+            "gaps (nothing was measured)."
         ),
     ),
     PlotInfo(
         name="fitness_spread",
         title="Fitness Spread",
         description=(
-            "Per-generation MEAN AIC over valid individuals (lower is better). "
-            "Complements the platform 'convergence' plot, which draws the "
-            "single best AIC: this shows how the whole population converges, "
-            "not just the global optimum. No-valid generations appear as gaps "
-            "(their +inf sentinel is masked)."
+            "Per-generation MEAN AIC over the surviving population's finite "
+            "scores (lower is better). The platform 'convergence' plot draws "
+            "the single best AIC; this curve shows the level of the whole "
+            "surviving population — under elitist truncation it declines "
+            "alongside the best curve, and the distance between the two is "
+            "how far the population trails its optimum. Generations with no "
+            "finite-scored survivors (e.g. an all-invalid start) appear as "
+            "gaps (their +inf sentinel is masked)."
         ),
     ),
     PlotInfo(
@@ -111,15 +159,14 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
 
 
 
 
     if name == _SURROGATE_PLOT_NAME:
-        render_surrogate(ax, recorder)
-        return
+        return render_surrogate(ax, recorder)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     title = _plot_title(name)
@@ -129,15 +176,16 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
     ax.set_title(title)
 
     if not series:
+        reason = _no_data_reason(recorder)
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
 
 
@@ -158,6 +206,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         marker=_LINE_MARKER,
         markersize=_LINE_MARKER_SIZE,
     )
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -229,6 +278,15 @@ def _plot_title(name: str) -> str:
 
 
 __all__ = [
+    "BEST_AIC_KEY",
+    "GEN_BEST_AIC_KEY",
+    "GEN_BEST_NMSE_KEY",
+    "GEN_MEAN_AIC_KEY",
+    "GEN_MEAN_COMPLEXITY_KEY",
+    "LOGGED_METRICS",
+    "N_UNIQUE_KEY",
+    "N_VALID_KEY",
+    "POP_MEAN_AIC_KEY",
     "get_data",
     "list_plot_infos",
     "render",

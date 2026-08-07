@@ -92,7 +92,7 @@ def _pure_mock_components() -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

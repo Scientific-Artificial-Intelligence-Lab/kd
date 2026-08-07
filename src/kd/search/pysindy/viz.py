@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import logging
-import math
 from typing import TYPE_CHECKING, Any
 
+from kd.core.jsonsafe import finite_or_none
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -48,10 +48,10 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _require_known(name)
-    native = _finite_or_none(_last_logged_scalar(recorder, NATIVE_NMSE_KEY))
-    refit = _finite_or_none(_last_logged_scalar(recorder, REFIT_NMSE_KEY))
+    native = finite_or_none(_last_logged_scalar(recorder, NATIVE_NMSE_KEY))
+    refit = finite_or_none(_last_logged_scalar(recorder, REFIT_NMSE_KEY))
     support = _last_logged_scalar(recorder, SUPPORT_SIZE_KEY)
 
     ax.set_xlabel(_XLABEL)
@@ -64,16 +64,18 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         if value is not None
     ]
     if not bars:
+        reason = _no_data_reason(recorder)
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
+    warnings: list[str] = []
     labels = [label for label, _ in bars]
     heights = [value for _, value in bars]
     ax.bar(labels, heights)
@@ -85,6 +87,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         notes.append(f"support size: {support}")
     if refit is None and native is not None:
         notes.append("refit invalid")
+        warnings.append(f"plugin plot '{name}': refit invalid; refit bar omitted")
     if notes:
         ax.text(
             0.02,
@@ -94,16 +97,17 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
             ha="left",
             va="top",
         )
+    return warnings
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
     _require_known(name)
     support = _last_logged_scalar(recorder, SUPPORT_SIZE_KEY)
     return {
-        NATIVE_NMSE_KEY: _finite_or_none(
+        NATIVE_NMSE_KEY: finite_or_none(
             _last_logged_scalar(recorder, NATIVE_NMSE_KEY)
         ),
-        REFIT_NMSE_KEY: _finite_or_none(_last_logged_scalar(recorder, REFIT_NMSE_KEY)),
+        REFIT_NMSE_KEY: finite_or_none(_last_logged_scalar(recorder, REFIT_NMSE_KEY)),
         SUPPORT_SIZE_KEY: (
             support if isinstance(support, int) and not isinstance(support, bool)
             else None
@@ -131,13 +135,6 @@ def _last_logged_scalar(recorder: VizRecorder | None, key: str) -> Any:
     if not series:
         return None
     return series[-1]
-
-
-def _finite_or_none(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    result = float(value)
-    return result if math.isfinite(result) else None
 
 
 def _no_data_reason(recorder: VizRecorder | None) -> str:

@@ -344,11 +344,11 @@ class PythonExecutor:
 
 
 
-        dataset_axes = getattr(getattr(context, "dataset", None), "axes", None)
+        dataset_axes = context.dataset.axes
         provider_coords = provider.coords
         if name in provider_coords:
             coord_t = provider_coords[name]
-            in_dataset_axes = isinstance(dataset_axes, dict) and name in dataset_axes
+            in_dataset_axes = dataset_axes is not None and name in dataset_axes
             if not in_dataset_axes or coord_t.requires_grad:
                 return coord_t
 
@@ -466,11 +466,9 @@ def _try_parse_terminal_derivative(
 def _context_name_sets(
     context: ExecutionContext,
 ) -> tuple[set[str] | None, set[str] | None]:
-    dataset = getattr(context, "dataset", None)
-    fields = getattr(dataset, "fields", None)
-    axes = getattr(dataset, "axes", None)
-    known_fields = set(fields) if isinstance(fields, dict) else None
-    known_axes = set(axes) if isinstance(axes, dict) else None
+    dataset = context.dataset
+    known_fields = set(dataset.fields) if dataset.fields is not None else None
+    known_axes = set(dataset.axes) if dataset.axes is not None else None
     return known_fields, known_axes
 
 
@@ -488,10 +486,7 @@ def _should_use_full_path(
 
 
 def _context_fields_missing(context: ExecutionContext) -> bool:
-    dataset = getattr(context, "dataset", None)
-    if dataset is None:
-        return True
-    return getattr(dataset, "fields", None) is None
+    return context.dataset.fields is None
 
 
 def _get_ast_depth(node: ast.AST) -> int:

@@ -168,8 +168,8 @@ class PySINDyPlugin:
     def list_plots(self) -> list[PlotInfo]:
         return _viz_helpers.list_plot_infos()
 
-    def render_plot(self, name: str, ax: Axes) -> None:
-        _viz_helpers.render(name, ax, self._recorder)
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
         return _viz_helpers.get_data(name, self._recorder)

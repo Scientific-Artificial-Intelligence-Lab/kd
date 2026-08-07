@@ -158,7 +158,7 @@ class TestM2BuildResultTargetContract:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
 
@@ -183,7 +183,7 @@ class TestM2BuildResultTargetContract:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
@@ -209,7 +209,7 @@ class TestM3PredictedShapeGuard:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
@@ -236,7 +236,7 @@ class TestM3PredictedShapeGuard:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)
@@ -338,7 +338,7 @@ class TestPredictedResidualsTypeGuard:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         runner = ExperimentRunner(algorithm=algorithm, max_iterations=1)

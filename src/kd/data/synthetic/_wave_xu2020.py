@@ -29,4 +29,5 @@ def generate_wave_xu2020_data(
         u=u,
         noise_level=noise_level,
         ground_truth="u_tt = u_xx",
+        lhs_order=2,
     )

@@ -452,7 +452,7 @@ class TestPluginRestoreChainPreservesGateRejection:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=_OutOfBoundsEvaluator(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
             recorder=None,
         )
@@ -623,7 +623,7 @@ def _make_components(evaluator: object) -> Any:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

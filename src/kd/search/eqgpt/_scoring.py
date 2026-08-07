@@ -91,10 +91,13 @@ def score_candidate(
     lhs_var = float(lhs.var(correction=0).item()) if lhs.numel() > 1 else 0.0
     nmse_val = (1.0 - r2) if math.isfinite(r2) else PENALTY
     mse_val = nmse_val * lhs_var if lhs_var > 0 else PENALTY
+
+
+
     coeffs = (
         None
         if is_free_pivot
-        else torch.as_tensor(rr.coefficients, dtype=torch.float32)
+        else torch.as_tensor(-rr.coefficients, dtype=torch.float32)
         if valid
         else None
     )

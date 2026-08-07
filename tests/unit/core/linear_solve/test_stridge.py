@@ -363,6 +363,57 @@ class TestSTRidgeSolver:
         )
 
 
+    def test_lapack_failure_is_reported_as_degenerate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from kd.core.linear_solve import STRidgeSolver
+
+        def _fail(_matrix: torch.Tensor) -> torch.Tensor:
+            raise RuntimeError("linalg.cond: LAPACK failure")
+
+        monkeypatch.setattr(torch.linalg, "cond", _fail)
+        solver = STRidgeSolver(compute_condition_number=True)
+        theta, y, _ = _make_sparse_system(n=100, d=5, seed=61)
+
+        result = solver.solve(theta, y)
+
+        assert result.condition_number == float("inf")
+
+    def test_allocation_failure_is_not_reported_as_degenerate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from kd.core.linear_solve import STRidgeSolver
+
+        def _oom(_matrix: torch.Tensor) -> torch.Tensor:
+            raise torch.cuda.OutOfMemoryError("CUDA out of memory")
+
+        monkeypatch.setattr(torch.linalg, "cond", _oom)
+        solver = STRidgeSolver(compute_condition_number=True)
+        theta, y, _ = _make_sparse_system(n=100, d=5, seed=62)
+
+        with pytest.raises(torch.cuda.OutOfMemoryError):
+            solver.solve(theta, y)
+
+    def test_cpu_allocation_failure_is_not_reported_as_degenerate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from kd.core.linear_solve import STRidgeSolver
+
+        def _oom(_matrix: torch.Tensor) -> torch.Tensor:
+            raise RuntimeError(
+                "[enforce fail at alloc_cpu.cpp:117]. DefaultCPUAllocator: "
+                "can't allocate memory: you tried to allocate "
+                "8000000000000 bytes."
+            )
+
+        monkeypatch.setattr(torch.linalg, "cond", _oom)
+        solver = STRidgeSolver(compute_condition_number=True)
+        theta, y, _ = _make_sparse_system(n=100, d=5, seed=63)
+
+        with pytest.raises(RuntimeError, match="DefaultCPUAllocator"):
+            solver.solve(theta, y)
+
+
     def test_inherits_sparse_solver(self) -> None:
         from kd.core.linear_solve import STRidgeSolver
 

@@ -9,6 +9,14 @@ from kd.core.expr.naming import build_derivative_name
 HOMOGENEOUS_LHS_LABEL: Final[str] = "0"
 
 
+
+
+
+
+
+DEFAULT_LHS_LABEL: Final[str] = "u_t"
+
+
 def render_homogeneous_label(eq: Homogeneous) -> str:
     return " + ".join(term_ir for term_ir, _coefficient in eq.terms) + " = 0"
 

@@ -5,13 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
-
-
-
-pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
-
 from kd.core.equation.canonical import canonicalize_expression
-from kd.core.expr.canonicalizer import canonicalize_code
 from kd.core.expr.registry import FunctionRegistry
 from kd.search.discover.utils.canonicalize import (
     canonicalize_expression as discover_alias,
@@ -215,8 +209,7 @@ def test_all_paths_agree_byte_identically(
 ) -> None:
     survivor = canonicalize_expression(expression)
     via_discover = discover_alias(expression)
-    via_shim = canonicalize_code(expression, FunctionRegistry.create_default())
-    assert survivor == via_discover == via_shim == expected
+    assert survivor == via_discover == expected
 
 
 @pytest.mark.parametrize(
@@ -231,16 +224,6 @@ def test_all_paths_reject_identically(
         canonicalize_expression(expression)
     with pytest.raises(ValueError, match=match):
         discover_alias(expression)
-    with pytest.raises(ValueError, match=match):
-        canonicalize_code(expression, FunctionRegistry.create_default())
-
-
-def test_shim_ignores_registry_argument() -> None:
-    empty = FunctionRegistry()
-    default = FunctionRegistry.create_default()
-    for _, expression, expected in VALID_CORPUS:
-        assert canonicalize_code(expression, empty) == expected
-        assert canonicalize_code(expression, default) == expected
 
 
 

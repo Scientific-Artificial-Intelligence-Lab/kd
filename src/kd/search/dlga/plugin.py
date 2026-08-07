@@ -80,18 +80,15 @@ _NMSE_EPSILON_RETUNE_BAND: str = "1e-2 to 5e-2"
 
 
 
-
-
-_LOGGED_METRICS: tuple[str, ...] = (
-    "gen_best_fitness",
-    "gen_mean_fitness",
-    "gen_best_nmse",
-    "n_valid",
-    "n_unique",
-    "gen_mean_complexity",
-    "lhs_ut",
-    "lhs_utt",
-)
+_LOGGED_METRICS = _viz_helpers.LOGGED_METRICS
+_GEN_BEST_FITNESS_KEY = _viz_helpers.GEN_BEST_FITNESS_KEY
+_GEN_MEAN_FITNESS_KEY = _viz_helpers.GEN_MEAN_FITNESS_KEY
+_GEN_BEST_NMSE_KEY = _viz_helpers.GEN_BEST_NMSE_KEY
+_N_VALID_KEY = _viz_helpers.N_VALID_KEY
+_N_UNIQUE_KEY = _viz_helpers.N_UNIQUE_KEY
+_GEN_MEAN_COMPLEXITY_KEY = _viz_helpers.GEN_MEAN_COMPLEXITY_KEY
+_LHS_UT_KEY = _viz_helpers.LHS_UT_KEY
+_LHS_UTT_KEY = _viz_helpers.LHS_UTT_KEY
 
 
 
@@ -360,16 +357,16 @@ class DLGAPlugin:
             gen_best_fitness = float("inf")
             gen_mean_fitness = float("inf")
             gen_best_nmse = float("inf")
-            gen_mean_complexity = 0.0
+            gen_mean_complexity = float("nan")
         metrics: dict[str, float | int] = {
-            "gen_best_fitness": gen_best_fitness,
-            "gen_mean_fitness": gen_mean_fitness,
-            "gen_best_nmse": gen_best_nmse,
-            "n_valid": len(valid_results),
-            "n_unique": len({result.expression for result in results}),
-            "gen_mean_complexity": gen_mean_complexity,
-            "lhs_ut": sum(1 for r in valid_results if r.lhs_name == "u_t"),
-            "lhs_utt": sum(1 for r in valid_results if r.lhs_name == "u_tt"),
+            _GEN_BEST_FITNESS_KEY: gen_best_fitness,
+            _GEN_MEAN_FITNESS_KEY: gen_mean_fitness,
+            _GEN_BEST_NMSE_KEY: gen_best_nmse,
+            _N_VALID_KEY: len(valid_results),
+            _N_UNIQUE_KEY: len({result.expression for result in results}),
+            _GEN_MEAN_COMPLEXITY_KEY: gen_mean_complexity,
+            _LHS_UT_KEY: sum(1 for r in valid_results if r.lhs_name == "u_t"),
+            _LHS_UTT_KEY: sum(1 for r in valid_results if r.lhs_name == "u_tt"),
         }
         log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 
@@ -469,8 +466,8 @@ class DLGAPlugin:
     def list_plots(self) -> list[PlotInfo]:
         return _viz_helpers.list_plot_infos()
 
-    def render_plot(self, name: str, ax: Axes) -> None:
-        _viz_helpers.render(name, ax, self._recorder)
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
         return _viz_helpers.get_data(name, self._recorder)

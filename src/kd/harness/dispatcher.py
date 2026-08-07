@@ -85,11 +85,6 @@ def worker_command(
     ]
     if shard.memory_max_gb is None:
         return base
-    if shutil.which("systemd-run") is None:
-        raise DispatchRunError(
-            "shard requests memory_max_gb but systemd-run is not available; "
-            "refusing to run without the requested cgroup memory cap"
-        )
     prefix = [
         "systemd-run",
         "--user",
@@ -400,9 +395,7 @@ class _Dispatch:
                 info["sigkill_used"] = True
             _proc_wait(info["proc"])
         for shard_id in list(self._running):
-            self._finalize(
-                shard_id, _proc_returncode(self._running[shard_id]["proc"])
-            )
+            self._finalize(shard_id, self._running[shard_id]["proc"].returncode)
 
 
 def _close(handle: IO[Any]) -> None:
@@ -432,13 +425,6 @@ def _proc_wait(proc: subprocess.Popen[bytes]) -> None:
         proc.wait()
 
 
-def _proc_returncode(proc: subprocess.Popen[bytes]) -> int | None:
-    try:
-        return proc.returncode
-    except OSError:
-        return None
-
-
 def run_dispatch(
     batch_root: Path,
     *,
@@ -460,7 +446,6 @@ def run_dispatch(
         any(shard.memory_max_gb is not None for shard in manifest.shards)
         and shutil.which("systemd-run") is None
     ):
-
 
 
 

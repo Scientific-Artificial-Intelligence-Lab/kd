@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 
+from kd.search import tool_schema
 from kd.search.callbacks import (
     CheckpointCallback,
     EarlyStoppingCallback,
@@ -34,7 +35,6 @@ from kd.search.checkpoint_manifest import (
     CheckpointManifestError,
     load_checkpoint_manifest,
 )
-from kd.search.descriptor import tool_schema
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
     DEFAULT_N_ITERATIONS,
@@ -44,8 +44,7 @@ from kd.search.discover.config import (
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt.config import EqGPTConfig
 from kd.search.eqgpt.plugin import EqGPTPlugin
-from kd.search.llm4ed.config import Llm4edConfig
-from kd.search.llm4ed.plugin import Llm4edPlugin
+from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
 from kd.search.protocol import FacadeWiringContract, PlatformComponents
 from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.plugin import PySINDyPlugin
@@ -111,8 +110,6 @@ def instrument_schemas() -> list[dict[str, Any]]:
     ]
 
 
-_DEFAULT_LHS_FIELD = "u"
-_DEFAULT_LHS_AXIS = "t"
 
 
 
@@ -130,6 +127,9 @@ _UNSET: Any = object()
 
 
 
+
+
+_DEFAULT_GENERATIONS = 50
 _DEFAULT_POPULATION = 20
 _DEFAULT_DEPTH = 4
 _DEFAULT_WIDTH = 5
@@ -139,6 +139,14 @@ _DEFAULT_SEED = 0
 _DEFAULT_CHECKPOINT_EVERY = 10
 
 _VALID_DERIVATIVES = frozenset({"finite_diff", "autograd"})
+
+
+
+
+
+
+
+_GENERATIONS_INTO_CONFIG = frozenset({"pysr"})
 
 
 
@@ -165,7 +173,9 @@ class _ProgressPrinter:
 
     Prints ``[kd] Generation N/M | best <metric>=... | expr=...`` with an
     algorithm-aware metric label. Emits a final ``[kd] Done.`` line on
-    experiment end.
+    experiment end. ``M`` is the run's EFFECTIVE iteration count (1 for a
+    one-shot plugin), not the requested ``generations``, which for a one-shot
+    run would advertise iterations the runner never drives.
     """
 
     def __init__(self, total_generations: int) -> None:
@@ -239,16 +249,18 @@ class Model:
     post-fit attributes (``best_expr_``, ``best_score_``, ``result_``).
 
     Limitations:
-        Only **first-order LHS** PDE is supported end-to-end (e.g.
-        ``u_t = f(u, u_x, ...)``). A dataset can *carry* a higher-order LHS via
+        Most packaged engines fit a **first-order LHS** only (e.g.
+        ``u_t = f(u, u_x, ...)``). A dataset carries its LHS order via
         ``dataset.lhs_order`` (the single source of truth — DATA-0; e.g.
-        ``u_tt`` for the wave equation ``u_tt = c**2 * u_xx``), but no packaged
-        search algorithm can discover one yet: an unsupported
-        ``(algorithm, lhs_order)`` combination fails loud at ``fit`` time rather
-        than silently fitting the wrong target. To discover a
-        second-order-in-time PDE today, reduce it to a first-order system
-        manually (introduce ``v = u_t``, then discover ``u_t = v`` and
-        ``v_t = ...`` separately).
+        ``u_tt`` for the wave equation ``u_tt = c**2 * u_xx``), and an
+        unsupported ``(algorithm, lhs_order)`` combination fails loud at
+        ``fit`` time rather than silently fitting the wrong target.
+        Second-order-in-time targets are covered by DLGA only: set
+        ``DLGAConfig(target_lhs_order=2)``, or use the ``wave_preset()`` /
+        ``kg_preset()`` constructors (recovery validated on the bundled
+        ``wave`` and ``klein-gordon`` datasets). For every other engine,
+        reduce to a first-order system manually (introduce ``v = u_t``, then
+        discover ``u_t = v`` and ``v_t = ...`` separately).
 
     Args:
         algorithm: Search algorithm name. Supported: ``"sga"`` (default,
@@ -269,7 +281,16 @@ class Model:
             optimizer's ``max_iter``).
             For non-SGA algorithms the individual facade parameters below
             (population/depth/width/aic_ratio/derivatives) are SGA-only.
-        generations: Maximum number of search iterations (all algorithms).
+        generations: Search-loop length (default 50). The five iterative
+            algorithms (sga / dlga / discover / eqgpt / llm4ed) spend it as the
+            kd runner's ``max_iterations``. ``pysr`` is one-shot: the runner
+            loop is pinned to 1 and ``generations`` becomes PySR's internal GP
+            ``niterations`` instead (only when no ``config=PySRConfig(...)``
+            supplies its own). ``pysindy`` consumes it NOWHERE (one STLSQ
+            solve, whose ``max_iter`` is a convergence cap set through
+            ``config=PySINDyConfig(...)``), so passing it explicitly there
+            emits a ``UserWarning`` naming the algorithm rather than silently
+            dropping the value.
         population: SGA population size (number of PDE candidates). SGA-only.
         depth: Maximum tree depth per term. SGA-only.
         width: Maximum number of terms per PDE. SGA-only.
@@ -340,9 +361,17 @@ class Model:
             resumes from its exhausted cursor, an injected ``BudgetedProvider``
             keeps its spent budget. Build a fresh provider per fit if a clean
             slate is desired.
-        checkpoint_dir: Optional directory for periodic checkpoints (all
-            algorithms). When set, every ``fit`` attaches a fresh
-            ``CheckpointCallback`` writing ``checkpoint_{iteration:06d}.pt``
+        checkpoint_dir: Optional directory for periodic checkpoints. Writing
+            covers all seven algorithms (the payload is the plugin's own
+            ``state``, part of the search protocol), but RESUME semantics split
+            by plugin: the five iterative engines (sga / dlga / discover /
+            eqgpt / llm4ed) restore the search state and keep searching, so a
+            larger ``generations`` extends the run, while the two one-shot
+            engines (pysr / pysindy) restore the finished fit without
+            re-running the solver (recover-without-rerun; their runner loop is
+            pinned to one iteration either way). When set, every ``fit``
+            attaches a fresh ``CheckpointCallback`` writing
+            ``checkpoint_{iteration:06d}.pt``
             every ``checkpoint_every`` iterations plus a
             ``checkpoint_final.pt`` at experiment end, alongside a
             ``manifest.json`` evidence ledger (``kd-ckptman-v1``): the ledger
@@ -402,7 +431,7 @@ class Model:
     def __init__(
         self,
         algorithm: str = "sga",
-        generations: int = 50,
+        generations: int = _UNSET,
         population: int = _UNSET,
         depth: int = _UNSET,
         width: int = _UNSET,
@@ -431,6 +460,9 @@ class Model:
 
 
 
+        generations_resolved = (
+            _DEFAULT_GENERATIONS if generations is _UNSET else generations
+        )
         population_resolved = (
             _DEFAULT_POPULATION if population is _UNSET else population
         )
@@ -485,8 +517,12 @@ class Model:
 
         self._validate_discover_config_facade_compat(algorithm, config)
 
+
+
+        self._warn_if_generations_unused(algorithm, generations)
+
         self.algorithm = algorithm
-        self.generations = generations
+        self.generations = generations_resolved
         self.population = population_resolved
         self.depth = depth_resolved
         self.width = width_resolved
@@ -711,7 +747,8 @@ class Model:
                 f"Cannot pass both 'config=' and algorithm-specific "
                 f"parameters: {overrides}. When 'config' is provided, use "
                 f"it as the single source of plugin settings; only "
-                f"'generations', 'verbose', 'callbacks', "
+                f"'generations' (except pysr, where the config's own "
+                f"'niterations' wins), 'verbose', 'callbacks', "
                 f"'checkpoint_dir'/'checkpoint_every' ('surrogate_model' "
                 f"for DLGA, 'provider' for llm4ed) remain effective on the "
                 f"facade."
@@ -929,6 +966,34 @@ class Model:
             )
 
     @staticmethod
+    def _warn_if_generations_unused(algorithm: str, generations: Any) -> None:
+        """Warn when an EXPLICIT ``generations`` reaches no knob of ``algorithm``.
+
+        A one-shot plugin runs exactly one runner iteration, so ``generations``
+        only means something if the facade routes it into the plugin's own
+        config (PySR's GP ``niterations``). For a one-shot plugin outside
+        ``_GENERATIONS_INTO_CONFIG`` the value is a pure no-op, which is the
+        silent drop every other facade parameter is guarded against. It warns
+        rather than raises because the drop is harmless to the science: the run
+        is correct, only the user's iteration budget is imaginary.
+
+        Receives the SENTINEL-bearing value: an omitted ``generations`` carries
+        no user intent, so only an explicit one is worth a warning.
+        """
+        if generations is _UNSET or algorithm in _GENERATIONS_INTO_CONFIG:
+            return
+        if not _PLUGIN_CLASS_BY_ALGORITHM[algorithm].one_shot:
+            return
+        config_name = _PLUGIN_CLASS_BY_ALGORITHM[algorithm].config_cls.__name__
+        warnings.warn(
+            f"generations={generations} has no effect for "
+            f"algorithm='{algorithm}': it runs a single one-shot solve. "
+            f"Set its native iteration cap through config={config_name}(...).",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    @staticmethod
     def _validate_early_stopping_direction(
         callbacks: list[RunnerCallback] | None,
         algorithm: str,
@@ -1004,11 +1069,13 @@ class Model:
 
                 Because ``generations`` maps into ``max_iterations`` (not the
                 config) for every iterative plugin, "resume with more
-                generations" keeps working — EXCEPT for PySR (one-shot), where
-                ``generations`` maps into ``niterations`` (``init_only``):
-                changing it is rejected by the diff, so a controller must
-                special-case one-shot instruments (no "add more generations"
-                action for PySR).
+                generations" keeps working — EXCEPT for the one-shot engines:
+                for PySR ``generations`` maps into ``niterations``
+                (``init_only``), so changing it is rejected by the diff; for
+                PySINDy it reaches no knob at all (accepted but inert, warned
+                at construction). A controller must special-case one-shot
+                instruments (no "add more generations" action for
+                pysr/pysindy).
 
                 A checkpoint written under a DIFFERENT kd config schema (a field
                 was added or removed since it was written) is fail-closed: the
@@ -1112,17 +1179,7 @@ class Model:
         plugin, batch_size = self._build_plugin()
         self._algorithm = plugin
 
-
-
-
-
-
-
-
-
-
-        one_shot = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm].one_shot
-        max_iterations = 1 if one_shot else self.generations
+        max_iterations = self._effective_max_iterations()
         runner = ExperimentRunner(
             algorithm=plugin,
             max_iterations=max_iterations,
@@ -1558,6 +1615,27 @@ class Model:
             dataset.lhs_order, dataset.topology, reqs, self.algorithm
         )
 
+    def _effective_max_iterations(self) -> int:
+        """Return the runner loop length this Model will actually drive.
+
+        One-shot plugins (PySR / PySINDy) are idempotent: a second ``propose``
+        returns ``[]``. Driving one for ``generations`` rounds would pollute the
+        recorder with empty no-op iterations and confuse early-stop, so the kd
+        runner loop is pinned to a single iteration. The facade ``generations``
+        still reaches PySR via its internal GP ``niterations`` (see
+        ``_build_pysr_config``). All other algorithms are genuinely iterative
+        and keep ``max_iterations == generations``. The one-shot flag is the
+        plugin's own ``FacadeWiringContract.one_shot`` declaration (no
+        facade-resident ``algorithm == "pysr"`` special case).
+
+        Single source for ``fit``'s runner AND the verbose progress printer's
+        denominator: printing ``Generation 1/500`` for a one-shot run would
+        confirm an iteration budget that never ran.
+        """
+        if _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm].one_shot:
+            return 1
+        return self.generations
+
     def _build_callbacks(self) -> list[RunnerCallback]:
         """Return the runner callback list.
 
@@ -1576,7 +1654,9 @@ class Model:
                 )
             )
         if self.verbose:
-            cbs.append(_ProgressPrinter(total_generations=self.generations))
+            cbs.append(
+                _ProgressPrinter(total_generations=self._effective_max_iterations())
+            )
         return cbs
 
 

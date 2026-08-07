@@ -4,11 +4,16 @@ from __future__ import annotations
 import json
 import logging
 import math
-from typing import Any
+from typing import Any, Final
 
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
+
+
+
+
+JSON_INDENT_SPACES: Final[int] = 2
 
 
 def detach_tensor(value: Tensor) -> Tensor:
@@ -30,6 +35,28 @@ def sanitize_float(value: float) -> float | None:
     if math.isnan(value) or math.isinf(value):
         return None
     return value
+
+
+def finite_or_none(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    result = float(value)
+    return result if math.isfinite(result) else None
+
+
+
+
+
+
+
+
+
+
+NO_MEASUREMENT: Final[float] = float("nan")
+
+
+def is_measured(value: Any) -> bool:
+    return isinstance(value, (int, float)) and math.isfinite(value)
 
 
 def make_json_safe(value: Any, *, key: str) -> Any:

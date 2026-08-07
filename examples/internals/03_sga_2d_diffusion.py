@@ -1,4 +1,42 @@
+#!/usr/bin/env python3
+"""Example 03: SGA discovery on 2D diffusion (multi-axis structure).
 
+What this demonstrates
+----------------------
+1. Build a 2D diffusion dataset with three non-collinear Fourier modes —
+   single-mode and naive two-mode data degenerate so that ``default u +
+   single d^2`` can fit ``u_t``, letting SGA "cheat" by skipping one
+   axis. Three non-collinear modes break that degeneracy so the search
+   has to recover both axes.
+2. Run SGA and inspect ``selected_indices`` + active term axes — a real
+   2D discovery must contain BOTH ``u_xx`` (or ``diff_x(u_x)``) and
+   ``u_yy`` (or ``diff_y(u_y)``).
+3. Render the standard HTML report.
+
+Equation
+--------
+2D diffusion: ``u_t = alpha * (u_xx + u_yy)`` (here alpha = 0.1)
+
+Analytic solution (3-mode superposition):
+    u(x, y, t) = sum_i amp_i * sin(kx_i * x) * sin(ky_i * y)
+               * exp(-alpha * (kx_i^2 + ky_i^2) * t)
+
+Modes chosen ``(1,2), (3,1), (2,3)`` with amps ``1, 1, 0.8`` ensure
+``cos(u_xx, u_yy)`` ~ 0.43 and ``lstsq([u, u_xx], u_t).resid / ||u_t||``
+> 5%, blocking the single-axis shortcut.
+
+Expected outcome
+----------------
+With population=15, generations=80 SGA typically finds an expression
+whose ``selected_indices`` contains TWO PDE terms covering both ``x`` and
+``y`` second-derivative axes. Effective coefficients project to roughly
+(+0.1, +0.1) on (u_xx, u_yy).
+
+Usage
+-----
+    python examples/internals/03_sga_2d_diffusion.py
+    open examples/out/diffusion_2d/report.html
+"""
 
 from __future__ import annotations
 
@@ -43,6 +81,7 @@ OUT_DIR = Path(__file__).parent / "out" / "diffusion_2d"
 
 
 def build_three_mode_diffusion_2d() -> PDEDataset:
+    """Build a 2D diffusion dataset with 3 non-collinear modes (cheat-proof)."""
     dtype = torch.float64
     x = torch.linspace(0.0, 2.0 * math.pi, NX + 1, dtype=dtype)[:-1]
     y = torch.linspace(0.0, 2.0 * math.pi, NY + 1, dtype=dtype)[:-1]
@@ -92,7 +131,7 @@ def main() -> None:
     logger.info("Ground truth: %s", dataset.ground_truth)
     logger.info("Modes (kx, ky, amp): %s", MODES)
 
-
+    # Quick health check: report cheat residuals so user sees why 3 modes matter
     provider = FiniteDiffProvider(dataset, max_order=2)
     u = dataset.fields["u"].values.flatten()
     u_t = provider.get_derivative("u", "t", 1).flatten()
@@ -109,9 +148,9 @@ def main() -> None:
     cheat_y = fit_residual([u, u_yy])
     logger.info("Cheat residual ||u_t - lstsq([u, u_xx])||/||u_t|| = %.4f", cheat_x)
     logger.info("Cheat residual ||u_t - lstsq([u, u_yy])||/||u_t|| = %.4f", cheat_y)
-
-
-
+    # Hard assertion: if either cheat residual <= 0.05, the data has
+    # degenerated to a cheat-friendly configuration and SGA results would
+    # be a false positive. Fail loudly rather than silently passing.
     assert cheat_x > 0.05, (
         f"Data degenerated: u + u_xx fits u_t with residual {cheat_x:.4f} "
         f"(<= 0.05). SGA could skip the y axis. Check MODES."
@@ -148,7 +187,7 @@ def main() -> None:
         logger.info("Coefficients: %s", [f"{c:+.4f}" for c in coeffs])
     if final.selected_indices is not None:
         logger.info("Selected idx: %s", final.selected_indices)
-        n_pde = sum(1 for i in final.selected_indices if i >= 1)
+        n_pde = sum(1 for i in final.selected_indices if i >= 1) # idx 0 = default u
         logger.info(
             "Active PDE terms: %d %s",
             n_pde,

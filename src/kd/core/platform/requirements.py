@@ -72,9 +72,24 @@ def assert_dataset_supported(
             f"(arch041 step 3b / C-A)."
         )
     if dataset_lhs_order != reqs.lhs_order:
+
+
+
+
+
+
+
+        order2_hint = (
+            " DLGA is the only packaged plugin with a configurable target "
+            "order: set DLGAConfig(target_lhs_order=2) (or use the "
+            "wave_preset()/kg_preset() factories) to fit a u_tt dataset."
+            if dataset_lhs_order == 2
+            else ""
+        )
         raise NotImplementedError(
             f"Algorithm '{algorithm}' does not support a dataset with "
             f"lhs_order={dataset_lhs_order}: it targets lhs_order={reqs.lhs_order} "
             f"only (the single order whose evaluator it builds). Match the dataset "
-            f"order to the plugin's target, or use a plugin that selects this order."
+            f"order to the plugin's target, or use a plugin that selects this "
+            f"order.{order2_hint}"
         )

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import matplotlib
 import matplotlib.pyplot as plt
-import pytest
 import torch
 
 matplotlib.use("Agg")
@@ -194,5 +193,89 @@ class TestResidualInferGrid:
         fig, _ = plot_residual(result, field_shape=None, infer_grid=True)
         try:
             assert not any("No spatial data" in t for t in self._spatial_texts(fig))
+        finally:
+            plt.close(fig)
+
+    def test_infer_grid_true_discloses_the_guess(self) -> None:
+
+
+
+
+        result = _make_result(n_samples=16)
+        fig, warnings = plot_residual(result, field_shape=None, infer_grid=True)
+        try:
+            assert not any("No spatial data" in t for t in self._spatial_texts(fig))
+            assert any("(4, 4)" in w for w in warnings), (
+                f"guessed shape not disclosed: {warnings}"
+            )
+            assert any("field_shape" in w for w in warnings), (
+                f"remedy not disclosed: {warnings}"
+            )
+        finally:
+            plt.close(fig)
+
+
+class TestResidualSpatialSkipWarnings:
+
+    def test_non_square_default_warns(self) -> None:
+        result = _make_result(n_samples=48)
+        fig, warnings = plot_residual(result)
+        try:
+            assert any("not a perfect square" in w for w in warnings)
+            assert any("field_shape" in w for w in warnings)
+        finally:
+            plt.close(fig)
+
+    def test_one_dimensional_field_shape_warns(self) -> None:
+        result = _make_result(n_samples=48)
+        fig, warnings = plot_residual(result, field_shape=(48,))
+        try:
+            assert any("fewer than 2 dimensions" in w for w in warnings)
+        finally:
+            plt.close(fig)
+
+    def test_infer_grid_false_stays_silent(self) -> None:
+
+
+        result = _make_result(n_samples=16)
+        fig, warnings = plot_residual(result, field_shape=None, infer_grid=False)
+        try:
+            assert warnings == []
+        finally:
+            plt.close(fig)
+
+
+class TestResidualHeatmapClipDisclosure:
+
+    def test_heatmap_title_discloses_clipped_range(self) -> None:
+        result = _make_result(n_samples=100)
+        residuals = result.final_eval.residuals
+        assert residuals is not None
+        residuals[0] = 1e12
+        fig, _ = plot_residual(result, field_shape=(10, 10))
+        try:
+
+            assert "clipped, actual" in fig.axes[1].get_title()
+
+
+            image = fig.axes[1].images[0]
+            assert image.colorbar is not None
+            assert image.colorbar.extend == "max"
+        finally:
+            plt.close(fig)
+
+    def test_unclipped_heatmap_carries_no_clip_note(self) -> None:
+
+
+        result = _make_result(n_samples=100)
+        residuals = result.final_eval.residuals
+        assert residuals is not None
+        residuals[:] = 1.0
+        fig, _ = plot_residual(result, field_shape=(10, 10))
+        try:
+
+
+            assert fig.axes[1].images, "spatial heatmap did not render"
+            assert "clipped" not in fig.axes[1].get_title()
         finally:
             plt.close(fig)

@@ -67,7 +67,7 @@ def _real_components(dataset: PDEDataset) -> PlatformComponents:
         dataset=dataset,
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
     )
 
@@ -77,7 +77,7 @@ def _fresh_mock_components() -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
     )
 

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import math
+import textwrap
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -9,7 +11,11 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
+    from kd.core.integrator import IntegrationResult
+
 _RESIDUAL_PERCENTILE = 99.0
+_WARNING_FONTSIZE = 9
+_WARNING_WRAP_WIDTH = 38
 
 
 
@@ -93,6 +99,23 @@ def _heatmap_panel(
     ax.set_title(title)
 
 
+def _warning_panel(ax: Axes, reason: str, label: str = "Predicted") -> None:
+    wrapped = textwrap.fill(reason, width=_WARNING_WRAP_WIDTH)
+    ax.text(
+        0.5,
+        0.5,
+        wrapped,
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=_WARNING_FONTSIZE,
+        color="red",
+    )
+    ax.set_title(label)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
 def _panel_scale(
     display: NDArray[np.floating],
     *,
@@ -100,10 +123,18 @@ def _panel_scale(
     limits: tuple[float, float] | None,
 ) -> tuple[str | None, float, float]:
     if residual:
+        if limits is not None:
+            return "RdBu_r", limits[0], limits[1]
         vmax = _robust_abs_max(display)
         return "RdBu_r", -vmax, vmax
     vmin, vmax = limits if limits is not None else _shared_value_limits(display)
     return None, vmin, vmax
+
+
+def _residual_limits(data: NDArray[np.floating]) -> tuple[float, float]:
+    display = np.where(np.isfinite(data), data, np.nan)
+    vmax = _robust_abs_max(display)
+    return -vmax, vmax
 
 
 def _shared_value_limits(data: NDArray[np.floating]) -> tuple[float, float]:
@@ -167,3 +198,76 @@ def _robust_abs_max(data: NDArray[np.floating]) -> float:
     if not np.isfinite(vmax) or vmax == 0:
         vmax = 1.0
     return vmax
+
+
+def _resolve_shape(
+    data: NDArray[np.floating],
+    field_shape: tuple[int, ...] | None,
+    warnings: list[str],
+    *,
+    infer_grid: bool = True,
+) -> tuple[int, ...] | None:
+    n = data.size
+
+    if field_shape is not None:
+        expected = 1
+        for s in field_shape:
+            expected *= s
+        if expected != n:
+            warnings.append(
+                f"field_shape {field_shape} (size {expected}) "
+                f"does not match data size {n}"
+            )
+            return None
+        if len(field_shape) < 2:
+            warnings.append(
+                f"field_shape {field_shape} has fewer than 2 dimensions; "
+                "spatial panel skipped"
+            )
+            return None
+        return field_shape
+
+
+    if infer_grid:
+        sqrt_n = int(math.isqrt(n))
+        if sqrt_n * sqrt_n == n and sqrt_n > 1:
+
+
+
+
+            warnings.append(
+                "No field_shape given; spatial panel rendered on a GUESSED "
+                f"square grid {(sqrt_n, sqrt_n)} -- pass "
+                "field_shape=dataset.get_shape() to confirm the true layout"
+            )
+            return (sqrt_n, sqrt_n)
+
+
+
+
+        warnings.append(
+            f"No field_shape given and residual count {n} is not a perfect "
+            "square; spatial panel skipped -- pass "
+            "field_shape=dataset.get_shape() for a real heatmap"
+        )
+
+    return None
+
+
+def _diverged_text(
+    integration_result: IntegrationResult | None,
+    time_axis: str,
+) -> str:
+    if integration_result is not None and integration_result.diverged_at_t is not None:
+        return f"DIVERGED at {time_axis}={integration_result.diverged_at_t:.3g}"
+    return "DIVERGED"
+
+
+def _diverged_tag(
+    diverged: bool,
+    integration_result: IntegrationResult | None,
+    time_axis: str,
+) -> str:
+    if not diverged:
+        return ""
+    return f" ({_diverged_text(integration_result, time_axis)})"

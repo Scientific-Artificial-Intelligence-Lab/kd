@@ -1,4 +1,6 @@
 
+import logging
+
 import pytest
 import torch
 
@@ -73,18 +75,66 @@ class TestBuildEquationDegradation:
         assert build_equation(["u_x"], coefficients, _LHS) is None
 
     @pytest.mark.unit
-    def test_degrades_on_length_mismatch_with_debug_log(
+    def test_degrades_on_length_mismatch_with_warning_log(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        caplog.set_level("DEBUG", logger="kd.core.equation.construct")
+
+
+
+
+
+        caplog.set_level(logging.WARNING, logger="kd.core.equation.construct")
 
         assert build_equation(["u_x"], torch.tensor([1.0, 2.0]), _LHS) is None
 
-        assert "length mismatch" in caplog.text
+        assert [
+            record.levelno
+            for record in caplog.records
+            if "length mismatch" in record.getMessage()
+        ] == [logging.WARNING]
+
+    @pytest.mark.unit
+    def test_degrades_on_non_finite_coefficient_with_warning_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+
+
+        caplog.set_level(logging.WARNING, logger="kd.core.equation.construct")
+
+        assert build_equation(["u_x"], torch.tensor([float("nan")]), _LHS) is None
+
+        assert [
+            record.levelno
+            for record in caplog.records
+            if "non-finite" in record.getMessage()
+        ] == [logging.WARNING]
 
     @pytest.mark.unit
     def test_degrades_on_missing_lhs_spec(self) -> None:
         assert build_equation(["u_x"], torch.tensor([1.0]), None) is None
+
+    @pytest.mark.unit
+    def test_missing_lhs_spec_stays_at_debug(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+
+
+
+
+        caplog.set_level(logging.DEBUG, logger="kd.core.equation.construct")
+
+        assert build_equation(["u_x"], torch.tensor([1.0]), None) is None
+
+        assert [
+            record.levelno
+            for record in caplog.records
+            if "missing lhs_spec" in record.getMessage()
+        ] == [logging.DEBUG]
+        assert [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno >= logging.WARNING
+        ] == []
 
     @pytest.mark.unit
     def test_degrades_on_empty_terms(self) -> None:

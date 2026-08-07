@@ -644,10 +644,10 @@ def test_plugin_list_plots_returns_four() -> None:
 
 
 @pytest.mark.unit
-def test_render_surrogate_training_returns_none(ax: Axes) -> None:
+def test_render_surrogate_training_returns_empty_warnings(ax: Axes) -> None:
     recorder = _recorder_with_surrogate_curve()
     result = dlga_viz.render(NEW_PLOT_NAME, ax, recorder)
-    assert result is None, f"render must return None; got {type(result).__name__}."
+    assert result == [], f"clean render must return no warnings; got {result!r}."
 
 
 @pytest.mark.unit

@@ -73,12 +73,12 @@ ALGORITHM_NAME: Final[str] = "eqgpt"
 
 
 
-_LOGGED_METRICS: Final[tuple[str, ...]] = (
-    "pool_best",
-    "pool_median",
-    "pool_worst",
-    "finetune_loss",
-)
+
+_LOGGED_METRICS: Final[tuple[str, ...]] = _viz_helpers.LOGGED_METRICS
+_POOL_BEST_KEY: Final[str] = _viz_helpers.POOL_BEST_KEY
+_POOL_MEDIAN_KEY: Final[str] = _viz_helpers.POOL_MEDIAN_KEY
+_POOL_WORST_KEY: Final[str] = _viz_helpers.POOL_WORST_KEY
+_FINETUNE_LOSS_KEY: Final[str] = _viz_helpers.FINETUNE_LOSS_KEY
 
 
 
@@ -546,7 +546,7 @@ class EqGPTPlugin:
             terms=terms,
             executor=self._components.executor,
             context=context,
-            target=(-self._lhs_flat).detach(),
+            target=self._lhs_flat.detach(),
             best_reward=best_reward,
             term_cache=self._term_cache,
         )
@@ -558,7 +558,7 @@ class EqGPTPlugin:
         if self._steady is not None:
             return self._steady.result_target(self._best_terms())
         assert self._lhs_flat is not None
-        return (-self._lhs_flat).detach().clone()
+        return self._lhs_flat.detach().clone()
 
 
     @property
@@ -651,20 +651,20 @@ class EqGPTPlugin:
         infos = _viz_helpers.list_plot_infos()
         if self._multicase is not None:
             source = _viz_helpers.PER_CASE_PLOT_INFO
-            infos.append(
+            infos.insert(
+                0,
                 PlotInfo(
                     name=source.name,
                     title=source.title,
                     description=source.description,
-                )
+                ),
             )
         return infos
 
-    def render_plot(self, name: str, ax: Axes) -> None:
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
         if name == _viz_helpers.PER_CASE_PLOT_INFO.name and self._multicase is not None:
-            _viz_helpers.render_per_case_reward(ax, self._per_case_rewards())
-            return
-        _viz_helpers.render(name, ax, self._recorder)
+            return _viz_helpers.render_per_case_reward(ax, self._per_case_rewards())
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
         if name == _viz_helpers.PER_CASE_PLOT_INFO.name and self._multicase is not None:
@@ -678,7 +678,7 @@ class EqGPTPlugin:
 
     def render_homogeneous_plot(
         self, name: str, ax: Axes, result: ExperimentResult
-    ) -> None:
+    ) -> list[str]:
         data = _steady_viz_helpers.SteadyVizData()
         if self._steady is not None:
             cache_key = result.equation
@@ -690,7 +690,7 @@ class EqGPTPlugin:
                 self._steady_viz_cache = (cache_key, data)
             else:
                 data = self._steady_viz_cache[1]
-        _steady_viz_helpers.render(name, ax, data)
+        return _steady_viz_helpers.render(name, ax, data)
 
     def _per_case_rewards(self) -> dict[str, float]:
         assert self._multicase is not None
@@ -780,10 +780,10 @@ class EqGPTPlugin:
                     self._pool_rewards[mid - 1] + self._pool_rewards[mid]
                 ) / 2.0
         return {
-            "pool_best": float(pool_best),
-            "pool_median": float(pool_median),
-            "pool_worst": float(pool_worst),
-            "finetune_loss": (
+            _POOL_BEST_KEY: float(pool_best),
+            _POOL_MEDIAN_KEY: float(pool_median),
+            _POOL_WORST_KEY: float(pool_worst),
+            _FINETUNE_LOSS_KEY: (
                 float(finetune_loss) if finetune_loss is not None else _NO_MEASUREMENT
             ),
         }

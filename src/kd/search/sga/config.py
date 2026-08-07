@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, get_args
 
 if TYPE_CHECKING:
     from kd.models.field_model import FieldModel
 
 DedupMode = Literal["none", "pre_prune", "post_prune", "dual"]
 """Allowed values for ``SGAConfig.dedup_mode``"""
+
+
+
+
+DEDUP_MODES: tuple[str, ...] = get_args(DedupMode)
 
 OperatorPool = tuple[tuple[str, int], ...]
 """Convenience alias for name/arity operator pools."""
@@ -113,7 +118,18 @@ class SGAConfig:
     """Tolerance step size for STRidge sweep."""
 
     maxit: int = 10
-    """Number of tolerance sweep iterations."""
+    """Max steps of the inner per-candidate STRidge tolerance sweep
+    (``train_sweep`` in ``sga/train.py``).
+
+    NOT a search-budget knob (F21): it bounds how many ``d_tol`` steps the
+    adaptive sweep tries while fitting ONE candidate PDE's coefficients, and
+    is unrelated to the generation/population search length. That budget is
+    the facade's ``generations=`` (mapped to the runner's
+    ``max_iterations``, which ``SGAConfig`` never carries): raising
+    ``maxit`` does not lengthen the search or widen the population. See
+    ``str_iters`` for the STRidge solver's own iteration cap at each
+    tolerance level this sweep visits.
+    """
 
     str_iters: int = 10
     """STRidge internal iterations per tolerance level."""

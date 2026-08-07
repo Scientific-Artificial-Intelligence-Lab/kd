@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import pytest
@@ -466,9 +467,9 @@ def test_all_invalid_generation_still_logs_all_series(
     )
 
     mean_complexity = recorder.get("gen_mean_complexity")[-1]
-    assert mean_complexity == pytest.approx(0.0, abs=1e-12), (
-        f"gen_mean_complexity is LOCKED to 0.0 for the no-valid case (this "
-        f"test fixes the convention); got {mean_complexity!r}."
+    assert isinstance(mean_complexity, float) and math.isnan(mean_complexity), (
+        f"gen_mean_complexity is LOCKED to NaN (not-measured, audit m4) for "
+        f"the no-valid case; got {mean_complexity!r}."
     )
 
 
@@ -678,8 +679,9 @@ def test_empty_results_logs_full_whitelist_with_sentinels(
         )
 
     mean_complexity = recorder.get("gen_mean_complexity")[-1]
-    assert mean_complexity == pytest.approx(0.0, abs=1e-12), (
-        f"gen_mean_complexity must be 0.0 for an empty batch; got {mean_complexity!r}."
+    assert isinstance(mean_complexity, float) and math.isnan(mean_complexity), (
+        f"gen_mean_complexity must be NaN (not-measured) for an empty batch; "
+        f"got {mean_complexity!r}."
     )
 
 

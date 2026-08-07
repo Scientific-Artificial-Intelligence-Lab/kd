@@ -33,12 +33,41 @@ logger = logging.getLogger(__name__)
 
 
 
+GEN_BEST_FITNESS_KEY = "gen_best_fitness"
+GEN_MEAN_FITNESS_KEY = "gen_mean_fitness"
+GEN_BEST_NMSE_KEY = "gen_best_nmse"
+N_VALID_KEY = "n_valid"
+N_UNIQUE_KEY = "n_unique"
+GEN_MEAN_COMPLEXITY_KEY = "gen_mean_complexity"
+LHS_UT_KEY = "lhs_ut"
+LHS_UTT_KEY = "lhs_utt"
+LOGGED_METRICS: tuple[str, ...] = (
+    GEN_BEST_FITNESS_KEY,
+    GEN_MEAN_FITNESS_KEY,
+    GEN_BEST_NMSE_KEY,
+    N_VALID_KEY,
+    N_UNIQUE_KEY,
+    GEN_MEAN_COMPLEXITY_KEY,
+    LHS_UT_KEY,
+    LHS_UTT_KEY,
+)
+
+
+
+
+
+
+
+
+
+
+
 
 
 _PLOT_METRIC: dict[str, str] = {
-    "fitness_spread": "gen_mean_fitness",
-    "population_diversity": "n_unique",
-    "complexity_evolution": "gen_mean_complexity",
+    "fitness_spread": GEN_MEAN_FITNESS_KEY,
+    "population_diversity": N_UNIQUE_KEY,
+    "complexity_evolution": GEN_MEAN_COMPLEXITY_KEY,
 }
 
 
@@ -49,12 +78,15 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
         title="Fitness Spread",
         description=(
             "Per-generation MEAN GA fitness (NMSE + epsilon*length; lower is "
-            "better) over valid individuals. Complements the platform "
-            "'convergence' plot, which draws the single global best: this "
-            "shows how the whole population converges, not just the running "
-            "optimum (DLGA's GA has no elitism, so the per-generation best "
-            "fluctuates). No-valid / all-cross-LHS-guarded generations appear "
-            "as gaps (their +inf sentinel is masked)."
+            "better) over valid individuals, on a LOG y-axis: single "
+            "blown-up individuals (svd_null_space normalization) push the "
+            "mean into the thousands and a linear axis flattens the range "
+            "the search actually works in. Complements the platform "
+            "'convergence' plot, which draws the single global best (DLGA's "
+            "GA has no elitism, so the per-generation best fluctuates). A "
+            "generation appears as a gap whenever its mean is non-finite — "
+            "one inf-fitness individual suffices, not only all-invalid "
+            "generations."
         ),
     ),
     PlotInfo(
@@ -69,8 +101,12 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
         name="complexity_evolution",
         title="Complexity Evolution",
         description=(
-            "Mean genome complexity of valid individuals per generation — a "
-            "bloat monitor (DLGA's NMSE-era epsilon can tolerate noise terms)."
+            "Mean retained-term count (EvaluationResult.complexity — terms "
+            "kept in the final fitted equation) of valid individuals per "
+            "generation. NOT the genome gene count that the epsilon fitness "
+            "penalty acts on: module-internal bloat (more genes per term) "
+            "moves the penalty but not this curve. All-invalid generations "
+            "appear as gaps (nothing was measured)."
         ),
     ),
     PlotInfo(
@@ -90,6 +126,11 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
 
 
 _NO_DATA_TEXT = "No data"
+
+
+
+
+_LOG_Y_PLOTS: frozenset[str] = frozenset({"fitness_spread"})
 
 _X_LABEL = "Generation"
 
@@ -122,14 +163,13 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
 
 
 
     if name == _SURROGATE_PLOT_NAME:
-        render_surrogate(ax, recorder)
-        return
+        return render_surrogate(ax, recorder)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     title = _plot_title(name)
@@ -139,15 +179,16 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
     ax.set_title(title)
 
     if not series:
+        reason = _no_data_reason(recorder)
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
 
 
@@ -155,19 +196,27 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
 
 
 
-    cleaned = [
-        float("nan")
-        if value is None or (isinstance(value, float) and not math.isfinite(value))
-        else value
-        for value in series
-    ]
+    if name in _LOG_Y_PLOTS:
+
+
+
+        ax.set_yscale("log")
+        display: Any = _mask_for_log(series)
+    else:
+        display = [
+            float("nan")
+            if value is None or (isinstance(value, float) and not math.isfinite(value))
+            else value
+            for value in series
+        ]
 
     ax.plot(
         range(len(series)),
-        cleaned,
+        display,
         marker=_LINE_MARKER,
         markersize=_LINE_MARKER_SIZE,
     )
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -203,7 +252,8 @@ def _safe_get_series(recorder: VizRecorder | None, metric: str) -> list[Any]:
     return recorder.get(metric)
 
 
-def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
+def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> list[str]:
+    warnings: list[str] = []
     epochs = _last_logged_list(recorder, SURROGATE_EPOCH_KEY)
     train = _last_logged_list(recorder, SURROGATE_TRAIN_LOSS_KEY)
 
@@ -212,17 +262,32 @@ def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
     ax.set_title(_plot_title(_SURROGATE_PLOT_NAME))
 
     if not epochs or not train:
+
+
+
+
+
+
+        reason = (
+            "no recorder"
+            if recorder is None
+            else "no surrogate training logged for this run"
+        )
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [
+            f"plugin plot '{_SURROGATE_PLOT_NAME}': {_NO_DATA_TEXT} ({reason})"
+        ]
 
-    train_x, train_y = _aligned_xy(epochs, train, SURROGATE_TRAIN_LOSS_KEY)
+    train_x, train_y = _aligned_xy(
+        epochs, train, SURROGATE_TRAIN_LOSS_KEY, warnings
+    )
     ax.set_yscale("log")
     ax.plot(
         train_x,
@@ -233,7 +298,9 @@ def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
     )
     val = _last_logged_list(recorder, SURROGATE_VAL_LOSS_KEY)
     if val:
-        val_x, val_y = _aligned_xy(epochs, val, SURROGATE_VAL_LOSS_KEY)
+        val_x, val_y = _aligned_xy(
+            epochs, val, SURROGATE_VAL_LOSS_KEY, warnings
+        )
         ax.plot(
             val_x,
             _mask_for_log(val_y),
@@ -245,6 +312,7 @@ def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> None:
     if isinstance(best_epoch, (int, float)) and not isinstance(best_epoch, bool):
         ax.axvline(float(best_epoch), label=_SURROGATE_BEST_EPOCH_LABEL)
     ax.legend()
+    return warnings
 
 
 def surrogate_data(recorder: VizRecorder | None) -> dict[str, Any]:
@@ -270,19 +338,25 @@ def surrogate_data(recorder: VizRecorder | None) -> dict[str, Any]:
 
 
 def _aligned_xy(
-    epochs: list[Any], series: list[Any], series_key: str
+    epochs: list[Any],
+    series: list[Any],
+    series_key: str,
+    warnings: list[str] | None = None,
 ) -> tuple[list[Any], list[Any]]:
     if len(epochs) == len(series):
         return epochs, series
     common = min(len(epochs), len(series))
-    logger.warning(
-        "dlga.viz: surrogate '%s' length %d != epoch length %d; truncating to "
-        "%d (drifted recorder).",
-        series_key,
-        len(series),
-        len(epochs),
-        common,
+
+
+
+    note = (
+        f"plugin plot '{_SURROGATE_PLOT_NAME}': surrogate '{series_key}' "
+        f"length {len(series)} != epoch length {len(epochs)}; truncated to "
+        f"{common} (drifted recorder)"
     )
+    logger.warning(note)
+    if warnings is not None:
+        warnings.append(note)
     return epochs[:common], series[:common]
 
 
@@ -382,6 +456,15 @@ def _plot_title(name: str) -> str:
 
 
 __all__ = [
+    "GEN_BEST_FITNESS_KEY",
+    "GEN_BEST_NMSE_KEY",
+    "GEN_MEAN_COMPLEXITY_KEY",
+    "GEN_MEAN_FITNESS_KEY",
+    "LHS_UTT_KEY",
+    "LHS_UT_KEY",
+    "LOGGED_METRICS",
+    "N_UNIQUE_KEY",
+    "N_VALID_KEY",
     "get_data",
     "list_plot_infos",
     "render",

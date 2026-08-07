@@ -46,7 +46,8 @@ def build_equation(
 
     coefficient_values = _coefficient_values(coefficients)
     if len(term_irs) != len(coefficient_values):
-        logger.debug(
+
+        logger.warning(
             "Skipping equation derivation: term/coefficient length mismatch "
             "(terms=%d, coefficients=%d)",
             len(term_irs),
@@ -56,7 +57,8 @@ def build_equation(
 
     for index, coefficient in enumerate(coefficient_values):
         if not math.isfinite(coefficient):
-            logger.debug(
+
+            logger.warning(
                 "Skipping equation derivation: non-finite coefficient at index %d",
                 index,
             )
@@ -124,7 +126,8 @@ def build_homogeneous(
 
     coefficient_values = _coefficient_values(coefficients)
     if len(term_irs) != len(coefficient_values):
-        logger.debug(
+
+        logger.warning(
             "Skipping equation derivation: term/coefficient length mismatch "
             "(terms=%d, coefficients=%d)",
             len(term_irs),
@@ -134,7 +137,8 @@ def build_homogeneous(
 
     for index, coefficient in enumerate(coefficient_values):
         if not math.isfinite(coefficient):
-            logger.debug(
+
+            logger.warning(
                 "Skipping equation derivation: non-finite coefficient at index %d",
                 index,
             )

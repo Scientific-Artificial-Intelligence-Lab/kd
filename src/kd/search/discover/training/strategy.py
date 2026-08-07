@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
 import numpy.typing as npt
@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 from torch.optim import Adam, Optimizer
 
+from kd.core.jsonsafe import NO_MEASUREMENT
 from kd.search.discover.core.batch import Batch
 
 if TYPE_CHECKING:
@@ -27,6 +28,18 @@ GRAD_NORM_ORDER = 2
 ALLOWED_BASELINES = frozenset({"R_e", "ewma_R", "combined"})
 EMPTY_LOSS_VALUE = 0.0
 DEGENERATE_FILTER_THRESHOLD = 1
+
+
+
+
+
+
+
+
+
+
+
+_NO_MEASUREMENT: Final[float] = NO_MEASUREMENT
 
 BoolArray = npt.NDArray[np.bool_]
 logger = logging.getLogger(__name__)
@@ -256,9 +269,14 @@ class RSPGStrategy:
             "pg_loss": EMPTY_LOSS_VALUE,
             "entropy_loss": EMPTY_LOSS_VALUE,
             "total_loss": EMPTY_LOSS_VALUE,
-            "baseline": EMPTY_LOSS_VALUE,
-            "reward": EMPTY_LOSS_VALUE,
-            "grad_norm": EMPTY_LOSS_VALUE,
+
+
+
+
+
+            "baseline": _NO_MEASUREMENT,
+            "reward": _NO_MEASUREMENT,
+            "grad_norm": _NO_MEASUREMENT,
         }
 
     def _compute_baseline(
@@ -331,18 +349,23 @@ class RSPGStrategy:
             any_grad = True
             parameter_norm = parameter.grad.data.norm(GRAD_NORM_ORDER)
             total_norm += float(parameter_norm.item()) ** GRAD_NORM_ORDER
-        if not any_grad and not self._grad_norm_warned:
+        if not any_grad:
 
 
 
 
-            logger.debug(
-                "_grad_norm: every controller parameter has grad=None; "
-                "returning 0.0 (no backward signal reached the controller). "
-                "Further occurrences in this strategy instance will be "
-                "silent.",
-            )
-            self._grad_norm_warned = True
+
+
+            if not self._grad_norm_warned:
+                logger.warning(
+                    "_grad_norm: every controller parameter has grad=None; "
+                    "reporting the gradient norm as not-measured (NaN) — no "
+                    "backward signal reached the controller. "
+                    "Further occurrences in this strategy instance will not "
+                    "be re-warned.",
+                )
+                self._grad_norm_warned = True
+            return _NO_MEASUREMENT
         return float(total_norm ** (1.0 / GRAD_NORM_ORDER))
 
     @staticmethod

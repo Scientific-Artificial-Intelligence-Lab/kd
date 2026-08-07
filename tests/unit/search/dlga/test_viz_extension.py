@@ -16,6 +16,8 @@ import pytest
 from matplotlib.axes import Axes
 
 from kd.search.dlga import DLGAConfig, DLGAPlugin
+from kd.search.dlga import plugin as dlga_plugin
+from kd.search.dlga import viz as dlga_viz
 from kd.search.recorder import VizRecorder
 from kd.viz.extension import PlotInfo, VizExtension
 
@@ -217,11 +219,11 @@ def test_list_plots_returns_fresh_copies() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("plot_name", sorted(GA_PLOT_NAMES))
-def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
+def test_render_plot_returns_empty_warnings(plot_name: str, ax: Axes) -> None:
     plugin, _ = _plugin_populated()
     result = plugin.render_plot(plot_name, ax)
-    assert result is None, (
-        f"render_plot({plot_name!r}, ax) must return None; got {type(result).__name__}"
+    assert result == [], (
+        f"render_plot({plot_name!r}, ax) must return no warnings; got {result!r}"
     )
 
 
@@ -311,7 +313,7 @@ def test_render_empty_recorder_warns_not_crash(
     }[recorder_state]()
 
     try:
-        plugin.render_plot(plot_name, ax)
+        channel = plugin.render_plot(plot_name, ax)
     except Exception as exc:
         pytest.fail(
             f"render_plot({plot_name!r}) with {recorder_state} recorder must not "
@@ -326,6 +328,9 @@ def test_render_empty_recorder_warns_not_crash(
         f"render_plot({plot_name!r}) with {recorder_state} recorder must surface a "
         f"warning panel with one of {signals}. texts={text_strs!r}, title={title!r}"
     )
+
+
+    assert any("no data" in note.lower() for note in channel), channel
     assert len(ax.lines) == 0, (
         f"{recorder_state} recorder warning panel must not draw a phantom line; "
         f"got {len(ax.lines)} lines."
@@ -512,3 +517,50 @@ def test_fitness_spread_plots_population_mean_not_best(ax: Axes) -> None:
         "— that duplicates-and-disagrees with the platform convergence plot."
     )
     assert ax.get_ylabel() == "gen_mean_fitness"
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_plot_metric_keys_are_within_the_logged_whitelist() -> None:
+    used = set(dlga_viz._PLOT_METRIC.values())
+    assert used <= set(dlga_plugin._LOGGED_METRICS)
+
+
+@pytest.mark.unit
+def test_fitness_spread_uses_log_y_axis() -> None:
+    recorder = VizRecorder(enabled=True)
+    for value in (0.67, 12.0, 3002.0):
+        recorder.log("gen_mean_fitness", value)
+        recorder.log("n_unique", 10)
+        recorder.log("gen_mean_complexity", 2.0)
+    fig, ax = plt.subplots()
+    try:
+        dlga_viz.render("fitness_spread", ax, recorder)
+        assert ax.get_yscale() == "log"
+    finally:
+        plt.close(fig)
+    fig, ax = plt.subplots()
+    try:
+        dlga_viz.render("complexity_evolution", ax, recorder)
+        assert ax.get_yscale() == "linear"
+    finally:
+        plt.close(fig)
+
+
+@pytest.mark.unit
+def test_surrogate_no_data_reason_names_missing_training_not_empty() -> None:
+    recorder = VizRecorder(enabled=True)
+    recorder.log("gen_mean_fitness", 1.0)
+    fig, ax = plt.subplots()
+    try:
+        channel = dlga_viz.render_surrogate(ax, recorder)
+        assert any("no surrogate training" in note for note in channel)
+        assert not any("(empty)" in note for note in channel)
+        texts = " ".join(t.get_text() for t in ax.texts)
+        assert "no surrogate training" in texts
+    finally:
+        plt.close(fig)

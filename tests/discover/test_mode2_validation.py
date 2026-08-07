@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from kd.core.expr import (
     FunctionRegistry,
     PythonExecutor,
 )
+from kd.core.expr.term_key import structure_term_key
 from kd.core.linear_solve.least_squares import (
     LeastSquaresSolver,
 )
@@ -108,18 +110,13 @@ PRETRAIN_LOSS_CEILING = 0.23
 
 
 
+
+
+
+
+
+
 GATE1_SEEDS: tuple[int, ...] = (42, 123, 777)
-
-
-
-
-
-
-_NEG_PREFIX: str = "neg("
-_NEG_SUFFIX: str = ")"
-_TERM_ALIASES: dict[str, str] = {
-    "mul(u, diff_x(u))": "mul(diff_x(u), u)",
-}
 
 
 GT_TERM_SET_BURGERS: frozenset[str] = frozenset(
@@ -304,18 +301,10 @@ def _build_mode2_runner(
     return runner, config
 
 
-def _canonicalize_term(term: str) -> tuple[str, int]:
-    sign = 1
-    while term.startswith(_NEG_PREFIX) and term.endswith(_NEG_SUFFIX):
-        term = term[len(_NEG_PREFIX): -len(_NEG_SUFFIX)]
-        sign = -sign
-    return _TERM_ALIASES.get(term, term), sign
-
-
-def _canonical_term_set(terms: list[str] | None) -> frozenset[str]:
+def _canonical_term_set(terms: Iterable[str] | None) -> frozenset[str]:
     if not terms:
         return frozenset()
-    return frozenset(_canonicalize_term(t)[0] for t in terms)
+    return frozenset(structure_term_key(t) for t in terms)
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,7 +332,8 @@ def _run_one_seed(
         best_reward=float(state.best_reward),
         best_expression=state.best_expression,
         term_set=term_set,
-        gt_hit=(term_set == gt_term_set),
+
+        gt_hit=(term_set == _canonical_term_set(gt_term_set)),
     )
 
 
@@ -788,26 +778,22 @@ class TestMode2AggregateGuards:
                 )
 
     @pytest.mark.unit
-    def test_canonical_term_set_handles_neg_and_sibling_aliases(self) -> None:
+    def test_canonical_term_set_folds_neg_and_sibling_order(self) -> None:
 
-        assert _canonicalize_term("mul(u, diff_x(u))") == (
-            "mul(diff_x(u), u)",
-            1,
-        )
-        assert _canonicalize_term("mul(diff_x(u), u)") == (
-            "mul(diff_x(u), u)",
-            1,
-        )
-
-        assert _canonicalize_term("neg(u)") == ("u", -1)
-        assert _canonicalize_term("neg(neg(u))") == ("u", 1)
 
         assert (
-            _canonical_term_set(
-                ["diff2_x(u)", "neg(mul(u, diff_x(u)))"],
-            )
-            == GT_TERM_SET_BURGERS
+            _canonical_term_set(["mul(u, diff_x(u))"])
+            == _canonical_term_set(["mul(diff_x(u), u)"])
+            == _canonical_term_set(["mul(u,diff_x(u))"])
         )
+
+        assert _canonical_term_set(["neg(u)"]) == _canonical_term_set(["u"])
+        assert _canonical_term_set(["neg(neg(u))"]) == _canonical_term_set(["u"])
+
+
+        assert _canonical_term_set(
+            ["diff2_x(u)", "neg(mul(u, diff_x(u)))"],
+        ) == _canonical_term_set(GT_TERM_SET_BURGERS)
 
         assert _canonical_term_set(None) == frozenset()
         assert _canonical_term_set([]) == frozenset()

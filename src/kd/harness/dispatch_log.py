@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
-_SHARD_ID_RE: Final[re.Pattern[str]] = re.compile(r"^shard-\d{2,}$")
+from kd.core.jsonsafe import JSON_INDENT_SPACES
+from kd.harness._dispatch_schema import SHARD_ID_RE
 
 DISPATCH_LOG_ARTIFACT_TAG: Final[str] = "kd-dispatch-log-v1"
 DISPATCH_LOG_SCHEMA_VERSION: Final[int] = 1
@@ -54,8 +54,6 @@ _DISPATCH_LOG_V1_WORKER_ENV_KEYS: Final[frozenset[str]] = frozenset(
 _KILL_REASON_VOCABULARY: Final[frozenset[str]] = frozenset(
     {"timeout", "spawn_failed", "dispatcher_interrupted"}
 )
-
-_JSON_INDENT_SPACES: Final[int] = 2
 
 
 class DispatchLogError(ValueError):
@@ -108,8 +106,7 @@ def _require_bool(value: Any, *, field: str, shard_id: str) -> bool:
 def _require_str_or_none(value: Any, *, field: str, shard_id: str) -> str | None:
     if value is not None and not isinstance(value, str):
         raise DispatchLogError(
-            f"worker {shard_id!r} field {field!r} must be a str or null; "
-            f"got {value!r}"
+            f"worker {shard_id!r} field {field!r} must be a str or null; got {value!r}"
         )
     return value
 
@@ -220,7 +217,8 @@ def _decode_worker(payload: Any) -> WorkerLogRow:
 
 
 
-    if not isinstance(shard_id, str) or _SHARD_ID_RE.fullmatch(shard_id) is None:
+
+    if not isinstance(shard_id, str) or SHARD_ID_RE.fullmatch(shard_id) is None:
         raise DispatchLogError(
             f"worker shard_id must match 'shard-<digits>'; got {shard_id!r}"
         )
@@ -318,7 +316,7 @@ def write_dispatch_log(log: DispatchLog, path: Path) -> Path:
         json.dump(
             log.to_dict(),
             handle,
-            indent=_JSON_INDENT_SPACES,
+            indent=JSON_INDENT_SPACES,
             allow_nan=False,
             sort_keys=True,
         )

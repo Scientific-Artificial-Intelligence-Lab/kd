@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import pickle
 from unittest.mock import MagicMock
@@ -1834,6 +1835,62 @@ def _make_components_with_fields_axes(
     )
 
 
+def _make_components_with_missing_derivative(
+    missing: tuple[str, str, int],
+) -> PlatformComponents:
+    field_shape = (_SMALL_GRID_SIZE, _SMALL_TIME_SIZE)
+    x_vals = torch.linspace(0.0, 1.0, _SMALL_GRID_SIZE)
+    t_vals = torch.linspace(0.0, 1.0, _SMALL_TIME_SIZE)
+    data_gen = torch.Generator().manual_seed(20260804)
+    u_data = torch.randn(field_shape, generator=data_gen)
+
+    fields = {"u": u_data}
+    axes = {"x": x_vals, "t": t_vals}
+
+    dataset = PDEDataset(
+        name="vocab_shrink_test",
+        task_type=TaskType.PDE,
+        topology=DataTopology.GRID,
+        axes={name: AxisInfo(name=name, values=val) for name, val in axes.items()},
+        axis_order=["x", "t"],
+        fields={
+            name: FieldData(name=name, values=val) for name, val in fields.items()
+        },
+        lhs_field="u",
+        lhs_axis="t",
+    )
+
+    context = MagicMock()
+
+    def get_variable(name: str) -> torch.Tensor:
+        if name in fields:
+            return fields[name]
+        if name in axes:
+            return axes[name]
+        raise KeyError(f"Variable '{name}' not found")
+
+    def get_derivative(field_name: str, axis: str, order: int) -> torch.Tensor:
+        if (field_name, axis, order) == missing:
+            raise KeyError(f"Derivative {field_name}_{axis * order} not available")
+
+
+        key = f"{field_name}|{axis}|{order}".encode()
+        seed = int.from_bytes(key, "little") % (2**31)
+        gen = torch.Generator().manual_seed(seed)
+        return torch.randn(field_shape, generator=gen)
+
+    context.get_variable = get_variable
+    context.get_derivative = get_derivative
+
+    return PlatformComponents(
+        dataset=dataset,
+        executor=MagicMock(),
+        evaluator=MagicMock(),
+        context=context,
+        registry=MagicMock(),
+    )
+
+
 class TestPrepareGuardrails:
 
 
@@ -2109,6 +2166,37 @@ class TestPrepareGuardrails:
         den = plugin._den
         den_axes = [entry[0] for entry in den]
         assert "t" not in den_axes, f"lhs_axis 't' leaked into den: {den}"
+
+
+
+    @pytest.mark.unit
+    def test_unavailable_derivative_warns_about_vocabulary(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        from kd.search.sga.plugin import SGAPlugin
+
+        components = _make_components_with_missing_derivative(("u", "x", 1))
+        plugin = SGAPlugin(config=SGAConfig(num=3, depth=2, width=2, seed=42))
+
+        with caplog.at_level(logging.WARNING, logger="kd.search.sga.plugin"):
+            plugin.prepare(components)
+
+        messages = [
+            rec.getMessage()
+            for rec in caplog.records
+            if rec.levelno == logging.WARNING and rec.name == "kd.search.sga.plugin"
+        ]
+        assert any("u_x" in msg and "vocabulary" in msg for msg in messages), (
+            "dropped derivative u_x must warn, naming the key and the "
+            f"vocabulary consequence; got: {messages}"
+        )
+
+
+
+        vars_list = plugin.state["vars"]
+        assert "u_x" not in vars_list
+        assert "u" in vars_list
 
 
 

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 import torch
@@ -527,6 +529,16 @@ class TestValidMaskFiltering:
         assert loss_info["entropy_loss"] == pytest.approx(0.0)
         assert loss_info["total_loss"] == pytest.approx(0.0)
 
+
+
+
+        assert math.isnan(loss_info["grad_norm"])
+
+
+
+        assert math.isnan(loss_info["reward"])
+        assert math.isnan(loss_info["baseline"])
+
         for key in ("pg_loss", "entropy_loss", "total_loss",
                      "baseline", "reward", "grad_norm"):
             assert key in loss_info, f"Missing key in empty loss_info: {key}"
@@ -726,7 +738,7 @@ class TestObservabilityWarnings:
         )
 
     @pytest.mark.unit
-    def test_grad_norm_all_none_logs_debug(
+    def test_grad_norm_all_none_returns_no_measurement_and_warns(
         self,
         controller: LSTMController,
         caplog: pytest.LogCaptureFixture,
@@ -737,18 +749,30 @@ class TestObservabilityWarnings:
         for parameter in controller.parameters():
             parameter.grad = None
 
+
+
         with caplog.at_level(
             logging.DEBUG, logger="kd.search.discover.training.strategy",
         ):
             result = strategy._grad_norm(controller)
 
-        assert result == 0.0
-        assert any(
-            "grad" in rec.message.lower() and "none" in rec.message.lower()
+        assert math.isnan(result), (
+            "all-.grad=None must return NO_MEASUREMENT (NaN), not a "
+            f"measured value; got {result!r}"
+        )
+        matching = [
+            rec
             for rec in caplog.records
-        ), (
-            "Expected a DEBUG trace when every parameter lacks a gradient; "
+            if "grad" in rec.message.lower() and "none" in rec.message.lower()
+        ]
+        assert matching, (
+            "Expected a log record when every parameter lacks a gradient; "
             f"got: {[r.message for r in caplog.records]}"
+        )
+        assert all(rec.levelno == logging.WARNING for rec in matching), (
+            "The no-backward-signal line must be WARNING (a broken training "
+            "loop is not a debug detail); got levels: "
+            f"{[rec.levelname for rec in matching]}"
         )
 
     @pytest.mark.unit
@@ -810,7 +834,7 @@ class TestObservabilityWarnings:
         )
 
     @pytest.mark.unit
-    def test_grad_norm_debug_is_sticky(
+    def test_grad_norm_warning_is_sticky(
         self,
         controller: LSTMController,
         caplog: pytest.LogCaptureFixture,
@@ -820,6 +844,8 @@ class TestObservabilityWarnings:
         strategy = _make_strategy()
         for parameter in controller.parameters():
             parameter.grad = None
+
+
 
         with caplog.at_level(
             logging.DEBUG, logger="kd.search.discover.training.strategy",
@@ -833,9 +859,27 @@ class TestObservabilityWarnings:
             if "grad" in rec.message.lower() and "none" in rec.message.lower()
         ]
         assert len(traces) == 1, (
-            "_grad_norm DEBUG should be sticky (one per strategy); "
+            "_grad_norm warning should be sticky (one per strategy); "
             f"got {len(traces)} traces: {[t.message for t in traces]}"
         )
+
+    @pytest.mark.unit
+    def test_unmeasured_grad_norm_serializes_to_json_null(
+        self,
+        controller: LSTMController,
+        batch: Batch,
+    ) -> None:
+        from kd.core.jsonsafe import sanitize_float
+
+        strategy = _make_strategy(epsilon=0.5)
+        rewards = torch.arange(BATCH_SIZE, dtype=torch.float32)
+        valid_mask = np.zeros(BATCH_SIZE, dtype=bool)
+
+        loss_info, _ = strategy.train_step(
+            controller, batch, rewards, BaselineState(), valid_mask=valid_mask,
+        )
+
+        assert sanitize_float(loss_info["grad_norm"]) is None
 
 
 

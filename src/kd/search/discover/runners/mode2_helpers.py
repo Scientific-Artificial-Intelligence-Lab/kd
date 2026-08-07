@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import logging
 import math
 import time
@@ -17,6 +16,7 @@ from kd.core.evaluator import (
 from kd.core.expr import (
     FunctionRegistry,
 )
+from kd.core.expr.term_key import structure_term_key
 from kd.core.safety import safe_div
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
@@ -122,8 +122,8 @@ def detect_structure_hit(
     except Exception:
         return False
 
-    observed = {_canonical_term(term) for term in terms}
-    expected = {_canonical_term(term) for term in ground_truth_terms}
+    observed = {structure_term_key(term) for term in terms}
+    expected = {structure_term_key(term) for term in ground_truth_terms}
     return observed == expected
 
 
@@ -211,55 +211,6 @@ def _assert_noise_bounds(
             "noise lag-1 autocorrelation "
             f"{observed['max_abs_autocorr_lag1']:.6g} too large"
         )
-
-
-def _canonical_term(term: str) -> str:
-    try:
-        tree = ast.parse(term, mode="eval")
-    except SyntaxError:
-        return "".join(term.split())
-    node = _strip_sign_and_scalar(tree.body)
-    return "".join(ast.unparse(node).split())
-
-
-def _strip_sign_and_scalar(node: ast.expr) -> ast.expr:
-    if isinstance(node, ast.Call) and _is_call(node, "neg", 1):
-        return _strip_sign_and_scalar(node.args[0])
-    if isinstance(node, ast.Call) and _is_call(node, "mul", 2):
-        return _strip_mul_scalar(node)
-    if (
-        isinstance(node, ast.Call)
-        and _is_call(node, "div", 2)
-        and _is_numeric_scalar(node.args[1])
-    ):
-        return _strip_sign_and_scalar(node.args[0])
-    return node
-
-
-def _strip_mul_scalar(node: ast.Call) -> ast.expr:
-    left, right = node.args
-    if _is_numeric_scalar(left):
-        return _strip_sign_and_scalar(right)
-    if _is_numeric_scalar(right):
-        return _strip_sign_and_scalar(left)
-    return node
-
-
-def _is_call(node: ast.expr, name: str, arity: int) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == name
-        and len(node.args) == arity
-    )
-
-
-def _is_numeric_scalar(node: ast.expr) -> bool:
-    if isinstance(node, ast.Constant):
-        return isinstance(node.value, int | float) and not isinstance(node.value, bool)
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
-        return _is_numeric_scalar(node.operand)
-    return False
 
 
 def _validate_mode1_args(

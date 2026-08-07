@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, TextIO
 
+from kd.core.jsonsafe import finite_or_none
+
 __all__ = [
     "ITEREVENT_SCHEME",
     "ITEREVENT_SCHEMA_VERSION",
@@ -45,10 +47,6 @@ _ITEREVENT_V1_FIELDS: Final[tuple[str, ...]] = (
     "diagnostics",
 )
 _ITEREVENT_V1_FIELD_SET: Final[frozenset[str]] = frozenset(_ITEREVENT_V1_FIELDS)
-
-
-def _finite_or_none(value: float) -> float | None:
-    return value if math.isfinite(value) else None
 
 
 class IterationEventSinkError(RuntimeError):
@@ -217,7 +215,11 @@ class IterationEventEmitter:
         raw_expression: str = algorithm.best_expression
         if raw_expression:
             best_expression: str | None = raw_expression
-            best_score = _finite_or_none(float(algorithm.best_score))
+
+
+
+
+            best_score = finite_or_none(float(algorithm.best_score))
         else:
             best_expression = None
             best_score = None

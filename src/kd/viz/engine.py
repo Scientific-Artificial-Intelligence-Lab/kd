@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-import ast
 import logging
-import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import PillowWriter
 
-from kd.core.equation import Form
+from kd.core.equation import DEFAULT_LHS_LABEL, Form
 from kd.data.schema import DataTopology
 from kd.viz.extension import HomogeneousVizExtension, VizExtension
+from kd.viz.integration_assembly import build_integration_result
 from kd.viz.plots.animation import plot_field_animation
 from kd.viz.plots.coefficient import plot_coefficient_bar
 from kd.viz.plots.comparison import (
@@ -34,7 +33,7 @@ from kd.viz.report import FigureSpec, ReportResult, generate_report
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
@@ -74,33 +73,6 @@ _AUTOGRAD_DOMAIN_NOTE = (
 
 
 
-
-_PROTECTED_SEMANTICS_NOTE = (
-    "Protected-operator note: the integrated RHS contains exp/log, which "
-    "the platform evaluates with protected semantics (safe_exp/safe_log "
-    "clamping) — the same semantics under which the equation was scored "
-    "during search. Trajectories that would diverge under bare operators "
-    "may remain bounded."
-)
-
-
-
-_PROTECTED_OPERATORS = frozenset({"exp", "log"})
-
-
-
-
-
-
-
-
-
-_INTEGRATION_PRUNE_RTOL = 1e-12
-
-
-
-
-
 _INTEGRATION_DEGRADED_NOTE = (
     "Integration-dependent plots (field comparison, time slices, error "
     "heatmap) are rendered in degraded form; other plots and metrics are "
@@ -108,115 +80,47 @@ _INTEGRATION_DEGRADED_NOTE = (
 )
 
 
-def _prune_near_zero_terms(
-    terms: Sequence[str],
-    coefficients: Sequence[float],
-    active: list[int],
-) -> tuple[list[int], list[str]]:
-    """Drop active terms whose coefficient is numerically zero.
 
-    A term is pruned when ``|c| < _INTEGRATION_PRUNE_RTOL * max|c|`` over
-    the active, finite coefficients. Non-finite coefficients are never
-    pruned: they flow on to ``_assemble_integration_rhs``, which rejects
-    them explicitly with a ValueError naming the offending term —
-    fail-loud beats silent drop. The largest-|c| term always survives,
-    so a non-empty selection stays non-empty.
 
-    Returns:
-        Tuple of (surviving indices, disclosure notes — one summary line
-        when anything was pruned, empty otherwise).
+
+
+_NO_DATASET_NOTE = (
+    "no dataset provided: dataset-dependent plots skipped (coefficient bar, "
+    "field comparison, PDE residual field, time slices, error heatmap)"
+)
+_NO_ALGORITHM_NOTE = "no algorithm provided: plugin and form-specific plots skipped"
+
+
+
+
+_ANIMATION_TOPOLOGY_NOTE = (
+    "field animation requires a 2D-spatial+time dataset; skipping field_animation.gif"
+)
+
+
+def _scatter_aware_field_shape(
+    dataset: Any,
+) -> tuple[tuple[int, ...] | None, bool]:
+    """Resolve ``(field_shape, is_scatter)`` for the residual-panel plots.
+
+    Single source for ``render_all``'s residual path and
+    ``_render_pde_residual``:
+    a SCATTERED dataset has no grid, so ``get_shape()`` is a 1-D ``(N,)``
+    point count that never matches the (primary coeff-grid) residual length --
+    passing it makes the spatial-residual panel emit a spurious "does not
+    match data size" warning. Treat SCATTERED (and a missing dataset) as
+    shapeless (``field_shape=None``) AND forbid the square-shape guess
+    (callers pass ``infer_grid=not is_scatter``) so the panels degrade to a
+    DISCLOSED fallback ("No spatial data" / 1D line panels) rather than
+    fabricating a square heatmap from a coincidentally-square residual count.
     """
-    finite_magnitudes = [
-        abs(coefficients[i]) for i in active if math.isfinite(coefficients[i])
-    ]
-    if not finite_magnitudes:
-        return active, []
-    threshold = _INTEGRATION_PRUNE_RTOL * max(finite_magnitudes)
-    dropped = [
-        i
-        for i in active
-        if math.isfinite(coefficients[i]) and abs(coefficients[i]) < threshold
-    ]
-    if not dropped:
-        return active, []
-    keep = [i for i in active if i not in set(dropped)]
-    detail = ", ".join(f"'{terms[i]}' (coeff {coefficients[i]:.3g})" for i in dropped)
-    note = (
-        f"Near-zero term(s) excluded from time integration: {detail} "
-        f"(|coeff| < {_INTEGRATION_PRUNE_RTOL:g} * max|coeff|); "
-        "reported equation and metrics keep the full term list."
-    )
-    return keep, [note]
 
-
-def _assemble_integration_rhs(
-    terms: Sequence[str],
-    coefficients: Sequence[float],
-    keep: Sequence[int],
-) -> str:
-    """Assemble the integrable RHS IR string from surviving terms (-4).
-
-    ``"(c0)*(term0) + (c1)*(term1) + ..."`` with coefficients serialized
-    via ``repr()`` (float64 round-trip). An empty selection yields ``"0"``
-    so ``integrate_pde``'s scalar-broadcast branch keeps the field at its
-    initial condition.
-
-    Exactly-zero coefficients are omitted without disclosure: dropping
-    ``(0.0)*(term)`` is mathematically lossless and preserves the old
-    sympy path's ``0*x -> 0`` canonicalization (an all-zero equation must
-    integrate as u_t = 0, not fail on an unintegrable zero-weighted
-    term). Near-zero-but-nonzero terms are handled — and disclosed — by
-    ``_prune_near_zero_terms`` instead.
-
-    Raises:
-        ValueError: If any surviving coefficient is non-finite. A NaN/Inf
-            refit coefficient is an upstream pipeline defect, not a
-            property of the RHS terms — it must fail loud HERE with an
-            accurate attribution (the old path's ``format_pde`` raised
-            'Coefficients must be finite'), not serialize via ``repr()``
-            into a bare ``nan``/``inf`` symbol that the integrator's
-            classifier would misreport as an unrecognised RHS symbol.
-            Assembly runs before ``_get_integration_result``'s try/except,
-            so this propagates to the caller by design.
-    """
-    non_finite = [i for i in keep if not math.isfinite(coefficients[i])]
-    if non_finite:
-        detail = ", ".join(
-            f"term '{terms[i]}' has coefficient {coefficients[i]!r}"
-            for i in non_finite
-        )
-        raise ValueError(
-            f"Cannot assemble integration RHS: non-finite coefficient(s) — "
-            f"{detail}. Coefficients must be finite; a NaN/Inf here points "
-            "at a degenerate upstream fit/refit, not at the RHS terms."
-        )
-    survivors = [i for i in keep if coefficients[i] != 0.0]
-    if not survivors:
-        return "0"
-    return " + ".join(f"({coefficients[i]!r})*({terms[i]})" for i in survivors)
-
-
-def _protected_semantics_note(rhs: str) -> str | None:
-    """Return the protected-operator disclosure when the RHS needs it.
-
-    -5: when the integrable RHS calls exp/log, disclose that the
-    registry evaluates them as safe_exp/safe_log (clamped). Uses an AST
-    walk (not substring matching) so e.g. a hypothetical ``myexp(...)``
-    does not false-positive; unparseable RHS strings yield no note —
-    ``integrate_pde`` reports those on its own.
-    """
+    is_scatter = getattr(dataset, "topology", None) == DataTopology.SCATTERED
     try:
-        tree = ast.parse(rhs, mode="eval")
-    except (SyntaxError, ValueError):
-        return None
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id in _PROTECTED_OPERATORS
-        ):
-            return _PROTECTED_SEMANTICS_NOTE
-    return None
+        field_shape = None if (dataset is None or is_scatter) else dataset.get_shape()
+    except (ValueError, AttributeError):
+        field_shape = None
+    return field_shape, is_scatter
 
 
 class VizEngine:
@@ -246,6 +150,14 @@ class VizEngine:
 
 
 
+
+        with style_context(self._style):
+            pass
+
+
+
+
+
     def render_all(
         self,
         result: ExperimentResult,
@@ -267,23 +179,15 @@ class VizEngine:
 
         Returns:
             ReportResult with generated figure paths, HTML report
-            path, and warnings.
+            path, and warnings. Omitting ``dataset`` / ``algorithm``
+            (or requesting ``animate`` on non-2D data) skips the
+            corresponding figure families; each skip is disclosed in
+            ``report.warnings`` rather than silently shrinking the
+            figure set.
         """
 
 
-
-
-
-
-
-
-        is_scatter = getattr(dataset, "topology", None) == DataTopology.SCATTERED
-        try:
-            field_shape = (
-                None if (dataset is None or is_scatter) else dataset.get_shape()
-            )
-        except (ValueError, AttributeError):
-            field_shape = None
+        field_shape, is_scatter = _scatter_aware_field_shape(dataset)
 
         report = self.render_universal(
             result, field_shape=field_shape, infer_grid=not is_scatter
@@ -292,9 +196,17 @@ class VizEngine:
 
         if dataset is not None:
             self._render_field_comparison(result, dataset, report, animate=animate)
+        else:
+            notes = [_NO_DATASET_NOTE]
+            if animate:
+                notes.append(_ANIMATION_TOPOLOGY_NOTE)
+            self._merge_warnings(report, notes)
 
 
         universal_figures = list(report.figures)
+
+        if algorithm is None:
+            self._merge_warnings(report, [_NO_ALGORITHM_NOTE])
 
 
 
@@ -364,7 +276,7 @@ class VizEngine:
             )
             if path is not None:
                 report.figures.append(path)
-            report.warnings.extend(warnings)
+            self._merge_warnings(report, warnings)
 
 
         path, warnings = self._render_tier2(
@@ -376,7 +288,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
         return report
 
@@ -413,7 +325,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
 
         path, warnings = self._render_comparison_one(
@@ -425,7 +337,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
 
         path, warnings = self._render_comparison_one(
@@ -437,7 +349,7 @@ class VizEngine:
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
         return report
 
@@ -457,30 +369,54 @@ class VizEngine:
             One ``FigureSpec`` per successfully rendered plot, carrying the
             title and description the producer declared on its ``PlotInfo``.
         """
+        if algorithm is None or not isinstance(algorithm, HomogeneousVizExtension):
+            return []
+        declared = algorithm.list_homogeneous_plots()
+        if not declared:
+
+
+            return []
         equation = result.equation
-        if (
-            equation is None
-            or equation.form is not Form.HOMOGENEOUS
-            or algorithm is None
-            or not isinstance(algorithm, HomogeneousVizExtension)
-        ):
+        if equation is None or equation.form is not Form.HOMOGENEOUS:
+
+
+
+            reason = (
+                "result carries no equation (invalid run)"
+                if equation is None
+                else f"equation form is {equation.form.name}, not HOMOGENEOUS"
+            )
+            self._merge_warnings(
+                report,
+                [f"Steady-state plots ({len(declared)}) skipped: {reason}"],
+            )
             return []
 
         specs: list[FigureSpec] = []
-        for plot_info in algorithm.list_homogeneous_plots():
+        for plot_info in declared:
             subplot_kw = (
                 {"projection": plot_info.projection}
                 if plot_info.projection is not None
                 else None
             )
-            fig, ax = plt.subplots(
-                figsize=_PLUGIN_FIGSIZE,
-                dpi=_DEFAULT_DPI,
-                subplot_kw=subplot_kw,
-            )
+
+
+            with style_context(self._style):
+                fig, ax = plt.subplots(
+                    figsize=_PLUGIN_FIGSIZE,
+                    dpi=_DEFAULT_DPI,
+                    subplot_kw=subplot_kw,
+                )
             try:
                 with style_context(self._style):
-                    algorithm.render_homogeneous_plot(plot_info.name, ax, result)
+                    plugin_warnings = algorithm.render_homogeneous_plot(
+                        plot_info.name, ax, result
+                    )
+
+
+
+                if plugin_warnings:
+                    self._merge_warnings(report, plugin_warnings)
                 path = self._output_dir / (
                     f"homogeneous_{plot_info.name}.{_SVG_FORMAT}"
                 )
@@ -542,13 +478,25 @@ class VizEngine:
             return plugin_specs
 
         for plot_info in plot_infos:
-            fig, ax = plt.subplots(
-                figsize=_PLUGIN_FIGSIZE,
-                dpi=_DEFAULT_DPI,
-            )
+
+
+
+            with style_context(self._style):
+                fig, ax = plt.subplots(
+                    figsize=_PLUGIN_FIGSIZE,
+                    dpi=_DEFAULT_DPI,
+                )
             try:
                 with style_context(self._style):
-                    algorithm.render_plot(plot_info.name, ax)
+                    plugin_warnings = algorithm.render_plot(plot_info.name, ax)
+
+
+
+
+
+
+                if plugin_warnings:
+                    self._merge_warnings(report, plugin_warnings)
                 path = self._output_dir / f"plugin_{plot_info.name}.{_SVG_FORMAT}"
                 fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
                 plugin_specs.append(
@@ -578,6 +526,13 @@ class VizEngine:
     ) -> None:
         """Render field comparison and Tier 2 plots that need dataset."""
 
+
+
+        lhs_note = self._maybe_lhs_assumption_note(result, dataset)
+        if lhs_note:
+            self._merge_warnings(report, [lhs_note])
+
+
         path, warnings = self._render_one(
             "coefficient_bar",
             plot_coefficient_bar,
@@ -598,14 +553,30 @@ class VizEngine:
 
 
         if getattr(dataset, "topology", None) == DataTopology.SCATTERED:
-            self._merge_warnings(
-                report,
-                ["scattered data: field-grid plots skipped (no grid topology)"],
-            )
+            notes = ["scattered data: field-grid plots skipped (no grid topology)"]
+
+
+
+            if animate:
+                notes.append(_ANIMATION_TOPOLOGY_NOTE)
+            self._merge_warnings(report, notes)
             return
 
 
-        integration_result, prune_notes = self._get_integration_result(result, dataset)
+        try:
+            integration_result, prune_notes = build_integration_result(
+                result, dataset
+            )
+        except ValueError as exc:
+
+
+
+
+
+            from kd.core.integrator import IntegrationResult
+
+            integration_result = IntegrationResult(success=False, warning=str(exc))
+            prune_notes = []
         self._merge_warnings(report, prune_notes)
 
 
@@ -632,7 +603,6 @@ class VizEngine:
         path, warnings = self._render_tier2(
             "field_comparison",
             plot_field_comparison,
-            result=result,
             dataset=dataset,
             integration_result=integration_result,
         )
@@ -643,7 +613,6 @@ class VizEngine:
 
         if animate:
             path, warnings = self._render_animation(
-                result=result,
                 dataset=dataset,
                 integration_result=integration_result,
             )
@@ -658,7 +627,6 @@ class VizEngine:
         path, warnings = self._render_tier2(
             "time_slices",
             plot_time_slices,
-            result=result,
             dataset=dataset,
             integration_result=integration_result,
         )
@@ -670,7 +638,6 @@ class VizEngine:
         path, warnings = self._render_tier2(
             "error_heatmap",
             plot_error_heatmap,
-            result=result,
             dataset=dataset,
             integration_result=integration_result,
         )
@@ -691,71 +658,6 @@ class VizEngine:
             if msg not in report.warnings:
                 report.warnings.append(msg)
 
-    def _get_integration_result(
-        self,
-        result: ExperimentResult,
-        dataset: PDEDataset,
-    ) -> tuple[IntegrationResult, list[str]]:
-        """Compute integration result for field_comparison/time_slices/error_heatmap.
-
-        Near-zero coefficients are pruned from the integrable RHS first
-        (see ``_prune_near_zero_terms``); the returned notes disclose what
-        was pruned and must reach the report exactly once
-        (``_render_field_comparison`` owns that).
-
-        The integrable RHS is the platform IR string assembled directly
-        from the pruned terms + coefficients (-4):
-        ``"(c0)*(term0) + (c1)*(term1) + ..."`` with ``repr()``
-        coefficients for float64 round-trip, or ``"0"`` when everything
-        is pruned/deselected. ``format_pde``/sympy no longer sit on the
-        integration path — they serve LaTeX display only, so nested
-        open-form derivative terms reach ``integrate_pde`` losslessly.
-
-        Only ``integrate_pde()`` is wrapped in try/except (it may fail for
-        legitimate scientific reasons). Attribute access and the string
-        assembly are programmer-level steps whose errors should propagate
-        normally.
-
-        Why no autograd-note annotation here: the autograd-domain
-        warning is emitted ONCE engine-side by ``_render_field_comparison``
-        (see the dedup check around ``autograd_note``). Mutating
-        ``IntegrationResult.warning`` would let Tier 2 plots forward the
-        annotated note 4x (one per plot), bypassing the dedup guard.
-
-        Returns:
-            Tuple of (integration result, disclosure notes).
-        """
-        from kd.core.integrator import IntegrationResult, integrate_pde
-
-        terms = result.final_eval.terms
-        coeffs = result.final_eval.coefficients
-        if terms is None or coeffs is None:
-            return (
-                IntegrationResult(
-                    success=False,
-                    warning="Missing terms or coefficients in final_eval",
-                ),
-                [],
-            )
-        coeff_values = [float(c) for c in coeffs]
-        selected = result.final_eval.selected_indices
-        active = list(selected) if selected is not None else list(range(len(terms)))
-        keep, notes = _prune_near_zero_terms(terms, coeff_values, active)
-        rhs = _assemble_integration_rhs(terms, coeff_values, keep)
-        protected_note = _protected_semantics_note(rhs)
-        if protected_note is not None:
-            notes = [*notes, protected_note]
-        try:
-            return integrate_pde(rhs, dataset), notes
-        except Exception as exc:
-            return (
-                IntegrationResult(
-                    success=False,
-                    warning=f"Integration failed: {exc}",
-                ),
-                notes,
-            )
-
     @staticmethod
     def _maybe_autograd_domain_note(result: ExperimentResult) -> str | None:
         """Return the autograd-domain note, or ``None`` if not applicable.
@@ -766,9 +668,7 @@ class VizEngine:
         because SGA builds its own internal provider while its platform-level
         derivative requirement stays finite-difference.
         """
-        config = getattr(result, "config", None)
-        if not isinstance(config, dict):
-            return None
+        config = result.config
         uses_autograd_domain = (
             config.get("provider_kind") == "autograd"
             or config.get("use_autograd") is True
@@ -777,6 +677,45 @@ class VizEngine:
             return None
         return _AUTOGRAD_DOMAIN_NOTE
 
+    @staticmethod
+    def _maybe_lhs_assumption_note(
+        result: ExperimentResult, dataset: Any
+    ) -> str | None:
+        """Return a disclosure note when ``result.lhs_label`` is an assumption.
+
+        Mirrors the no-declaration condition of ``Runner._lhs_label``'s final
+        fallback: when neither the algorithm (``final_eval.lhs_name``) nor the
+        dataset (``lhs_field``/``lhs_axis``) declared the regression target,
+        the label reaching equation and residual panels is the hardcoded
+        ``DEFAULT_LHS_LABEL``, and the report must say so.
+        The label itself is the first gate: a
+        non-default label — a homogeneous result's ``"0"``, a directly
+        constructed custom label — cannot be the hardcoded guess this note
+        claims it is. Do NOT key this on ``final_eval.form``: that field is a
+        transient dispatch signal that does not survive save/load (review
+        finding, 2026-08-06).
+        """
+
+        if result.lhs_label != DEFAULT_LHS_LABEL:
+            return None
+        lhs_name = result.final_eval.lhs_name
+        if isinstance(lhs_name, str) and lhs_name:
+            return None
+        lhs_field = getattr(dataset, "lhs_field", "")
+        lhs_axis = getattr(dataset, "lhs_axis", "")
+        if (
+            isinstance(lhs_field, str)
+            and lhs_field
+            and isinstance(lhs_axis, str)
+            and lhs_axis
+        ):
+            return None
+        return (
+            f"LHS label {result.lhs_label!r} is a default assumption: neither "
+            "the algorithm (final_eval.lhs_name) nor the dataset "
+            "(lhs_field/lhs_axis) declared the regression target"
+        )
+
     def _render_pde_residual(
         self,
         result: ExperimentResult,
@@ -784,10 +723,10 @@ class VizEngine:
         report: ReportResult,
     ) -> None:
         """Render PDE residual field (u_t actual vs predicted)."""
-        try:
-            field_shape = dataset.get_shape()
-        except (ValueError, AttributeError):
-            field_shape = None
+
+
+
+        field_shape, is_scatter = _scatter_aware_field_shape(dataset)
 
         path, warnings = self._render_tier2(
             "pde_residual_field",
@@ -795,10 +734,11 @@ class VizEngine:
             result=result,
             field_shape=field_shape,
             dataset=dataset,
+            infer_grid=not is_scatter,
         )
         if path is not None:
             report.figures.append(path)
-        report.warnings.extend(warnings)
+        self._merge_warnings(report, warnings)
 
     def _render_tier2(
         self,
@@ -837,13 +777,13 @@ class VizEngine:
     def _render_animation(
         self,
         *,
-        result: ExperimentResult,
         dataset: PDEDataset,
         integration_result: IntegrationResult,
     ) -> tuple[Path | None, list[str]]:
         """Render the optional 2D field animation GIF."""
         if not self._can_render_animation(dataset):
-            return None, []
+            logger.warning(_ANIMATION_TOPOLOGY_NOTE)
+            return None, [_ANIMATION_TOPOLOGY_NOTE]
         if not PillowWriter.isAvailable():
             msg = "PillowWriter unavailable; skipping field_animation.gif"
             logger.warning(msg)
@@ -853,7 +793,6 @@ class VizEngine:
         animation = None
         try:
             animation, warnings = plot_field_animation(
-                result,
                 dataset,
                 integration_result,
                 style=self._style,
@@ -898,13 +837,21 @@ class VizEngine:
         Per-plot error isolation: a failing plot does not prevent other
         plots or the report from being generated.
 
+        The Axes is created INSIDE the style context: axis/tick label sizes
+        fix at Axes creation, so a figure born outside the context keeps
+        default sizes no matter what the plot function later applies
+        (023-D3 revision). The engine's context exits before ``plot_fn``
+        runs; the fn then applies the SAME merged rcParams itself via its
+        ``style=`` parameter (sequential, not nested — the param exists so
+        direct engine-less callers get styled artists too).
+
         Returns:
             Tuple of (saved file path or None on error, warnings).
         """
-        fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
+        with style_context(self._style):
+            fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
         try:
-            with style_context(self._style):
-                warnings = plot_fn(result, ax)
+            warnings = plot_fn(result, ax, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"
             fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
         except Exception as exc:
@@ -930,13 +877,17 @@ class VizEngine:
         Per-plot error isolation: a failing comparison plot does not
         prevent other comparison plots from being generated.
 
+        Axes creation and style plumbing follow ``_render_one`` (023-D3
+        revision): figure born inside the style context, plot fn re-wraps
+        with the same ``style=`` for direct callers.
+
         Returns:
             Tuple of (saved file path or None on error, warnings).
         """
-        fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
+        with style_context(self._style):
+            fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
         try:
-            with style_context(self._style):
-                warnings = plot_fn(results, ax, labels=labels)
+            warnings = plot_fn(results, ax, labels=labels, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"
             fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
         except Exception as exc:

@@ -129,9 +129,7 @@ def _colorbar_labels(fig: matplotlib.figure.Figure) -> list[str]:
 @pytest.mark.unit
 def test_field_1d_residual_panel_is_predicted_minus_true() -> None:
     dataset = _dataset_1d()
-    fig, _ = plot_field_comparison(
-        _overshooting_result(), dataset, _overshooting_integration(dataset)
-    )
+    fig, _ = plot_field_comparison(dataset, _overshooting_integration(dataset))
     residual_axes = [ax for ax in fig.axes if ax.get_title().startswith("Residual")]
     assert residual_axes, "1D field comparison drew no residual panel"
     for ax in residual_axes:
@@ -142,9 +140,7 @@ def test_field_1d_residual_panel_is_predicted_minus_true() -> None:
 @pytest.mark.unit
 def test_field_2d_residual_panels_are_predicted_minus_true() -> None:
     dataset = _dataset_2d()
-    fig, _ = plot_field_comparison(
-        _overshooting_result(), dataset, _overshooting_integration(dataset)
-    )
+    fig, _ = plot_field_comparison(dataset, _overshooting_integration(dataset))
 
 
     residual_axes = [ax for ax in fig.axes if ax.get_title().startswith("Residual")]
@@ -158,9 +154,7 @@ def test_field_2d_residual_panels_are_predicted_minus_true() -> None:
 @pytest.mark.parametrize("dataset_factory", [_dataset_1d, _dataset_2d])
 def test_error_heatmap_is_predicted_minus_true(dataset_factory) -> None:
     dataset = dataset_factory()
-    fig, _ = plot_error_heatmap(
-        _overshooting_result(), dataset, _overshooting_integration(dataset)
-    )
+    fig, _ = plot_error_heatmap(dataset, _overshooting_integration(dataset))
     heatmap_axes = [ax for ax in fig.axes if ax.images]
     assert heatmap_axes, "error heatmap drew no image"
     for ax in heatmap_axes:

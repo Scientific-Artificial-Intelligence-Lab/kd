@@ -39,20 +39,15 @@ _LHS_ORDER = 1
 
 
 
-_PARETO_COMPLEXITY_KEY = "pareto_complexity"
-_PARETO_LOSS_KEY = "pareto_loss"
-_PARETO_NMSE_KEY = "pareto_nmse"
-_SELECTED_COMPLEXITY_KEY = "selected_complexity"
-_SELECTED_LOSS_KEY = "selected_loss"
-_SELECTED_NMSE_KEY = "selected_nmse"
-_LOGGED_METRICS: tuple[str, ...] = (
-    _PARETO_COMPLEXITY_KEY,
-    _PARETO_LOSS_KEY,
-    _PARETO_NMSE_KEY,
-    _SELECTED_COMPLEXITY_KEY,
-    _SELECTED_LOSS_KEY,
-    _SELECTED_NMSE_KEY,
-)
+
+
+_PARETO_COMPLEXITY_KEY = _viz_helpers.PARETO_COMPLEXITY_KEY
+_PARETO_LOSS_KEY = _viz_helpers.PARETO_LOSS_KEY
+_PARETO_NMSE_KEY = _viz_helpers.PARETO_NMSE_KEY
+_SELECTED_COMPLEXITY_KEY = _viz_helpers.SELECTED_COMPLEXITY_KEY
+_SELECTED_LOSS_KEY = _viz_helpers.SELECTED_LOSS_KEY
+_SELECTED_NMSE_KEY = _viz_helpers.SELECTED_NMSE_KEY
+_LOGGED_METRICS = _viz_helpers.LOGGED_METRICS
 
 
 _CONFIG_LIBRARY_FINGERPRINT = "library_fingerprint"
@@ -313,8 +308,8 @@ class PySRPlugin:
     def list_plots(self) -> list[PlotInfo]:
         return _viz_helpers.list_plot_infos()
 
-    def render_plot(self, name: str, ax: Axes) -> None:
-        _viz_helpers.render(name, ax, self._recorder)
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
         return _viz_helpers.get_data(name, self._recorder)

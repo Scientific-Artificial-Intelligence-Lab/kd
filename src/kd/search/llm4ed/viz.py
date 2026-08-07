@@ -18,6 +18,28 @@ if TYPE_CHECKING:
     from kd.search.recorder import VizRecorder
 
 
+
+
+
+
+
+
+POOL_BEST_KEY = "pool_best"
+POOL_MEDIAN_KEY = "pool_median"
+POOL_WORST_KEY = "pool_worst"
+N_INVALID_KEY = "n_invalid"
+N_LLM_CALLS_KEY = "n_llm_calls"
+N_VALID_KEY = "n_valid"
+LOGGED_METRICS: tuple[str, ...] = (
+    POOL_BEST_KEY,
+    POOL_MEDIAN_KEY,
+    POOL_WORST_KEY,
+    N_INVALID_KEY,
+    N_LLM_CALLS_KEY,
+    N_VALID_KEY,
+)
+
+
 _PLOT_INFOS: tuple[PlotInfo, ...] = (
     PlotInfo(
         name="pool_reward_spread",
@@ -47,7 +69,7 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
 )
 
 _PLOT_NAMES: tuple[str, ...] = tuple(info.name for info in _PLOT_INFOS)
-_SPREAD_METRICS: tuple[str, ...] = ("pool_best", "pool_median", "pool_worst")
+_SPREAD_METRICS: tuple[str, ...] = (POOL_BEST_KEY, POOL_MEDIAN_KEY, POOL_WORST_KEY)
 _YLABEL: dict[str, str] = {
     "pool_reward_spread": "reward",
     "invalid_count": "invalid events",
@@ -62,8 +84,8 @@ _LINE_MARKER_SIZE = 3
 
 
 _SINGLE_SOURCE: dict[str, str] = {
-    "invalid_count": "n_invalid",
-    "llm_calls": "n_llm_calls",
+    "invalid_count": N_INVALID_KEY,
+    "llm_calls": N_LLM_CALLS_KEY,
 }
 
 
@@ -95,7 +117,7 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(_YLABEL[name])
@@ -107,8 +129,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         }
         max_len = max((len(series) for series in series_by_metric.values()), default=0)
         if max_len == 0:
-            _draw_no_data(ax, recorder)
-            return
+            return _draw_no_data(ax, recorder, name)
         x = list(range(max_len))
         for metric in _SPREAD_METRICS:
             ax.plot(
@@ -122,12 +143,11 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         annotate_gaps(
             ax, band_measured_flags(series_by_metric.values(), max_len), _POOL_GAPS
         )
-        return
+        return []
 
     series = _derived_series(name, recorder)
     if not series:
-        _draw_no_data(ax, recorder)
-        return
+        return _draw_no_data(ax, recorder, name)
     ax.plot(
         range(len(series)),
         _sanitized(series),
@@ -135,6 +155,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         markersize=_LINE_MARKER_SIZE,
     )
     annotate_gaps(ax, measured_flags(_gap_source(name, recorder)), _PANEL_GAPS[name])
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -207,15 +228,17 @@ def _pad_series(series: list[Any], length: int) -> list[Any]:
     return [*series, *([None] * (length - len(series)))]
 
 
-def _draw_no_data(ax: Axes, recorder: VizRecorder | None) -> None:
+def _draw_no_data(ax: Axes, recorder: VizRecorder | None, name: str) -> list[str]:
+    reason = _no_data_reason(recorder)
     ax.text(
         0.5,
         0.5,
-        f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+        f"{_NO_DATA_TEXT} ({reason})",
         transform=ax.transAxes,
         ha="center",
         va="center",
     )
+    return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
 
 def _no_data_reason(recorder: VizRecorder | None) -> str:
@@ -233,4 +256,15 @@ def _plot_title(name: str) -> str:
     return name
 
 
-__all__ = ["get_data", "list_plot_infos", "render"]
+__all__ = [
+    "LOGGED_METRICS",
+    "N_INVALID_KEY",
+    "N_LLM_CALLS_KEY",
+    "N_VALID_KEY",
+    "POOL_BEST_KEY",
+    "POOL_MEDIAN_KEY",
+    "POOL_WORST_KEY",
+    "get_data",
+    "list_plot_infos",
+    "render",
+]

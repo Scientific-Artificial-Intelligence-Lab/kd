@@ -11,6 +11,7 @@ import torch.nn as nn
 
 from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
+from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr.executor import PythonExecutor
 from kd.core.expr.registry import FunctionRegistry
 
@@ -29,7 +30,6 @@ from kd.data.schema import (
     PDEDataset,
     TaskType,
 )
-from kd.search.dlga.surrogate import DLGASurrogateContext
 from kd.search.protocol import PlatformComponents
 
 
@@ -187,9 +187,9 @@ class TestDefaultReqsEquivalence:
         components = PlatformBuilder(small_dataset_with_lhs, DerivativeReqs()).build()
         assert isinstance(components.context, ExecutionContext)
 
-        assert not isinstance(components.context, DLGASurrogateContext), (
+        assert not isinstance(components.context, SurrogateContext), (
             "Default (needs_surrogate=False) must NOT wrap the context with "
-            "DLGASurrogateContext — SGA Layer 1 raw u lock"
+            "SurrogateContext — SGA Layer 1 raw u lock"
         )
 
     @pytest.mark.unit
@@ -243,7 +243,7 @@ class TestAutogradWithoutSurrogate:
         reqs = DerivativeReqs(provider_kind="autograd", needs_surrogate=False)
         components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
         assert isinstance(components.context, ExecutionContext)
-        assert not isinstance(components.context, DLGASurrogateContext), (
+        assert not isinstance(components.context, SurrogateContext), (
             "needs_surrogate=False with autograd must NOT wrap context — "
             " SGA Layer 1 raw u invariant"
         )
@@ -297,7 +297,7 @@ class TestAutogradWithProvidedSurrogate:
             surrogate_model=pretrained_model,
         )
         components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
-        assert isinstance(components.context, DLGASurrogateContext)
+        assert isinstance(components.context, SurrogateContext)
 
     @pytest.mark.unit
     def test_provider_uses_provided_model(
@@ -388,7 +388,7 @@ class TestAutogradTrainsDefaultModel:
             },
         )
         components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
-        assert isinstance(components.context, DLGASurrogateContext)
+        assert isinstance(components.context, SurrogateContext)
 
     @pytest.mark.unit
     def test_provider_holds_internally_built_model(
@@ -632,7 +632,7 @@ class TestContextCarriesTrainingResult:
         reqs = DerivativeReqs(provider_kind="autograd", needs_surrogate=False)
         components = PlatformBuilder(small_dataset_with_lhs, reqs).build()
 
-        assert not isinstance(components.context, DLGASurrogateContext)
+        assert not isinstance(components.context, SurrogateContext)
         training_result = getattr(components.context, "training_result", None)
         assert training_result is None, (
             "SGA opt-in (needs_surrogate=False) must leave no surrogate "

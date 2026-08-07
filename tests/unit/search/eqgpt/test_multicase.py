@@ -383,7 +383,7 @@ class TestBuildFinalResult:
 
         torch.testing.assert_close(
             target.detach().cpu().double(),
-            (-pinned).double(),
+            pinned.double(),
             rtol=1e-6,
             atol=1e-9,
         )

@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
+from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search._record_schema import (
     EvidenceHashError,
     EvidenceHashSchemeError,
@@ -56,8 +57,6 @@ INVALID_REASON_VOCAB: Final[frozenset[str]] = frozenset(
 HEADLINE_COEFFICIENT_SOURCE_VOCAB: Final[frozenset[str]] = frozenset(
     {"native", "platform_refit", "undeclared"}
 )
-
-_JSON_INDENT_SPACES = 2
 
 _RUN_COST_REQUIRED_FIELDS = frozenset(
     {
@@ -434,7 +433,7 @@ class RunRecord:
             json.dump(
                 self.to_dict(),
                 handle,
-                indent=_JSON_INDENT_SPACES,
+                indent=JSON_INDENT_SPACES,
                 allow_nan=False,
             )
 
@@ -452,7 +451,7 @@ class RunRecord:
         return expected == self.evidence_hash
 
     def verify_run_spec_hash(self) -> bool:
-        return self.run_spec.content_hash() == self.run_spec_hash
+        return self.run_spec.run_spec_hash == self.run_spec_hash
 
     def record_content_hash(
         self, record_hash_scheme: str = RECORD_HASH_SCHEME
@@ -518,7 +517,7 @@ def _require_valid_evidence_hash(record: RunRecord) -> None:
 
 def _require_valid_run_spec_hash(record: RunRecord) -> None:
     if not record.verify_run_spec_hash():
-        expected = record.run_spec.content_hash()
+        expected = record.run_spec.run_spec_hash
         raise RunSpecHashError(
             "run_spec hash mismatch: "
             f"got {record.run_spec_hash!r}; expected {expected!r}"

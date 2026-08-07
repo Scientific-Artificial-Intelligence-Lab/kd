@@ -177,6 +177,16 @@ def _build_runner(
     )
 
 
+def _build_stub_runner(
+    stub: Any,
+    config: DiscoverConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> PINNCycleRunner:
+    runner = _build_runner(stub, config)
+    monkeypatch.setattr(runner, "_rebuild_after_pinn", lambda: stub)
+    return runner
+
+
 class _CorruptingTrainPinnError(RuntimeError):
     pass
 
@@ -299,10 +309,13 @@ class TestCycleRun:
             assert isinstance(m["best_reward"], float)
             assert math.isfinite(m["best_reward"])
 
-    def test_metrics_have_pinn_losses(self) -> None:
-        result = _build_runner(
+    def test_metrics_have_pinn_losses(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = _build_stub_runner(
             _AlwaysValidHeatEvaluator(),
             _fast_config(n_cycles=1),
+            monkeypatch,
         ).run()
         assert len(result.cycle_metrics) == 1
         for m in result.cycle_metrics:
@@ -319,8 +332,14 @@ class TestCycleRun:
 
 class TestNoValidExpression:
 
-    def test_warns_on_skip(self, caplog: pytest.LogCaptureFixture) -> None:
-        runner = _build_runner(_AlwaysInvalidEvaluator(), _fast_config(n_cycles=1))
+    def test_warns_on_skip(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        runner = _build_stub_runner(
+            _AlwaysInvalidEvaluator(), _fast_config(n_cycles=1), monkeypatch
+        )
         with caplog.at_level(logging.WARNING):
             runner.run()
         assert any(
@@ -328,18 +347,22 @@ class TestNoValidExpression:
             for r in caplog.records
         ), f"Expected skip/no-valid warning; got {[r.message for r in caplog.records]}"
 
-    def test_completes_with_metrics(self) -> None:
-        result = _build_runner(
+    def test_completes_with_metrics(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        result = _build_stub_runner(
             _AlwaysInvalidEvaluator(),
             _fast_config(n_cycles=2),
+            monkeypatch,
         ).run()
         assert isinstance(result, PINNCycleResult)
         assert len(result.cycle_metrics) == 2
 
-    def test_pinn_losses_absent_when_skipped(self) -> None:
-        result = _build_runner(
+    def test_pinn_losses_absent_when_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = _build_stub_runner(
             _AlwaysInvalidEvaluator(),
             _fast_config(n_cycles=1),
+            monkeypatch,
         ).run()
         for m in result.cycle_metrics:
             assert "data_loss" not in m, "data_loss present despite no valid expression"
@@ -1003,28 +1026,6 @@ class TestRebuildFromEvaluator:
 
         assert captured["executor"] is heat_evaluator.executor
         assert captured["solver"] is heat_evaluator.solver
-
-    def test_rebuild_after_pinn_keeps_protocol_only_evaluator(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        import kd.search.discover.pinn.cycle as cycle_module
-
-        invalid_evaluator = _AlwaysInvalidEvaluator()
-        runner = _build_runner(invalid_evaluator, _fast_config())
-
-        def fail_rebuild(*args: object, **kwargs: object) -> object:
-            raise AssertionError("rebuild_evaluator should not run for test stubs")
-
-        monkeypatch.setattr(cycle_module, "rebuild_evaluator", fail_rebuild)
-
-        rebuilt = runner._rebuild_after_pinn()
-
-
-
-
-
-        assert cast(object, rebuilt) is invalid_evaluator
 
     def test_runner_stores_no_separate_rebuild_fields(
         self,

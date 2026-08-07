@@ -1,13 +1,11 @@
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from kd.models.trainer import TrainingResult
     from kd.search.recorder import VizRecorder
-
-logger = logging.getLogger(__name__)
 
 
 
@@ -45,7 +43,7 @@ _EARLY_STOPPED_FALSE = 0.0
 
 def log_surrogate_training(
     recorder: VizRecorder | None,
-    training_result: Any,
+    training_result: TrainingResult | None,
 ) -> None:
     if recorder is None:
         return
@@ -54,24 +52,18 @@ def log_surrogate_training(
     if recorder.get(SURROGATE_TRAIN_LOSS_KEY):
         return
 
-    loss_history = getattr(training_result, "loss_history", None) or []
+    loss_history = training_result.loss_history
     if not loss_history:
         return
-    val_history = getattr(training_result, "val_loss_history", None)
-
-
-
+    val_history = training_result.val_loss_history
 
 
 
     if val_history is not None and len(val_history) != len(loss_history):
-        logger.warning(
-            "surrogate_log: val_loss_history length %d != loss_history length "
-            "%d; dropping the validation curve (logging train only).",
-            len(val_history),
-            len(loss_history),
+        raise ValueError(
+            f"val_loss_history length {len(val_history)} != loss_history "
+            f"length {len(loss_history)}"
         )
-        val_history = None
 
     keep = _downsample_indices(len(loss_history), _SURROGATE_HISTORY_CAP)
 
@@ -88,16 +80,13 @@ def log_surrogate_training(
             [float(val_history[index]) for index in keep],
         )
 
-    best_epoch = getattr(training_result, "best_epoch", None)
-    if best_epoch is not None:
-        recorder.log(SURROGATE_BEST_EPOCH_KEY, float(best_epoch))
-    recorder.log(
-        SURROGATE_EPOCHS_RUN_KEY, float(getattr(training_result, "epochs_run", 0))
-    )
+    if training_result.best_epoch is not None:
+        recorder.log(SURROGATE_BEST_EPOCH_KEY, float(training_result.best_epoch))
+    recorder.log(SURROGATE_EPOCHS_RUN_KEY, float(training_result.epochs_run))
     recorder.log(
         SURROGATE_EARLY_STOPPED_KEY,
         _EARLY_STOPPED_TRUE
-        if getattr(training_result, "early_stopped", False)
+        if training_result.early_stopped
         else _EARLY_STOPPED_FALSE,
     )
 

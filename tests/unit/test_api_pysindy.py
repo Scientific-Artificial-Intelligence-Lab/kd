@@ -22,7 +22,8 @@ def test_model_builds_pysindy_plugin_with_one_shot_batch() -> None:
 
 
 def test_default_config_threads_seed_but_not_generations() -> None:
-    model = Model(algorithm="pysindy", generations=73, seed=19, verbose=False)
+    with pytest.warns(UserWarning, match="pysindy"):
+        model = Model(algorithm="pysindy", generations=73, seed=19, verbose=False)
     config = model._build_pysindy_config()
     assert config.seed == 19
     assert config.max_iter == PySINDyConfig().max_iter
@@ -30,12 +31,13 @@ def test_default_config_threads_seed_but_not_generations() -> None:
 
 def test_user_config_is_deep_copied_verbatim() -> None:
     supplied = PySINDyConfig(threshold=0.25, max_iter=31, seed=7)
-    model = Model(
-        algorithm="pysindy",
-        generations=99,
-        verbose=False,
-        config=supplied,
-    )
+    with pytest.warns(UserWarning, match="pysindy"):
+        model = Model(
+            algorithm="pysindy",
+            generations=99,
+            verbose=False,
+            config=supplied,
+        )
     resolved = model._build_pysindy_config()
     assert resolved == supplied
     assert resolved is not supplied

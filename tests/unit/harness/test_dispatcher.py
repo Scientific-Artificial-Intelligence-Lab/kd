@@ -135,20 +135,6 @@ def test_worker_command_wraps_with_systemd_run_when_memory_capped(
     assert cmd[7:10] == ["/usr/bin/python3", "-m", "kd.harness.worker"]
 
 
-def test_worker_command_fails_loud_when_systemd_run_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-
-
-    monkeypatch.setattr(dispatcher_module.shutil, "which", lambda _name: None)
-    with pytest.raises(DispatchRunError, match="systemd-run"):
-        worker_command(
-            _shard("shard-00", memory_max_gb=4.0),
-            Path("/batch/dispatch.json"),
-            python_executable="/usr/bin/python3",
-        )
-
-
 
 
 

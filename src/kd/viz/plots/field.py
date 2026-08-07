@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import textwrap
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
@@ -17,10 +16,13 @@ from kd.viz.plots._dim_utils import (
 )
 from kd.viz.plots._field_panels import (
     _RESIDUAL_SIGN,
+    _diverged_text,
     _heatmap_panel,
     _pcolormesh_panel,
     _range_note,
     _reference_limits,
+    _residual_limits,
+    _warning_panel,
 )
 from kd.viz.style import style_context
 
@@ -29,19 +31,15 @@ if TYPE_CHECKING:
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
-    from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
 _FIELD_FIGSIZE_1D = (15, 4)
 _N_TIME_SNAPSHOTS = 3
 _DEFAULT_DPI = 150
-_WARNING_FONTSIZE = 9
-_WARNING_WRAP_WIDTH = 38
 
 
 def plot_field_comparison(
-    result: ExperimentResult,
     dataset: PDEDataset,
     integration_result: IntegrationResult,
     *,
@@ -93,7 +91,7 @@ def plot_field_comparison(
         return fig, warnings
 
 
-    pred_field, diverged = _extract_predicted(
+    pred_field, diverged, no_pred_reason = _extract_predicted(
         integration_result, true_field.shape, warnings
     )
 
@@ -108,6 +106,7 @@ def plot_field_comparison(
                 integration_result,
                 warnings,
                 diverged=diverged,
+                no_pred_reason=no_pred_reason,
             )
         else:
             fig = _render_2d_spatial(
@@ -119,6 +118,7 @@ def plot_field_comparison(
                 integration_result,
                 warnings,
                 diverged=diverged,
+                no_pred_reason=no_pred_reason,
             )
 
     return fig, warnings
@@ -128,11 +128,11 @@ def _extract_predicted(
     integration_result: IntegrationResult,
     true_shape: tuple[int, ...],
     warnings: list[str],
-) -> tuple[NDArray[np.floating] | None, bool]:
+) -> tuple[NDArray[np.floating] | None, bool, str | None]:
     if integration_result.predicted_field is None:
         msg = integration_result.warning or "Integration failed"
         warnings.append(msg)
-        return None, False
+        return None, False, msg
 
     pred = np.array(
         integration_result.predicted_field.detach().cpu().numpy(),
@@ -140,14 +140,15 @@ def _extract_predicted(
     )
 
     if pred.shape != true_shape:
-        warnings.append(f"Shape mismatch: true {true_shape} vs predicted {pred.shape}")
-        return None, False
+        msg = f"Shape mismatch: true {true_shape} vs predicted {pred.shape}"
+        warnings.append(msg)
+        return None, False, msg
 
     diverged = not integration_result.success
     if diverged:
         warnings.append(integration_result.warning or "Integration did not succeed")
 
-    return pred, diverged
+    return pred, diverged, None
 
 
 def _render_1d_spatial(
@@ -160,6 +161,7 @@ def _render_1d_spatial(
     warnings: list[str],
     *,
     diverged: bool = False,
+    no_pred_reason: str | None = None,
 ) -> Figure:
     fig, axes_arr = plt.subplots(1, 3, figsize=_FIELD_FIGSIZE_1D, dpi=_DEFAULT_DPI)
     axes: list[Axes] = list(axes_arr.flat)
@@ -228,8 +230,11 @@ def _render_1d_spatial(
             residual=True,
         )
     else:
-        _warning_panel(axes[1], integration_result)
-        _warning_panel(axes[2], integration_result, label="Residual")
+        assert (
+            no_pred_reason is not None
+        )
+        _warning_panel(axes[1], no_pred_reason)
+        _warning_panel(axes[2], no_pred_reason, label="Residual")
 
     fig.tight_layout()
     return fig
@@ -245,6 +250,7 @@ def _render_2d_spatial(
     warnings: list[str],
     *,
     diverged: bool = False,
+    no_pred_reason: str | None = None,
 ) -> Figure:
     assert (
         dataset.axis_order is not None
@@ -271,6 +277,12 @@ def _render_2d_spatial(
 
 
     limits = _reference_limits(true_field, pred_field)
+
+
+
+    residual_row_limits = (
+        _residual_limits(pred_field - true_field) if pred_field is not None else None
+    )
 
     for col, t_idx in enumerate(time_indices):
 
@@ -313,18 +325,26 @@ def _render_2d_spatial(
             )
 
             residual_slice = pred_slice - true_slice
+            assert (
+                residual_row_limits is not None
+            )
             _heatmap_panel(
                 axes_arr[2, col],
                 residual_slice,
-                f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})",
+                f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})"
+                + _range_note(residual_slice, residual_row_limits),
                 residual=True,
                 extent=extent,
                 xlabel=xlabel,
                 ylabel=ylabel,
+                limits=residual_row_limits,
             )
         else:
-            _warning_panel(axes_arr[1, col], integration_result)
-            _warning_panel(axes_arr[2, col], integration_result, label="Residual")
+            assert (
+                no_pred_reason is not None
+            )
+            _warning_panel(axes_arr[1, col], no_pred_reason)
+            _warning_panel(axes_arr[2, col], no_pred_reason, label="Residual")
 
     fig.tight_layout()
     return fig
@@ -342,31 +362,8 @@ def _predicted_title(
             return f"Predicted ({time_axis}={t_val:.3g})"
         return "Predicted"
 
-    div_t = integration_result.diverged_at_t
-    tag = f"DIVERGED at {time_axis}={div_t:.3g}" if div_t is not None else "DIVERGED"
+    tag = _diverged_text(integration_result, time_axis)
 
     if t_val is not None:
         return f"Predicted ({tag}, {time_axis}={t_val:.3g})"
     return f"Predicted ({tag})"
-
-
-def _warning_panel(
-    ax: Axes,
-    integration_result: IntegrationResult,
-    label: str = "Predicted",
-) -> None:
-    msg = integration_result.warning or "Integration failed"
-    wrapped = textwrap.fill(msg, width=_WARNING_WRAP_WIDTH)
-    ax.text(
-        0.5,
-        0.5,
-        wrapped,
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=_WARNING_FONTSIZE,
-        color="red",
-    )
-    ax.set_title(label)
-    ax.set_xticks([])
-    ax.set_yticks([])

@@ -580,7 +580,7 @@ class TestPluginBuilderIntegration:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=mock_evaluator,
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
 
@@ -607,7 +607,7 @@ class TestPluginBuilderIntegration:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=mock_evaluator,
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
 

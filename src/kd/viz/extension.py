@@ -25,7 +25,7 @@ class VizExtension(Protocol):
     def list_plots(self) -> list[PlotInfo]:
         ...
 
-    def render_plot(self, name: str, ax: Axes) -> None:
+    def render_plot(self, name: str, ax: Axes) -> list[str] | None:
         ...
 
     def get_plot_data(self, name: str) -> Any:
@@ -40,5 +40,5 @@ class HomogeneousVizExtension(Protocol):
 
     def render_homogeneous_plot(
         self, name: str, ax: Axes, result: ExperimentResult
-    ) -> None:
+    ) -> list[str] | None:
         ...

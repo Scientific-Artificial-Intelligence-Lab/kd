@@ -15,9 +15,13 @@ from kd.viz.plots._dim_utils import (
     _slice_nd_to_2d,
 )
 from kd.viz.plots._field_panels import (
+    _WARNING_FONTSIZE,
+    _WARNING_WRAP_WIDTH,
+    _diverged_tag,
     _heatmap_panel,
     _range_note,
     _reference_limits,
+    _warning_panel,
 )
 from kd.viz.style import style_context
 
@@ -26,24 +30,26 @@ if TYPE_CHECKING:
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
-    from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DPI = 150
-_WARNING_FONTSIZE = 9
-_WARNING_WRAP_WIDTH = 38
 _YLIM_PAD_FRACTION = 0.05
 
 
 def plot_time_slices(
-    result: ExperimentResult,
     dataset: PDEDataset,
     integration_result: IntegrationResult,
     *,
     style: dict[str, Any] | None = None,
     n_slices: int = 3,
 ) -> tuple[Figure, list[str]]:
+
+
+
+    if n_slices < 1:
+        raise ValueError(f"n_slices must be >= 1, got {n_slices}")
+
     warnings: list[str] = []
 
 
@@ -107,7 +113,9 @@ def plot_time_slices(
     t_coords = dataset.get_coords(time_axis).detach().cpu().numpy()
 
 
-    pred_field, diverged = _extract_pred(integration_result, true_field.shape, warnings)
+    pred_field, diverged, no_pred_reason = _extract_pred(
+        integration_result, true_field.shape, warnings
+    )
 
     with style_context(style):
         if n_spatial <= 1:
@@ -124,6 +132,7 @@ def plot_time_slices(
                 warnings,
                 diverged=diverged,
                 integration_result=integration_result,
+                no_pred_reason=no_pred_reason,
             )
         else:
             fig = _render_2d_slices(
@@ -139,6 +148,7 @@ def plot_time_slices(
                 warnings,
                 diverged=diverged,
                 integration_result=integration_result,
+                no_pred_reason=no_pred_reason,
             )
 
     return fig, warnings
@@ -148,25 +158,26 @@ def _extract_pred(
     integration_result: IntegrationResult,
     true_shape: tuple[int, ...],
     warnings: list[str],
-) -> tuple[np.ndarray | None, bool]:
+) -> tuple[np.ndarray | None, bool, str | None]:
     if integration_result.predicted_field is None:
         msg = integration_result.warning or "Integration failed"
         warnings.append(msg)
-        return None, False
+        return None, False, msg
 
     pred = np.array(
         integration_result.predicted_field.detach().cpu().numpy(), dtype=np.float64
     )
 
     if pred.shape != true_shape:
-        warnings.append(f"Shape mismatch: true {true_shape} vs predicted {pred.shape}")
-        return None, False
+        msg = f"Shape mismatch: true {true_shape} vs predicted {pred.shape}"
+        warnings.append(msg)
+        return None, False, msg
 
     diverged = not integration_result.success
     if diverged:
         warnings.append(integration_result.warning or "Integration did not succeed")
 
-    return pred, diverged
+    return pred, diverged, None
 
 
 def _render_1d_slices(
@@ -183,6 +194,7 @@ def _render_1d_slices(
     *,
     diverged: bool = False,
     integration_result: IntegrationResult | None = None,
+    no_pred_reason: str | None = None,
 ) -> Figure:
     fig, axes_arr = plt.subplots(
         1,
@@ -224,7 +236,12 @@ def _render_1d_slices(
 
             note = _pred_range_note(pred_display, ylim)
         else:
-            _add_warning_text(ax, "No prediction")
+            assert (
+                no_pred_reason is not None
+            )
+            _add_warning_text(
+                ax, textwrap.fill(no_pred_reason, width=_WARNING_WRAP_WIDTH)
+            )
 
         title = (
             f"{time_axis} = {t_val:.3g}{div_tag}"
@@ -267,6 +284,7 @@ def _render_2d_slices(
     *,
     diverged: bool = False,
     integration_result: IntegrationResult | None = None,
+    no_pred_reason: str | None = None,
 ) -> Figure:
     n_rows = 2
     fig, axes_arr = plt.subplots(
@@ -318,22 +336,13 @@ def _render_2d_slices(
                 limits=limits,
             )
         else:
-            _warning_panel(axes_arr[1, col])
+            assert (
+                no_pred_reason is not None
+            )
+            _warning_panel(axes_arr[1, col], no_pred_reason)
 
     fig.tight_layout()
     return fig
-
-
-def _diverged_tag(
-    diverged: bool,
-    integration_result: IntegrationResult | None,
-    time_axis: str,
-) -> str:
-    if not diverged:
-        return ""
-    if integration_result is not None and integration_result.diverged_at_t is not None:
-        return f" (DIVERGED at {time_axis}={integration_result.diverged_at_t:.3g})"
-    return " (DIVERGED)"
 
 
 def _add_warning_text(ax: Axes, msg: str) -> None:
@@ -347,19 +356,3 @@ def _add_warning_text(ax: Axes, msg: str) -> None:
         fontsize=_WARNING_FONTSIZE,
         color="red",
     )
-
-
-def _warning_panel(ax: Axes, msg: str = "No prediction available") -> None:
-    wrapped = textwrap.fill(msg, width=_WARNING_WRAP_WIDTH)
-    ax.text(
-        0.5,
-        0.5,
-        wrapped,
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=_WARNING_FONTSIZE,
-        color="red",
-    )
-    ax.set_xticks([])
-    ax.set_yticks([])

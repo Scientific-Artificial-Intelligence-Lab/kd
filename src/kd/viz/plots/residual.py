@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import logging
-import math
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from kd.viz.plots._field_panels import _RESIDUAL_SIGN
+from kd.viz.plots._field_panels import (
+    _RESIDUAL_PERCENTILE,
+    _RESIDUAL_SIGN,
+    _colorbar_extend,
+    _range_note,
+    _resolve_shape,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -74,7 +79,7 @@ def _render_histogram(
         return
 
     abs_data = np.abs(data)
-    xlim = float(np.percentile(abs_data, 99))
+    xlim = float(np.percentile(abs_data, _RESIDUAL_PERCENTILE))
     if not np.isfinite(xlim) or xlim == 0.0:
         xlim = float(np.std(data)) or 1.0
 
@@ -134,9 +139,22 @@ def _render_spatial(
         return
 
 
+
+
+
+    slice_note = ""
     if reshaped.ndim > 2:
         from kd.viz.plots._dim_utils import _slice_nd_to_2d
 
+        dropped = [
+            f"axis-{i} @ {reshaped.shape[i] // 2}/{reshaped.shape[i]}"
+            for i in range(2, reshaped.ndim)
+        ]
+        slice_note = f" [mid-slice: {', '.join(dropped)}]"
+        warnings.append(
+            "Spatial residual heatmap shows only the (axis-0, axis-1) plane "
+            f"at the midpoint of the remaining axes ({', '.join(dropped)})"
+        )
         reshaped = _slice_nd_to_2d(reshaped, (0, 1))
 
     display = np.where(np.isfinite(reshaped), reshaped, np.nan)
@@ -146,7 +164,7 @@ def _render_spatial(
 
     finite_vals = display[np.isfinite(display)]
     if finite_vals.size > 0:
-        vmax = float(np.percentile(np.abs(finite_vals), 99))
+        vmax = float(np.percentile(np.abs(finite_vals), _RESIDUAL_PERCENTILE))
         if vmax == 0.0:
             vmax = 1.0
         vmin = -vmax
@@ -162,11 +180,26 @@ def _render_spatial(
         vmax=vmax,
         rasterized=True,
     )
-    ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
 
-    ax.set_title(f"Spatial Residual ({_RESIDUAL_SIGN})")
+    ax.figure.colorbar(
+        im,
+        ax=ax,
+        fraction=0.046,
+        pad=0.04,
+        extend=_colorbar_extend(display, vmin, vmax),
+    )
+
+
+
+
+
+
+    ax.set_title(
+        f"Spatial Residual ({_RESIDUAL_SIGN}){slice_note}"
+        + _range_note(display, (vmin, vmax))
+    )
 
 
 
@@ -174,38 +207,6 @@ def _render_spatial(
 
     ax.set_xlabel("axis-1 index")
     ax.set_ylabel("axis-0 index")
-
-
-def _resolve_shape(
-    data: np.ndarray,
-    field_shape: tuple[int, ...] | None,
-    warnings: list[str],
-    *,
-    infer_grid: bool = True,
-) -> tuple[int, ...] | None:
-    n = data.size
-
-    if field_shape is not None:
-        expected = 1
-        for s in field_shape:
-            expected *= s
-        if expected != n:
-            warnings.append(
-                f"field_shape {field_shape} (size {expected}) "
-                f"does not match data size {n}"
-            )
-            return None
-        if len(field_shape) < 2:
-            return None
-        return field_shape
-
-
-    if infer_grid:
-        sqrt_n = int(math.isqrt(n))
-        if sqrt_n * sqrt_n == n and sqrt_n > 1:
-            return (sqrt_n, sqrt_n)
-
-    return None
 
 
 def _empty_panel(ax: Axes, text: str, title: str) -> None:

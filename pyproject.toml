@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.5.0"
+version = "0.5.1"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -75,6 +75,16 @@ pysindy = [
 llm4ed = [
     "openai>=1.40",
 ]
+# langchain runtime is NOT a default dependency and is imported LAZILY
+# never need it. Install with ``uv sync --extra agent``.
+# NOT deepagents: its filesystem/sub-agent middleware is required scaffolding
+# that cannot be excluded, so it would add eight file tools (~2.4k tokens of
+# langchain-openai provides the OpenAI-compatible chat model kd's convention
+# targets (OPENAI_API_KEY / OPENAI_BASE_URL).
+agent = [
+    "langchain>=1.3,<2",
+    "langchain-openai>=1.0",
+]
 
 [dependency-groups]
 dev = [
@@ -90,6 +100,9 @@ dev = [
     # The EDL reference-oracle conftest imports tqdm at module load; without
     # it the fast tier drowns real failures in collection errors.
     "tqdm>=4.60",
+    "memray>=1.19.3",
+    "py-spy>=0.4.2",
+    "ipykernel>=7.3.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -154,6 +167,13 @@ warn_unused_ignores = false
 # to remain valid whether the untyped dependency is installed or absent.
 [[tool.mypy.overrides]]
 module = "pysindy.*"
+ignore_missing_imports = true
+
+# it inside build_agent / run_discovery, so environments without it (CI) must
+# not fail on those lazy imports. Where it IS installed these overrides are
+# inert and the real types are still checked.
+[[tool.mypy.overrides]]
+module = ["langchain.*", "langchain_core.*", "langgraph.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

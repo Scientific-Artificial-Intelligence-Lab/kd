@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
 
+from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.viz.equation_display import EquationDisplay, latex_display
 
 if TYPE_CHECKING:
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_JSON_INDENT = 2
 
 
 @dataclass
@@ -106,7 +106,7 @@ def _build_json_summary(result: ExperimentResult) -> str:
             arr = final_eval.get(key)
             if isinstance(arr, list) and len(arr) > 20:
                 final_eval[key] = f"[{len(arr)} elements]"
-    return json.dumps(data, indent=_JSON_INDENT, default=str)
+    return json.dumps(data, indent=JSON_INDENT_SPACES, default=str)
 
 
 def _best_expression_display(result: ExperimentResult) -> EquationDisplay:

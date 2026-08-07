@@ -40,13 +40,25 @@ dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
 model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
 model.fit(dataset)
 
-print(model.best_expr_)    # the discovered PDE
-print(model.best_score_)   # its AIC score
+print(model.best_expr_)    # u_t = -0.9863*mul(u_x, u) + 0.09955*diff_x(u_x)
+print(model.best_score_)   # -11.38 (AIC, lower is better)
 ```
+
+The printed expression is KD's canonical function-call notation (funcall IR): `mul(u_x, u)` is
+`u*u_x` and `diff_x(u_x)` is `u_xx`, so the discovered equation reads
+`u_t = -0.99*u*u_x + 0.0996*u_xx` — the Burgers equation recovered from data
+with fitted coefficients (ground truth: `u_t = -1*u*u_x + 0.1*u_xx`).
+The HTML report renders it in standard notation:
+
+<div align="center">
+<img src="docs/images/burgers_equation.png" width="480" alt="Discovered Burgers equation rendered in the HTML report"><br>
+<em>The discovered equation as rendered in the report (longer run on the
+bundled 256×201 Burgers benchmark).</em>
+</div>
 
 <div align="center">
 <img src="docs/images/burgers_field_comparison.png" width="760" alt="True vs predicted Burgers field"><br>
-<em>True vs predicted solution from the fit above (Burgers equation).</em>
+<em>True vs predicted solution (Burgers equation).</em>
 </div>
 
 See [`examples/`](examples/) for runnable scripts covering every engine,
@@ -132,10 +144,6 @@ breaking, reconstructed frame by frame from camera images in the wave-tank
 experiments of the EqGPT paper. KD bundles one of the paper's 12 experiments
 (case `N_G2Tp12A100_broad`) as scattered `(t, x, η)` points — a table rather
 than a gridded `PDEDataset`.
-[`examples/18_eqgpt_wave_breaking.py`](examples/18_eqgpt_wave_breaking.py)
-reproduces the paper's wave-breaking discovery with the EqGPT engine across
-all 12 experiments (the full multi-case assets are not vendored; the script
-header explains what to download and where to point it).
 
 **TLC-CC** — column-chromatography retention volumes measured on an
 automated platform (192 compounds, 4 g silica columns), aggregated to mean
@@ -278,7 +286,23 @@ print(report.report)         # path to report.html
 print(len(report.figures))   # number of figure files
 ```
 
-The report renders the discovered equation as a structure-only **expression
+The report bundles universal figures — the discovered equation rendered in
+LaTeX, search convergence, a parity plot, residual maps, True/Predicted field
+comparisons — plus the fitted engine's own diagnostics:
+
+<div align="center">
+<img src="docs/images/burgers_parity.png" width="560" alt="Parity plot: predicted vs actual u_t"><br>
+<em>Parity plot from the report: predicted vs actual <code>u_t</code> for the
+discovered Burgers equation (R² = 1.0000).</em>
+</div>
+
+<div align="center">
+<img src="docs/images/chafee_field_comparison.png" width="820" alt="Chafee-Infante true, predicted, and residual fields"><br>
+<em>True / Predicted / Residual panels from a Chafee-Infante fit
+(<code>u_t = u_xx - u + u^3</code> recovered by SGA).</em>
+</div>
+
+The report also renders the discovered equation as a structure-only **expression
 tree**, and (for the SGA engine) the raw **genome tree** of the best evolved
 individual, so you can see what the search actually produced versus the sparse
 equation it was distilled into:
@@ -303,7 +327,6 @@ src/kd/
 ├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
 ├── data/         # PDEDataset, synthetic generators, dataset loaders
 ├── search/       # sga / dlga / discover / eqgpt / llm4ed / pysr / pysindy
-│                 #   engines + configs
 ├── harness/      # batch experiment plans, evidence store, consensus reports
 ├── viz/          # VizEngine: HTML reports & figures
 └── inspect.py    # preview() dataset sanity checks

@@ -175,7 +175,7 @@ def components_for(dataset: PDEDataset | None = None) -> PlatformComponents:
         dataset=dataset if dataset is not None else heat_dataset(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=VizRecorder(),
     )

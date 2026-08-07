@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from kd.data.derivatives.finite_diff import UNIFORM_GRID_RTOL, is_uniform_grid
 from kd.data.loaders.csv_grid import read_grid_csv
 from kd.data.schema import AxisInfo, DataTopology, FieldData, PDEDataset, TaskType
 from kd.data.synthetic._loaders import _load_mat, _resolve_eqgpt_file
@@ -33,22 +34,18 @@ _BURGERS_2D_Y_KEY = "y"
 _BURGERS_2D_T_KEY = "t"
 _BURGERS_2D_GROUND_TRUTH = "u_t = -u*u_x - u*u_y + 0.01*u_xx + 0.01*u_yy"
 
-_UNIFORM_SPACING_RTOL = 1e-3
-
 
 def _validate_uniform_axis(
     coord: np.ndarray, axis_name: str, dataset_name: str
 ) -> None:
-    diffs = np.diff(coord)
-    if diffs.size == 0:
+    if np.diff(coord).size == 0:
         raise ValueError(
             f"{dataset_name} axis '{axis_name}' must contain at least two points"
         )
-    spacing = diffs.mean()
-    if not np.allclose(diffs, spacing, rtol=_UNIFORM_SPACING_RTOL, atol=0.0):
+    if not is_uniform_grid(coord, rtol=UNIFORM_GRID_RTOL):
         raise ValueError(
-            f"{dataset_name} axis '{axis_name}' is not uniformly spaced "
-            f"within rtol={_UNIFORM_SPACING_RTOL}"
+            f"{dataset_name} axis '{axis_name}' must be strictly increasing "
+            f"and uniformly spaced within rtol={UNIFORM_GRID_RTOL}"
         )
 
 

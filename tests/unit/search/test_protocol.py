@@ -339,7 +339,7 @@ def mock_components() -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
     )
 
@@ -740,7 +740,7 @@ class TestNegativeCases:
                 dataset=MagicMock(),
                 executor=MagicMock(),
                 evaluator=MagicMock(),
-                context=MagicMock(),
+                context=MagicMock(training_result=None),
                 registry=MagicMock(),
                 recorder=None,
                 solver=MagicMock(),
@@ -792,7 +792,7 @@ class TestPlatformComponentsRecorder:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         assert pc.recorder is None
@@ -806,7 +806,7 @@ class TestPlatformComponentsRecorder:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
             recorder=recorder,
         )
@@ -818,7 +818,7 @@ class TestPlatformComponentsRecorder:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
             recorder=None,
         )
@@ -831,7 +831,7 @@ class TestPlatformComponentsRecorder:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         assert pc.dataset is not None

@@ -66,3 +66,14 @@ These files are retained for benchmark coverage or future loader work.
 | Dataset id | File | Source | Equation / description | Shape / axes | Loader |
 | --- | --- | --- | --- | --- | --- |
 | `eqgpt-pde-compound` | `eqgpt_pde_compound.csv` | EqGPT `PDE_compound/PDE_compound.csv` | `u_t - 0.2*(u*u_x)_x = 0` | 200 x 200, `(x,t)` | none |
+
+## Referenced Third-Party Assets (Not Bundled)
+
+Assets a plugin resolves at runtime but that kd does not vendor under this
+directory (too large to bundle); each is distributed separately by its authors.
+
+| Asset | Source | Used by | Resolution |
+| --- | --- | --- | --- |
+| `PDEGPT_wave_breaking.pt` (~152 MB) | Pretrained GPT-proposer checkpoint from the EqGPT project (Xu, H. et al., [EqGPT](https://github.com/woshixuhao/EqGPT), *Nat Commun* **16**, 10255 (2025)); distributed separately by the authors | `kd.search.eqgpt.backend.RealGPTBackend` (the `eqgpt` search plugin); `examples/16_eqgpt.py` | Point `KD_EQGPT_ASSET_DIR` at a directory containing `gpt_model/PDEGPT_wave_breaking.pt`, or pass `weights_path=`/`asset_dir=` to `RealGPTBackend.from_assets` (see `resolve_asset_path` in the same module) |
+| `WaveBreaking.pkl` (~199 MB) | Wave-breaking laboratory experiments (23 cases, Imperial College London wave tank; Xu, H. et al. *Nat Commun* **16**, 10255 (2025)), distributed via HF `Spac1ly/KnowledgeDiscover` (pinned mirror `timeoutHao/KD-data`) | `kd.load_wave_breaking` / `kd.data.loaders.load_wave_breaking_cases` | Default path `<repo-root>/data/hf-knowledgediscover/WaveBreaking.pkl` (git-ignored); the loader error names the HF source when absent, or pass an explicit path |
+| Wave surrogate checkpoint tree | Per-case neural surrogates for the wave-breaking experiments, trained in the predecessor (the retired sibling checkout) | `kd.data.loaders.wave_breaking` surrogate path (`wave_surrogate_checkpoint_path`, `resolve_v1_wave_asset_dir`) | Config `v1_asset_dir` or the `KD_V1_WAVE_ASSETS` environment variable, else fail-loud |

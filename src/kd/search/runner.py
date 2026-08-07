@@ -13,6 +13,7 @@ from torch import Tensor
 
 from kd.core import safety_counters
 from kd.core.equation import (
+    DEFAULT_LHS_LABEL,
     HOMOGENEOUS_LHS_LABEL,
     Equation,
     Evolution,
@@ -23,7 +24,7 @@ from kd.core.equation import (
     render_lhs_label,
 )
 from kd.core.evaluator import EvaluationResult
-from kd.core.expr.naming import build_derivative_name, parse_derivative_name
+from kd.core.expr.naming import parse_derivative_name
 from kd.core.platform.requirements import DerivativeReqs, assert_dataset_supported
 from kd.data.schema import PDEDataset, compute_dataset_fingerprint
 from kd.search.callbacks import RunnerCallback, VizDataCollector
@@ -60,7 +61,6 @@ logger = logging.getLogger(__name__)
 
 
 
-_DEFAULT_LHS_LABEL = "u_t"
 
 
 
@@ -108,27 +108,6 @@ def _implements_member(algorithm: object, member: str) -> bool:
 
 
 _UNSET: Final = object()
-
-
-def _probe_optional(algorithm: object, member: str, default: object) -> object:
-    try:
-        return getattr(algorithm, member, default)
-    except Exception:
-        logger.warning(
-            "Optional cost telemetry %r raised; treating as unavailable",
-            member,
-            exc_info=True,
-        )
-        return default
-
-
-def _coerce_token_count(totals: object, key: str) -> int | None:
-    if not isinstance(totals, dict):
-        return None
-    value = totals.get(key)
-    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-        return value
-    return None
 
 
 class ExperimentRunner:
@@ -490,7 +469,7 @@ class ExperimentRunner:
 
 
 
-        raw_surrogate_seconds = _probe_optional(
+        raw_surrogate_seconds = getattr(
             self._algorithm, "surrogate_train_seconds", _UNSET
         )
         if raw_surrogate_seconds is _UNSET:
@@ -499,24 +478,19 @@ class ExperimentRunner:
                 "elapsed_seconds",
                 None,
             )
+        surrogate_seconds = cast("float | None", raw_surrogate_seconds)
 
 
 
 
 
-        surrogate_seconds = (
-            float(raw_surrogate_seconds)
-            if isinstance(raw_surrogate_seconds, (int, float))
-            and not isinstance(raw_surrogate_seconds, bool)
-            else None
+
+        token_totals = cast(
+            "dict[str, int] | None",
+            getattr(self._algorithm, "llm_token_totals", None),
         )
-
-
-
-
-        raw_token_totals = _probe_optional(self._algorithm, "llm_token_totals", None)
-        tokens_in = _coerce_token_count(raw_token_totals, "tokens_in")
-        tokens_out = _coerce_token_count(raw_token_totals, "tokens_out")
+        tokens_in = None if token_totals is None else token_totals["tokens_in"]
+        tokens_out = None if token_totals is None else token_totals["tokens_out"]
         cost = RunCost(
             wallclock_seconds=search_seconds + (preprocessing_seconds or 0.0),
             search_seconds=search_seconds,
@@ -741,12 +715,18 @@ class ExperimentRunner:
 
 
 
-
             lhs_order: int = getattr(dataset, "lhs_order", 1)
-            if lhs_order == 1:
-                return f"{lhs_field}_{lhs_axis}"
-            return build_derivative_name(lhs_field, lhs_axis, lhs_order)
-        return _DEFAULT_LHS_LABEL
+            return render_lhs_label(
+                LhsSpec(field=lhs_field, axis=lhs_axis, order=lhs_order)
+            )
+        logger.warning(
+            "Neither the algorithm (final_eval.lhs_name) nor the dataset "
+            "(lhs_field/lhs_axis) declared the regression target; defaulting "
+            "lhs_label to %r. Downstream plots and reports label the LHS with "
+            "this assumption.",
+            DEFAULT_LHS_LABEL,
+        )
+        return DEFAULT_LHS_LABEL
 
     def _invalid_final_eval(self, error_message: str) -> EvaluationResult:
 

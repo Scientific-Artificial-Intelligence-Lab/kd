@@ -1,12 +1,17 @@
 
-from kd.core.expr.canonicalizer import (
-    canonical_hash,
-    canonicalize,
-    canonicalize_code,
-)
 from kd.core.expr.executor import ExecutorResult, PythonExecutor, has_open_form_diff
 from kd.core.expr.registry import FunctionRegistry
-from kd.core.expr.simplify import expand_linear_diffs
+from kd.core.expr.sympy_bridge import (
+    FormattedEquation,
+    are_equivalent,
+    format_pde,
+    from_sympy,
+    symbolic_diff,
+    to_latex,
+    to_sympy,
+    to_unicode,
+)
+from kd.core.expr.term_key import structure_term_key
 from kd.core.expr.terms import split_terms
 from kd.core.expr.validator import (
     ALLOWED_NODES,
@@ -22,14 +27,20 @@ __all__ = [
     "validate_expr",
     "get_function_calls",
 
-    "canonicalize",
-    "canonicalize_code",
-    "canonical_hash",
 
     "PythonExecutor",
     "ExecutorResult",
     "has_open_form_diff",
-    "expand_linear_diffs",
 
     "split_terms",
+    "structure_term_key",
+
+    "FormattedEquation",
+    "are_equivalent",
+    "format_pde",
+    "from_sympy",
+    "symbolic_diff",
+    "to_latex",
+    "to_sympy",
+    "to_unicode",
 ]

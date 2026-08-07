@@ -48,6 +48,7 @@ class EvaluationResult:
     terms: list[str] | None = None
     expression: str = ""
     lhs_name: str | None = None
+    condition_number: float | None = None
     form: Form = Form.EVOLUTION
 
     def to_dict(self, *, include_residuals: bool = True) -> dict[str, Any]:
@@ -75,7 +76,20 @@ class EvaluationResult:
             "terms": self.terms,
             "expression": self.expression,
             "lhs_name": self.lhs_name,
+            "condition_number": (
+                sanitize_float(self.condition_number)
+                if self.condition_number is not None
+                else None
+            ),
+            "condition_number_computed": self.condition_number is not None,
         }
+
+
+
+
+
+
+
 
 
 
@@ -99,12 +113,15 @@ class Evaluator:
         penalty_value: float = 1e10,
         scorer: ScorerFn | None = None,
         enable_term_cache: bool = True,
+        *,
+        report_condition_number: bool = False,
     ) -> None:
         self._executor = executor
         self._solver = solver
         self._context = context
         self._lhs = lhs.detach()
         self._penalty_value = penalty_value
+        self._report_condition_number = report_condition_number
         self._term_cache: TermColumnCache | None = (
             TermColumnCache() if enable_term_cache else None
         )
@@ -340,6 +357,11 @@ class Evaluator:
             selected_indices=solve_result.selected_indices,
             residuals=(y_pred - self._lhs_flat).detach(),
             terms=list(valid_terms),
+            condition_number=(
+                solve_result.condition_number
+                if self._report_condition_number
+                else None
+            ),
         )
 
     def evaluate_expression(self, expr: str) -> EvaluationResult:

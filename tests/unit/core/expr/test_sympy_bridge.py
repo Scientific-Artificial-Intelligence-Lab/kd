@@ -846,3 +846,11 @@ class TestFromSympyHardFailures:
         x = sympy.Symbol("x")
         with pytest.raises(ValueError):
             from_sympy(x**x)
+
+
+class TestOneConstantColumn:
+
+    def test_one_folds_to_integer_in_display(self) -> None:
+        assert to_latex("one") == "1"
+        assert to_latex("mul(0.5, one)") == "0.5"
+        assert to_sympy("mul(2, one)") == sympy.Integer(2)

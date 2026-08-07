@@ -14,11 +14,8 @@ from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.figure import Figure
 
-from kd.core.evaluator import EvaluationResult
 from kd.core.integrator import IntegrationResult
 from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
-from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult
 from kd.viz.plots.time_slices import plot_time_slices
 
 
@@ -85,42 +82,6 @@ def _make_integration_result(
     return IntegrationResult(success=False, warning="Integration failed")
 
 
-def _make_experiment_result() -> ExperimentResult:
-    n = 50
-    actual = torch.randn(n)
-    predicted = actual + torch.randn(n) * 0.1
-    recorder = VizRecorder()
-    recorder.log("_best_score", 1.0)
-    recorder.log("_best_expr", "u")
-    recorder.log("_n_candidates", 10)
-    return ExperimentResult(
-        best_expression="u",
-        best_score=1.0,
-        iterations=1,
-        early_stopped=False,
-        final_eval=EvaluationResult(
-            mse=0.01,
-            nmse=0.005,
-            r2=0.95,
-            score=-100.0,
-            complexity=1,
-            coefficients=torch.tensor([1.0]),
-            is_valid=True,
-            error_message="",
-            selected_indices=[0],
-            residuals=predicted - actual,
-            terms=["u"],
-            expression="u",
-        ),
-        actual=actual,
-        predicted=predicted,
-        dataset_name="test",
-        algorithm_name="SGA",
-        config={},
-        recorder=recorder,
-    )
-
-
 _AMPLIFY = 100.0
 
 
@@ -144,8 +105,7 @@ class TestTimeSlicesSmoke:
     def test_callable_returns_tuple(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert isinstance(warnings, list)
@@ -155,15 +115,13 @@ class TestTimeSlicesSmoke:
     def test_accepts_style_kwarg(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, style={"font.size": 12})
+        fig, _ = plot_time_slices(ds, ir, style={"font.size": 12})
         plt.close(fig)
 
     def test_accepts_n_slices_kwarg(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=5)
+        fig, _ = plot_time_slices(ds, ir, n_slices=5)
         plt.close(fig)
 
 
@@ -179,9 +137,7 @@ class TestTimeSlicesHappyPath:
         custom_axis_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(custom_axis_dataset)
-        result = _make_experiment_result()
         fig, _ = plot_time_slices(
-            result,
             custom_axis_dataset,
             ir,
             n_slices=2,
@@ -198,8 +154,7 @@ class TestTimeSlicesHappyPath:
     def test_1d_produces_panels(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
 
             assert len(fig.get_axes()) >= 3
@@ -209,8 +164,7 @@ class TestTimeSlicesHappyPath:
     def test_2d_produces_panels(self) -> None:
         ds = _make_2d_dataset(nt=5)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             assert len(fig.get_axes()) >= 3
         finally:
@@ -221,20 +175,15 @@ class TestTimeSlicesHappyPath:
         rectangular_2d_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(rectangular_2d_dataset)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, rectangular_2d_dataset, ir, n_slices=3)
+        fig, _ = plot_time_slices(rectangular_2d_dataset, ir, n_slices=3)
         try:
             data_axes = [ax for ax in fig.get_axes() if ax.images]
             assert data_axes
             image = data_axes[0].images[0]
 
 
-            assert tuple(image.get_extent()) == pytest.approx(
-                (10.0, 14.0, -2.0, 3.0)
-            )
-            assert tuple(image.get_extent()) != pytest.approx(
-                (-0.5, 3.5, -0.5, 4.5)
-            )
+            assert tuple(image.get_extent()) == pytest.approx((10.0, 14.0, -2.0, 3.0))
+            assert tuple(image.get_extent()) != pytest.approx((-0.5, 3.5, -0.5, 4.5))
             assert {ax.get_xlabel() for ax in data_axes} == {"eta"}
             assert {ax.get_ylabel() for ax in data_axes} == {"xi"}
         finally:
@@ -243,10 +192,9 @@ class TestTimeSlicesHappyPath:
     def test_n_slices_affects_panel_count(self) -> None:
         ds = _make_1d_dataset(nt=20)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig2, _ = plot_time_slices(result, ds, ir, n_slices=2)
-        fig5, _ = plot_time_slices(result, ds, ir, n_slices=5)
+        fig2, _ = plot_time_slices(ds, ir, n_slices=2)
+        fig5, _ = plot_time_slices(ds, ir, n_slices=5)
         try:
             assert len(fig5.get_axes()) > len(fig2.get_axes())
         finally:
@@ -256,8 +204,7 @@ class TestTimeSlicesHappyPath:
     def test_panels_have_titles(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             non_empty = [t for t in titles if t]
@@ -276,8 +223,7 @@ class TestTimeSlicesEdgeCases:
     def test_failed_integration_no_crash(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds, success=False)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert len(warnings) > 0
@@ -287,8 +233,7 @@ class TestTimeSlicesEdgeCases:
     def test_single_time_step(self) -> None:
         ds = _make_1d_dataset(nx=10, nt=1)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -297,8 +242,7 @@ class TestTimeSlicesEdgeCases:
     def test_n_slices_larger_than_nt(self) -> None:
         ds = _make_1d_dataset(nt=2)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=10)
+        fig, _ = plot_time_slices(ds, ir, n_slices=10)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -313,8 +257,7 @@ class TestTimeSlicesEdgeCases:
             warning="Diverged at t=0.5",
             diverged_at_t=0.5,
         )
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -323,9 +266,8 @@ class TestTimeSlicesEdgeCases:
     def test_no_figure_leak(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
         figs_before = len(plt.get_fignums())
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         plt.close(fig)
         figs_after = len(plt.get_fignums())
         assert figs_after <= figs_before
@@ -372,8 +314,7 @@ class TestTimeSlicesAxisOrderNone:
         ds = _make_ode_dataset_no_axis_order()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -385,8 +326,7 @@ class TestTimeSlicesAxisOrderNone:
         ds = _make_ode_dataset_no_axis_order()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -395,8 +335,7 @@ class TestTimeSlicesAxisOrderNone:
     def test_axis_order_none_failed_integration(self) -> None:
         ds = _make_ode_dataset_no_axis_order()
         ir = IntegrationResult(success=False, warning="Integration failed")
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -409,8 +348,7 @@ class TestTimeSlicesNSpatialZero:
         ds = _make_ode_dataset_n_spatial_0()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -422,8 +360,7 @@ class TestTimeSlicesNSpatialZero:
         ds = _make_ode_dataset_n_spatial_0()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -432,8 +369,7 @@ class TestTimeSlicesNSpatialZero:
     def test_n_spatial_zero_failed_integration(self) -> None:
         ds = _make_ode_dataset_n_spatial_0()
         ir = IntegrationResult(success=False, warning="Integration failed")
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir)
+        fig, warnings = plot_time_slices(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -456,8 +392,7 @@ class TestTimeSlicesDivergedTitle:
             warning="Diverged at t=0.5",
             diverged_at_t=0.5,
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             all_titles = " ".join(titles)
@@ -476,8 +411,7 @@ class TestTimeSlicesDivergedTitle:
             warning="Diverged at t=0.3",
             diverged_at_t=0.3,
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             all_titles = " ".join(titles)
@@ -496,8 +430,7 @@ class TestTimeSlicesDivergedTitle:
             warning="Integration did not succeed",
             diverged_at_t=None,
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             all_titles = " ".join(titles)
@@ -510,8 +443,7 @@ class TestTimeSlicesDivergedTitle:
     def test_non_diverged_no_diverged_tag(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds, success=True)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir)
+        fig, _ = plot_time_slices(ds, ir)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             all_titles = " ".join(titles)
@@ -532,8 +464,7 @@ class TestTimeSlicesNormalRegression:
     def test_1d_normal_dataset_unchanged(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, warnings = plot_time_slices(ds, ir, n_slices=3)
         try:
             assert isinstance(fig, Figure)
             assert len(fig.get_axes()) >= 3
@@ -550,8 +481,7 @@ class TestTimeSlicesNormalRegression:
     def test_2d_normal_dataset_unchanged(self) -> None:
         ds = _make_2d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, warnings = plot_time_slices(ds, ir, n_slices=3)
         try:
             assert isinstance(fig, Figure)
             assert len(fig.get_axes()) >= 3
@@ -571,8 +501,7 @@ class TestTimeSlicesColorScale:
         ir = IntegrationResult(
             success=True, predicted_field=ds.get_field("u") * _AMPLIFY
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             field_axes = _panels(fig, "True") + _panels(fig, "Predicted")
             assert field_axes
@@ -585,8 +514,7 @@ class TestTimeSlicesColorScale:
     def test_snapshots_share_one_scale_so_amplitude_decay_stays_visible(self) -> None:
         ds = _make_2d_dataset(nt=5)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             true_axes = _panels(fig, "True")
             assert len(true_axes) > 1
@@ -604,8 +532,7 @@ class TestTimeSlicesColorScale:
         ir = IntegrationResult(
             success=True, predicted_field=ds.get_field("u") * _AMPLIFY
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             pred_axes = _panels(fig, "Predicted")
             assert pred_axes
@@ -618,8 +545,7 @@ class TestTimeSlicesColorScale:
     def test_failed_integration_still_leaves_true_panels_scaled(self) -> None:
         ds = _make_2d_dataset(nt=5)
         ir = _make_integration_result(ds, success=False)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             true_axes = _panels(fig, "True")
             assert true_axes
@@ -635,8 +561,7 @@ class TestTimeSlices1DYScale:
     def test_columns_share_one_ylim_so_amplitude_decay_stays_visible(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             panels = [ax for ax in fig.get_axes() if ax.lines]
             assert len(panels) > 1
@@ -651,14 +576,11 @@ class TestTimeSlices1DYScale:
 
     def test_constant_true_field_does_not_shrink_the_prediction_away(self) -> None:
         ds = _make_1d_dataset(nt=10)
-        ds.fields["u"] = FieldData(
-            name="u", values=torch.zeros_like(ds.get_field("u"))
-        )
+        ds.fields["u"] = FieldData(name="u", values=torch.zeros_like(ds.get_field("u")))
         x = ds.get_coords("x")
         pred = (0.05 * torch.sin(x)).unsqueeze(1).expand_as(ds.get_field("u"))
         ir = IntegrationResult(success=True, predicted_field=pred.contiguous())
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             panels = [ax for ax in fig.get_axes() if ax.lines]
             assert panels
@@ -673,8 +595,7 @@ class TestTimeSlices1DYScale:
     def test_prediction_inside_the_margin_is_not_called_clipped(self) -> None:
         ds = _make_1d_dataset(nt=10)
         ir = IntegrationResult(success=True, predicted_field=ds.get_field("u") * 1.02)
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             panels = [ax for ax in fig.get_axes() if ax.lines]
             assert panels
@@ -687,13 +608,55 @@ class TestTimeSlices1DYScale:
         ir = IntegrationResult(
             success=True, predicted_field=ds.get_field("u") * _AMPLIFY
         )
-        result = _make_experiment_result()
-        fig, _ = plot_time_slices(result, ds, ir, n_slices=3)
+        fig, _ = plot_time_slices(ds, ir, n_slices=3)
         try:
             panels = [ax for ax in fig.get_axes() if ax.lines]
             assert panels
             for ax in panels:
                 assert "Predicted" in ax.get_title()
                 assert "clipped" in ax.get_title()
+        finally:
+            plt.close(fig)
+
+
+class TestNoPredictionReason:
+
+    def test_2d_missing_prediction_panel_carries_reason_and_title(
+        self, custom_axis_2d_dataset: PDEDataset
+    ) -> None:
+        reason = "Unsupported function calls in RHS expression: ['diff_x']"
+        ir = IntegrationResult(success=False, warning=reason)
+        fig, warnings = plot_time_slices(custom_axis_2d_dataset, ir)
+        try:
+            texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+            assert any("diff_x" in t for t in texts)
+            assert any(ax.get_title() == "Predicted" for ax in fig.axes)
+            assert any("diff_x" in w for w in warnings)
+        finally:
+            plt.close(fig)
+
+    def test_1d_missing_prediction_carries_reason(
+        self, custom_axis_dataset: PDEDataset
+    ) -> None:
+        reason = "Unsupported function calls in RHS expression: ['diff_x']"
+        ir = IntegrationResult(success=False, warning=reason)
+        fig, _warnings = plot_time_slices(custom_axis_dataset, ir)
+        try:
+            texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+            assert any("diff_x" in t for t in texts)
+        finally:
+            plt.close(fig)
+
+    def test_shape_mismatch_is_not_reported_as_integration_failure(
+        self, custom_axis_dataset: PDEDataset
+    ) -> None:
+        wrong_shape = torch.zeros(3, 3)
+        ir = IntegrationResult(success=True, predicted_field=wrong_shape)
+        fig, warnings = plot_time_slices(custom_axis_dataset, ir)
+        try:
+            texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+            assert any("Shape mismatch" in t for t in texts)
+            assert not any("Integration failed" in t for t in texts)
+            assert any("Shape mismatch" in w for w in warnings)
         finally:
             plt.close(fig)

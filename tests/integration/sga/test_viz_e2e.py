@@ -30,7 +30,8 @@ _MIN_RENDERED_SVG_BYTES = 2000
 def _populated_plugin() -> SGAPlugin:
     recorder = VizRecorder(enabled=True)
     for i in range(_N_GENS):
-        recorder.log("gen_mean_aic", float("inf") if i == 0 else 100.0 - 10.0 * i)
+        recorder.log("pop_mean_aic", float("inf") if i == 0 else 100.0 - 10.0 * i)
+        recorder.log("gen_mean_aic", float("inf") if i == 0 else 130.0 - 10.0 * i)
         recorder.log("n_unique", 20 - i)
         recorder.log("gen_mean_complexity", 1.0 + 0.5 * i)
         recorder.log("gen_best_aic", float("inf") if i == 0 else 80.0 - 8.0 * i)
@@ -168,7 +169,7 @@ def test_sga_tree_plots_render_via_engine(tmp_path: Path) -> None:
 def test_sga_recorder_whitelist_covers_plotted_metrics() -> None:
     from kd.search.sga.plugin import _LOGGED_METRICS
 
-    plotted = {"n_unique", "gen_mean_complexity", "gen_mean_aic"}
+    plotted = {"n_unique", "gen_mean_complexity", "pop_mean_aic"}
     assert plotted <= set(_LOGGED_METRICS), (
         f"plotted metrics must be a subset of the whitelist; "
         f"stray={plotted - set(_LOGGED_METRICS)}"
@@ -188,8 +189,8 @@ def test_sga_recorder_has_whitelist_fields() -> None:
 
 
     assert recorder_keys == per_gen_expected, (
-        f"a GA-only recorder must carry exactly the 6 whitelist fields + legacy "
-        f"'best_aic' (7 keys; surrogate keys are absent without training); "
+        f"a GA-only recorder must carry exactly the 7 whitelist fields + legacy "
+        f"'best_aic' (8 keys; surrogate keys are absent without training); "
         f"symmetric-difference={per_gen_expected ^ recorder_keys}"
     )
     assert recorder_keys.isdisjoint(_SURROGATE_METRICS), (

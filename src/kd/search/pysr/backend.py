@@ -50,8 +50,9 @@ class _PySRRegressorBackend:
             from pysr import PySRRegressor
         except ImportError as e:
             raise RuntimeError(
-                "Model(algorithm='pysr') 需要 pysr + Julia。"
-                f"pip install kd[pysr]. 原始错误: {e}"
+                "Model(algorithm='pysr') requires the optional dependency "
+                "`pysr` (which bundles a Julia runtime); install it with "
+                f"`uv sync --extra pysr`. Original error: {e}"
             ) from e
         cfg = self._config
         kwargs: dict[str, Any] = {

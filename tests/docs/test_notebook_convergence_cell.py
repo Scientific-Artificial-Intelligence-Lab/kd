@@ -11,11 +11,24 @@ _NOTEBOOK = _REPO_ROOT / "examples" / "notebooks" / "getting_started.ipynb"
 
 
 
-_RECORDER_CALL_RE = re.compile(r"""recorder\.get\(\s*["']_best_score["']""")
+_PRIVATE_KEY = "_best_score"
+
+
+_FACADE_IMPORT_RE = re.compile(
+    r"from\s+kd\.viz\.plots\s+import\s+[^\n]*\bplot_convergence\b"
+)
+
+_PLOT_CALL_RE = re.compile(r"\bplot_convergence\(")
 
 
 def _load_notebook() -> dict[str, object]:
     return json.loads(_NOTEBOOK.read_text(encoding="utf-8"))
+
+
+def _cell_sources(nb: dict[str, object]) -> list[str]:
+    cells = nb["cells"]
+    assert isinstance(cells, list)
+    return ["".join(cell.get("source", [])) for cell in cells]
 
 
 def _convergence_cell(nb: dict[str, object]) -> dict[str, object]:
@@ -41,11 +54,26 @@ def _has_image_output(cell: dict[str, object]) -> bool:
     return False
 
 
-def test_convergence_cell_reads_recorder_best_score() -> None:
+def test_convergence_cell_calls_public_plot_convergence() -> None:
     source = "".join(_convergence_cell(_load_notebook()).get("source", []))
-    assert _RECORDER_CALL_RE.search(source), (
-        'convergence cell must call recorder.get("_best_score") to read the '
-        "score series, got:\n" + source
+    assert _FACADE_IMPORT_RE.search(source), (
+        "convergence cell must import plot_convergence from kd.viz.plots "
+        "(the sanctioned single-plot facade), got:\n" + source
+    )
+    assert _PLOT_CALL_RE.search(source), (
+        "convergence cell must actually call plot_convergence(...), not merely "
+        "import it, got:\n" + source
+    )
+
+
+def test_notebook_never_names_private_best_score_key() -> None:
+    offenders = [
+        source for source in _cell_sources(_load_notebook()) if _PRIVATE_KEY in source
+    ]
+    assert not offenders, (
+        f"notebook must not name the private recorder key {_PRIVATE_KEY!r}; "
+        "read the series through kd.viz.plots.plot_convergence instead. "
+        "Offending cells:\n" + "\n---\n".join(offenders)
     )
 
 
@@ -53,7 +81,7 @@ def test_convergence_cell_drops_ad_hoc_probe() -> None:
     source = "".join(_convergence_cell(_load_notebook()).get("source", []))
     assert "_find_score_history" not in source, (
         "convergence cell must not probe ad-hoc attribute names via "
-        "_find_score_history; read the recorder instead."
+        "_find_score_history; call plot_convergence instead."
     )
 
 

@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.docs.test_docs_quickstart_sync import CANONICAL_EXPR
 
-
-
-CANONICAL_EXPR = "u_t = -1*mul(u_x, u) + 0.1002*diff2_x(u)"
 EXPECTED_BEST_SCORE = -28.776750720652373
 
 

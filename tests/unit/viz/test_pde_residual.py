@@ -394,6 +394,85 @@ class TestPdeResidualSilentFallbackWarning:
 
 
 
+class TestPdeResidualGuessedGridDisclosure:
+
+    def test_square_guess_discloses_shape_and_remedy(self) -> None:
+        result = _make_result(n_samples=16)
+        fig, warnings = plot_pde_residual_field(result, field_shape=None)
+        try:
+            assert any("(4, 4)" in w for w in warnings), (
+                f"guessed shape not disclosed: {warnings}"
+            )
+            assert any("field_shape" in w for w in warnings), (
+                f"remedy not disclosed: {warnings}"
+            )
+        finally:
+            plt.close(fig)
+
+
+
+
+
+
+
+class TestPdeResidualDegradeDisclosure:
+
+    def test_one_dimensional_field_shape_warns_and_falls_back_to_lines(self) -> None:
+        result = _make_result(n_samples=48)
+        fig, warnings = plot_pde_residual_field(result, field_shape=(48,))
+        try:
+            assert any("fewer than 2 dimensions" in w for w in warnings), (
+                f"<2-D degrade not disclosed: {warnings}"
+            )
+            axes = fig.get_axes()
+            assert len(axes) == 3
+            assert all(ax.lines for ax in axes), "expected the 1D line fallback"
+            assert all(not ax.images for ax in axes)
+        finally:
+            plt.close(fig)
+
+    def test_infer_grid_false_suppresses_square_guess(self) -> None:
+        result = _make_result(n_samples=16)
+        fig, warnings = plot_pde_residual_field(
+            result, field_shape=None, infer_grid=False
+        )
+        try:
+            assert warnings == []
+            assert all(ax.lines for ax in fig.get_axes())
+            assert all(not ax.images for ax in fig.get_axes())
+        finally:
+            plt.close(fig)
+
+    def test_scattered_dataset_discloses_and_falls_back_to_lines(self) -> None:
+        n = 48
+        ds = PDEDataset.from_scatter(
+            coords={
+                "t": torch.rand(n, dtype=torch.float64),
+                "x": torch.rand(n, dtype=torch.float64),
+            },
+            fields={"u": torch.randn(n, dtype=torch.float64)},
+            lhs="u_t",
+            name="scatter_entry",
+        )
+        result = _make_result(n_samples=n)
+        fig, warnings = plot_pde_residual_field(result, dataset=ds, field_shape=None)
+        try:
+            assert any("fewer than 2 dimensions" in w for w in warnings), (
+                f"scatter degrade not disclosed: {warnings}"
+            )
+            axes = fig.get_axes()
+            assert len(axes) == 3
+            assert all(ax.lines for ax in axes), "expected the 1D line fallback"
+            assert all(not ax.images for ax in axes)
+        finally:
+            plt.close(fig)
+
+
+
+
+
+
+
 class TestPdeResidualColorScale:
 
     def test_1d_axis_aware_shares_clim_with_colorbars(self) -> None:

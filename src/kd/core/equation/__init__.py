@@ -19,6 +19,7 @@ from kd.core.equation.lowering import (
 )
 from kd.core.equation.projection import active_law
 from kd.core.equation.rendering import (
+    DEFAULT_LHS_LABEL,
     HOMOGENEOUS_LHS_LABEL,
     render_homogeneous_label,
     render_lhs_label,
@@ -51,6 +52,7 @@ from kd.core.equation.types import (
 
 __all__ = [
     "CATALOG_FINGERPRINT_DOMAIN",
+    "DEFAULT_LHS_LABEL",
     "Equation",
     "EquationAttrs",
     "Evolution",

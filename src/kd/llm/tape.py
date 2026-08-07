@@ -31,7 +31,7 @@ def request_hash(request: LLMRequest) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _request_to_json(request: LLMRequest) -> dict[str, Any]:
+def request_to_json(request: LLMRequest) -> dict[str, Any]:
     return {
         "prompt": request.prompt,
         "params": {
@@ -42,7 +42,7 @@ def _request_to_json(request: LLMRequest) -> dict[str, Any]:
     }
 
 
-def _request_from_json(data: dict[str, Any]) -> LLMRequest:
+def request_from_json(data: dict[str, Any]) -> LLMRequest:
     params = data["params"]
     return LLMRequest(
         prompt=data["prompt"],
@@ -54,7 +54,7 @@ def _request_from_json(data: dict[str, Any]) -> LLMRequest:
     )
 
 
-def _usage_to_json(usage: LLMUsage) -> dict[str, int | None]:
+def usage_to_json(usage: LLMUsage) -> dict[str, int | None]:
     return {
         "prompt_tokens": usage.prompt_tokens,
         "completion_tokens": usage.completion_tokens,
@@ -62,19 +62,19 @@ def _usage_to_json(usage: LLMUsage) -> dict[str, int | None]:
     }
 
 
-def _response_to_json(response: LLMResponse) -> dict[str, Any]:
+def response_to_json(response: LLMResponse) -> dict[str, Any]:
     return {
         "text": response.text,
         "model": response.model,
         "usage": (
             None
             if response.usage is None
-            else _usage_to_json(response.usage)
+            else usage_to_json(response.usage)
         ),
     }
 
 
-def _response_from_json(data: dict[str, Any]) -> LLMResponse:
+def response_from_json(data: dict[str, Any]) -> LLMResponse:
     usage_data = data.get("usage")
     usage = (
         None
@@ -88,7 +88,7 @@ def _response_from_json(data: dict[str, Any]) -> LLMResponse:
     return LLMResponse(text=data["text"], model=data["model"], usage=usage)
 
 
-def _load_entries(path: Path) -> list[dict[str, Any]]:
+def load_tape_entries(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise LLMTapeMismatchError(f"LLM tape file not found: {path}")
     entries: list[dict[str, Any]] = []
@@ -119,8 +119,8 @@ class TapeRecordingProvider:
         response = self._inner.complete(request)
         entry = {
             "kind": "llm_call",
-            "request": _request_to_json(request),
-            "response": _response_to_json(response),
+            "request": request_to_json(request),
+            "response": response_to_json(response),
         }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as handle:
@@ -146,7 +146,7 @@ class TapeReplayProvider:
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         if self._entries is None:
-            self._entries = _load_entries(self._path)
+            self._entries = load_tape_entries(self._path)
         entries = self._entries
         if self._position >= len(entries):
             raise LLMTapeMismatchError(
@@ -158,11 +158,11 @@ class TapeReplayProvider:
             raise LLMTapeMismatchError(
                 f"LLM tape entry at position {self._position} is not an llm_call"
             )
-        recorded_request = _request_from_json(entry["request"])
+        recorded_request = request_from_json(entry["request"])
         if request_hash(request) != request_hash(recorded_request):
             raise LLMTapeMismatchError(
                 f"LLM tape request mismatch at position {self._position}"
             )
 
         self._position += 1
-        return _response_from_json(entry["response"])
+        return response_from_json(entry["response"])

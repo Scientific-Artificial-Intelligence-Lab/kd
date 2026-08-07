@@ -297,10 +297,10 @@ def _find_line_in_band(ax: Axes, low: float, high: float) -> object | None:
 
 
 @pytest.mark.unit
-def test_render_surrogate_training_returns_none(ax: Axes) -> None:
+def test_render_surrogate_training_returns_empty_warnings(ax: Axes) -> None:
     recorder = _recorder_with_surrogate_curve()
     result = sga_viz.render(_NEW_PLOT_NAME, ax, recorder)
-    assert result is None, f"render must return None; got {type(result).__name__}."
+    assert result == [], f"clean render must return no warnings; got {result!r}."
 
 
 @pytest.mark.unit
@@ -454,7 +454,9 @@ def test_render_surrogate_training_length_mismatch_does_not_raise(ax: Axes) -> N
             f"render must not raise on a length-drifted surrogate recorder; got "
             f"{type(exc).__name__}: {exc!r}."
         )
-    assert result is None, "render must still honor the Tier-1 None contract"
+
+
+    assert any("drifted recorder" in note for note in result), result
 
 
 @pytest.mark.unit

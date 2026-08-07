@@ -108,10 +108,13 @@ class PlatformBuilder:
         dataset: PDEDataset,
         reqs: DerivativeReqs,
         device: str | None = None,
+        *,
+        compute_condition_number: bool = False,
     ) -> None:
         self._dataset = dataset
         self._reqs = reqs
         self._device: torch.device | None = _resolve_device(device)
+        self._compute_condition_number = compute_condition_number
 
 
 
@@ -232,7 +235,9 @@ class PlatformBuilder:
                 "homogeneous (lhs_order=0) dataset; use a provider_kind='none' "
                 "plugin-private homogeneous path."
             )
-        solver = LeastSquaresSolver()
+        solver = LeastSquaresSolver(
+            compute_condition_number=self._compute_condition_number
+        )
         lhs = (
             provider.get_derivative(
                 dataset.lhs_field,
@@ -251,6 +256,7 @@ class PlatformBuilder:
             solver=solver,
             context=context,
             lhs=lhs,
+            report_condition_number=self._compute_condition_number,
         )
 
 

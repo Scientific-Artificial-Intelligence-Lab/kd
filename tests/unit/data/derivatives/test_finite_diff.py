@@ -1279,3 +1279,19 @@ class TestProviderFloat32:
         u_t = provider.get_derivative("u", "t", order=1)
         assert u_x.shape == ds.get_shape()
         assert u_t.shape == ds.get_shape()
+
+
+class TestOrderCeilingSingleSource:
+
+    @pytest.mark.unit
+    def test_consumer_aliases_track_max_supported_order(self) -> None:
+
+
+        from kd._evaluate_classify import _FD_MAX_ORDER
+        from kd.core.integrator import _MAX_STENCIL_ORDER
+        from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
+        from kd.harness.consensus_verify import _DEFAULT_MAX_ATOMIC_ORDER
+
+        assert _MAX_STENCIL_ORDER == MAX_SUPPORTED_ORDER
+        assert _FD_MAX_ORDER == MAX_SUPPORTED_ORDER
+        assert _DEFAULT_MAX_ATOMIC_ORDER == MAX_SUPPORTED_ORDER

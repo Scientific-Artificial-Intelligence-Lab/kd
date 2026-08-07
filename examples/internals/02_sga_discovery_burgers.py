@@ -1,4 +1,32 @@
+#!/usr/bin/env python3
+"""Example 02: End-to-end SGA discovery on 1D Burgers + visualization.
 
+What this demonstrates
+----------------------
+1. Build a `PDEDataset` (synthetic Burgers data with known ground truth).
+2. Wire `PlatformComponents` (executor, evaluator, derivative provider).
+3. Run `SGAPlugin` through `ExperimentRunner` for N generations.
+4. Inspect `ExperimentResult`: best expression, AIC, selected coefficients.
+5. Render a full HTML report via `VizEngine` (5+ figures, auto-saved).
+
+Equation
+--------
+Burgers: u_t = -u * u_x + nu * u_xx (here nu = 0.1)
+
+Expected outcome
+----------------
+On a clean 128x64 grid with 80 generations and population=15, SGA typically
+finds a best expression containing both ``u * u_x`` (advection) and
+``u_xx`` (diffusion) with effective coefficients close to (-1, +0.1).
+Best AIC typically reaches negative double digits (concrete value depends
+on seed, ``aic_ratio``, and tree size). Run-to-run variance is normal —
+try a few seeds before drawing conclusions.
+
+Usage
+-----
+    python examples/internals/02_sga_discovery_burgers.py
+    open examples/out/burgers/report.html
+"""
 
 from __future__ import annotations
 
@@ -20,9 +48,7 @@ logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(mes
 logger = logging.getLogger("examples.02")
 logger.setLevel(logging.INFO)
 
-
-
-
+# Tunables (all small enough for ~1 minute on CPU)
 NX, NT = 128, 64
 NU = 0.1
 SEED = 42
@@ -32,6 +58,7 @@ OUT_DIR = Path(__file__).parent / "out" / "burgers"
 
 
 def build_components(dataset) -> PlatformComponents:
+    """Wire up the standard FD-based platform stack for a PDE dataset."""
     provider = FiniteDiffProvider(dataset, max_order=2)
     context = ExecutionContext(dataset=dataset, derivative_provider=provider)
     registry = FunctionRegistry.create_default()
@@ -77,7 +104,7 @@ def main() -> None:
     )
     result = runner.run(components)
 
-
+    # ---- Inspect result ---------------------------------------------------
     logger.info("--- Result ---")
     logger.info("Best expression: %s", result.best_expression)
     logger.info("Best AIC: %.4f", result.best_score)
@@ -94,7 +121,7 @@ def main() -> None:
     if final.selected_indices is not None:
         logger.info("Selected idx: %s", final.selected_indices)
 
-
+    # ---- Render visualization ---------------------------------------------
     logger.info("Rendering HTML report to %s", OUT_DIR)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     viz = VizEngine(output_dir=OUT_DIR)

@@ -24,6 +24,7 @@ from kd.core.expr.registry import FunctionRegistry
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.derivatives.finite_diff import (
     DX_ZERO_FLOOR,
+    MAX_SUPPORTED_ORDER,
     UNIFORM_GRID_RTOL,
     FiniteDiffProvider,
     is_uniform_grid,
@@ -36,7 +37,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_METHOD = "Radau"
 
 
-_MAX_STENCIL_ORDER = 3
+
+_MAX_STENCIL_ORDER = MAX_SUPPORTED_ORDER
 
 
 

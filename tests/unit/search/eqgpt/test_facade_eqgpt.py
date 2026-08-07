@@ -29,8 +29,8 @@ _skip_no_pretrained_assets = pytest.mark.skipif(
     not _pretrained_assets_available(),
     reason=(
         "pretrained EqGPT weights absent; the facade default path resolves them "
-        "via resolve_asset_path() (repo-root ref_libs fallback or "
-        "$KD_EQGPT_ASSET_DIR). Set KD_EQGPT_ASSET_DIR to run this e2e."
+        "via resolve_asset_path(), which reads $KD_EQGPT_ASSET_DIR. Set "
+        "KD_EQGPT_ASSET_DIR to run this e2e."
     ),
 )
 

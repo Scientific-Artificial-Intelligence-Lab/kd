@@ -10,11 +10,8 @@ matplotlib.use("Agg")
 
 from matplotlib.animation import FuncAnimation
 
-from kd.core.evaluator import EvaluationResult
 from kd.core.integrator import IntegrationResult
 from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
-from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult
 from kd.viz.plots._dim_utils import _pick_animation_frames
 from kd.viz.plots.animation import plot_field_animation
 
@@ -34,41 +31,6 @@ def _make_1d_dataset(nx: int = 8, nt: int = 5) -> PDEDataset:
         fields={"u": FieldData(name="u", values=u)},
         lhs_field="u",
         lhs_axis="t",
-    )
-
-
-def _make_experiment_result() -> ExperimentResult:
-    actual = torch.linspace(0.0, 1.0, 8)
-    predicted = actual.clone()
-    recorder = VizRecorder()
-    recorder.log("_best_score", 1.0)
-    recorder.log("_best_expr", "u")
-    recorder.log("_n_candidates", 1)
-    return ExperimentResult(
-        best_expression="u",
-        best_score=1.0,
-        iterations=1,
-        early_stopped=False,
-        final_eval=EvaluationResult(
-            mse=0.0,
-            nmse=0.0,
-            r2=1.0,
-            score=0.0,
-            complexity=1,
-            coefficients=torch.tensor([1.0]),
-            is_valid=True,
-            error_message="",
-            selected_indices=[0],
-            residuals=predicted - actual,
-            terms=["u"],
-            expression="u",
-        ),
-        actual=actual,
-        predicted=predicted,
-        dataset_name="test",
-        algorithm_name="SGA",
-        config={},
-        recorder=recorder,
     )
 
 
@@ -92,17 +54,19 @@ def test_plot_field_animation_frame_count_extent_and_fixed_norm(
 ) -> None:
     true_field = rectangular_2d_dataset.get_field("u")
     ir = IntegrationResult(success=True, predicted_field=true_field * 2.0)
-    result = _make_experiment_result()
 
     anim, warnings = plot_field_animation(
-        result,
         rectangular_2d_dataset,
         ir,
         max_frames=4,
         fps=5,
     )
     try:
-        assert warnings == []
+
+
+        assert len(warnings) == 1
+        assert "4 of 6" in warnings[0]
+        assert "4 of 6" in anim._fig.get_suptitle()
         assert isinstance(anim, FuncAnimation)
         assert list(anim.new_frame_seq()) == _pick_animation_frames(6, 4)
         data_axes = [ax for ax in anim._fig.axes if ax.images]
@@ -122,9 +86,8 @@ def test_plot_field_animation_frame_count_extent_and_fixed_norm(
 def test_plot_field_animation_skips_non_2d_dataset() -> None:
     ds = _make_1d_dataset()
     ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
-    result = _make_experiment_result()
 
-    anim, warnings = plot_field_animation(result, ds, ir)
+    anim, warnings = plot_field_animation(ds, ir)
 
     assert anim is None
     assert any("2D" in warning or "2 spatial" in warning for warning in warnings)
@@ -138,14 +101,35 @@ def test_plot_field_animation_success_false_renders_true_only(
         predicted_field=rectangular_2d_dataset.get_field("u"),
         warning="Integration failed",
     )
-    result = _make_experiment_result()
 
-    anim, warnings = plot_field_animation(result, rectangular_2d_dataset, ir)
+    anim, warnings = plot_field_animation(rectangular_2d_dataset, ir)
     try:
         assert isinstance(anim, FuncAnimation)
         assert any("Integration failed" in warning for warning in warnings)
         data_axes = [ax for ax in anim._fig.axes if ax.images]
         assert len(data_axes) == 1
         assert "Predicted" not in " ".join(ax.get_title() for ax in data_axes)
+    finally:
+        _close_animation(anim)
+
+
+def test_plot_field_animation_color_scale_is_truth_referenced(
+    rectangular_2d_dataset: PDEDataset,
+) -> None:
+    true_field = rectangular_2d_dataset.get_field("u")
+    ir = IntegrationResult(success=True, predicted_field=true_field * 1.0e6)
+
+    anim, warnings = plot_field_animation(rectangular_2d_dataset, ir)
+    try:
+        data_axes = [ax for ax in anim._fig.axes if ax.images]
+        assert len(data_axes) == 2
+        vmin, vmax = data_axes[0].images[0].get_clim()
+        assert vmin == pytest.approx(float(true_field.min()))
+        assert vmax == pytest.approx(float(true_field.max()))
+
+
+        assert data_axes[0].images[0].colorbar.extend == "both"
+        pred_title = data_axes[1].get_title()
+        assert "clipped, actual" in pred_title
     finally:
         _close_animation(anim)

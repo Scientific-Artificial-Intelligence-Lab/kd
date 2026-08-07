@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import warnings
 from typing import Any
 
 import pytest
@@ -910,3 +911,53 @@ def test_facade_accepts_first_order_lhs_passes_gate(small_burgers_dataset) -> No
     m = Model(algorithm="sga", generations=2, population=4, verbose=False)
     m.fit(small_burgers_dataset)
     assert m.best_expr_ is not None
+
+
+
+
+
+
+
+class _StubAlgorithm:
+
+    best_score = 0.5
+    best_expression = "add(u, u_x)"
+
+
+def test_explicit_generations_warns_on_pysindy() -> None:
+    with pytest.warns(UserWarning, match="pysindy"):
+        Model(algorithm="pysindy", generations=500, verbose=False)
+
+
+def test_omitted_generations_stays_silent_on_pysindy() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        m = Model(algorithm="pysindy", verbose=False)
+    assert m.generations == 50
+
+
+def test_explicit_generations_stays_silent_on_iterative_algorithm() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        m = Model(algorithm="sga", generations=500, verbose=False)
+    assert m.generations == 500
+
+
+def test_explicit_generations_stays_silent_on_pysr() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        m = Model(algorithm="pysr", generations=17, verbose=False)
+    assert m._build_pysr_config().niterations == 17
+
+
+def test_progress_printer_total_is_the_effective_iteration_count(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.warns(UserWarning, match="pysindy"):
+        one_shot = Model(algorithm="pysindy", generations=500, verbose=True)
+    one_shot._build_callbacks()[-1].on_iteration_end(0, _StubAlgorithm(), [], [])
+    assert "Generation 1/1" in capsys.readouterr().out
+
+    iterative = Model(algorithm="sga", generations=7, verbose=True)
+    iterative._build_callbacks()[-1].on_iteration_end(0, _StubAlgorithm(), [], [])
+    assert "Generation 1/7" in capsys.readouterr().out

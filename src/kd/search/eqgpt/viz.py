@@ -27,17 +27,33 @@ if TYPE_CHECKING:
 
 
 
+
+
+
+POOL_BEST_KEY = "pool_best"
+POOL_MEDIAN_KEY = "pool_median"
+POOL_WORST_KEY = "pool_worst"
+FINETUNE_LOSS_KEY = "finetune_loss"
+LOGGED_METRICS: tuple[str, ...] = (
+    POOL_BEST_KEY,
+    POOL_MEDIAN_KEY,
+    POOL_WORST_KEY,
+    FINETUNE_LOSS_KEY,
+)
+
+
+
 _PLOT_METRIC: dict[str, str] = {
-    "reward_convergence": "pool_best",
-    "finetune_loss": "finetune_loss",
+    "reward_convergence": POOL_BEST_KEY,
+    "finetune_loss": FINETUNE_LOSS_KEY,
 }
-_SPREAD_METRICS: tuple[str, ...] = ("pool_best", "pool_median", "pool_worst")
+_SPREAD_METRICS: tuple[str, ...] = (POOL_BEST_KEY, POOL_MEDIAN_KEY, POOL_WORST_KEY)
 
 
 
 _YLABEL: dict[str, str] = {
-    "reward_convergence": "pool_best",
-    "finetune_loss": "finetune_loss",
+    "reward_convergence": POOL_BEST_KEY,
+    "finetune_loss": FINETUNE_LOSS_KEY,
     "pool_reward_spread": "reward",
 }
 
@@ -125,6 +141,19 @@ _PER_CASE_XLABEL = "case"
 _PER_CASE_YLABEL = "reward"
 _PER_CASE_LABEL_FONTSIZE = 6
 
+
+
+
+
+_PER_CASE_SCOPE_CAPTION = (
+    "score = mean reward over the scored cases; R^2/MSE = primary case only"
+)
+_PER_CASE_SCOPE_WARNING = (
+    f"plugin plot '{_PER_CASE_PLOT_NAME}': headline score is the mean reward "
+    "over the scored cases (n/a cases excluded); R^2/MSE metrics are "
+    "primary-case only"
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -135,7 +164,7 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(_YLABEL[name])
@@ -147,8 +176,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         }
         max_len = max((len(series) for series in series_by_metric.values()), default=0)
         if max_len == 0:
-            _draw_no_data(ax, recorder)
-            return
+            return _draw_no_data(ax, recorder, name)
         x = list(range(max_len))
         for metric in _SPREAD_METRICS:
             ax.plot(
@@ -162,13 +190,12 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         annotate_gaps(
             ax, band_measured_flags(series_by_metric.values(), max_len), _POOL_GAPS
         )
-        return
+        return []
 
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
     if not series:
-        _draw_no_data(ax, recorder)
-        return
+        return _draw_no_data(ax, recorder, name)
     ax.plot(
         range(len(series)),
         series,
@@ -181,6 +208,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         _annotate_reward_convergence(ax, series)
     else:
         annotate_gaps(ax, measured_flags(series), _PANEL_GAPS[name])
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -215,7 +243,7 @@ def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
     }
 
 
-def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
+def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> list[str]:
     ax.set_xlabel(_PER_CASE_XLABEL)
     ax.set_ylabel(_PER_CASE_YLABEL)
     ax.set_title(_PER_CASE_TITLE)
@@ -230,7 +258,10 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
             ha="center",
             va="center",
         )
-        return
+        return [
+            f"plugin plot '{PER_CASE_PLOT_INFO.name}': "
+            f"{_NO_DATA_TEXT} ({reason})"
+        ]
     positions = list(range(len(names)))
 
 
@@ -266,6 +297,8 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> None:
                 va="bottom",
                 fontsize=_PER_CASE_LABEL_FONTSIZE,
             )
+    append_subtitle(ax, _PER_CASE_SCOPE_CAPTION)
+    return [_PER_CASE_SCOPE_WARNING]
 
 
 def per_case_data(per_case: dict[str, float]) -> dict[str, Any]:
@@ -345,15 +378,17 @@ def _annotate_reward_convergence(ax: Axes, series: list[Any]) -> None:
     append_subtitle(ax, note)
 
 
-def _draw_no_data(ax: Axes, recorder: VizRecorder | None) -> None:
+def _draw_no_data(ax: Axes, recorder: VizRecorder | None, name: str) -> list[str]:
+    reason = _no_data_reason(recorder)
     ax.text(
         0.5,
         0.5,
-        f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+        f"{_NO_DATA_TEXT} ({reason})",
         transform=ax.transAxes,
         ha="center",
         va="center",
     )
+    return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
 
 def _no_data_reason(recorder: VizRecorder | None) -> str:
@@ -372,7 +407,12 @@ def _plot_title(name: str) -> str:
 
 
 __all__ = [
+    "FINETUNE_LOSS_KEY",
+    "LOGGED_METRICS",
     "PER_CASE_PLOT_INFO",
+    "POOL_BEST_KEY",
+    "POOL_MEDIAN_KEY",
+    "POOL_WORST_KEY",
     "get_data",
     "list_plot_infos",
     "per_case_data",

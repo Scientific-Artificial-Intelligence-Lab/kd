@@ -245,6 +245,12 @@ def evaluate_terms(
 
     Returns:
         An ``EvaluationResult`` with ``is_valid is True`` (honest metrics).
+        This entry always measures ``condition_number`` (candidate-library
+        collinearity). The measured matrix is the one the solver was handed:
+        under ``skip_invalid=True`` that is the SURVIVING columns, not every
+        string in ``terms`` — a term dropped as ``shape`` / ``all-zero`` /
+        ``tautology`` is not in the number. Strict mode fits every submitted
+        term or raises, so there the two coincide.
 
     Raises:
         ValueError: If ``terms`` is empty.
@@ -357,6 +363,14 @@ def _build_components(
 
     The facade params ``max_order`` / ``lhs_order`` flow straight into
     ``DerivativeReqs`` so they cannot be silently dropped.
+
+    This narrow entry opts IN to the candidate-library condition number: it is
+    a one-shot probe whose caller is an agent choosing a term library, and one
+    extra SVD is small next to the double term execution this entry already
+    accepts (see the module's cost note). The search loop keeps the builder
+    default (off): it runs the same solve tens of thousands of times per run
+    and stores the value nowhere. ``validate_terms`` shares this helper but
+    never solves, so it pays nothing for the flag.
     """
     reqs = DerivativeReqs(max_atomic_order=max_order, lhs_order=lhs_order)
-    return PlatformBuilder(dataset, reqs).build()
+    return PlatformBuilder(dataset, reqs, compute_condition_number=True).build()

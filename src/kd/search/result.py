@@ -12,6 +12,7 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import (
+    DEFAULT_LHS_LABEL,
     Equation,
     LhsSpec,
     build_equation,
@@ -24,12 +25,12 @@ from kd.core.equation import (
 )
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.expr.naming import parse_derivative_name
+from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
 from kd.search.records import RunRecord, validate_invalid_reason
 
 logger = logging.getLogger(__name__)
 
-_JSON_INDENT_SPACES = 2
 RESULT_SCHEMA_VERSION: Final[int] = 1
 
 
@@ -72,6 +73,30 @@ def _load_float(value: Any) -> float:
     return float("nan") if value is None else value
 
 
+def _load_condition_number(data: dict[str, Any]) -> float | None:
+    """Restore ``condition_number`` from its two-key JSON encoding.
+
+    The payload splits the diagnostic in two so that a measured non-finite
+    value stays distinguishable from an unmeasured one after ``sanitize_float``
+    turns both into ``null``::
+
+        (value, computed)
+        (float, True) -> measured, finite -> that float
+        (None, True) -> measured, non-finite -> ``float("inf")``
+        (None, False) -> not measured -> ``None``
+
+    ``inf`` is the only non-finite the producing solvers emit (an all-zero
+    matrix is pre-guarded to ``inf``, and a LAPACK failure returns ``inf``), so
+    the restoration is exact rather than a best guess. Both keys are read with
+    ``.get``: results written before this field existed carry neither, and must
+    keep loading as "not measured".
+    """
+    if not data.get("condition_number_computed", False):
+        return None
+    value = data.get("condition_number")
+    return float("inf") if value is None else float(value)
+
+
 def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
     """Reconstruct an ``EvaluationResult`` from serialized data.
 
@@ -99,6 +124,7 @@ def _deserialize_evaluation_result(data: dict[str, Any]) -> EvaluationResult:
         terms=data["terms"],
         expression=data["expression"],
         lhs_name=data.get("lhs_name"),
+        condition_number=_load_condition_number(data),
     )
 
 
@@ -318,7 +344,7 @@ class ExperimentResult(RunResult):
     algorithm_name: str
     config: dict[str, Any]
     recorder: VizRecorder
-    lhs_label: str = "u_t"
+    lhs_label: str = DEFAULT_LHS_LABEL
     equation: Equation | None = None
     manifest: RunManifest | None = None
     run_record: RunRecord | None = None
@@ -368,7 +394,7 @@ class ExperimentResult(RunResult):
             json.dump(
                 self.to_dict(),
                 handle,
-                indent=_JSON_INDENT_SPACES,
+                indent=JSON_INDENT_SPACES,
                 allow_nan=False,
             )
         logger.debug("Saved experiment result to %s", output_path)
@@ -451,7 +477,7 @@ class ExperimentResult(RunResult):
             algorithm_name=data["algorithm_name"],
             config=data["config"],
             recorder=VizRecorder.from_dict(data["recorder"]),
-            lhs_label=data.get("lhs_label", "u_t"),
+            lhs_label=data.get("lhs_label", DEFAULT_LHS_LABEL),
             equation=equation,
             manifest=manifest,
             run_record=run_record,

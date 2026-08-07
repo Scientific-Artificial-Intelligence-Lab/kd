@@ -7,6 +7,7 @@ import torch
 
 from kd.core.linear_solve._helpers import (
     SOLVE_DTYPE,
+    compute_condition_number,
     r2_score,
     upcast_for_solve,
 )
@@ -65,7 +66,7 @@ class STRidgeSolver(SparseSolver):
             condition_number = None
             if self.compute_condition_number:
 
-                condition_number = _compute_condition_number(theta_solve)
+                condition_number = compute_condition_number(theta_solve)
                 if condition_number > _COND_WARN_THRESHOLD:
                     logger.warning(
                         "High condition number %.2e detected in theta matrix",
@@ -257,15 +258,6 @@ def _iterative_threshold(
             w[biginds] = _lstsq(x[:, biginds], y)
 
     return w, biginds
-
-
-def _compute_condition_number(theta: torch.Tensor) -> float:
-    if (theta == 0).all():
-        return float("inf")
-    try:
-        return float(torch.linalg.cond(theta).item())
-    except RuntimeError:
-        return float("inf")
 
 
 def _build_result(

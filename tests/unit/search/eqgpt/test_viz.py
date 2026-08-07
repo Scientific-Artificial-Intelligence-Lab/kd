@@ -168,10 +168,10 @@ def test_unknown_name_message_lists_all_three_available(ax) -> None:
 
 
 @pytest.mark.parametrize("name", _PLOT_NAMES)
-def test_render_plot_returns_none(name, ax) -> None:
+def test_render_plot_returns_empty_warnings(name, ax) -> None:
     plugin = _plugin()
     plugin.prepare(_components(_disjoint_recorder()))
-    assert plugin.render_plot(name, ax) is None
+    assert plugin.render_plot(name, ax) == []
 
 
 
@@ -430,9 +430,11 @@ def _degraded_recorders() -> list[VizRecorder | None]:
 @pytest.mark.parametrize("name", _PLOT_NAMES)
 @pytest.mark.parametrize("recorder", _degraded_recorders())
 def test_render_degrades_with_no_data_panel_and_no_lines(name, recorder, ax) -> None:
-    eqgpt_viz.render(name, ax, recorder)
+    channel = eqgpt_viz.render(name, ax, recorder)
     assert len(ax.lines) == 0
     assert any("no data" in txt.get_text().lower() for txt in ax.texts)
+
+    assert any("no data" in note.lower() for note in channel), channel
 
 
 
@@ -600,15 +602,17 @@ def _wave_plugin(per_case, monkeypatch, *, terms=("u_x",)):
     return plugin
 
 
-def test_list_plots_wave_mode_appends_per_case_panel(monkeypatch) -> None:
+def test_list_plots_wave_mode_leads_with_per_case_panel(monkeypatch) -> None:
     names = [i.name for i in _wave_plugin({"N_a": 0.9}, monkeypatch).list_plots()]
-    assert names == [*_PLOT_NAMES, _PER_CASE_NAME]
+
+
+    assert names == [_PER_CASE_NAME, *_PLOT_NAMES]
 
 
 def test_list_plots_wave_panel_is_a_fresh_copy(monkeypatch) -> None:
     plugin = _wave_plugin({"N_a": 0.9}, monkeypatch)
-    plugin.list_plots()[-1].title = "MUTATED"
-    assert plugin.list_plots()[-1].title != "MUTATED"
+    plugin.list_plots()[0].title = "MUTATED"
+    assert plugin.list_plots()[0].title != "MUTATED"
 
 
 def test_single_case_list_plots_has_no_per_case_panel() -> None:
@@ -618,7 +622,9 @@ def test_single_case_list_plots_has_no_per_case_panel() -> None:
 
 def test_render_plot_per_case_draws_a_bar_per_case(monkeypatch, ax) -> None:
     plugin = _wave_plugin({"N_a": 0.94, "N_b": 0.92, "N_c": 0.95}, monkeypatch)
-    assert plugin.render_plot(_PER_CASE_NAME, ax) is None
+    warnings = plugin.render_plot(_PER_CASE_NAME, ax)
+
+    assert len(warnings) == 1 and "primary" in warnings[0].lower()
     assert len(ax.patches) == 3
     assert [round(p.get_height(), 2) for p in ax.patches] == [0.94, 0.92, 0.95]
 
@@ -675,9 +681,11 @@ def test_render_per_case_reward_na_mark_visible_when_all_rewards_negative(ax) ->
 
 @pytest.mark.parametrize("per_case", [{}, {"N_a": float("nan")}])
 def test_render_per_case_reward_degrades_to_no_data_panel(per_case, ax) -> None:
-    eqgpt_viz.render_per_case_reward(ax, per_case)
+    channel = eqgpt_viz.render_per_case_reward(ax, per_case)
     assert len(ax.patches) == 0
     assert any("No data" in t.get_text() for t in ax.texts)
+
+    assert any("No data" in note for note in channel), channel
 
 
 def test_per_case_data_sanitizes_nan_to_none() -> None:

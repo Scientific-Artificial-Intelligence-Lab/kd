@@ -124,6 +124,26 @@ def test_engine_renders_homogeneous_triple_by_explicit_form(
     assert all(seen is result for _name, seen in algorithm.rendered)
 
 
+def test_homogeneous_render_warnings_reach_report(
+    tmp_path, mock_experiment_result: ExperimentResult
+) -> None:
+
+    class _WarningHomogeneousViz(_HomogeneousOnlyViz):
+        def render_homogeneous_plot(
+            self, name: str, ax, result: ExperimentResult
+        ) -> list[str]:
+            super().render_homogeneous_plot(name, ax, result)
+            return [f"homogeneous plot '{name}': No data (probe)"]
+
+    result = _homogeneous_result(mock_experiment_result)
+    report = VizEngine(tmp_path).render_all(
+        result, algorithm=_WarningHomogeneousViz(), dataset=_scatter_dataset()
+    )
+
+    for name in _HOMOGENEOUS_NAMES:
+        assert any(f"homogeneous plot '{name}'" in w for w in report.warnings)
+
+
 def test_engine_does_not_shape_guess_homogeneous_plots_for_evolution(
     tmp_path, mock_experiment_result: ExperimentResult
 ) -> None:
@@ -137,3 +157,38 @@ def test_engine_does_not_shape_guess_homogeneous_plots_for_evolution(
     stems = {path.stem for path in report.figures}
     assert not (_HOMOGENEOUS_STEMS & stems)
     assert algorithm.rendered == []
+
+
+def test_skipped_homogeneous_group_is_named_in_warnings(
+    tmp_path, mock_experiment_result: ExperimentResult
+) -> None:
+    result = replace(mock_experiment_result, equation=None)
+    algorithm = _HomogeneousOnlyViz()
+
+    report = VizEngine(tmp_path).render_all(
+        result, algorithm=algorithm, dataset=_scatter_dataset()
+    )
+
+    assert algorithm.rendered == []
+    assert any(
+        "Steady-state plots (3) skipped" in w and "no equation" in w
+        for w in report.warnings
+    ), report.warnings
+
+
+def test_no_skip_note_when_producer_declares_no_homogeneous_plots(
+    tmp_path, mock_experiment_result: ExperimentResult
+) -> None:
+
+    class _NoneDeclaredViz(_HomogeneousOnlyViz):
+        def list_homogeneous_plots(self) -> list[PlotInfo]:
+            return []
+
+    result = replace(mock_experiment_result, equation=None)
+    report = VizEngine(tmp_path).render_all(
+        result, algorithm=_NoneDeclaredViz(), dataset=_scatter_dataset()
+    )
+
+    assert not any("Steady-state plots" in w for w in report.warnings), (
+        report.warnings
+    )

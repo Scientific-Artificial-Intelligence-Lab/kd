@@ -1,3 +1,14 @@
+"""Example 14 - Generate a 2D Burgers field animation.
+
+Loads the bundled EqGPT Burgers_2D benchmark, integrates the known
+ground-truth RHS on a uniform downsample of the grid, then saves a
+True | Predicted GIF animation.
+
+Output goes to ``examples/out/field_animation_burgers2d.gif``.
+
+Run: python examples/14_field_animation_2d.py
+      open examples/out/field_animation_burgers2d.gif
+"""
 
 from pathlib import Path
 
@@ -5,22 +16,18 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import torch
 from matplotlib.animation import PillowWriter
 
 import kd
-from kd.core.evaluator import EvaluationResult
-from kd.core.integrator import integrate_pde
-from kd.data.schema import (
+from kd import (
     AxisInfo,
     DataTopology,
     FieldData,
     PDEDataset,
     TaskType,
 )
-from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult
-from kd.viz.plots.animation import plot_field_animation
+from kd.core import integrate_pde
+from kd.viz.plots import plot_field_animation
 
 OUT_DIR = Path(__file__).parent / "out"
 OUT_PATH = OUT_DIR / "field_animation_burgers2d.gif"
@@ -28,6 +35,7 @@ _DOWNSAMPLE_STEP = 4
 
 
 def _load_downsampled_burgers_2d() -> PDEDataset:
+    """Load bundled Burgers_2D and keep a smaller uniform grid for the demo."""
     full = kd.load_burgers_2d()
     x = full.get_coords("x")[::_DOWNSAMPLE_STEP].clone()
     y = full.get_coords("y")[::_DOWNSAMPLE_STEP].clone()
@@ -56,42 +64,8 @@ def _load_downsampled_burgers_2d() -> PDEDataset:
     )
 
 
-def _make_demo_result(dataset: PDEDataset) -> ExperimentResult:
-    actual = torch.linspace(0.0, 1.0, 8)
-    recorder = VizRecorder()
-    recorder.log("_best_score", 0.0)
-    recorder.log("_best_expr", dataset.ground_truth or "u")
-    recorder.log("_n_candidates", 1)
-
-    return ExperimentResult(
-        best_expression=dataset.ground_truth or "u",
-        best_score=0.0,
-        iterations=1,
-        early_stopped=False,
-        final_eval=EvaluationResult(
-            mse=0.0,
-            nmse=0.0,
-            r2=1.0,
-            score=0.0,
-            complexity=1,
-            coefficients=torch.tensor([1.0]),
-            is_valid=True,
-            error_message="",
-            selected_indices=[0],
-            residuals=torch.zeros_like(actual),
-            terms=["u"],
-            expression="u",
-        ),
-        actual=actual,
-        predicted=actual,
-        dataset_name=dataset.name,
-        algorithm_name="demo",
-        config={},
-        recorder=recorder,
-    )
-
-
 def main() -> int:
+    """Generate the Burgers_2D field animation GIF."""
     if not PillowWriter.isAvailable():
         print("PillowWriter is unavailable; skipping GIF generation.")
         return 0
@@ -103,8 +77,7 @@ def main() -> int:
         print(f"Integration failed: {integration_result.warning}")
         return 1
 
-    result = _make_demo_result(dataset)
-    animation, warnings = plot_field_animation(result, dataset, integration_result)
+    animation, warnings = plot_field_animation(dataset, integration_result)
     if animation is None:
         print(f"Animation skipped: {'; '.join(warnings)}")
         return 0

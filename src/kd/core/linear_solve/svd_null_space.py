@@ -6,6 +6,7 @@ import math
 import torch
 
 from kd.core.linear_solve._helpers import (
+    compute_condition_number,
     r2_score,
     upcast_for_solve,
 )
@@ -58,7 +59,9 @@ class SVDNullSpaceSolver(SparseSolver):
                 coefficients=coefficients.detach(),
                 residual=residual,
                 r2=r2_score(y_pred_64, y_solve),
-                condition_number=self._condition_number(augmented),
+
+
+                condition_number=compute_condition_number(augmented),
                 selected_indices=selected_indices,
             )
 
@@ -83,15 +86,6 @@ class SVDNullSpaceSolver(SparseSolver):
                 f"dimension mismatch: theta has {theta.shape[0]} rows, "
                 f"y has {y_1d.shape[0]} elements"
             )
-
-    @staticmethod
-    def _condition_number(matrix: torch.Tensor) -> float:
-        if (matrix == 0).all():
-            return float("inf")
-        try:
-            return float(torch.linalg.cond(matrix).item())
-        except RuntimeError:
-            return float("inf")
 
     @staticmethod
     def _invalid(theta: torch.Tensor, message: str) -> SolveResult:

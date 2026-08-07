@@ -679,6 +679,32 @@ class TestBurgers2DNonUniformGuard:
         with pytest.raises(ValueError):
             synthetic.load_burgers_2d(data_dir=tmp_path)
 
+    @pytest.mark.unit
+    def test_descending_axis_raises(self, tmp_path: Path) -> None:
+        coords = {
+            "x": np.linspace(1.0, 0.0, 5),
+            "y": np.linspace(0.0, 1.0, 3),
+            "t": np.linspace(0.0, 1.0, 4),
+        }
+        path = tmp_path / _B2D_FILE
+        _write_burgers_2d_mat(path, coords["x"], coords["y"], coords["t"])
+
+        with pytest.raises(ValueError, match=r"axis 'x'"):
+            synthetic.load_burgers_2d(data_dir=tmp_path)
+
+    @pytest.mark.unit
+    def test_zero_spacing_axis_raises(self, tmp_path: Path) -> None:
+        coords = {
+            "x": np.full(5, 0.5),
+            "y": np.linspace(0.0, 1.0, 3),
+            "t": np.linspace(0.0, 1.0, 4),
+        }
+        path = tmp_path / _B2D_FILE
+        _write_burgers_2d_mat(path, coords["x"], coords["y"], coords["t"])
+
+        with pytest.raises(ValueError, match=r"axis 'x'"):
+            synthetic.load_burgers_2d(data_dir=tmp_path)
+
 
 
 

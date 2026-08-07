@@ -232,7 +232,7 @@ def engine(
 ) -> DiscoverEngine:
     torch.manual_seed(SEED)
     return DiscoverEngine(
-        controller=controller,
+        generator=controller,
         strategy=strategy,
         reward_adapter=compute_reward,
         validator=validator,
@@ -250,7 +250,7 @@ def engine_with_capacity(
 ) -> DiscoverEngine:
     torch.manual_seed(SEED)
     return DiscoverEngine(
-        controller=controller,
+        generator=controller,
         strategy=strategy,
         reward_adapter=compute_reward,
         validator=validator,
@@ -1187,7 +1187,7 @@ class TestCycleTopCandidates:
         assert not hasattr(saved_state, "cycle_top_candidates")
 
         restored = DiscoverEngine(
-            controller=controller,
+            generator=controller,
             strategy=strategy,
             reward_adapter=compute_reward,
             validator=validator,

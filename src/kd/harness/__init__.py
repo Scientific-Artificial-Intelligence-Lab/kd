@@ -16,6 +16,7 @@ from kd.harness.consensus_report import (
     render_consensus_markdown,
     write_consensus_artifact,
 )
+from kd.harness.consensus_verify import MemberVerification, VerificationStatus
 from kd.harness.dispatch import (
     DISPATCH_ARTIFACT_TAG,
     DatasetResolverError,
@@ -32,6 +33,10 @@ from kd.harness.dispatch_log import (
     DISPATCH_LOG_ARTIFACT_TAG,
     DispatchLog,
     DispatchLogError,
+    WorkerLogRow,
+    decode_dispatch_log,
+    read_dispatch_log,
+    write_dispatch_log,
 )
 from kd.harness.dispatch_report import build_batch_report, render_dispatch_markdown
 from kd.harness.dispatcher import (
@@ -77,21 +82,26 @@ __all__ = [
     "EvidenceStore",
     "EvidenceStoreError",
     "ExperimentPlan",
+    "MemberVerification",
     "MergeReplayError",
     "PlanEntry",
     "PlanRunResult",
     "ShardMappingError",
     "ShardMissingError",
+    "VerificationStatus",
+    "WorkerLogRow",
     "build_batch_report",
     "build_consensus",
     "build_dispatch_manifest",
     "build_plan_report",
     "build_store_report",
     "consensus_to_dict",
+    "decode_dispatch_log",
     "dispatch_plan",
     "environment_fingerprint",
     "merge_shards",
     "read_consensus_artifact",
+    "read_dispatch_log",
     "read_dispatch_manifest",
     "render_consensus_markdown",
     "render_dispatch_markdown",
@@ -100,5 +110,6 @@ __all__ = [
     "run_episode",
     "run_plan",
     "write_consensus_artifact",
+    "write_dispatch_log",
     "write_dispatch_manifest",
 ]

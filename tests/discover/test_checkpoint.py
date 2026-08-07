@@ -124,7 +124,7 @@ def engine(
 ) -> DiscoverEngine:
     torch.manual_seed(SEED)
     return DiscoverEngine(
-        controller=controller,
+        generator=controller,
         strategy=strategy,
         reward_adapter=compute_reward,
         validator=validator,
@@ -144,7 +144,7 @@ def mock_components(mock_evaluator: MockEvaluator) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=mock_evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

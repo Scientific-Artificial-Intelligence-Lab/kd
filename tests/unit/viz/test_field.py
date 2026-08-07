@@ -285,9 +285,8 @@ class TestPlotFieldComparison:
         custom_axis_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(custom_axis_dataset)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, custom_axis_dataset, ir)
+        fig, _ = plot_field_comparison(custom_axis_dataset, ir)
         try:
             plot_axes = fig.get_axes()[:3]
             assert {ax.get_xlabel() for ax in plot_axes} == {"tau"}
@@ -298,9 +297,8 @@ class TestPlotFieldComparison:
     def test_1d_spatial_returns_figure_and_warnings(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert isinstance(warnings, list)
@@ -310,9 +308,8 @@ class TestPlotFieldComparison:
     def test_1d_spatial_has_three_panels(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             axes = fig.get_axes()
 
@@ -323,9 +320,8 @@ class TestPlotFieldComparison:
     def test_1d_spatial_panel_titles_contain_true_predicted_residual(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             titles = [ax.get_title().lower() for ax in fig.get_axes()]
             title_text = " ".join(titles)
@@ -338,9 +334,8 @@ class TestPlotFieldComparison:
     def test_2d_spatial_returns_figure(self) -> None:
         ds = _make_2d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert isinstance(warnings, list)
@@ -350,9 +345,8 @@ class TestPlotFieldComparison:
     def test_2d_spatial_has_multiple_panels(self) -> None:
         ds = _make_2d_pde_dataset(nt=5)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
 
 
@@ -366,9 +360,8 @@ class TestPlotFieldComparison:
         rectangular_2d_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(rectangular_2d_dataset)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, rectangular_2d_dataset, ir)
+        fig, _ = plot_field_comparison(rectangular_2d_dataset, ir)
         try:
             data_axes = [ax for ax in fig.get_axes() if ax.images]
             assert data_axes
@@ -384,9 +377,8 @@ class TestPlotFieldComparison:
     def test_integration_failure_no_crash(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds, success=False)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -406,9 +398,8 @@ class TestPlotFieldComparison:
     def test_integration_failure_predicted_panel_shows_message(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds, success=False)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
 
             all_texts = []
@@ -431,9 +422,8 @@ class TestPlotFieldComparison:
     def test_diverged_integration_handled_gracefully(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_diverged_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -443,18 +433,16 @@ class TestPlotFieldComparison:
     def test_style_parameter_accepted(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir, style={"font.size": 12})
+        fig, _ = plot_field_comparison(ds, ir, style={"font.size": 12})
         plt.close(fig)
 
     def test_no_figures_leaked(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
         figs_before = len(plt.get_fignums())
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         plt.close(fig)
         figs_after = len(plt.get_fignums())
         assert figs_after <= figs_before
@@ -462,9 +450,8 @@ class TestPlotFieldComparison:
     def test_return_type_is_tuple(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        out = plot_field_comparison(result, ds, ir)
+        out = plot_field_comparison(ds, ir)
         try:
             assert isinstance(out, tuple)
             assert len(out) == 2
@@ -554,9 +541,8 @@ class TestFieldComparisonEdgeCases:
     def test_very_small_dataset(self) -> None:
         ds = _make_1d_pde_dataset(nx=2, nt=2)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -565,9 +551,8 @@ class TestFieldComparisonEdgeCases:
     def test_large_noise_in_prediction(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_integration_result(ds, add_noise_std=100.0)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -580,9 +565,8 @@ class TestFieldComparisonEdgeCases:
             predicted_field=None,
             warning="Total failure",
         )
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -592,9 +576,8 @@ class TestFieldComparisonEdgeCases:
     def test_single_spatial_point(self) -> None:
         ds = _make_1d_pde_dataset(nx=1, nt=5)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -671,9 +654,8 @@ class TestFieldComparisonDiverged:
     def test_1d_diverged_title_contains_diverged(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_diverged_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             all_titles = [ax.get_title().upper() for ax in fig.get_axes()]
             all_title_text = " ".join(all_titles)
@@ -686,9 +668,8 @@ class TestFieldComparisonDiverged:
     def test_2d_diverged_title_contains_diverged(self) -> None:
         ds = _make_2d_pde_dataset()
         ir = _make_diverged_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             all_titles = [ax.get_title().upper() for ax in fig.get_axes()]
             all_texts = []
@@ -704,9 +685,8 @@ class TestFieldComparisonDiverged:
     def test_diverged_still_shows_prediction_data(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_diverged_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
 
 
@@ -718,9 +698,8 @@ class TestFieldComparisonDiverged:
     def test_diverged_at_t_in_warning(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = _make_diverged_integration_result(ds)
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             combined = " ".join(warnings).lower()
             all_texts = []
@@ -753,9 +732,8 @@ class TestFieldComparison2dPredNone:
             predicted_field=None,
             warning="Integration failed completely",
         )
-        result = _make_experiment_result()
 
-        fig, warnings = plot_field_comparison(result, ds, ir)
+        fig, warnings = plot_field_comparison(ds, ir)
         try:
             n_axes = len(fig.get_axes())
 
@@ -773,9 +751,8 @@ class TestFieldComparison2dPredNone:
             predicted_field=None,
             warning="Total failure",
         )
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             all_texts = []
             for ax in fig.get_axes():
@@ -800,9 +777,8 @@ class TestFieldComparison2dPredNone:
             predicted_field=None,
             warning="Integration failed",
         )
-        result = _make_experiment_result()
 
-        fig, _ = plot_field_comparison(result, ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
 
             first_row_axes = fig.get_axes()[:3]
@@ -810,3 +786,16 @@ class TestFieldComparison2dPredNone:
             assert has_images, "True row should still render heatmaps"
         finally:
             plt.close(fig)
+
+
+def test_field_shape_mismatch_panel_names_mismatch_not_integration_failure() -> None:
+    ds = _make_1d_pde_dataset()
+    ir = IntegrationResult(success=True, predicted_field=torch.zeros(3, 3))
+    fig, warnings = plot_field_comparison(ds, ir)
+    try:
+        texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert any("Shape mismatch" in t for t in texts)
+        assert not any("Integration failed" in t for t in texts)
+        assert any("Shape mismatch" in w for w in warnings)
+    finally:
+        plt.close(fig)

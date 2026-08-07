@@ -38,6 +38,11 @@ class _MockAlgorithm:
         self._best_score = best_score
         self._best_expression = best_expression
         self._state: dict[str, Any] = {}
+        self._config: dict[str, Any] = {"algorithm": "mock"}
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return dict(self._config)
 
     @property
     def best_score(self) -> float:
@@ -1742,26 +1747,6 @@ class TestCheckpointManifestWritePath:
         with pytest.raises(CheckpointManifestError, match="no checkpoint manifest"):
             cb.on_iteration_end(0, _MockAlgorithm(), [], [])
         assert list(tmp_path.iterdir()) == []
-
-    @pytest.mark.unit
-    def test_degraded_mock_writer_yields_none_identity(
-        self, tmp_path: Path
-    ) -> None:
-        from kd.search.checkpoint_manifest import load_checkpoint_manifest
-
-        cb = CheckpointCallback(directory=tmp_path, every_n=1)
-        algo = _MockAlgorithm()
-        cb.on_experiment_start(algo)
-        cb.on_iteration_end(0, algo, [], [])
-        cb.on_experiment_end(algo)
-
-        entries = load_checkpoint_manifest(tmp_path)
-        assert entries
-        for entry in entries:
-            assert entry.algorithm is None
-            assert entry.seed is None
-            assert entry.config_hash is None
-
 
 
 

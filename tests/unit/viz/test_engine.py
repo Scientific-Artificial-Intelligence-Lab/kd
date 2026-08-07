@@ -10,11 +10,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pytest
+import torch
 
 from kd.core.integrator import IntegrationResult
-from kd.data.schema import PDEDataset
+from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
 from kd.search.result import ExperimentResult
-from kd.viz import VizEngine
+from kd.viz import VizEngine, build_integration_result
 from kd.viz.report import ReportResult
 
 
@@ -28,6 +29,12 @@ class TestVizEngineInit:
     def test_accepts_custom_style(self, tmp_path: Path) -> None:
         engine = VizEngine(output_dir=tmp_path, style={"font.size": 20})
         assert engine._style["font.size"] == 20
+
+    def test_invalid_style_fails_at_construction(self, tmp_path: Path) -> None:
+        with pytest.raises(KeyError, match="fontsize"):
+            VizEngine(output_dir=tmp_path, style={"fontsize": 14})
+        with pytest.raises(ValueError, match="font.size"):
+            VizEngine(output_dir=tmp_path, style={"font.size": "huge"})
 
 
 class TestRenderUniversal:
@@ -73,7 +80,15 @@ class TestRenderUniversal:
         engine = VizEngine(output_dir=tmp_path)
         report = engine.render_universal(mock_experiment_result)
 
-        assert len(report.warnings) == 0, f"Unexpected warnings: {report.warnings}"
+
+
+
+
+
+        guessed = [w for w in report.warnings if "GUESSED square grid" in w]
+        assert len(guessed) == 1, f"Expected 1 guess disclosure: {guessed}"
+        unexpected = [w for w in report.warnings if "GUESSED square grid" not in w]
+        assert unexpected == [], f"Unexpected warnings: {unexpected}"
 
 
 class _NoVizAlgorithm:
@@ -92,6 +107,35 @@ class _ZeroPlotsAlgorithm:
         raise AssertionError("must not be called with zero plots")
 
 
+class _WarningPlotsAlgorithm:
+
+    def list_plots(self):
+        from kd.viz.extension import PlotInfo
+
+        return [PlotInfo(name="alpha", title="A"), PlotInfo(name="beta", title="B")]
+
+    def render_plot(self, name, ax) -> list[str]:
+        ax.plot([0, 1], [0, 1])
+        return [f"plugin plot '{name}': No data (probe)", "shared plugin note"]
+
+    def get_plot_data(self, name):
+        return {}
+
+
+class _LegacyNonePlotsAlgorithm:
+
+    def list_plots(self):
+        from kd.viz.extension import PlotInfo
+
+        return [PlotInfo(name="gamma", title="G")]
+
+    def render_plot(self, name, ax) -> None:
+        ax.plot([0, 1], [1, 0])
+
+    def get_plot_data(self, name):
+        return {}
+
+
 class TestRenderAll:
 
     def test_without_dataset(
@@ -104,12 +148,42 @@ class TestRenderAll:
         field_files = [f for f in report.figures if "field" in str(f)]
         assert len(field_files) == 0
 
-    def test_no_algorithm_emits_no_plugin_warning(
+    def test_no_algorithm_warns_plugin_plots_skipped(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
     ) -> None:
         engine = VizEngine(output_dir=tmp_path)
         report = engine.render_all(mock_experiment_result)
+        assert any(
+            "no algorithm" in w and "skipped" in w for w in report.warnings
+        )
+
+
         assert not [w for w in report.warnings if "VizExtension" in w]
+
+    def test_no_dataset_warns_skipped_families(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result)
+        note = next(w for w in report.warnings if "no dataset" in w)
+        assert "coefficient bar" in note
+        assert "field comparison" in note
+
+    def test_provided_params_emit_no_skip_notes(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        ds = _make_pde_dataset_for_engine()
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds)
+        assert not [w for w in report.warnings if "no dataset" in w]
+
+    def test_animate_without_dataset_warns_both(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, animate=True)
+        assert any("no dataset" in w for w in report.warnings)
+        assert any("field_animation" in w for w in report.warnings)
 
     def test_non_viz_algorithm_warns_zero_plots(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
@@ -131,6 +205,46 @@ class TestRenderAll:
             mock_experiment_result, algorithm=_ZeroPlotsAlgorithm()
         )
         assert any("declared zero plots" in w for w in report.warnings)
+
+    def test_plugin_render_warnings_reach_report(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(
+            mock_experiment_result, algorithm=_WarningPlotsAlgorithm()
+        )
+        assert any("plugin plot 'alpha'" in w for w in report.warnings)
+        assert any("plugin plot 'beta'" in w for w in report.warnings)
+
+        assert sum(1 for w in report.warnings if w == "shared plugin note") == 1
+
+        assert any(p.name == "plugin_alpha.svg" for p in report.figures)
+
+    def test_plugin_render_none_return_still_valid(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(
+            mock_experiment_result, algorithm=_LegacyNonePlotsAlgorithm()
+        )
+        assert any(p.name == "plugin_gamma.svg" for p in report.figures)
+        assert not [w for w in report.warnings if "gamma" in w]
+
+    def test_plugin_warnings_survive_save_failure(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        engine = VizEngine(output_dir=tmp_path)
+        with patch(
+            "matplotlib.figure.Figure.savefig",
+            side_effect=OSError("simulated disk failure"),
+        ):
+            report = engine.render_all(
+                mock_experiment_result, algorithm=_WarningPlotsAlgorithm()
+            )
+        assert any("plugin plot 'alpha'" in w for w in report.warnings)
+        assert any("failed" in w and "alpha" in w for w in report.warnings)
 
     def test_with_dataset_renders_field(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
@@ -169,6 +283,22 @@ class TestRenderAll:
         field_files = [f for f in report.figures if f.name == "field_comparison.svg"]
         assert len(field_files) == 1
 
+    def test_nan_coefficient_degrades_report_instead_of_crashing(
+        self,
+        tmp_path: Path,
+        mock_experiment_result: ExperimentResult,
+        custom_axis_dataset: object,
+    ) -> None:
+        import torch
+
+        mock_experiment_result.final_eval.coefficients = torch.tensor(
+            [1.0, float("nan"), 0.3]
+        )
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=custom_axis_dataset)
+        assert any("non-finite coefficient" in w for w in report.warnings)
+        assert len(report.figures) > 0
+
     def test_dataset_without_proper_api_warns(
         self, tmp_path: Path, mock_experiment_result: ExperimentResult
     ) -> None:
@@ -195,7 +325,9 @@ class TestRenderAll:
     ) -> None:
         from unittest.mock import patch
 
-        def _raise_on_equation(result: ExperimentResult, ax: object) -> list[str]:
+        def _raise_on_equation(
+            result: ExperimentResult, ax: object, *, style: object = None
+        ) -> list[str]:
             raise RuntimeError("Simulated plot failure")
 
         engine = VizEngine(output_dir=tmp_path)
@@ -376,7 +508,9 @@ class TestRenderAllTier2Plots:
         engine = VizEngine(output_dir=tmp_path)
 
         with (
-            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch(
+                "kd.viz.engine.build_integration_result", return_value=(ir, [])
+            ),
             patch(
                 "kd.viz.engine.plot_field_animation",
                 side_effect=AssertionError("animation should be gated off"),
@@ -418,7 +552,9 @@ class TestRenderAllTier2Plots:
             return _FakeAnimation(), []
 
         with (
-            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch(
+                "kd.viz.engine.build_integration_result", return_value=(ir, [])
+            ),
             patch("kd.viz.engine.plot_field_animation", _fake_plot),
             patch("kd.viz.engine.PillowWriter", _FakePillowWriter),
         ):
@@ -448,7 +584,9 @@ class TestRenderAllTier2Plots:
                 return False
 
         with (
-            patch.object(engine, "_get_integration_result", return_value=(ir, [])),
+            patch(
+                "kd.viz.engine.build_integration_result", return_value=(ir, [])
+            ),
             patch(
                 "kd.viz.engine.plot_field_animation",
                 side_effect=AssertionError("writer check should skip before plotting"),
@@ -464,23 +602,70 @@ class TestRenderAllTier2Plots:
         assert not (tmp_path / "field_animation.gif").exists()
         assert any("PillowWriter" in warning for warning in report.warnings)
 
+    def test_animation_on_1d_dataset_warns_and_skips(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        from unittest.mock import patch
+
+        ds = _make_pde_dataset_for_engine()
+        ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
+        engine = VizEngine(output_dir=tmp_path)
+
+        with (
+            patch(
+                "kd.viz.engine.build_integration_result", return_value=(ir, [])
+            ),
+            patch(
+                "kd.viz.engine.plot_field_animation",
+                side_effect=AssertionError("1D data must skip before plotting"),
+            ),
+        ):
+            report = engine.render_all(
+                mock_experiment_result,
+                dataset=ds,
+                animate=True,
+            )
+
+        assert not (tmp_path / "field_animation.gif").exists()
+        assert any(
+            "2D-spatial" in w and "field_animation" in w for w in report.warnings
+        )
+
+    def test_animation_on_scattered_dataset_warns_and_skips(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        import torch
+
+        x = torch.linspace(-1.0, 1.0, 12)
+        y = torch.linspace(0.0, 2.0, 12)
+        ds = PDEDataset.from_scatter(
+            coords={"x": x, "y": y},
+            fields={"u": x**2 - y**2},
+            lhs="",
+            name="scatter-animate",
+        )
+        engine = VizEngine(output_dir=tmp_path)
+        report = engine.render_all(mock_experiment_result, dataset=ds, animate=True)
+        assert not (tmp_path / "field_animation.gif").exists()
+        assert any("scattered" in w for w in report.warnings)
+        assert any("field_animation" in w for w in report.warnings)
 
 
 
 
 
 
-class TestGetIntegrationResultTryExcept:
+
+class TestBuildIntegrationResultTryExcept:
 
     def test_integrate_pde_error_caught(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         from unittest.mock import patch
 
         from kd.core.integrator import IntegrationResult
 
         ds = _make_pde_dataset_for_engine()
-        engine = VizEngine(output_dir=tmp_path)
 
 
 
@@ -488,7 +673,7 @@ class TestGetIntegrationResultTryExcept:
             "kd.core.integrator.integrate_pde",
             side_effect=RuntimeError("Solver diverged"),
         ):
-            result, _notes = engine._get_integration_result(mock_experiment_result, ds)
+            result, _notes = build_integration_result(mock_experiment_result, ds)
 
         assert isinstance(result, IntegrationResult)
         assert not result.success
@@ -496,31 +681,25 @@ class TestGetIntegrationResultTryExcept:
         assert result.warning is not None
 
     def test_format_pde_out_of_integration_path(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         from unittest.mock import patch
 
         ds = _make_pde_dataset_for_engine()
-        engine = VizEngine(output_dir=tmp_path)
 
         with patch(
             "kd.core.expr.sympy_bridge.format_pde",
             side_effect=TypeError("BUG: format_pde must not be called"),
         ):
-            result, _notes = engine._get_integration_result(
-                mock_experiment_result, ds
-            )
+            result, _notes = build_integration_result(mock_experiment_result, ds)
 
 
         assert "BUG" not in (result.warning or "")
 
     def test_attribute_access_bug_not_swallowed(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
-        from unittest.mock import PropertyMock, patch
-
         ds = _make_pde_dataset_for_engine()
-        engine = VizEngine(output_dir=tmp_path)
 
 
         bad_result = mock_experiment_result
@@ -543,23 +722,22 @@ class TestGetIntegrationResultTryExcept:
         bad_result.final_eval = _BrokenEval()
         try:
             with pytest.raises(AttributeError, match="BUG"):
-                engine._get_integration_result(bad_result, ds)
+                build_integration_result(bad_result, ds)
         finally:
             bad_result.final_eval = original_final_eval
 
     def test_missing_terms_still_handled(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         from kd.core.integrator import IntegrationResult
 
         ds = _make_pde_dataset_for_engine()
-        engine = VizEngine(output_dir=tmp_path)
 
 
         original_terms = mock_experiment_result.final_eval.terms
         mock_experiment_result.final_eval.terms = None
         try:
-            result, notes = engine._get_integration_result(mock_experiment_result, ds)
+            result, notes = build_integration_result(mock_experiment_result, ds)
             assert isinstance(result, IntegrationResult)
             assert not result.success
             assert notes == []
@@ -619,15 +797,14 @@ def _with_terms(
 class TestNearZeroTermPruning:
 
     def test_near_zero_term_pruned_and_disclosed(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         ds = _make_smooth_dataset()
-        engine = VizEngine(output_dir=tmp_path)
         result = _with_terms(
             mock_experiment_result, ["u_xx", "t"], [0.1, -9.5e-16], None
         )
 
-        integration, notes = engine._get_integration_result(result, ds)
+        integration, notes = build_integration_result(result, ds)
 
         assert integration.success is True, integration.warning
         assert len(notes) == 1
@@ -635,23 +812,21 @@ class TestNearZeroTermPruning:
         assert "9.5e-16" in notes[0]
 
     def test_genuine_small_coefficient_not_pruned(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         ds = _make_smooth_dataset()
-        engine = VizEngine(output_dir=tmp_path)
         result = _with_terms(mock_experiment_result, ["u_xx", "t"], [1.0, 1e-4], None)
 
-        integration, notes = engine._get_integration_result(result, ds)
+        integration, notes = build_integration_result(result, ds)
 
         assert notes == []
         assert integration.success is False
         assert "t" in integration.warning
 
     def test_prune_threshold_ignores_inactive_terms(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         ds = _make_smooth_dataset()
-        engine = VizEngine(output_dir=tmp_path)
         result = _with_terms(
             mock_experiment_result,
             ["u_xx", "t", "v"],
@@ -659,7 +834,7 @@ class TestNearZeroTermPruning:
             [0, 1],
         )
 
-        integration, notes = engine._get_integration_result(result, ds)
+        integration, notes = build_integration_result(result, ds)
 
         assert integration.success is True, integration.warning
         assert len(notes) == 1
@@ -667,13 +842,12 @@ class TestNearZeroTermPruning:
         assert "u_xx" not in notes[0]
 
     def test_all_zero_coefficients_left_alone(
-        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+        self, mock_experiment_result: ExperimentResult
     ) -> None:
         ds = _make_smooth_dataset()
-        engine = VizEngine(output_dir=tmp_path)
         result = _with_terms(mock_experiment_result, ["u_xx", "t"], [0.0, 0.0], None)
 
-        integration, notes = engine._get_integration_result(result, ds)
+        integration, notes = build_integration_result(result, ds)
 
         assert notes == []
         assert integration.success is True, integration.warning
@@ -774,3 +948,77 @@ class TestAutogradDomainNote:
         assert "SGA" not in note
         assert "autograd" in note
         assert "finite-difference" in note
+
+
+def _no_lhs_declaration_dataset() -> PDEDataset:
+    x = torch.linspace(0.0, 1.0, 5)
+    t = torch.linspace(0.0, 1.0, 4)
+    u = torch.sin(x).unsqueeze(1) * torch.exp(-t).unsqueeze(0)
+    return PDEDataset(
+        name="no_lhs_declaration",
+        task_type=TaskType.PDE,
+        axes={"x": AxisInfo(name="x", values=x), "t": AxisInfo(name="t", values=t)},
+        axis_order=["x", "t"],
+        fields={"u": FieldData(name="u", values=u)},
+    )
+
+
+class TestLhsAssumptionNote:
+
+    def test_note_fires_when_nothing_declares_lhs(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        note = VizEngine._maybe_lhs_assumption_note(
+            mock_experiment_result, _no_lhs_declaration_dataset()
+        )
+
+        assert note is not None
+        assert "default assumption" in note
+        assert "u_t" in note
+
+    def test_no_note_when_dataset_declares(
+        self,
+        mock_experiment_result: ExperimentResult,
+        custom_axis_dataset: PDEDataset,
+    ) -> None:
+        note = VizEngine._maybe_lhs_assumption_note(
+            mock_experiment_result, custom_axis_dataset
+        )
+
+        assert note is None
+
+    def test_no_note_when_algorithm_declares(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        result = replace(
+            mock_experiment_result,
+            final_eval=replace(mock_experiment_result.final_eval, lhs_name="v_x"),
+        )
+
+        note = VizEngine._maybe_lhs_assumption_note(
+            result, _no_lhs_declaration_dataset()
+        )
+
+        assert note is None
+
+    def test_no_note_for_non_default_label(
+        self, mock_experiment_result: ExperimentResult
+    ) -> None:
+        result = replace(mock_experiment_result, lhs_label="0")
+
+        note = VizEngine._maybe_lhs_assumption_note(
+            result, _no_lhs_declaration_dataset()
+        )
+
+        assert note is None
+
+    def test_note_reaches_report_warnings(
+        self, tmp_path: Path, mock_experiment_result: ExperimentResult
+    ) -> None:
+        engine = VizEngine(output_dir=tmp_path)
+
+        report = engine.render_all(
+            mock_experiment_result, dataset=_no_lhs_declaration_dataset()
+        )
+
+        assert any("default assumption" in w for w in report.warnings)

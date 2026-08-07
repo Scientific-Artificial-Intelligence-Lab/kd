@@ -194,7 +194,27 @@ class TestSharedYlabelFromMeta:
 
 class TestBandPoolingByScoreIdentity:
 
-    def test_band_pooled_for_same_meta_despite_different_names(self) -> None:
+    def test_band_pooled_for_same_algorithm_multiseed(self) -> None:
+        results = [
+            _make_result(
+                "a", score_kind="NMSE", score_direction="min", algorithm="algo_a"
+            ),
+            _make_result(
+                "b", score_kind="NMSE", score_direction="min", algorithm="algo_a"
+            ),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings = render_overlaid_convergence(results, ax)
+            assert _has_mean_band(ax), (
+                "multi-seed runs of one algorithm sharing one "
+                "(score_kind, score_direction) identity must pool"
+            )
+            assert not warnings, f"pooled overlay must not warn; got {warnings!r}"
+        finally:
+            plt.close(fig)
+
+    def test_band_suppressed_for_same_meta_different_algorithms(self) -> None:
         results = [
             _make_result(
                 "a", score_kind="NMSE", score_direction="min", algorithm="algo_a"
@@ -206,11 +226,19 @@ class TestBandPoolingByScoreIdentity:
         fig, ax = plt.subplots()
         try:
             warnings = render_overlaid_convergence(results, ax)
-            assert _has_mean_band(ax), (
-                "runs sharing one (score_kind, score_direction) identity must "
-                "pool into a mean±std band even across algorithm names"
+            assert not _has_mean_band(ax), (
+                "one shared metric from two algorithms must not average into "
+                "a single cross-engine band"
             )
-            assert not warnings, f"pooled overlay must not warn; got {warnings!r}"
+
+
+
+            assert len(warnings) == 1 and "different algorithms" in warnings[0], (
+                warnings
+            )
+            assert "band suppressed" in ax.get_title()
+
+            assert ax.get_ylabel() == "Best NMSE"
         finally:
             plt.close(fig)
 

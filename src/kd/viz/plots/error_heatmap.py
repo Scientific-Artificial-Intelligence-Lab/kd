@@ -14,13 +14,12 @@ from kd.viz.plots._dim_utils import (
     _pick_time_steps,
     _slice_nd_to_2d,
 )
-from kd.viz.plots._field_panels import _RESIDUAL_SIGN, _robust_abs_max
+from kd.viz.plots._field_panels import _RESIDUAL_SIGN, _diverged_tag, _robust_abs_max
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
-    from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,6 @@ _COLORBAR_LABEL = f"Error ({_RESIDUAL_SIGN})"
 
 
 def plot_error_heatmap(
-    result: ExperimentResult,
     dataset: PDEDataset,
     integration_result: IntegrationResult,
     *,
@@ -171,18 +169,6 @@ def plot_error_heatmap(
             )
 
     return fig, warnings
-
-
-def _diverged_tag(
-    diverged: bool,
-    integration_result: IntegrationResult,
-    time_axis: str,
-) -> str:
-    if not diverged:
-        return ""
-    if integration_result.diverged_at_t is not None:
-        return f" (DIVERGED at {time_axis}={integration_result.diverged_at_t:.3g})"
-    return " (DIVERGED)"
 
 
 def _render_1d_error(

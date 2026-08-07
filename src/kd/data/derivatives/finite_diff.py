@@ -13,7 +13,10 @@ from kd.data.schema import DataTopology, PDEDataset
 _MIN_DX = 1e-15
 
 
-_MAX_SUPPORTED_ORDER = 3
+
+
+
+MAX_SUPPORTED_ORDER = 3
 
 
 _MIN_POINTS_FOR_ORDER = {
@@ -21,6 +24,9 @@ _MIN_POINTS_FOR_ORDER = {
     2: 5,
     3: 5,
 }
+
+
+assert set(_MIN_POINTS_FOR_ORDER) == set(range(1, MAX_SUPPORTED_ORDER + 1))
 
 
 
@@ -51,8 +57,8 @@ def central_diff(
         raise ValueError(f"dx is too small ({dx}), must be >= {_MIN_DX}")
 
 
-    if order < 1 or order > _MAX_SUPPORTED_ORDER:
-        raise ValueError(f"order must be in [1, {_MAX_SUPPORTED_ORDER}], got {order}")
+    if order < 1 or order > MAX_SUPPORTED_ORDER:
+        raise ValueError(f"order must be in [1, {MAX_SUPPORTED_ORDER}], got {order}")
 
 
     if axis < 0 or axis >= f.dim():
@@ -288,9 +294,9 @@ class FiniteDiffProvider(DerivativeProvider):
 
         if max_order < 1:
             raise ValueError(f"max_order must be >= 1, got {max_order}")
-        if max_order > _MAX_SUPPORTED_ORDER:
+        if max_order > MAX_SUPPORTED_ORDER:
             raise ValueError(
-                f"max_order must be <= {_MAX_SUPPORTED_ORDER}, got {max_order}"
+                f"max_order must be <= {MAX_SUPPORTED_ORDER}, got {max_order}"
             )
 
 

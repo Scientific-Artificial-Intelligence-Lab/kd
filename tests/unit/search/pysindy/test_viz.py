@@ -74,10 +74,12 @@ class TestPlotCatalog:
 class TestRender:
 
     def test_no_recorder_draws_no_data_panel(self, ax) -> None:
-        pysindy_viz.render(_PLOT_NAME, ax, None)
+        channel = pysindy_viz.render(_PLOT_NAME, ax, None)
         texts = [t.get_text() for t in ax.texts]
         assert any("No data" in t for t in texts)
         assert len(ax.patches) == 0
+
+        assert any("No data" in note for note in channel), channel
 
     def test_unlogged_recorder_draws_no_data_panel(self, ax) -> None:
         pysindy_viz.render(_PLOT_NAME, ax, VizRecorder())
@@ -92,10 +94,12 @@ class TestRender:
         assert "support size: 3" in texts
 
     def test_invalid_refit_drops_bar_and_says_so(self, ax) -> None:
-        pysindy_viz.render(_PLOT_NAME, ax, _populated_recorder(refit=None))
+        channel = pysindy_viz.render(_PLOT_NAME, ax, _populated_recorder(refit=None))
         assert len(ax.patches) == 1
         texts = " ".join(t.get_text() for t in ax.texts)
         assert "refit invalid" in texts
+
+        assert any("refit invalid" in note for note in channel), channel
 
     def test_zero_nmse_falls_back_to_linear_scale(self, ax) -> None:
         pysindy_viz.render(_PLOT_NAME, ax, _populated_recorder(native=0.0))

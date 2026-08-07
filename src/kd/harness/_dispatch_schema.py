@@ -39,7 +39,8 @@ _DISPATCH_V1_RESOURCES_KEYS: Final[frozenset[str]] = frozenset(
     {"max_concurrent_heavy", "grace_seconds"}
 )
 
-_SHARD_ID_RE: Final[re.Pattern[str]] = re.compile(r"^shard-\d{2,}$")
+
+SHARD_ID_RE: Final[re.Pattern[str]] = re.compile(r"^shard-\d{2,}$")
 
 
 class DispatchManifestError(ValueError):
@@ -104,7 +105,7 @@ class ShardSpec:
     memory_max_gb: float | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.shard_id, str) or not _SHARD_ID_RE.match(self.shard_id):
+        if not isinstance(self.shard_id, str) or not SHARD_ID_RE.match(self.shard_id):
             raise DispatchManifestError(
                 f"shard_id must match '^shard-\\d{{2,}}$'; got {self.shard_id!r}"
             )

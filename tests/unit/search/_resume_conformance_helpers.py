@@ -289,7 +289,7 @@ def discover_components(evaluator: Any) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

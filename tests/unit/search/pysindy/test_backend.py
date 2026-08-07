@@ -108,7 +108,7 @@ def test_missing_dependency_error_names_install_extra(
     backend = default_backend_factory(PySINDyConfig())
     X, y = _sample_problem()
 
-    with pytest.raises(RuntimeError, match=r"kd\[pysindy\]"):
+    with pytest.raises(RuntimeError, match=r"--extra pysindy"):
         backend.fit(X, y)
 
 

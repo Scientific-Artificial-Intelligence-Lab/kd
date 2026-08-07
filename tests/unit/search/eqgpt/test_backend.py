@@ -196,43 +196,35 @@ def test_resolve_uses_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert resolve_asset_path() == weights
 
 
-def test_resolve_explicit_weights_path_wins_over_env_and_fallback(
+def test_resolve_explicit_weights_path_wins_over_asset_dir_and_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     explicit = tmp_path / "explicit.pt"
     explicit.write_bytes(b"stub")
     _make_weights(tmp_path / "asset")
     _make_weights(tmp_path / "env")
-    _make_weights(tmp_path / "fb")
     monkeypatch.setenv(ASSET_ENV_VAR, str(tmp_path / "env"))
     resolved = resolve_asset_path(
         weights_path=explicit,
         asset_dir=tmp_path / "asset",
-        fallback_dir=tmp_path / "fb",
     )
     assert resolved == explicit
 
 
-def test_resolve_asset_dir_wins_over_env_and_fallback(
+def test_resolve_asset_dir_wins_over_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     asset = _make_weights(tmp_path / "asset")
     _make_weights(tmp_path / "env")
-    _make_weights(tmp_path / "fb")
     monkeypatch.setenv(ASSET_ENV_VAR, str(tmp_path / "env"))
-    resolved = resolve_asset_path(
-        asset_dir=tmp_path / "asset", fallback_dir=tmp_path / "fb"
-    )
-    assert resolved == asset
+    assert resolve_asset_path(asset_dir=tmp_path / "asset") == asset
 
 
-def test_resolve_env_wins_over_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    env_weights = _make_weights(tmp_path / "env")
-    _make_weights(tmp_path / "fb")
-    monkeypatch.setenv(ASSET_ENV_VAR, str(tmp_path / "env"))
-    assert resolve_asset_path(fallback_dir=tmp_path / "fb") == env_weights
+def test_resolve_without_any_source_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(ASSET_ENV_VAR, raising=False)
+    with pytest.raises(FileNotFoundError) as exc:
+        resolve_asset_path()
+    assert ASSET_ENV_VAR in str(exc.value)
 
 
 def test_resolve_explicit_nonexistent_weights_path_raises(
@@ -248,9 +240,7 @@ def test_resolve_missing_asset_raises_with_guidance(
 ) -> None:
     monkeypatch.delenv(ASSET_ENV_VAR, raising=False)
     with pytest.raises(FileNotFoundError) as exc:
-        resolve_asset_path(
-            asset_dir=tmp_path / "empty_asset", fallback_dir=tmp_path / "empty_fb"
-        )
+        resolve_asset_path(asset_dir=tmp_path / "empty_asset")
     assert ASSET_ENV_VAR in str(exc.value)
 
 

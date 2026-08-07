@@ -37,10 +37,13 @@ _LOSS_INFO_FIELDS: frozenset[str] = frozenset(
 )
 
 
+
+
 _ENGINE_METRIC_FIELDS: frozenset[str] = frozenset(
     {
         "reward_max",
         "best_reward",
+        "reward_full",
         "n_valid",
         "n_eval_valid",
         "n_invalid_in_topk",
@@ -82,7 +85,7 @@ def _make_components(recorder: VizRecorder | None) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=_MockEvaluator(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=recorder,
     )
@@ -164,7 +167,7 @@ def test_update_logs_engine_metrics(
     logged = recorder.keys()
 
     assert logged == EXPECTED_METRICS, (
-        f"recorder.keys() must equal the explicit 12-tuple whitelist.\n"
+        f"recorder.keys() must equal the explicit 13-tuple whitelist.\n"
         f" missing: {sorted(EXPECTED_METRICS - logged)}\n"
         f" extra: {sorted(logged - EXPECTED_METRICS)}\n"
         f" got: {sorted(logged)}"

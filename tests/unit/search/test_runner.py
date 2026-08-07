@@ -925,7 +925,7 @@ class TestRunnerVizDataCollectorInjection:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         runner = ExperimentRunner(algorithm=recording_algorithm, max_iterations=2)
@@ -1494,7 +1494,7 @@ class TestEnsureRecorderBackfill:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
 

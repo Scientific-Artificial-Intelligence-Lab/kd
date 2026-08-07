@@ -584,5 +584,3 @@ class TestRebasePublicName:
         assert best is not None
         assert best.nmse == pytest.approx(NMSE_X_ON_B)
 
-    def test_j_private_alias_is_preserved(self) -> None:
-        assert DiscoverEngine._rebase_best is DiscoverEngine.rebase_best

@@ -48,6 +48,7 @@ from kd.harness.consensus import (
     ConsensusReport,
     DatasetConsensus,
 )
+from kd.search.mini_table import escape_cell as _escape_cell
 
 __all__ = [
     "ConsensusArtifactError",
@@ -235,10 +236,6 @@ def read_consensus_artifact(path: str | Path) -> dict[str, Any]:
 
 
 
-
-
-def _escape_cell(value: str) -> str:
-    return value.replace("|", r"\|").replace("\r", " ").replace("\n", " ")
 
 
 def _fmt(value: float | int | None) -> str:

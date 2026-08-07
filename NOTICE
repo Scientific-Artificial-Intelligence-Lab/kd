@@ -43,3 +43,37 @@ A copy of the MIT License is reproduced below.
   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
+
+-------------------------------------------------------------------
+
+This product bundles reference benchmark datasets from the EqGPT
+project by Xu, H. et al., used under the Apache License, Version 2.0
+(the same license as this product; see LICENSE):
+
+  https://github.com/woshixuhao/EqGPT
+  Xu, H. et al. Nat. Commun. 16, 10255 (2025), doi:10.1038/s41467-025-65114-2
+
+The bundled files are:
+  src/kd/_assets/data/eqgpt_allen_cahn.mat
+  src/kd/_assets/data/eqgpt_burgers_2d.mat
+  src/kd/_assets/data/eqgpt_convection_diffusion.mat
+  src/kd/_assets/data/eqgpt_eq_6_2_12.csv
+  src/kd/_assets/data/eqgpt_klein_gordon.mat
+  src/kd/_assets/data/eqgpt_laplacian_eitech.xlsx
+  src/kd/_assets/data/eqgpt_laplacian_smile.xlsx
+  src/kd/_assets/data/eqgpt_pde_compound.csv
+  src/kd/_assets/data/eqgpt_poisson_disk.xlsx
+  src/kd/_assets/data/eqgpt_wave.mat
+
+This product also bundles wave-breaking laboratory measurements from
+the same project (Imperial College London wave-tank experiments
+analysed in the paper above), with permission of the authors:
+
+  src/kd/_assets/data/wave_breaking_N_G2Tp12A100_broad.npz
+
+The EqGPT search engine in this product is an independent
+re-implementation; only the datasets above are bundled from the EqGPT
+project. The pretrained GPT proposer weights (PDEGPT_wave_breaking.pt,
+~152 MB) are distributed separately by the authors; the `eqgpt` search
+plugin resolves them at runtime from an asset directory (see
+KD_EQGPT_ASSET_DIR in src/kd/_assets/data/DATASETS.md).

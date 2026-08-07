@@ -5,13 +5,9 @@ from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.sympy_bridge import to_sympy
 
 
-
-_UNIT_INTERCEPT = "1"
-
-
 def fold_add(kd_terms: list[str]) -> str:
     if not kd_terms:
-        return _UNIT_INTERCEPT
+        raise ValueError("fold_add requires at least one term")
     if len(kd_terms) == 1:
         return kd_terms[0]
     return _build_add_chain(kd_terms)

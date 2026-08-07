@@ -257,7 +257,7 @@ def _build_discover_scenario() -> _RestoreScenario:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=_StubExpressionEvaluator(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )
@@ -311,7 +311,7 @@ def _build_pysr_scenario() -> _RestoreScenario:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )
@@ -363,7 +363,7 @@ def _build_pysindy_scenario() -> _RestoreScenario:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MagicMock(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

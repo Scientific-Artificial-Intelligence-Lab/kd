@@ -55,21 +55,18 @@ def render_steady_residual_domain(
     x: np.ndarray | None,
     y: np.ndarray | None,
     residual: np.ndarray | None,
-) -> None:
+) -> list[str]:
     ax.set_title(f"{_TITLE_PREFIX}: residual domain")
     if x is None or y is None or residual is None:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     x_arr, y_arr, residual_arr = (
         np.asarray(value).reshape(-1) for value in (x, y, residual)
     )
     if not (x_arr.size == y_arr.size == residual_arr.size) or x_arr.size == 0:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     finite = np.isfinite(x_arr) & np.isfinite(y_arr) & np.isfinite(residual_arr)
     if not finite.all():
-        _degrade(ax, _NON_FINITE)
-        return
+        return _degrade(ax, _NON_FINITE)
     magnitude = np.abs(residual_arr[finite])
     ax_3d = cast(Any, ax)
     ax_3d.scatter(
@@ -83,6 +80,7 @@ def render_steady_residual_domain(
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax_3d.set_zlabel("|residual|")
+    return []
 
 
 def render_steady_term_balance(
@@ -91,27 +89,25 @@ def render_steady_term_balance(
     terms: list[str] | tuple[str, ...] | None,
     *,
     pivot_index: int,
-) -> None:
+) -> list[str]:
     ax.set_title(f"{_TITLE_PREFIX}: term balance")
     if matrix is None or terms is None:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     values = np.asarray(matrix)
-    labels = list(terms)
+
+
+
+    labels = ["1" if term == "one" else term for term in terms]
     if values.ndim != 2 or values.shape[1] != len(labels) or values.size == 0:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     if not np.isfinite(values).all():
-        _degrade(ax, _NON_FINITE)
-        return
+        return _degrade(ax, _NON_FINITE)
     if not 0 <= pivot_index < len(labels):
-        _degrade(ax, "No data: pivot index is unavailable")
-        return
+        return _degrade(ax, "No data: pivot index is unavailable")
     with np.errstate(over="ignore", invalid="ignore"):
         rms = np.sqrt(np.mean(np.square(values), axis=0))
     if not np.isfinite(rms).all():
-        _degrade(ax, _NON_FINITE)
-        return
+        return _degrade(ax, _NON_FINITE)
     colors = [
         "tab:orange" if index == pivot_index else "tab:blue"
         for index in range(len(labels))
@@ -120,26 +116,24 @@ def render_steady_term_balance(
     bars[pivot_index].set_label("Pivot")
     ax.text(pivot_index, rms[pivot_index], "pivot", ha="center", va="bottom")
     ax.set_ylabel("Column RMS")
+    return []
 
 
 def render_steady_surrogate_fit(
     ax: Axes,
     observed: np.ndarray | None,
     predicted: np.ndarray | None,
-) -> None:
+) -> list[str]:
     ax.set_title(f"{_TITLE_PREFIX}: surrogate fit")
     if observed is None or predicted is None:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     observed_arr = np.asarray(observed).reshape(-1)
     predicted_arr = np.asarray(predicted).reshape(-1)
     if observed_arr.size != predicted_arr.size or observed_arr.size == 0:
-        _degrade(ax, _NO_DATA)
-        return
+        return _degrade(ax, _NO_DATA)
     finite = np.isfinite(observed_arr) & np.isfinite(predicted_arr)
     if not finite.all():
-        _degrade(ax, _NON_FINITE)
-        return
+        return _degrade(ax, _NON_FINITE)
     observed_finite = observed_arr[finite]
     predicted_finite = predicted_arr[finite]
     ax.scatter(observed_finite, predicted_finite, s=12, rasterized=True)
@@ -160,29 +154,30 @@ def render_steady_surrogate_fit(
     ax.text(0.05, 0.95, r2_text, transform=ax.transAxes, va="top")
     ax.set_xlabel("Observed u")
     ax.set_ylabel("Predicted u")
+    return []
 
 
-def render(name: str, ax: Axes, data: SteadyVizData) -> None:
+def render(name: str, ax: Axes, data: SteadyVizData) -> list[str]:
     if name == "residual_domain":
-        render_steady_residual_domain(ax, data.x, data.y, data.residual)
-        return
-    if name == "term_balance":
-        render_steady_term_balance(
+        notes = render_steady_residual_domain(ax, data.x, data.y, data.residual)
+    elif name == "term_balance":
+        notes = render_steady_term_balance(
             ax, data.matrix, data.terms, pivot_index=data.pivot_index
         )
-        return
-    if name == "surrogate_fit":
-        render_steady_surrogate_fit(ax, data.observed, data.predicted)
-        return
-    raise ValueError(f"Unknown EqGPT steady plot: {name!r}")
+    elif name == "surrogate_fit":
+        notes = render_steady_surrogate_fit(ax, data.observed, data.predicted)
+    else:
+        raise ValueError(f"Unknown EqGPT steady plot: {name!r}")
+    return [f"homogeneous plot '{name}': {note}" for note in notes]
 
 
-def _degrade(ax: Axes, message: str) -> None:
+def _degrade(ax: Axes, message: str) -> list[str]:
     text_2d = getattr(ax, "text2D", None)
     if text_2d is not None:
         text_2d(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes)
-        return
-    ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes)
+    else:
+        ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes)
+    return [message]
 
 
 __all__ = [

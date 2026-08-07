@@ -1,8 +1,18 @@
+"""Example 15 - On-demand remote datasets (HuggingFace).
+
+Some kd datasets are fetched on demand from HuggingFace, cached locally,
+checksum-verified, and pinned to a revision. REQUIREMENTS: network access
+and the optional hub extra, installed with ``uv sync --extra hub``.
+This is not part of the offline quick start and is not run in CI.
+
+Run: python examples/15_remote_dataset.py
+"""
 
 import kd
 
 
 def main() -> None:
+    """Fetch one remote dataset and run a tiny fit."""
     print("Available remote datasets:")
     for spec in kd.list_remote_datasets():
         print(f" {spec.id}: {spec.equation}")

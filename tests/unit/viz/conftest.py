@@ -17,7 +17,7 @@ _TWO_PI = 6.283185307179586
 
 @pytest.fixture()
 def mock_evaluation_result() -> EvaluationResult:
-    n_samples = 50
+    n_samples = 64
     residuals = torch.randn(n_samples) * 0.1
     return EvaluationResult(
         mse=0.01,
@@ -53,7 +53,7 @@ def mock_experiment_result(
     mock_evaluation_result: EvaluationResult,
     mock_recorder: VizRecorder,
 ) -> ExperimentResult:
-    n_samples = 50
+    n_samples = 64
     actual = torch.sin(torch.linspace(0, 6.28, n_samples))
     predicted = actual + torch.randn(n_samples) * 0.1
     return ExperimentResult(

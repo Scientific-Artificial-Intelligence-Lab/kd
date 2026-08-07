@@ -64,7 +64,7 @@ def mock_components(mock_evaluator: MockEvaluator) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=mock_evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )
@@ -342,7 +342,7 @@ class TestPluginBestResultCheckpoint:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MockEvaluatorWithTerms(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
             recorder=None,
         )
@@ -366,7 +366,7 @@ class TestPluginBestResultCheckpoint:
             dataset=MagicMock(),
             executor=MagicMock(),
             evaluator=MockEvaluatorWithTerms(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
             recorder=None,
         )
@@ -457,7 +457,7 @@ def components_with_target() -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=MockEvaluatorWithTarget(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

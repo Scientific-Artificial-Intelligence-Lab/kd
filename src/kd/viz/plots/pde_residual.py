@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
@@ -15,6 +14,7 @@ from kd.viz.plots._field_panels import (
     _pcolormesh_panel,
     _range_note,
     _reference_limits,
+    _resolve_shape,
 )
 from kd.viz.style import style_context
 
@@ -37,6 +37,7 @@ def plot_pde_residual_field(
     style: dict[str, Any] | None = None,
     field_shape: tuple[int, ...] | None = None,
     dataset: PDEDataset | None = None,
+    infer_grid: bool = True,
 ) -> tuple[Figure, list[str]]:
     warnings: list[str] = []
 
@@ -60,7 +61,13 @@ def plot_pde_residual_field(
     if dataset is not None and _has_axis_info(dataset):
         with style_context(style):
             fig = _render_axis_aware(
-                actual, predicted, dataset, field_shape, warnings, lhs_label
+                actual,
+                predicted,
+                dataset,
+                field_shape,
+                warnings,
+                lhs_label,
+                infer_grid=infer_grid,
             )
         return fig, warnings
 
@@ -69,7 +76,7 @@ def plot_pde_residual_field(
         logger.warning(
             "No dataset provided; falling back to 1D layout for PDE residual"
         )
-    shape = _resolve_shape(actual, field_shape, warnings)
+    shape = _resolve_shape(actual, field_shape, warnings, infer_grid=infer_grid)
 
     with style_context(style):
         fig, axes_arr = plt.subplots(
@@ -154,6 +161,8 @@ def _render_axis_aware(
     field_shape: tuple[int, ...] | None,
     warnings: list[str],
     lhs_label: str,
+    *,
+    infer_grid: bool = True,
 ) -> Figure:
     import contextlib
 
@@ -163,11 +172,14 @@ def _render_axis_aware(
     n_spatial = len(spatial_axes)
 
 
+
+
+
     if field_shape is None:
         with contextlib.suppress(ValueError, AttributeError):
             field_shape = dataset.get_shape()
 
-    shape = _resolve_shape(actual, field_shape, warnings)
+    shape = _resolve_shape(actual, field_shape, warnings, infer_grid=infer_grid)
     if shape is None:
 
         fig, axes_arr = plt.subplots(
@@ -331,7 +343,17 @@ def _render_2d_axis_aware(
     time_axis: str,
     time_dim: int,
 ) -> Figure:
-    from kd.viz.plots._dim_utils import _slice_nd_to_2d
+    from kd.viz.plots._dim_utils import (
+        _imshow_extent_for_spatial_axes,
+        _slice_nd_to_2d,
+    )
+
+
+
+
+    assert dataset.axis_order is not None
+    spatial_axes = [a for a in dataset.axis_order if a != time_axis]
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
     n_t = actual_nd.shape[time_dim]
 
@@ -365,12 +387,18 @@ def _render_2d_axis_aware(
         axes[0],
         actual_slice,
         f"True ({time_axis}={t_val:.3g})" + _range_note(actual_slice, limits),
+        extent=extent,
+        xlabel=xlabel,
+        ylabel=ylabel,
         limits=limits,
     )
     _heatmap_panel(
         axes[1],
         pred_slice,
         f"Predicted ({time_axis}={t_val:.3g})" + _range_note(pred_slice, limits),
+        extent=extent,
+        xlabel=xlabel,
+        ylabel=ylabel,
         limits=limits,
     )
     _heatmap_panel(
@@ -378,40 +406,13 @@ def _render_2d_axis_aware(
         residual_slice,
         f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})",
         residual=True,
+        extent=extent,
+        xlabel=xlabel,
+        ylabel=ylabel,
     )
 
     fig.tight_layout()
     return fig
-
-
-def _resolve_shape(
-    data: np.ndarray,
-    field_shape: tuple[int, ...] | None,
-    warnings: list[str],
-) -> tuple[int, ...] | None:
-    n = data.size
-
-    if field_shape is not None:
-        expected = 1
-        for s in field_shape:
-            expected *= s
-        if expected != n:
-            warnings.append(
-                f"field_shape {field_shape} (size {expected}) "
-                f"does not match data size {n}"
-            )
-            return None
-        if len(field_shape) < 2:
-            return None
-        return field_shape
-
-
-    sqrt_n = int(math.isqrt(n))
-    if sqrt_n * sqrt_n == n and sqrt_n > 1:
-        return (sqrt_n, sqrt_n)
-
-    warnings.append(f"No field_shape provided and cannot infer 2D shape from size {n}")
-    return None
 
 
 def _safe_reshape(

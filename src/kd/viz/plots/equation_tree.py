@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sympy
 
 from kd.core.expr.sympy_bridge import to_sympy
+from kd.viz.style import style_context
 from kd.viz.tree_layout import RenderNode, draw_tree, forest_to_render
 
 if TYPE_CHECKING:
@@ -116,14 +117,21 @@ def _draw_placeholder(ax: Axes, message: str) -> None:
     ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center", va="center")
 
 
-def plot_equation_tree(result: ExperimentResult, ax: Axes) -> list[str]:
+def plot_equation_tree(
+    result: ExperimentResult,
+    ax: Axes,
+    *,
+    style: dict[str, Any] | None = None,
+) -> list[str]:
     root, warnings = _build_render(result)
     if root is None:
         warnings.append("Empty expression; skipping equation tree")
-        _draw_placeholder(ax, "No expression")
-        ax.set_title("Expression Tree")
+        with style_context(style):
+            _draw_placeholder(ax, "No expression")
+            ax.set_title("Expression Tree")
         return warnings
 
-    warnings.extend(draw_tree(root, ax))
-    ax.set_title("Expression Tree")
+    with style_context(style):
+        warnings.extend(draw_tree(root, ax))
+        ax.set_title("Expression Tree")
     return warnings

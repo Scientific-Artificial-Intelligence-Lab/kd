@@ -16,6 +16,11 @@ from kd.viz.plots._dim_utils import (
     _pick_animation_frames,
     _slice_nd_to_2d,
 )
+from kd.viz.plots._field_panels import (
+    _colorbar_extend,
+    _range_note,
+    _reference_limits,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -23,7 +28,6 @@ if TYPE_CHECKING:
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
-    from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,6 @@ _DEFAULT_DPI = 150
 
 
 def plot_field_animation(
-    result: ExperimentResult,
     dataset: PDEDataset,
     integration_result: IntegrationResult,
     *,
@@ -58,6 +61,16 @@ def plot_field_animation(
     )
     n_t = true_field.shape[time_dim]
     frame_indices = _pick_animation_frames(n_t, max_frames)
+    n_shown = len(frame_indices)
+    suptitle = None
+    if n_shown < n_t:
+
+
+        suptitle = f"Showing {n_shown} of {n_t} time steps"
+        warnings.append(
+            f"Animation shows {n_shown} of {n_t} time steps "
+            f"(max_frames={max_frames})"
+        )
     t_coords = np.asarray(
         dataset.get_coords(time_axis).detach().cpu().numpy(),
         dtype=np.float64,
@@ -68,9 +81,14 @@ def plot_field_animation(
         true_field.shape,
         warnings,
     )
-    use_prediction = pred_field is not None
-    limit_arrays = [true_field, pred_field] if use_prediction else [true_field]
-    vmin, vmax = _finite_min_max(limit_arrays)
+
+
+
+
+
+
+
+    vmin, vmax = _reference_limits(true_field, pred_field)
     extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
 
     with style_context(style):
@@ -87,6 +105,7 @@ def plot_field_animation(
             ylabel,
             vmin,
             vmax,
+            suptitle=suptitle,
         )
 
     def _update(frame_idx: int) -> list[AxesImage]:
@@ -97,7 +116,13 @@ def plot_field_animation(
         if pred_field is not None and len(images) > 1:
             pred_slice = _display_slice(pred_field, frame_idx, time_dim)
             images[1].set_data(pred_slice)
-            axes[1].set_title(f"Predicted ({time_axis}={t_val:.3g})")
+
+
+
+            axes[1].set_title(
+                f"Predicted ({time_axis}={t_val:.3g})"
+                + _range_note(pred_slice, (vmin, vmax))
+            )
         return images
 
     interval_ms = 1000.0 / float(fps)
@@ -149,6 +174,8 @@ def _init_animation_figure(
     ylabel: str,
     vmin: float,
     vmax: float,
+    *,
+    suptitle: str | None = None,
 ) -> tuple[Figure, list[Axes], list[AxesImage]]:
     n_cols = 2 if pred_field is not None else 1
     fig, axes_arr = plt.subplots(
@@ -176,11 +203,13 @@ def _init_animation_figure(
         )
     )
     if pred_field is not None:
+        pred_slice = _display_slice(pred_field, frame_idx, time_dim)
         images.append(
             _add_image(
                 axes[1],
-                _display_slice(pred_field, frame_idx, time_dim),
-                f"Predicted ({time_axis}={t_val:.3g})",
+                pred_slice,
+                f"Predicted ({time_axis}={t_val:.3g})"
+                + _range_note(pred_slice, (vmin, vmax)),
                 extent,
                 xlabel,
                 ylabel,
@@ -189,7 +218,14 @@ def _init_animation_figure(
             )
         )
 
-    fig.colorbar(images[0], ax=axes, label=field_name)
+    if suptitle is not None:
+        fig.suptitle(suptitle)
+    extend = (
+        _colorbar_extend(pred_field, vmin, vmax)
+        if pred_field is not None
+        else "neither"
+    )
+    fig.colorbar(images[0], ax=axes, label=field_name, extend=extend)
     return fig, axes, images
 
 
@@ -227,21 +263,3 @@ def _display_slice(
     if frame.ndim > 2:
         frame = _slice_nd_to_2d(frame, (0, 1))
     return np.where(np.isfinite(frame), frame, np.nan)
-
-
-def _finite_min_max(arrays: list[NDArray[np.floating] | None]) -> tuple[float, float]:
-    finite_values = [
-        arr[np.isfinite(arr)]
-        for arr in arrays
-        if arr is not None and np.isfinite(arr).any()
-    ]
-    if not finite_values:
-        return 0.0, 1.0
-    values = np.concatenate(finite_values)
-    vmin = float(values.min())
-    vmax = float(values.max())
-    if not np.isfinite(vmin) or not np.isfinite(vmax):
-        return 0.0, 1.0
-    if vmin == vmax:
-        return vmin - 0.5, vmax + 0.5
-    return vmin, vmax

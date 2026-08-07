@@ -1,4 +1,54 @@
+#!/usr/bin/env python3
+"""Example 04: SGA with NN + autograd derivative mode.
 
+What this demonstrates
+----------------------
+1. Run SGA twice on the SAME noisy 1D Burgers data:
+   - Once with default FD derivatives.
+   - Once with ``use_autograd=True`` — kd auto-trains a ``FieldModel``
+     surrogate and routes the SGA terminal derivatives (``u_x``, ``u_t``)
+     through ``AutogradProvider``.
+2. Compare best AIC, MSE, and recovered coefficients side by side.
+
+Why bother
+----------
+On clean analytic data, FD derivatives are usually sufficient. For
+noisy data (instrumental error, simulation jitter, low resolution)
+finite differences amplify noise — a smooth NN surrogate can produce
+cleaner derivatives, and SGA discovery becomes more stable.
+
+Where the autograd switch applies
+---------------------------------
+SGA touches derivatives in three places:
+
+- raw ``u`` leaf: always raw dataset values
+- terminal ``u_x``/``u_t``: FD provider OR AutogradProvider (this switch)
+- tree-internal ``d``/``d^2``: always SGA-internal finite-difference kernel
+
+So ``use_autograd=True`` only swaps the terminal layer. Tree-internal
+``d`` operators still go through finite differences — the autograd
+surrogate is only used to clean up the derivatives that feed into the
+linear regression step.
+
+Expected outcome
+----------------
+On the noisy Burgers below (noise_level=0.05), use_autograd=True *may*
+produce a slightly cleaner expression with lower MSE than FD alone.
+Whether AD wins depends strongly on noise level, FieldModel training
+budget (``autograd_train_epochs``), and learning rate. ``autograd_train_epochs``
+is an HONEST fixed-step budget: the surrogate trains exactly that many epochs
+(no silent early stop), so runtime scales linearly with it. With the demo's
+800-epoch training, AD does not always beat FD on a single seed — try
+larger noise (e.g. 0.1), more epochs (3000+), or a few seeds before
+concluding. Training overhead scales with data size AND epoch budget; for the
+demo's 96x48 grid + 800 epochs it is typically under 5s, but a 256x128 grid
++ 5000 epochs can add 30-90s. (To stop early once the surrogate plateaus, set
+``autograd_train_patience`` + ``autograd_train_val_ratio``.)
+
+Usage
+-----
+    python examples/internals/04_sga_with_autograd.py
+"""
 
 from __future__ import annotations
 
@@ -45,6 +95,7 @@ def build_components(dataset) -> PlatformComponents:
 
 
 def run_one(label: str, use_autograd: bool, dataset) -> dict:
+    """Run a single SGA pass and return summary metrics."""
     components = build_components(dataset)
     plugin = SGAPlugin(
         SGAConfig(
@@ -53,7 +104,7 @@ def run_one(label: str, use_autograd: bool, dataset) -> dict:
             width=5,
             seed=SEED,
             use_autograd=use_autograd,
-            autograd_train_epochs=800,
+            autograd_train_epochs=800, # quick training for demo
             autograd_train_lr=1e-3,
         )
     )

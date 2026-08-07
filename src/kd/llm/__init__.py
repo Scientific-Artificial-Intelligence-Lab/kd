@@ -17,7 +17,13 @@ from kd.llm.protocol import (
 from kd.llm.tape import (
     TapeRecordingProvider,
     TapeReplayProvider,
+    load_tape_entries,
+    request_from_json,
     request_hash,
+    request_to_json,
+    response_from_json,
+    response_to_json,
+    usage_to_json,
 )
 
 __all__ = [
@@ -35,5 +41,11 @@ __all__ = [
     "OpenAICompatProvider",
     "TapeRecordingProvider",
     "TapeReplayProvider",
+    "load_tape_entries",
+    "request_from_json",
     "request_hash",
+    "request_to_json",
+    "response_from_json",
+    "response_to_json",
+    "usage_to_json",
 ]

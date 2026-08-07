@@ -32,8 +32,9 @@ class _PySINDyOptimizerBackend:
             from pysindy.optimizers import STLSQ
         except ImportError as exc:
             raise RuntimeError(
-                "Model(algorithm='pysindy') 需要 pysindy。"
-                f"pip install kd[pysindy]. 原始错误: {exc}"
+                "Model(algorithm='pysindy') requires the optional dependency "
+                "`pysindy`; install it with `uv sync --extra pysindy`. "
+                f"Original error: {exc}"
             ) from exc
 
         cfg = self._config

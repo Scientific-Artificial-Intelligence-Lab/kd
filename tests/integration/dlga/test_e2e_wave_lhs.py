@@ -20,7 +20,7 @@ class _ExactWaveModel(nn.Module):
 def test_runner_preserves_dlga_selected_u_tt_label() -> None:
     dataset = generate_wave_xu2020_data(nx=24, nt=13, noise_level=0.0)
     plugin = DLGAPlugin(
-        DLGAConfig(pop_size=4, seed=0, epsilon=0.0),
+        DLGAConfig.wave_preset(pop_size=4, seed=0, epsilon=0.0),
         surrogate_model=_ExactWaveModel(),
     )
 

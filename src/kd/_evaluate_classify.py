@@ -22,6 +22,7 @@ import torch
 from kd.core.evaluator import release_cuda_memory
 from kd.core.expr.naming import parse_derivative_name
 from kd.core.expr.terms import split_terms
+from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
 
 if TYPE_CHECKING:
     from kd.core.executor.context import ExecutionContext
@@ -47,7 +48,8 @@ _TAUTOLOGY_REASON_TEXT = "duplicates the LHS target (tautological fit)"
 
 
 
-_FD_MAX_ORDER = 3
+
+_FD_MAX_ORDER = MAX_SUPPORTED_ORDER
 
 
 

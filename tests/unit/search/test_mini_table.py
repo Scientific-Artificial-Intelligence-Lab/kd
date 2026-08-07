@@ -114,6 +114,16 @@ def test_every_string_cell_is_escaped_and_single_line() -> None:
     assert _unescaped_pipe_count(rows[0]) == _unescaped_pipe_count(lines[0])
 
 
+def test_carriage_return_cell_stays_single_line() -> None:
+    record = _record("sga", expression="u\r\nu_x\rv")
+    table = build_mini_table([record])
+    rows = _data_rows(table)
+
+    assert len(rows) == 1
+    assert "\r" not in rows[0]
+    assert "u u_x v" in rows[0]
+
+
 def test_floats_and_hash_use_compact_display_formats() -> None:
     record = _record("sga", score=12.3456)
     row = _data_rows(build_mini_table([record]))[0]

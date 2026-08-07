@@ -1,4 +1,26 @@
+#!/usr/bin/env python3
+"""Example 05: Persist and reload an ExperimentResult.
 
+What this demonstrates
+----------------------
+1. Run a small SGA discovery (1D Burgers, fast).
+2. ``result.save("path.json")`` — JSON-serialize tensors, config, recorder.
+3. ``ExperimentResult.load("path.json")`` — reconstruct the value object.
+4. Re-render the HTML report from the loaded result (no re-search needed).
+
+Caveats
+-------
+- Tensor dtype is NOT preserved by JSON (tensors round-trip as float32 lists).
+  For exact dtype fidelity use a checkpoint mechanism, not this serializer.
+- Only ``ExperimentResult`` itself is saved — the live ``SGAPlugin``
+  instance and ``PlatformComponents`` are not. Plugin-level viz extensions
+  cannot be re-rendered offline (they need the algorithm object).
+
+Usage
+-----
+    python examples/internals/05_save_load_result.py
+    open examples/out/burgers_loaded/report.html
+"""
 
 from __future__ import annotations
 
@@ -23,7 +45,7 @@ logger = logging.getLogger("examples.05")
 logger.setLevel(logging.INFO)
 
 SEED = 42
-GENERATIONS = 30
+GENERATIONS = 30 # short — purpose is serialization, not best results
 POPULATION = 10
 SAVE_PATH = Path(__file__).parent / "out" / "burgers_result.json"
 RELOAD_REPORT_DIR = Path(__file__).parent / "out" / "burgers_loaded"
@@ -70,8 +92,8 @@ def main() -> None:
     logger.info(
         "expression match: %s", loaded.best_expression == result.best_expression
     )
-
-
+    # Guard the AIC equality check: if both are inf (no valid candidate found),
+    # ``inf - inf == nan`` would mislead the comparison. Treat both-inf as match.
     aic_match = (
         math.isinf(loaded.best_score) and math.isinf(result.best_score)
     ) or abs(loaded.best_score - result.best_score) < 1e-9
@@ -80,8 +102,8 @@ def main() -> None:
     logger.info("dataset_name: %s", loaded.dataset_name)
     logger.info("algorithm_name: %s", loaded.algorithm_name)
 
-
-
+    # Re-render report from loaded result. Note: pass dataset for field plots,
+    # but algorithm=None because the live plugin wasn't serialized.
     logger.info("Re-rendering HTML report from loaded result ...")
     RELOAD_REPORT_DIR.mkdir(parents=True, exist_ok=True)
     viz = VizEngine(output_dir=RELOAD_REPORT_DIR)

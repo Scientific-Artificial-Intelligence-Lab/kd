@@ -9,9 +9,10 @@ import platform
 import subprocess
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, cast
+from typing import Any, cast
 
 import kd
+from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.harness._verify import (
     INDEX_FILENAME,
     INDEX_SCHEMA_VERSION,
@@ -28,8 +29,6 @@ from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan
 from kd.search.records import RunRecord
 
 logger = logging.getLogger(__name__)
-
-_JSON_INDENT_SPACES: Final[int] = 2
 
 
 def environment_fingerprint() -> dict[str, str]:
@@ -326,7 +325,7 @@ class EvidenceStore:
             json.dump(
                 self._index_payload(),
                 handle,
-                indent=_JSON_INDENT_SPACES,
+                indent=JSON_INDENT_SPACES,
                 allow_nan=False,
                 sort_keys=True,
             )

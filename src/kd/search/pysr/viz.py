@@ -18,12 +18,21 @@ logger = logging.getLogger(__name__)
 
 
 
-_PARETO_COMPLEXITY_KEY = "pareto_complexity"
-_PARETO_LOSS_KEY = "pareto_loss"
-_PARETO_NMSE_KEY = "pareto_nmse"
-_SELECTED_COMPLEXITY_KEY = "selected_complexity"
-_SELECTED_LOSS_KEY = "selected_loss"
-_SELECTED_NMSE_KEY = "selected_nmse"
+
+PARETO_COMPLEXITY_KEY = "pareto_complexity"
+PARETO_LOSS_KEY = "pareto_loss"
+PARETO_NMSE_KEY = "pareto_nmse"
+SELECTED_COMPLEXITY_KEY = "selected_complexity"
+SELECTED_LOSS_KEY = "selected_loss"
+SELECTED_NMSE_KEY = "selected_nmse"
+LOGGED_METRICS: tuple[str, ...] = (
+    PARETO_COMPLEXITY_KEY,
+    PARETO_LOSS_KEY,
+    PARETO_NMSE_KEY,
+    SELECTED_COMPLEXITY_KEY,
+    SELECTED_LOSS_KEY,
+    SELECTED_NMSE_KEY,
+)
 
 
 
@@ -84,12 +93,12 @@ _PLOT_SPECS: tuple[_PlotSpec, ...] = (
             "PySR's own complexity/loss Pareto front; the selected model is "
             "highlighted."
         ),
-        x_key=_PARETO_COMPLEXITY_KEY,
-        y_key=_PARETO_LOSS_KEY,
+        x_key=PARETO_COMPLEXITY_KEY,
+        y_key=PARETO_LOSS_KEY,
         xlabel=_COMPLEXITY_LABEL,
         ylabel=_PYSR_LOSS_LABEL,
-        selected_x_key=_SELECTED_COMPLEXITY_KEY,
-        selected_y_key=_SELECTED_LOSS_KEY,
+        selected_x_key=SELECTED_COMPLEXITY_KEY,
+        selected_y_key=SELECTED_LOSS_KEY,
         is_line=True,
     ),
     _PlotSpec(
@@ -99,12 +108,12 @@ _PLOT_SPECS: tuple[_PlotSpec, ...] = (
             "kd's independent NMSE re-score per Pareto complexity (the audit "
             "substrate); the selected model is highlighted."
         ),
-        x_key=_PARETO_COMPLEXITY_KEY,
-        y_key=_PARETO_NMSE_KEY,
+        x_key=PARETO_COMPLEXITY_KEY,
+        y_key=PARETO_NMSE_KEY,
         xlabel=_COMPLEXITY_LABEL,
         ylabel=_KD_NMSE_LABEL,
-        selected_x_key=_SELECTED_COMPLEXITY_KEY,
-        selected_y_key=_SELECTED_NMSE_KEY,
+        selected_x_key=SELECTED_COMPLEXITY_KEY,
+        selected_y_key=SELECTED_NMSE_KEY,
         is_line=True,
     ),
     _PlotSpec(
@@ -113,12 +122,12 @@ _PLOT_SPECS: tuple[_PlotSpec, ...] = (
         description=(
             "PySR loss vs kd NMSE per Pareto point -- do the two rankings agree?"
         ),
-        x_key=_PARETO_LOSS_KEY,
-        y_key=_PARETO_NMSE_KEY,
+        x_key=PARETO_LOSS_KEY,
+        y_key=PARETO_NMSE_KEY,
         xlabel=_PYSR_LOSS_LABEL,
         ylabel=_KD_NMSE_LABEL,
-        selected_x_key=_SELECTED_LOSS_KEY,
-        selected_y_key=_SELECTED_NMSE_KEY,
+        selected_x_key=SELECTED_LOSS_KEY,
+        selected_y_key=SELECTED_NMSE_KEY,
         is_line=False,
     ),
 )
@@ -147,33 +156,45 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     spec = _require_spec(name)
-    x_values, y_values = _finite_xy_pairs(
-        _last_logged_list(recorder, spec.x_key),
-        _last_logged_list(recorder, spec.y_key),
-    )
+    raw_x = _last_logged_list(recorder, spec.x_key)
+    raw_y = _last_logged_list(recorder, spec.y_key)
+    x_values, y_values = _finite_xy_pairs(raw_x, raw_y)
 
     ax.set_xlabel(spec.xlabel)
     ax.set_ylabel(spec.ylabel)
     ax.set_title(spec.title)
 
     if not x_values or not y_values:
+        reason = _no_data_reason(recorder)
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
     if spec.is_line:
         ax.plot(x_values, y_values, marker=_LINE_MARKER, markersize=_LINE_MARKER_SIZE)
     else:
         ax.scatter(x_values, y_values, marker=_SCATTER_MARKER, s=_SCATTER_MARKER_SIZE)
     _draw_selected(ax, spec, recorder)
+
+
+
+
+    n_logged = min(len(raw_x), len(raw_y))
+    n_dropped = n_logged - len(x_values)
+    if n_dropped > 0:
+        return [
+            f"plugin plot '{name}': {n_dropped} of {n_logged} points "
+            "dropped (non-finite coordinate)"
+        ]
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:
@@ -286,6 +307,13 @@ def _no_data_reason(recorder: VizRecorder | None) -> str:
 
 
 __all__ = [
+    "LOGGED_METRICS",
+    "PARETO_COMPLEXITY_KEY",
+    "PARETO_LOSS_KEY",
+    "PARETO_NMSE_KEY",
+    "SELECTED_COMPLEXITY_KEY",
+    "SELECTED_LOSS_KEY",
+    "SELECTED_NMSE_KEY",
     "get_data",
     "list_plot_infos",
     "render",

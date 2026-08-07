@@ -2,7 +2,7 @@
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
 import torch
 from torch import Tensor
@@ -165,6 +165,16 @@ class FunctionRegistry:
         reg.register("lap", _lap_stub, arity=1)
 
         return reg
+
+
+
+
+
+
+
+PROTECTED_OPERATORS: Final[frozenset[str]] = frozenset(
+    {"div", "exp", "log", "n2", "n3", "recip"}
+)
 
 
 

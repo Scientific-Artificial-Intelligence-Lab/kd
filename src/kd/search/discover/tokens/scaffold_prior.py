@@ -61,8 +61,6 @@ class ScaffoldPrior(Prior):
         reaction_tokens: list[str],
         root_tokens: list[str] | tuple[str, ...] = ("add", "sub"),
         neutral_tokens: list[str] | tuple[str, ...] = (),
-        *,
-        strict_mode: bool = False,
     ) -> None:
         super().__init__(library)
         self._diffusion_indices: Int32Array = self._resolve_token_names(
@@ -136,9 +134,6 @@ class ScaffoldPrior(Prior):
         self._arities_with_pad: Int32Array = np.append(
             arities_copy, np.int32(_PAD_ARITY),
         )
-
-        self._arities: Int32Array = arities_copy
-        self._strict_mode: bool = bool(strict_mode)
         self._active: bool = False
 
     @classmethod

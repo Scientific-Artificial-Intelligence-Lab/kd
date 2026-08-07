@@ -707,6 +707,10 @@ def _result_with_zero_score() -> EvaluationResult:
 
 
 
+
+
+
+
 _EVALUATION_RESULT_KEYS = frozenset(
     {
         "mse",
@@ -723,6 +727,8 @@ _EVALUATION_RESULT_KEYS = frozenset(
         "terms",
         "expression",
         "lhs_name",
+        "condition_number",
+        "condition_number_computed",
     }
 )
 
@@ -749,6 +755,8 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "terms": ["diff_x(u)", "mul(u, diff_x(u))"],
             "expression": "add(mul(c0, diff_x(u)), mul(c1, mul(u, diff_x(u))))",
             "lhs_name": "u_t",
+            "condition_number": None,
+            "condition_number_computed": False,
         },
     ),
     (
@@ -768,6 +776,8 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "terms": None,
             "expression": "",
             "lhs_name": None,
+            "condition_number": None,
+            "condition_number_computed": False,
         },
     ),
     (
@@ -787,6 +797,8 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "terms": ["u_xx"],
             "expression": "",
             "lhs_name": None,
+            "condition_number": None,
+            "condition_number_computed": False,
         },
     ),
     (
@@ -806,6 +818,8 @@ _GOLDEN_TO_DICT: list[tuple[Any, dict[str, Any]]] = [
             "terms": ["diff_x(u)"],
             "expression": "",
             "lhs_name": None,
+            "condition_number": None,
+            "condition_number_computed": False,
         },
     ),
 ]

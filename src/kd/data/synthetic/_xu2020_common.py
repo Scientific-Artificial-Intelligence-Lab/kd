@@ -52,6 +52,7 @@ def build_dataset(
     u: torch.Tensor,
     noise_level: float,
     ground_truth: str,
+    lhs_order: int = 1,
 ) -> PDEDataset:
     return PDEDataset(
         name=name,
@@ -65,6 +66,7 @@ def build_dataset(
         fields={_FIELD_U: FieldData(_FIELD_U, u)},
         lhs_field=_FIELD_U,
         lhs_axis=_AXIS_T,
+        lhs_order=lhs_order,
         noise_level=noise_level,
         ground_truth=ground_truth,
     )

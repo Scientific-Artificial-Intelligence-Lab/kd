@@ -144,7 +144,7 @@ def _keyword_components(evaluator: Any) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
     )
 
@@ -520,7 +520,7 @@ class TestPlatformComponentsKwOnly:
                 MagicMock(),
                 executor=MagicMock(),
                 evaluator=MagicMock(),
-                context=MagicMock(),
+                context=MagicMock(training_result=None),
                 registry=MagicMock(),
             )
 
@@ -528,7 +528,7 @@ class TestPlatformComponentsKwOnly:
         components = PlatformComponents(
             dataset=MagicMock(),
             executor=MagicMock(),
-            context=MagicMock(),
+            context=MagicMock(training_result=None),
             registry=MagicMock(),
         )
         assert components.evaluator is None

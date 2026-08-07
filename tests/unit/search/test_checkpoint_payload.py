@@ -15,15 +15,13 @@ from kd.search.sga import SGAConfig, SGAPlugin
 
 class _StubAlgorithm:
 
+    config: dict[str, Any] = {"algorithm": "stub"}
     state: dict[str, Any] = {"weights": [1, 2, 3]}
     best_score = 0.5
     best_expression = "u_t = -u"
 
 
 def test_payload_wires_all_eight_keys() -> None:
-
-
-
 
 
     payload = build_checkpoint_payload(7, _StubAlgorithm())
@@ -33,9 +31,9 @@ def test_payload_wires_all_eight_keys() -> None:
         "algorithm_state": {"weights": [1, 2, 3]},
         "best_score": 0.5,
         "best_expression": "u_t = -u",
-        "algorithm": None,
-        "config": None,
-        "config_canon_scheme": None,
+        "algorithm": "stub",
+        "config": {"algorithm": "stub"},
+        "config_canon_scheme": CONFIG_CANON_SCHEME,
     }
 
 
@@ -88,13 +86,11 @@ def test_config_snapshot_does_read_artifacts_for_config_artifact_algorithm() -> 
         build_checkpoint_payload(2, writer)
 
 
-def test_payload_config_snapshot_degrades_to_none_for_mock_writer() -> None:
+def test_payload_rejects_non_mapping_config_loudly() -> None:
     writer = MagicMock()
     writer.state = {"weights": [1]}
-    payload = build_checkpoint_payload(0, writer)
-
-    assert payload["config"] is None
-    assert payload["config_canon_scheme"] is None
+    with pytest.raises(TypeError, match="Mapping"):
+        build_checkpoint_payload(0, writer)
 
 
 def test_runner_and_callback_emit_via_single_builder() -> None:

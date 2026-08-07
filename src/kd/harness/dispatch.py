@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Final
 
 import kd
+from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.harness._dispatch_schema import (
     _DISPATCH_V1_DATASET_KEYS,
     _DISPATCH_V1_KEYS,
@@ -46,7 +47,6 @@ __all__ = [
     "write_dispatch_manifest",
 ]
 
-_JSON_INDENT_SPACES: Final[int] = 2
 _MANIFEST_FILENAME: Final[str] = "dispatch.json"
 
 
@@ -280,7 +280,7 @@ def write_dispatch_manifest(manifest: DispatchManifest, batch_root: Path) -> Pat
         json.dump(
             manifest_to_payload(manifest),
             handle,
-            indent=_JSON_INDENT_SPACES,
+            indent=JSON_INDENT_SPACES,
             allow_nan=False,
             sort_keys=True,
         )

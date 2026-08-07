@@ -66,6 +66,7 @@ _EXPECTED_DISCOVER_METRICS: frozenset[str] = frozenset(
         "baseline",
         "reward",
         "grad_norm",
+        "reward_full",
         "reward_max",
         "best_reward",
         "n_valid",
@@ -119,6 +120,7 @@ def test_discover_facade_records_engine_metrics() -> None:
 _EXPECTED_PLUGIN_PLOTS: frozenset[str] = frozenset(
     {
         "reward_convergence",
+        "reward_full_mean",
         "entropy_loss_decay",
         "baseline_ewma",
     },
@@ -167,7 +169,7 @@ def test_render_all_includes_plugin_plots(tmp_path: Path) -> None:
 
     figure_names = {p.name for p in report.figures}
     assert expected_plugin_files <= figure_names, (
-        f"report.figures must include all 3 plugin plots. "
+        f"report.figures must include all 4 plugin plots. "
         f"Missing: {sorted(expected_plugin_files - figure_names)}. "
         f"Got figure names: {sorted(figure_names)}"
     )

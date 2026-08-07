@@ -12,11 +12,8 @@ matplotlib.use("Agg")
 
 from matplotlib.figure import Figure
 
-from kd.core.evaluator import EvaluationResult
 from kd.core.integrator import IntegrationResult
 from kd.data.schema import AxisInfo, FieldData, PDEDataset, TaskType
-from kd.search.recorder import VizRecorder
-from kd.search.result import ExperimentResult
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 
 
@@ -83,42 +80,6 @@ def _make_integration_result(
     return IntegrationResult(success=False, warning="Integration failed")
 
 
-def _make_experiment_result() -> ExperimentResult:
-    n = 50
-    actual = torch.randn(n)
-    predicted = actual + torch.randn(n) * 0.1
-    recorder = VizRecorder()
-    recorder.log("_best_score", 1.0)
-    recorder.log("_best_expr", "u")
-    recorder.log("_n_candidates", 10)
-    return ExperimentResult(
-        best_expression="u",
-        best_score=1.0,
-        iterations=1,
-        early_stopped=False,
-        final_eval=EvaluationResult(
-            mse=0.01,
-            nmse=0.005,
-            r2=0.95,
-            score=-100.0,
-            complexity=1,
-            coefficients=torch.tensor([1.0]),
-            is_valid=True,
-            error_message="",
-            selected_indices=[0],
-            residuals=predicted - actual,
-            terms=["u"],
-            expression="u",
-        ),
-        actual=actual,
-        predicted=predicted,
-        dataset_name="test",
-        algorithm_name="SGA",
-        config={},
-        recorder=recorder,
-    )
-
-
 
 
 
@@ -129,8 +90,7 @@ class TestErrorHeatmapSmoke:
     def test_callable_returns_tuple(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert isinstance(warnings, list)
@@ -140,8 +100,7 @@ class TestErrorHeatmapSmoke:
     def test_accepts_style_kwarg(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir, style={"font.size": 12})
+        fig, _ = plot_error_heatmap(ds, ir, style={"font.size": 12})
         plt.close(fig)
 
 
@@ -157,8 +116,7 @@ class TestErrorHeatmapHappyPath:
         custom_axis_2d_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(custom_axis_2d_dataset)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, custom_axis_2d_dataset, ir)
+        fig, _ = plot_error_heatmap(custom_axis_2d_dataset, ir)
         try:
             title_text = " ".join(ax.get_title() for ax in fig.get_axes())
             assert "tau=" in title_text
@@ -169,8 +127,7 @@ class TestErrorHeatmapHappyPath:
     def test_1d_produces_axes(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -179,8 +136,7 @@ class TestErrorHeatmapHappyPath:
     def test_2d_produces_axes(self) -> None:
         ds = _make_2d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -191,8 +147,7 @@ class TestErrorHeatmapHappyPath:
         rectangular_2d_dataset: PDEDataset,
     ) -> None:
         ir = _make_integration_result(rectangular_2d_dataset)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, rectangular_2d_dataset, ir)
+        fig, _ = plot_error_heatmap(rectangular_2d_dataset, ir)
         try:
             data_axes = [ax for ax in fig.get_axes() if ax.images]
             assert len(data_axes) == 3
@@ -211,8 +166,7 @@ class TestErrorHeatmapHappyPath:
     def test_has_colorbar_or_colormap(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
 
             has_visual = any(
@@ -225,8 +179,7 @@ class TestErrorHeatmapHappyPath:
     def test_title_present(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             titles = [ax.get_title() for ax in fig.get_axes()]
             suptitle = fig._suptitle.get_text() if fig._suptitle else ""
@@ -246,8 +199,7 @@ class TestErrorHeatmapEdgeCases:
     def test_failed_integration_no_crash(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds, success=False)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert len(warnings) > 0
@@ -261,8 +213,7 @@ class TestErrorHeatmapEdgeCases:
             predicted_field=None,
             warning="Total failure",
         )
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert len(warnings) > 0
@@ -278,8 +229,7 @@ class TestErrorHeatmapEdgeCases:
             warning="Diverged at t=0.5",
             diverged_at_t=0.5,
         )
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -288,8 +238,7 @@ class TestErrorHeatmapEdgeCases:
     def test_minimal_dataset(self) -> None:
         ds = _make_1d_dataset(nx=2, nt=2)
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -298,9 +247,8 @@ class TestErrorHeatmapEdgeCases:
     def test_no_figure_leak(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
         figs_before = len(plt.get_fignums())
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         plt.close(fig)
         figs_after = len(plt.get_fignums())
         assert figs_after <= figs_before
@@ -347,8 +295,7 @@ class TestErrorHeatmapAxisOrderNone:
         ds = _make_ode_dataset_no_axis_order()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -360,8 +307,7 @@ class TestErrorHeatmapAxisOrderNone:
         ds = _make_ode_dataset_no_axis_order()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -370,8 +316,7 @@ class TestErrorHeatmapAxisOrderNone:
     def test_axis_order_none_failed_integration(self) -> None:
         ds = _make_ode_dataset_no_axis_order()
         ir = IntegrationResult(success=False, warning="Integration failed")
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -384,8 +329,7 @@ class TestErrorHeatmapNSpatialZero:
         ds = _make_ode_dataset_n_spatial_0()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
 
@@ -397,8 +341,7 @@ class TestErrorHeatmapNSpatialZero:
         ds = _make_ode_dataset_n_spatial_0()
         pred = ds.get_field("u").clone()
         ir = IntegrationResult(success=True, predicted_field=pred)
-        result = _make_experiment_result()
-        fig, _ = plot_error_heatmap(result, ds, ir)
+        fig, _ = plot_error_heatmap(ds, ir)
         try:
             assert len(fig.get_axes()) >= 1
         finally:
@@ -407,8 +350,7 @@ class TestErrorHeatmapNSpatialZero:
     def test_n_spatial_zero_failed_integration(self) -> None:
         ds = _make_ode_dataset_n_spatial_0()
         ir = IntegrationResult(success=False, warning="Integration failed")
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
         finally:
@@ -425,8 +367,7 @@ class TestErrorHeatmapNormalRegression:
     def test_1d_normal_dataset_unchanged(self) -> None:
         ds = _make_1d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert len(fig.get_axes()) >= 1
@@ -443,8 +384,7 @@ class TestErrorHeatmapNormalRegression:
     def test_2d_normal_dataset_unchanged(self) -> None:
         ds = _make_2d_dataset()
         ir = _make_integration_result(ds)
-        result = _make_experiment_result()
-        fig, warnings = plot_error_heatmap(result, ds, ir)
+        fig, warnings = plot_error_heatmap(ds, ir)
         try:
             assert isinstance(fig, Figure)
             assert len(fig.get_axes()) >= 1

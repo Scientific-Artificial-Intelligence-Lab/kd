@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from kd.core.equation import (
@@ -95,8 +97,41 @@ class TestBuildHomogeneous:
         assert build_homogeneous(["a", "b"], [1.0]) is None
 
     @pytest.mark.unit
+    def test_length_mismatch_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+
+
+
+
+        caplog.set_level(logging.WARNING, logger="kd.core.equation.construct")
+
+        assert build_homogeneous(["a", "b"], [1.0]) is None
+
+        assert [
+            record.levelno
+            for record in caplog.records
+            if "length mismatch" in record.getMessage()
+        ] == [logging.WARNING]
+
+    @pytest.mark.unit
     def test_degrades_to_none_on_non_finite_coefficient(self) -> None:
         assert build_homogeneous(["a", "b"], [1.0, float("nan")]) is None
+
+    @pytest.mark.unit
+    def test_non_finite_coefficient_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+
+
+
+        caplog.set_level(logging.WARNING, logger="kd.core.equation.construct")
+
+        assert build_homogeneous(["a", "b"], [1.0, float("nan")]) is None
+
+        assert [
+            record.levelno
+            for record in caplog.records
+            if "non-finite" in record.getMessage()
+        ] == [logging.WARNING]
 
 
 class TestLowering:

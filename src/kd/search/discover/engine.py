@@ -58,7 +58,7 @@ class DiscoverEngine:
 
     def __init__(
         self,
-        generator: Generator | None = None,
+        generator: Generator,
         strategy: RSPGStrategy | None = None,
         reward_adapter: RewardAdapter | None = None,
         validator: CandidateValidator | None = None,
@@ -66,9 +66,8 @@ class DiscoverEngine:
         batch_size: int = DEFAULT_BATCH_SIZE,
         cycle_candidate_capacity: int = 0,
         result_filter: ResultFilter | None = None,
-        **kwargs: Any,
     ) -> None:
-        self._generator = self._resolve_generator(generator, kwargs)
+        self._generator = generator
         if strategy is None:
             raise TypeError("strategy is required.")
         if reward_adapter is None:
@@ -96,24 +95,6 @@ class DiscoverEngine:
         self._extras: dict[str, Any] | None = None
         self._pending: PendingState | None = None
         self._last_metrics: dict[str, float] = {}
-
-    @staticmethod
-    def _resolve_generator(
-        generator: Generator | None,
-        kwargs: dict[str, Any],
-    ) -> Generator:
-        legacy_controller = kwargs.pop("controller", None)
-        if kwargs:
-            unexpected = ", ".join(sorted(kwargs))
-            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
-        if generator is not None and legacy_controller is not None:
-            raise TypeError("Pass either generator or controller, not both.")
-        resolved = generator if generator is not None else legacy_controller
-        if resolved is None:
-            raise TypeError("generator is required.")
-        if not isinstance(resolved, Generator):
-            raise TypeError("generator must satisfy the Generator protocol.")
-        return resolved
 
     @property
     def batch_size(self) -> int:
@@ -512,10 +493,6 @@ class DiscoverEngine:
             self._best_reward = INITIAL_BEST_REWARD
         self._best_result = self._strip_result(result)
 
-
-
-    _rebase_best = rebase_best
-
     def _reset_cycle_candidates(self) -> None:
         self._cycle_candidates.reset()
 
@@ -547,6 +524,10 @@ class DiscoverEngine:
             n_eval_valid = float(np.count_nonzero(unique_eval_valid_mask))
         metrics = dict(loss_info)
         metrics["reward_max"] = reward_max
+
+
+
+        metrics["reward_full"] = float(torch.mean(rewards).detach().cpu().item())
         metrics["best_reward"] = self._best_reward
         metrics["n_valid"] = float(np.count_nonzero(pending.valid_mask))
         metrics["n_eval_valid"] = n_eval_valid

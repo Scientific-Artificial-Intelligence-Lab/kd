@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -54,14 +55,19 @@ class TestRunnerLhsName:
         assert result.lhs_label == "u_tt"
 
     @pytest.mark.unit
-    def test_missing_lhs_name_keeps_existing_dataset_fallback(
-        self, mock_components: PlatformComponents
+    def test_missing_declarations_default_label_is_disclosed(
+        self,
+        mock_components: PlatformComponents,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        result = ExperimentRunner(
-            _LhsNameAlgorithm(None),
-            max_iterations=1,
-            batch_size=1,
-        ).run(mock_components)
+        with caplog.at_level(logging.WARNING, logger="kd.search.runner"):
+            result = ExperimentRunner(
+                _LhsNameAlgorithm(None),
+                max_iterations=1,
+                batch_size=1,
+            ).run(mock_components)
 
         assert result.lhs_label == "u_t"
-
+        assert any(
+            "defaulting lhs_label" in record.message for record in caplog.records
+        )

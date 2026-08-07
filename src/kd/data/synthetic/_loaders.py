@@ -161,16 +161,15 @@ def _resolve_eqgpt_file(
     If ``data_dir`` is provided, it is authoritative: only
     ``Path(data_dir) / filename`` is considered (raises if absent there, with
     no fall-through). Otherwise, try the first existing of these
-    ``<subdir>``-scoped candidates: bundled package data, source
-    ``data``, then local EqGPT data under
-    ``a reference library
+    ``<subdir>``-scoped candidates: the bundled package data, then a source
+    checkout's data directory.
 
-    Every no-arg candidate is namespaced by ``subdir`` (not just the ref_libs
-    one) so a generic filename like ``data.mat`` cannot collide with a
-    different equation's file dropped into a shared flat directory. A loader
-    whose filename is already unambiguous and intentionally lives flat in the
-    data dir may opt out of namespacing by passing ``subdir=""``; use that only
-    when the filename cannot collide.
+    Every no-arg candidate is namespaced by ``subdir`` so a generic filename
+    like ``data.mat`` cannot collide with a different equation's file dropped
+    into a shared flat directory. A loader whose filename is already
+    unambiguous and intentionally lives flat in the data dir may opt out of
+    namespacing by passing ``subdir=""``; use that only when the filename
+    cannot collide.
     """
     if data_dir is not None:
         explicit_path = Path(data_dir) / filename
@@ -179,10 +178,13 @@ def _resolve_eqgpt_file(
         raise FileNotFoundError(f"EqGPT data file not found: {explicit_path}")
 
     project_root = _find_project_root()
+
+
+
+
     candidates = [
         Path(__file__).resolve().parents[2] / "_assets" / "data" / subdir / filename,
         project_root / _DEFAULT_DATA_DIR / subdir / filename,
-        project_root / "ref_libs" / "EqGPT" / "data" / subdir / filename,
     ]
     for path in candidates:
         if path.exists():
@@ -322,8 +324,8 @@ def load_allen_cahn(
 
     Args:
         data_dir: Directory holding ``eqgpt_allen_cahn.mat``. If None, falls
-            back to bundled / ``data`` / ``a reference library
-            locations.
+            back to the bundled package data, then a source checkout's data
+            directory.
 
     Returns:
         PDEDataset with Allen-Cahn data.
@@ -433,8 +435,8 @@ def load_convection_diffusion(
 
     Args:
         data_dir: Directory holding ``eqgpt_convection_diffusion.mat``. If
-            None, falls back to bundled / ``data`` /
-            ``a reference library locations.
+            None, falls back to the bundled package data, then a source
+            checkout's data directory.
 
     Returns:
         PDEDataset with convection-diffusion data.
@@ -470,7 +472,7 @@ def load_wave(
 
     Args:
         data_dir: Directory holding ``eqgpt_wave.mat``. If None, falls back to
-            bundled / ``data`` / ``a reference library locations.
+            the bundled package data, then a source checkout's data directory.
 
     Returns:
         PDEDataset with wave data (lhs_order=2).
@@ -511,8 +513,8 @@ def load_klein_gordon(
 
     Args:
         data_dir: Directory holding ``eqgpt_klein_gordon.mat``. If None, falls
-            back to bundled / ``data`` / ``a reference library
-            locations.
+            back to the bundled package data, then a source checkout's data
+            directory.
 
     Returns:
         PDEDataset with Klein-Gordon data (lhs_order=2).

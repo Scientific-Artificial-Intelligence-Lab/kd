@@ -61,6 +61,11 @@ def test_whitelist_is_the_six_render_inputs() -> None:
     }
 
 
+def test_render_source_keys_are_within_the_whitelist() -> None:
+    used = set(llm4ed_viz._SPREAD_METRICS) | set(llm4ed_viz._SINGLE_SOURCE.values())
+    assert used <= set(_LOGGED_METRICS)
+
+
 def test_no_fifth_sanitize_y_copy() -> None:
     from pathlib import Path
 
@@ -244,8 +249,11 @@ def test_both_plugins_share_one_gap_convention() -> None:
 def test_empty_recorder_degrades(name: str) -> None:
     fig, ax = plt.subplots()
     try:
-        llm4ed_viz.render(name, ax, VizRecorder())
-        llm4ed_viz.render(name, ax, None)
+        for recorder in (VizRecorder(), None):
+            channel = llm4ed_viz.render(name, ax, recorder)
+
+
+            assert any("No data" in note for note in channel), channel
     finally:
         plt.close(fig)
     y = llm4ed_viz.get_data(name, VizRecorder())["y"]

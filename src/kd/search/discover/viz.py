@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _PLOT_METRIC: dict[str, str] = {
     "reward_convergence": "reward",
+    "reward_full_mean": "reward_full",
     "entropy_loss_decay": "entropy_loss",
     "baseline_ewma": "baseline",
 }
@@ -29,18 +30,44 @@ _PLOT_METRIC: dict[str, str] = {
 
 
 
+
 _PLOT_INFOS: tuple[PlotInfo, ...] = (
     PlotInfo(
         name="reward_convergence",
-        title="Reward Convergence",
+        title="Reward (Mean of Top ε)",
         description=(
-            "Per-iteration reward signal from the policy-gradient training loop."
+            "Per-iteration mean reward of the top-ε risk-seeking subset the "
+            "policy gradient trains on — kd's analogue of what the reference "
+            "implementation calls 'Mean of Top ε' (r_avg_sub; kd selects the "
+            "subset after invalid-row filtering, delta, so the subsets "
+            "can differ for larger batches), NOT the batch reward. Under "
+            "the default batch=16, ε=0.05 the subset is a single sample, so "
+            "this curve equals the per-iteration maximum, and with the "
+            "default 'R_e' baseline it also coincides with the Reward "
+            "Baseline plot by construction. The whole-batch signal is the "
+            "'Reward (Full-Batch Mean)' plot."
+        ),
+    ),
+    PlotInfo(
+        name="reward_full_mean",
+        title="Reward (Full-Batch Mean)",
+        description=(
+            "Per-iteration mean reward over the FULL sampled batch (invalid "
+            "expressions carry the invalid-reward fill) — the reference "
+            "implementation's r_avg_full. Unlike the top-ε curve this one "
+            "moves with the whole policy, so the two panels together show "
+            "elite vs population progress."
         ),
     ),
     PlotInfo(
         name="entropy_loss_decay",
-        title="Entropy Loss Decay",
-        description=("Entropy regularizer loss component over training iterations."),
+        title="Entropy Loss",
+        description=(
+            "Entropy regularizer loss component (= -weight x mean policy "
+            "entropy, typically negative). Direction-neutral title on "
+            "purpose: the curve RISES toward zero as the policy's entropy "
+            "collapses — it does not 'decay' for a healthy run."
+        ),
     ),
     PlotInfo(
         name="baseline_ewma",
@@ -84,7 +111,7 @@ def list_plot_infos() -> list[PlotInfo]:
     ]
 
 
-def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
+def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
     metric = _PLOT_METRIC[name]
     series = _safe_get_series(recorder, metric)
@@ -95,15 +122,16 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
     ax.set_title(title)
 
     if not series:
+        reason = _no_data_reason(recorder)
         ax.text(
             0.5,
             0.5,
-            f"{_NO_DATA_TEXT} ({_no_data_reason(recorder)})",
+            f"{_NO_DATA_TEXT} ({reason})",
             transform=ax.transAxes,
             ha="center",
             va="center",
         )
-        return
+        return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
 
     ax.plot(
         range(len(series)),
@@ -111,6 +139,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> None:
         marker=_LINE_MARKER,
         markersize=_LINE_MARKER_SIZE,
     )
+    return []
 
 
 def get_data(name: str, recorder: VizRecorder | None) -> dict[str, Any]:

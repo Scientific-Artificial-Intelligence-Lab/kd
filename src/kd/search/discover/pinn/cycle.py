@@ -594,11 +594,6 @@ class PINNCycleRunner:
             lhs_field=self._dataset_metadata.lhs_field,
             lhs_axis=self._dataset_metadata.lhs_axis,
         )
-        if not hasattr(self._evaluator, "executor") or not hasattr(
-            self._evaluator,
-            "solver",
-        ):
-            return cast(Evaluator, self._evaluator)
         source = cast(Evaluator, self._evaluator)
         return rebuild_evaluator(regen, source.executor, source.solver)
 

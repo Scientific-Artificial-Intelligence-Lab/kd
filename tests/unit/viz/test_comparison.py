@@ -459,3 +459,59 @@ class TestSummaryTableTermDiff:
             assert not any("vocabular" in w for w in warnings_list), warnings_list
         finally:
             plt.close(fig)
+
+
+class TestMixedMetricDisclosure:
+
+    def test_mixed_metric_overlay_labels_and_subtitle(self) -> None:
+        from kd.viz.plots.comparison import render_overlaid_convergence
+
+        results = [
+            _make_result("SGA", score_kind="AIC", score_direction="min"),
+            _make_result("DISCOVER", score_kind="reward", score_direction="max"),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            render_overlaid_convergence(results, ax)
+            legend_texts = [t.get_text() for t in ax.get_legend().get_texts()]
+            assert "SGA (AIC, min)" in legend_texts
+            assert "DISCOVER (reward, max)" in legend_texts
+            assert "Mixed score metrics" in ax.get_title()
+        finally:
+            plt.close(fig)
+
+    def test_uniform_metric_overlay_keeps_plain_labels(self) -> None:
+        from kd.viz.plots.comparison import render_overlaid_convergence
+
+        results = [
+            _make_result("A", score_kind="AIC", score_direction="min"),
+            _make_result("B", score_kind="AIC", score_direction="min"),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            render_overlaid_convergence(results, ax)
+            legend_texts = [t.get_text() for t in ax.get_legend().get_texts()]
+            assert "A" in legend_texts
+            assert "B" in legend_texts
+            assert "Mixed score metrics" not in ax.get_title()
+        finally:
+            plt.close(fig)
+
+    def test_summary_table_non_finite_metrics_shown_as_na(self) -> None:
+        from kd.viz.plots.comparison import plot_summary_table
+
+        results = [
+            _make_result("A", r2=float("nan"), nmse=float("inf")),
+            _make_result("B"),
+        ]
+        fig, ax = plt.subplots()
+        try:
+            warnings = plot_summary_table(results, ax)
+            cells = ax.tables[0].get_celld()
+            assert cells[(1, 2)].get_text().get_text() == "N/A"
+            assert cells[(1, 3)].get_text().get_text() == "N/A"
+            assert cells[(2, 2)].get_text().get_text() == "0.05"
+            assert any("NMSE" in w and "N/A" in w for w in warnings)
+            assert any("R2" in w and "N/A" in w for w in warnings)
+        finally:
+            plt.close(fig)

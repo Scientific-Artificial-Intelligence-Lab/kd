@@ -4,6 +4,7 @@ from __future__ import annotations
 import torch
 
 from kd.core.linear_solve._helpers import (
+    compute_condition_number,
     r2_score,
     upcast_for_solve,
 )
@@ -30,8 +31,10 @@ class LeastSquaresSolver(SparseSolver):
             theta_solve = upcast_for_solve(theta)
             y_solve = upcast_for_solve(y_1d)
 
+
+
             condition_number = (
-                self._compute_condition_number(theta_solve)
+                compute_condition_number(theta_solve)
                 if self.compute_condition_number
                 else None
             )
@@ -106,15 +109,3 @@ class LeastSquaresSolver(SparseSolver):
                 f"dimension mismatch: theta has {n_samples} rows, "
                 f"y has {y_1d.shape[0]} elements"
             )
-
-    def _compute_condition_number(self, theta: torch.Tensor) -> float:
-
-        if (theta == 0).all():
-            return float("inf")
-
-        try:
-            cond: float = float(torch.linalg.cond(theta).item())
-            return cond
-        except RuntimeError:
-
-            return float("inf")

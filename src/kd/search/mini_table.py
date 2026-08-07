@@ -23,19 +23,18 @@ def _format_value(value: float | int | None) -> str:
     return str(value)
 
 
-def _escape_cell(value: str) -> str:
-
-    return value.replace("|", r"\|").replace("\n", " ")
+def escape_cell(value: str) -> str:
+    return value.replace("|", r"\|").replace("\r", " ").replace("\n", " ")
 
 
 def _record_row(record: RunRecord) -> str:
     evidence = record.evidence
     cost = record.cost
     cells = (
-        _escape_cell(evidence.instrument),
-        _escape_cell(evidence.dataset_name),
-        _escape_cell(evidence.expression),
-        _escape_cell(evidence.score_kind),
+        escape_cell(evidence.instrument),
+        escape_cell(evidence.dataset_name),
+        escape_cell(evidence.expression),
+        escape_cell(evidence.score_kind),
         _format_value(evidence.score),
         _format_value(evidence.r2),
         _format_value(cost.wallclock_seconds),

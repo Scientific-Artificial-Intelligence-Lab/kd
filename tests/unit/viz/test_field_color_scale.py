@@ -20,7 +20,6 @@ from kd.viz.plots.field import plot_field_comparison
 from tests.unit.viz.test_field import (
     _make_1d_pde_dataset,
     _make_2d_pde_dataset,
-    _make_experiment_result,
 )
 
 
@@ -80,9 +79,7 @@ class TestSharedColorScale1d:
 
     def test_true_and_predicted_share_clim_with_colorbars(self) -> None:
         ds = _make_1d_pde_dataset()
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             true_m = _mappable(_one_panel(fig, "True"))
             pred_m = _mappable(_one_panel(fig, "Predicted"))
@@ -95,9 +92,7 @@ class TestSharedColorScale1d:
     def test_shared_limits_track_the_true_field_not_the_union(self) -> None:
         ds = _make_1d_pde_dataset()
         true_max = float(ds.get_field("u").abs().max())
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             vmin, vmax = _mappable(_one_panel(fig, "True")).get_clim()
 
@@ -108,9 +103,7 @@ class TestSharedColorScale1d:
 
     def test_saturated_predicted_colorbar_is_marked_extended(self) -> None:
         ds = _make_1d_pde_dataset()
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             colorbar = _mappable(_one_panel(fig, "Predicted")).colorbar
             assert colorbar.extend == "both"
@@ -120,22 +113,20 @@ class TestSharedColorScale1d:
     def test_predicted_title_carries_actual_out_of_range_values(self) -> None:
         ds = _make_1d_pde_dataset()
         pred = ds.get_field("u") * _AMPLIFY
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             numbers = _floats_in(_one_panel(fig, "Predicted").get_title())
             for expected in (float(pred.min()), float(pred.max())):
-                assert any(
-                    n == pytest.approx(expected, rel=0.02) for n in numbers
-                ), f"{expected} missing from title numbers {numbers}"
+                assert any(n == pytest.approx(expected, rel=0.02) for n in numbers), (
+                    f"{expected} missing from title numbers {numbers}"
+                )
         finally:
             plt.close(fig)
 
     def test_in_range_prediction_gets_no_clipping_note(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = IntegrationResult(success=True, predicted_field=ds.get_field("u") * 0.5)
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             assert "clipped" not in _one_panel(fig, "Predicted").get_title()
         finally:
@@ -143,9 +134,7 @@ class TestSharedColorScale1d:
 
     def test_residual_keeps_independent_symmetric_scale(self) -> None:
         ds = _make_1d_pde_dataset()
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             res_vmin, res_vmax = _mappable(_one_panel(fig, "Residual")).get_clim()
             shared = _mappable(_one_panel(fig, "True")).get_clim()
@@ -161,7 +150,7 @@ class TestTrueFieldReferenceScale:
     def test_ordinary_true_field_is_not_clipped(self) -> None:
         ds = _make_1d_pde_dataset()
         ir = IntegrationResult(success=True, predicted_field=ds.get_field("u"))
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             true_ax = _one_panel(fig, "True")
             vmin, vmax = _mappable(true_ax).get_clim()
@@ -177,7 +166,7 @@ class TestTrueFieldReferenceScale:
         values[0, 0] = 1.0e6
         ds = _dataset_with_field(values)
         ir = IntegrationResult(success=True, predicted_field=values.clone())
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             true_ax = _one_panel(fig, "True")
             _, vmax = _mappable(true_ax).get_clim()
@@ -194,7 +183,7 @@ class TestTrueFieldReferenceScale:
         values[10:15, 10:20] = 1.0
         ds = _dataset_with_field(values)
         ir = IntegrationResult(success=True, predicted_field=values.clone())
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             true_ax = _one_panel(fig, "True")
             vmin, vmax = _mappable(true_ax).get_clim()
@@ -211,7 +200,7 @@ class TestDegenerateFieldLimits:
         values = torch.full((6, 5), 3.0)
         ds = _dataset_with_field(values)
         ir = IntegrationResult(success=True, predicted_field=values.clone())
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             vmin, vmax = _mappable(_one_panel(fig, "True")).get_clim()
             assert math.isfinite(vmin)
@@ -224,7 +213,7 @@ class TestDegenerateFieldLimits:
         values = torch.full((6, 5), float("nan"))
         ds = _dataset_with_field(values)
         ir = IntegrationResult(success=True, predicted_field=values.clone())
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             vmin, vmax = _mappable(_one_panel(fig, "True")).get_clim()
             assert math.isfinite(vmin)
@@ -237,7 +226,7 @@ class TestDegenerateFieldLimits:
         values = torch.zeros(6, 5)
         ds = _dataset_with_field(values)
         ir = IntegrationResult(success=True, predicted_field=values.clone())
-        fig, _ = plot_field_comparison(_make_experiment_result(), ds, ir)
+        fig, _ = plot_field_comparison(ds, ir)
         try:
             vmin, vmax = _mappable(_one_panel(fig, "True")).get_clim()
             assert math.isfinite(vmin)
@@ -256,9 +245,7 @@ class TestSharedColorScale2d:
 
     def test_all_field_panels_share_one_clim_and_have_colorbars(self) -> None:
         ds = _make_2d_pde_dataset(nt=5)
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             field_axes = _panels(fig, "True") + _panels(fig, "Predicted")
             assert len(field_axes) == 6
@@ -270,9 +257,7 @@ class TestSharedColorScale2d:
 
     def test_predicted_titles_carry_actual_out_of_range_values(self) -> None:
         ds = _make_2d_pde_dataset(nt=5)
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             pred_axes = _panels(fig, "Predicted")
             assert pred_axes
@@ -288,9 +273,7 @@ class TestSharedColorScale2d:
 
     def test_residual_row_keeps_independent_symmetric_scale(self) -> None:
         ds = _make_2d_pde_dataset(nt=5)
-        fig, _ = plot_field_comparison(
-            _make_experiment_result(), ds, _amplified_result(ds)
-        )
+        fig, _ = plot_field_comparison(ds, _amplified_result(ds))
         try:
             shared = _mappable(_panels(fig, "True")[0]).get_clim()
             for ax in _panels(fig, "Residual"):

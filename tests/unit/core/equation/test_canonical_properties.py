@@ -1,18 +1,10 @@
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-
-
-
-pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
-
 from kd.core.equation.canonical import canonicalize_expression
-from kd.core.expr.canonicalizer import canonicalize_code
-from kd.core.expr.registry import FunctionRegistry
 
 COMMUTATIVE_OPS = ("add", "mul")
 NON_COMMUTATIVE_OPS = ("sub", "div")
@@ -21,8 +13,6 @@ LEAVES = ("u", "a", "b", "c", "v", "w", "diffx", "u2")
 
 
 Tree = str | tuple[str, tuple["Tree", ...]]
-
-_DEFAULT_REGISTRY = FunctionRegistry.create_default()
 
 
 def _trees() -> st.SearchStrategy[Tree]:
@@ -88,11 +78,3 @@ def test_whitespace_invariance(tree: Tree) -> None:
 def test_output_is_compact(tree: Tree) -> None:
     assert " " not in canonicalize_expression(_render(tree, spaced=True))
 
-
-@settings(deadline=None)
-@given(tree=_trees())
-def test_shim_agrees_with_survivor(tree: Tree) -> None:
-    rendered = _render(tree, spaced=True)
-    assert canonicalize_code(rendered, _DEFAULT_REGISTRY) == canonicalize_expression(
-        rendered
-    )

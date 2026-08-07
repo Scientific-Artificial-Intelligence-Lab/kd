@@ -28,7 +28,7 @@ from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
 from kd.search.sga import tree_render as _tree_render
 from kd.search.sga import viz as _viz_helpers
-from kd.search.sga.config import OPS, ROOT, SGAConfig, build_den
+from kd.search.sga.config import DEDUP_MODES, OPS, ROOT, SGAConfig, build_den
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
 from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde
 from kd.search.sga.pde import PDE
@@ -90,14 +90,15 @@ def _aic_of(result: EvaluationResult) -> float:
 
 
 
-_LOGGED_METRICS: tuple[str, ...] = (
-    "gen_best_aic",
-    "gen_mean_aic",
-    "gen_best_nmse",
-    "n_valid",
-    "n_unique",
-    "gen_mean_complexity",
-)
+_LOGGED_METRICS = _viz_helpers.LOGGED_METRICS
+_BEST_AIC_KEY = _viz_helpers.BEST_AIC_KEY
+_GEN_BEST_AIC_KEY = _viz_helpers.GEN_BEST_AIC_KEY
+_GEN_MEAN_AIC_KEY = _viz_helpers.GEN_MEAN_AIC_KEY
+_POP_MEAN_AIC_KEY = _viz_helpers.POP_MEAN_AIC_KEY
+_GEN_BEST_NMSE_KEY = _viz_helpers.GEN_BEST_NMSE_KEY
+_N_VALID_KEY = _viz_helpers.N_VALID_KEY
+_N_UNIQUE_KEY = _viz_helpers.N_UNIQUE_KEY
+_GEN_MEAN_COMPLEXITY_KEY = _viz_helpers.GEN_MEAN_COMPLEXITY_KEY
 
 
 
@@ -515,7 +516,7 @@ class SGAPlugin:
         if self._recorder is not None:
 
 
-            self._recorder.log("best_aic", self._best_score)
+            self._recorder.log(_BEST_AIC_KEY, self._best_score)
 
         self._offspring = None
         self._offspring_results = None
@@ -529,13 +530,28 @@ class SGAPlugin:
     def list_plots(self) -> list[PlotInfo]:
         return [*_viz_helpers.list_plot_infos(), _tree_render.genome_tree_info()]
 
-    def render_plot(self, name: str, ax: Axes) -> None:
+    def _check_plot_name(self, name: str) -> None:
+        names = [info.name for info in self.list_plots()]
+        if name not in names:
+            available = ", ".join(names)
+            raise ValueError(f"Unknown plot name: {name!r}. Available: {available}")
+
+    def render_plot(self, name: str, ax: Axes) -> list[str]:
+        self._check_plot_name(name)
         if name == _tree_render.GENOME_TREE_INFO.name:
-            _tree_render.render_genome_tree(ax, self._best_pde())
-            return
-        _viz_helpers.render(name, ax, self._recorder)
+
+
+
+
+
+            return [
+                f"plugin plot '{name}': {note}"
+                for note in _tree_render.render_genome_tree(ax, self._best_pde())
+            ]
+        return _viz_helpers.render(name, ax, self._recorder)
 
     def get_plot_data(self, name: str) -> dict[str, Any]:
+        self._check_plot_name(name)
         if name == _tree_render.GENOME_TREE_INFO.name:
             return _tree_render.genome_tree_data(self._best_pde())
         return _viz_helpers.get_data(name, self._recorder)
@@ -696,17 +712,9 @@ class SGAPlugin:
         return var if math.isfinite(var) else 0.0
 
     def _format_best_expression(self) -> str:
-        try:
-            res = self.build_final_result()
-        except Exception:
-            res = None
+        res = self.build_final_result()
 
-        if (
-            res is not None
-            and res.is_valid
-            and res.coefficients is not None
-            and res.terms
-        ):
+        if res.is_valid and res.coefficients is not None and res.terms:
             rhs = self._format_rhs_with_coefficients(res.coefficients, res.terms)
             if rhs:
                 lhs = self._lhs_label_str()
@@ -871,8 +879,18 @@ class SGAPlugin:
                     get_deriv = self._resolve_get_derivative(context)
                     deriv = get_deriv(field_name, axis_name, 1)
                     data_dict[key] = _numeric_flatten(deriv)
-                except (KeyError, ValueError):
-                    logger.debug("Derivative %s not available", key)
+                except (KeyError, ValueError) as exc:
+
+
+
+
+                    logger.warning(
+                        "SGAPlugin: derivative %r unavailable (%s) — dropped "
+                        "from the SGA terminal vocabulary; expressions using "
+                        "it cannot be proposed",
+                        key,
+                        exc,
+                    )
 
     def _resolve_get_derivative(
         self,
@@ -1190,11 +1208,10 @@ class SGAPlugin:
         return [item.pde for item in evaluated_offspring]
 
     def _validate_dedup_mode(self) -> None:
-        valid_modes = ("none", "pre_prune", "post_prune", "dual")
-        if self._config.dedup_mode not in valid_modes:
+        if self._config.dedup_mode not in DEDUP_MODES:
             raise ValueError(
                 f"Invalid dedup_mode: {self._config.dedup_mode!r}. "
-                f"Must be one of {valid_modes}."
+                f"Must be one of {DEDUP_MODES}."
             )
 
     def _dedup_and_score(
@@ -1321,7 +1338,7 @@ class SGAPlugin:
                 self._best_formatted_cache = None
 
         if self._recorder is not None:
-            self._recorder.log("best_aic", self._best_score)
+            self._recorder.log(_BEST_AIC_KEY, self._best_score)
 
 
             self._log_generation_metrics(self._offspring_results or [])
@@ -1345,14 +1362,21 @@ class SGAPlugin:
             gen_best_aic = _INVALID_AIC
             gen_mean_aic = _INVALID_AIC
             gen_best_nmse = float("inf")
-            gen_mean_complexity = 0.0
+            gen_mean_complexity = float("nan")
+        pop_scores = [
+            score for score in (self._scores or []) if math.isfinite(score)
+        ]
+        pop_mean_aic = (
+            sum(pop_scores) / len(pop_scores) if pop_scores else _INVALID_AIC
+        )
         metrics: dict[str, float | int] = {
-            "gen_best_aic": gen_best_aic,
-            "gen_mean_aic": gen_mean_aic,
-            "gen_best_nmse": gen_best_nmse,
-            "n_valid": len(valid_results),
-            "n_unique": len({result.expression for result in results}),
-            "gen_mean_complexity": gen_mean_complexity,
+            _GEN_BEST_AIC_KEY: gen_best_aic,
+            _GEN_MEAN_AIC_KEY: gen_mean_aic,
+            _GEN_BEST_NMSE_KEY: gen_best_nmse,
+            _N_VALID_KEY: len(valid_results),
+            _N_UNIQUE_KEY: len({result.expression for result in results}),
+            _GEN_MEAN_COMPLEXITY_KEY: gen_mean_complexity,
+            _POP_MEAN_AIC_KEY: pop_mean_aic,
         }
         log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 

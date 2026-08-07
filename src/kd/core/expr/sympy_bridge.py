@@ -129,6 +129,13 @@ def _build_namespace(names: set[str]) -> dict[str, Any]:
     for name in names:
         if name in namespace:
             continue
+        if name == "one":
+
+
+
+
+            namespace[name] = sympy.Integer(1)
+            continue
         diff_callable = _make_diff_callable(name)
         if diff_callable is not None:
             namespace[name] = diff_callable

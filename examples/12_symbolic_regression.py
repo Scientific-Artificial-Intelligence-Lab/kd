@@ -1,12 +1,23 @@
+"""Example 12 - Standalone scalar symbolic regression with PySR.
+
+This is the pure scalar-SR bypass: fit ``y = f(X)`` on tabular data without a
+PDE dataset, derivatives, Theta matrix, or the ``kd.Model`` facade.
+
+The example uses the bundled TLC-CC dataset: real-world column chromatography
+measurements (Xu et al., Nat Commun 16, 832, 2025), where the start retention
+volume V_S is predicted from the TLC retardation factor R_F and the eluent
+composition r.
+
+Run: python examples/12_symbolic_regression.py
+"""
 
 import numpy as np
 
-from kd.data.regression import load_tlc_cc
-from kd.search.pysr.config import PySRConfig
-from kd.search.pysr.sr import PySRSymbolicRegressor
+from kd import PySRConfig, load_tlc_cc
+from kd.search.pysr import PySRSymbolicRegressor
 
-
-
+# Small budget: enough to demonstrate the end-to-end API quickly. Increase
+# niterations/populations/maxsize for a serious search.
 CONFIG = PySRConfig(
     niterations=5,
     population_size=20,

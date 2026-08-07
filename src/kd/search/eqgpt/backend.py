@@ -157,7 +157,6 @@ def resolve_asset_path(
     *,
     weights_path: Path | None = None,
     asset_dir: Path | None = None,
-    fallback_dir: Path | None = None,
     filename: str = DEFAULT_WEIGHTS_FILENAME,
 ) -> Path:
     if weights_path is not None:
@@ -173,13 +172,14 @@ def resolve_asset_path(
         source, label = asset_dir, "asset_dir"
     else:
         env_value = os.environ.get(ASSET_ENV_VAR)
-        if env_value:
-            source, label = Path(env_value), f"${ASSET_ENV_VAR}"
-        else:
-            source = (
-                fallback_dir if fallback_dir is not None else _default_fallback_dir()
+        if not env_value:
+            raise FileNotFoundError(
+                "pretrained EqGPT weights are not distributed with kd and no "
+                f"asset source was given. Set {ASSET_ENV_VAR} to a directory "
+                f"holding gpt_model/{filename}, or pass weights_path/asset_dir "
+                "explicitly to RealGPTBackend.from_assets."
             )
-            label = "fallback_dir"
+        source, label = Path(env_value), f"${ASSET_ENV_VAR}"
 
     candidate = source / "gpt_model" / filename
     if not candidate.exists():
@@ -189,7 +189,3 @@ def resolve_asset_path(
             "weights_path/asset_dir explicitly to RealGPTBackend.from_assets."
         )
     return candidate
-
-
-def _default_fallback_dir() -> Path:
-    return Path(__file__).resolve().parents[4] / "ref_libs" / "EqGPT_wave_breaking"

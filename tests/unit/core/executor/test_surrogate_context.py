@@ -149,20 +149,3 @@ class TestTrainingResultParam:
             SurrogateContext(dataset, provider, tr)
 
 
-class TestBackwardCompatAlias:
-
-    def test_dlga_alias_resolves_to_surrogate_context(self) -> None:
-        from kd.search.dlga.surrogate import DLGASurrogateContext
-
-        assert DLGASurrogateContext is SurrogateContext, (
-            "DLGASurrogateContext must be a literal alias for SurrogateContext, "
-            "not a separate class — promoted-and-aliased pattern."
-        )
-
-    def test_alias_constructs_same_instance_type(self) -> None:
-        from kd.search.dlga.surrogate import DLGASurrogateContext
-
-        model = _ScaledExactModel(scale=1.0)
-        dataset, provider = _dataset_and_provider(model)
-        context = DLGASurrogateContext(dataset, provider, surrogate_field="u")
-        assert isinstance(context, SurrogateContext)

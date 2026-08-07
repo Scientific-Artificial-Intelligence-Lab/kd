@@ -17,6 +17,8 @@ import pytest
 from matplotlib.axes import Axes
 
 from kd.search.recorder import VizRecorder
+from kd.search.sga import plugin as sga_plugin
+from kd.search.sga import viz as sga_viz
 from kd.search.sga.config import SGAConfig
 from kd.search.sga.pde import PDE
 from kd.search.sga.plugin import SGAPlugin
@@ -49,10 +51,11 @@ EXPECTED_ALL_PLOT_NAMES: frozenset[str] = EXPECTED_RECORDER_PLOT_NAMES | {"genom
 
 
 
+
 PLOT_TO_METRIC: dict[str, str] = {
     "population_diversity": "n_unique",
     "complexity_evolution": "gen_mean_complexity",
-    "fitness_spread": "gen_mean_aic",
+    "fitness_spread": "pop_mean_aic",
 }
 
 N_SYNTHETIC_GENS = 5
@@ -69,13 +72,16 @@ _X_LABEL_PREFIX = "gen"
 def _populate_recorder(recorder: VizRecorder, n_gens: int = N_SYNTHETIC_GENS) -> None:
     for i in range(n_gens):
 
-        recorder.log("gen_mean_aic", float(1000.0 - 50.0 * i))
+        recorder.log("pop_mean_aic", float(1000.0 - 50.0 * i))
         recorder.log("n_unique", 90 - 5 * i)
         recorder.log("gen_mean_complexity", float(1.0 + 0.5 * i))
 
 
 
+
+
         recorder.log("gen_best_aic", float(900.0 - 50.0 * i))
+        recorder.log("gen_mean_aic", float(1300.0 - 50.0 * i))
         recorder.log("gen_best_nmse", float(0.50 - 0.05 * i))
         recorder.log("n_valid", 20 + i)
 
@@ -83,7 +89,8 @@ def _populate_recorder(recorder: VizRecorder, n_gens: int = N_SYNTHETIC_GENS) ->
 def _populate_recorder_with_inf(recorder: VizRecorder) -> None:
     mean_aic_vals = [float("inf"), float("inf"), 900.0, 850.0, 800.0]
     for i, mean_aic in enumerate(mean_aic_vals):
-        recorder.log("gen_mean_aic", mean_aic)
+        recorder.log("pop_mean_aic", mean_aic)
+        recorder.log("gen_mean_aic", mean_aic + (0.0 if i < 2 else 300.0))
         recorder.log("n_unique", 90 - 5 * i)
         recorder.log("gen_mean_complexity", float(1.0 + 0.5 * i))
         recorder.log("gen_best_aic", float("inf") if i < 2 else 800.0 - 50.0 * i)
@@ -257,9 +264,17 @@ def test_genome_tree_get_plot_data_live_population() -> None:
 @pytest.mark.unit
 def test_genome_tree_degrades_without_population(ax: Axes) -> None:
     plugin = SGAPlugin(SGAConfig())
-    plugin.render_plot("genome_tree", ax)
+    channel = plugin.render_plot("genome_tree", ax)
     text = " ".join(t.get_text() for t in ax.texts).lower()
     assert "unavailable" in text
+
+
+
+
+    assert any(
+        note.startswith("plugin plot 'genome_tree':") and "unavailable" in note
+        for note in channel
+    ), channel
     assert plugin.get_plot_data("genome_tree")["available"] is False
 
 
@@ -270,11 +285,11 @@ def test_genome_tree_degrades_without_population(ax: Axes) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("plot_name", sorted(EXPECTED_PLOT_NAMES))
-def test_render_plot_returns_none(plot_name: str, ax: Axes) -> None:
+def test_render_plot_returns_empty_warnings(plot_name: str, ax: Axes) -> None:
     plugin, _ = _plugin_populated()
     result = plugin.render_plot(plot_name, ax)
-    assert result is None, (
-        f"render_plot({plot_name!r}, ax) must return None; got {type(result).__name__}"
+    assert result == [], (
+        f"render_plot({plot_name!r}, ax) must return no warnings; got {result!r}"
     )
 
 
@@ -312,31 +327,29 @@ def test_render_binds_recorder_series(plot_name: str, ax: Axes) -> None:
 
 
 @pytest.mark.unit
-def test_fitness_spread_renders_mean_not_best(ax: Axes) -> None:
+def test_fitness_spread_renders_population_mean(ax: Axes) -> None:
     plugin, recorder = _plugin_populated()
     plugin.render_plot("fitness_spread", ax)
 
     y_data = np.asarray(ax.lines[0].get_ydata()).tolist()
-    mean_series = recorder.get("gen_mean_aic")
+    pop_series = recorder.get("pop_mean_aic")
+    offspring_series = recorder.get("gen_mean_aic")
     best_series = recorder.get("gen_best_aic")
 
 
-    assert mean_series != best_series, (
-        "fixture bug: gen_mean_aic and gen_best_aic must differ for this test "
-        "to discriminate mean-vs-best."
+    assert len({tuple(pop_series), tuple(offspring_series), tuple(best_series)}) == 3, (
+        "fixture bug: pop_mean_aic / gen_mean_aic / gen_best_aic must all "
+        "differ for this test to discriminate them."
     )
-    assert y_data == pytest.approx(mean_series), (
-        f"fitness_spread must plot gen_mean_aic (population MEAN), got "
-        f"ydata={y_data!r}, mean={mean_series!r}."
-    )
-    assert y_data[-1] == pytest.approx(mean_series[-1]), (
-        f"fitness_spread last point must equal gen_mean_aic[-1]="
-        f"{mean_series[-1]!r}, NOT gen_best_aic[-1]={best_series[-1]!r}. "
-        f"Got {y_data[-1]!r}."
+    assert y_data == pytest.approx(pop_series), (
+        f"fitness_spread must plot pop_mean_aic (population mean), got "
+        f"ydata={y_data!r}, population={pop_series!r}."
     )
     assert y_data[-1] != pytest.approx(best_series[-1]), (
-        "fitness_spread must NOT plot gen_best_aic — its last point matches "
-        "the best series, meaning the renderer used best instead of mean."
+        "fitness_spread must NOT plot gen_best_aic."
+    )
+    assert y_data[-1] != pytest.approx(offspring_series[-1]), (
+        "fitness_spread must NOT plot the offspring mean gen_mean_aic."
     )
 
 
@@ -373,18 +386,18 @@ def test_get_plot_data_returns_jsonable_dict(plot_name: str) -> None:
 
 
 @pytest.mark.unit
-def test_get_plot_data_fitness_spread_is_mean_series() -> None:
+def test_get_plot_data_fitness_spread_is_population_series() -> None:
     plugin, recorder = _plugin_populated()
     data = plugin.get_plot_data("fitness_spread")
 
-    mean_series = recorder.get("gen_mean_aic")
+    pop_series = recorder.get("pop_mean_aic")
     best_series = recorder.get("gen_best_aic")
-    assert list(data["y"]) == pytest.approx(mean_series), (
-        f"fitness_spread y must equal gen_mean_aic; got {data['y']!r}, "
-        f"mean={mean_series!r}."
+    assert list(data["y"]) == pytest.approx(pop_series), (
+        f"fitness_spread y must equal pop_mean_aic; got {data['y']!r}, "
+        f"population={pop_series!r}."
     )
     assert data["y"][-1] != pytest.approx(best_series[-1]), (
-        "fitness_spread y[-1] must not equal gen_best_aic[-1] (mean != best)."
+        "fitness_spread y[-1] must not equal gen_best_aic[-1]."
     )
 
 
@@ -410,7 +423,7 @@ def test_render_empty_recorder_warns_not_crash(
     }[recorder_state]()
 
     try:
-        plugin.render_plot(plot_name, ax)
+        channel = plugin.render_plot(plot_name, ax)
     except Exception as exc:
         pytest.fail(
             f"render_plot({plot_name!r}) with {recorder_state} recorder must not "
@@ -426,6 +439,9 @@ def test_render_empty_recorder_warns_not_crash(
         f"a warning panel with one of {signals}. texts={text_strs!r}, "
         f"title={title!r}"
     )
+
+
+    assert any("no data" in note.lower() for note in channel), channel
     assert len(ax.lines) == 0, (
         f"{recorder_state} recorder warning panel must not draw a phantom line; "
         f"got {len(ax.lines)} lines."
@@ -538,6 +554,15 @@ def test_render_unknown_name_raises_with_none_recorder(ax: Axes) -> None:
 
 
 @pytest.mark.unit
+def test_unknown_name_hint_lists_genome_tree(ax: Axes) -> None:
+    plugin, _ = _plugin_populated()
+    with pytest.raises(ValueError, match="genome_tree"):
+        plugin.render_plot("nonexistent", ax)
+    with pytest.raises(ValueError, match="genome_tree"):
+        plugin.get_plot_data("nonexistent")
+
+
+@pytest.mark.unit
 def test_get_plot_data_unknown_name_raises() -> None:
     plugin, _ = _plugin_populated()
     with pytest.raises(ValueError):
@@ -591,7 +616,7 @@ def test_render_fitness_spread_all_inf_no_crash(ax: Axes) -> None:
     recorder = VizRecorder(enabled=True)
     n_gens = 4
     for _ in range(n_gens):
-        recorder.log("gen_mean_aic", float("inf"))
+        recorder.log("pop_mean_aic", float("inf"))
     plugin = _plugin_with_recorder(recorder)
 
     plugin.render_plot("fitness_spread", ax)
@@ -646,15 +671,16 @@ def test_render_fitness_spread_after_recorder_roundtrip(ax: Axes) -> None:
 
 
 
-    mean_finite = [v for v in restored.get("gen_mean_aic") if v is not None]
+
+    pop_finite = [v for v in restored.get("pop_mean_aic") if v is not None]
     best_finite = [v for v in restored.get("gen_best_aic") if v is not None]
-    assert mean_finite != best_finite, (
-        "fixture bug: finite gen_mean_aic and gen_best_aic must differ for the "
-        "round-trip mean-vs-best discriminator to bite."
+    assert pop_finite != best_finite, (
+        "fixture bug: finite pop_mean_aic and gen_best_aic must differ for the "
+        "round-trip discriminator to bite."
     )
-    assert finite_vals.tolist() == pytest.approx(mean_finite), (
-        f"after round-trip, fitness_spread must still plot gen_mean_aic's "
-        f"finite values {mean_finite!r} (NOT gen_best_aic's {best_finite!r}); "
+    assert finite_vals.tolist() == pytest.approx(pop_finite), (
+        f"after round-trip, fitness_spread must still plot pop_mean_aic's "
+        f"finite values {pop_finite!r} (NOT gen_best_aic's {best_finite!r}); "
         f"got {finite_vals.tolist()!r}."
     )
 
@@ -685,15 +711,15 @@ def test_get_plot_data_fitness_spread_roundtrip_none_no_warning(
 
 
     finite_y = [v for v in data["y"] if v is not None]
-    mean_finite = [v for v in restored.get("gen_mean_aic") if v is not None]
+    pop_finite = [v for v in restored.get("pop_mean_aic") if v is not None]
     best_finite = [v for v in restored.get("gen_best_aic") if v is not None]
-    assert mean_finite != best_finite, (
-        "fixture bug: finite gen_mean_aic/gen_best_aic must differ for the "
-        "round-trip mean-vs-best data discriminator to bite."
+    assert pop_finite != best_finite, (
+        "fixture bug: finite pop_mean_aic/gen_best_aic must differ for the "
+        "round-trip data discriminator to bite."
     )
-    assert finite_y == pytest.approx(mean_finite), (
-        f"get_plot_data after round-trip must keep gen_mean_aic's finite values "
-        f"{mean_finite!r} (NOT gen_best_aic's {best_finite!r}); got {finite_y!r}."
+    assert finite_y == pytest.approx(pop_finite), (
+        f"get_plot_data after round-trip must keep pop_mean_aic's finite values "
+        f"{pop_finite!r} (NOT gen_best_aic's {best_finite!r}); got {finite_y!r}."
     )
 
 
@@ -703,9 +729,9 @@ def test_sga_viz_logger_warns_on_exotic_payload(
 ) -> None:
     recorder = VizRecorder(enabled=True)
 
-    recorder.log("gen_mean_aic", 100.0)
-    recorder.log("gen_mean_aic", "not-a-number")
-    recorder.log("gen_mean_aic", 80.0)
+    recorder.log("pop_mean_aic", 100.0)
+    recorder.log("pop_mean_aic", "not-a-number")
+    recorder.log("pop_mean_aic", 80.0)
     plugin = _plugin_with_recorder(recorder)
 
     caplog.set_level(logging.WARNING, logger=_SGA_VIZ_LOGGER)
@@ -742,3 +768,14 @@ def test_render_all_plots_after_roundtrip_no_crash(ax: Axes) -> None:
                 f"render_plot({name!r}) after recorder round-trip must not "
                 f"raise; got {type(exc).__name__}: {exc!r}"
             )
+
+
+
+
+
+
+
+@pytest.mark.unit
+def test_plot_metric_keys_are_within_the_logged_whitelist() -> None:
+    used = set(sga_viz._PLOT_METRIC.values())
+    assert used <= set(sga_plugin._LOGGED_METRICS)

@@ -67,7 +67,7 @@ def prepared_plugin() -> DISCOVERPlugin:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=_MockEvaluator(),
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )
@@ -319,7 +319,7 @@ def _components_with_evaluator(evaluator: Any) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

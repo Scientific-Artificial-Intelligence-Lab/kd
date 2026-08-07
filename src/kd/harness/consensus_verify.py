@@ -12,6 +12,7 @@ from kd.core.expr.executor import PythonExecutor
 from kd.core.platform.builder import PlatformBuilder
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.verify import VerificationReport, VerifyPolicy, verify_equation
+from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
 from kd.data.schema import PDEDataset
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ VerificationStatus = Literal["verified", "failed", "not_evaluated"]
 
 
 
-_DEFAULT_MAX_ATOMIC_ORDER: int = 3
+
+_DEFAULT_MAX_ATOMIC_ORDER: int = MAX_SUPPORTED_ORDER
 _DEFAULT_PROVIDER_KIND: str = "finite_diff"
 
 

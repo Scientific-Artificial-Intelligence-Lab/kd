@@ -281,7 +281,7 @@ class MultiCaseEvaluator:
             )
         try:
             matrix = self._assemble(terms, bundle)
-            theta, target = matrix[:, 1:], -matrix[:, 0]
+            theta, target = matrix[:, 1:], matrix[:, 0]
             coefficients = np.linalg.lstsq(theta, target, rcond=None)[0]
         except _CASE_ERRORS as exc:
             return invalid_final_result(
@@ -320,7 +320,7 @@ class MultiCaseEvaluator:
         bundle = self._primary_coeff_bundle()
         if bundle is None:
             raise ValueError(f"no coeff bundle for primary {self._primary_case!r}.")
-        return (-bundle.pinned_lhs).detach().clone()
+        return bundle.pinned_lhs.detach().clone()
 
     def per_case_fits(self, terms: list[str]) -> dict[str, WaveBreakingFit]:
         fits: dict[str, WaveBreakingFit] = {}

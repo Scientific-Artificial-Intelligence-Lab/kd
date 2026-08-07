@@ -1,9 +1,8 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -14,7 +13,9 @@ if TYPE_CHECKING:
 
 
 
-NO_MEASUREMENT: Final[float] = float("nan")
+
+from kd.core.jsonsafe import NO_MEASUREMENT as NO_MEASUREMENT
+from kd.core.jsonsafe import is_measured as is_measured
 
 
 @dataclass(frozen=True)
@@ -23,10 +24,6 @@ class GapVocabulary:
     unit_plural: str
     missing: str
     nothing: str
-
-
-def is_measured(value: Any) -> bool:
-    return isinstance(value, (int, float)) and math.isfinite(value)
 
 
 def measured_flags(series: Sequence[Any]) -> list[bool]:

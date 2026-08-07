@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from kd.search.recorder import BEST_SCORE_KEY
+from kd.viz.style import style_context
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -41,6 +42,8 @@ def flat_value(values: Sequence[float]) -> float | None:
 def plot_convergence(
     result: ExperimentResult,
     ax: Axes,
+    *,
+    style: dict[str, Any] | None = None,
 ) -> list[str]:
     warnings: list[str] = []
     scores = result.recorder.get(BEST_SCORE_KEY)
@@ -52,17 +55,18 @@ def plot_convergence(
         warnings.append(
             f"No {BEST_SCORE_KEY} data in recorder; skipping convergence plot"
         )
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel(ylabel)
-        ax.set_title("Convergence")
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-        )
+        with style_context(style):
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel(ylabel)
+            ax.set_title("Convergence")
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+            )
         return warnings
 
     iterations = list(range(len(scores)))
@@ -83,35 +87,45 @@ def plot_convergence(
         warnings.append(
             f"No finite {BEST_SCORE_KEY} data in recorder; skipping convergence plot"
         )
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel(ylabel)
-        ax.set_title("Convergence")
-        ax.text(
-            0.5, 0.5, "No finite data", transform=ax.transAxes, ha="center", va="center"
-        )
+        with style_context(style):
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel(ylabel)
+            ax.set_title("Convergence")
+            ax.text(
+                0.5,
+                0.5,
+                "No finite data",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+            )
         return warnings
 
-    ax.plot(iterations, finite_scores, marker=".", markersize=3)
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel(ylabel)
+    with style_context(style):
+        ax.plot(iterations, finite_scores, marker=".", markersize=3)
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel(ylabel)
 
 
 
 
-    constant = flat_value(scores)
-    if constant is None:
-        ax.set_title("Convergence")
-    else:
+        constant = flat_value(scores)
+        if constant is None:
+            ax.set_title("Convergence")
+        else:
 
 
-        first_finite = finite_indices[0]
-        reached = (
-            "the first iteration" if first_finite == 0 else f"iteration {first_finite}"
-        )
-        ax.set_title(
-            f"Convergence\nbest {result.score_kind} constant at {constant:.4g} "
-            f"(reached at {reached})",
-            fontsize="medium",
-        )
+
+            first_finite = finite_indices[0]
+            reached = (
+                "the first iteration"
+                if first_finite == 0
+                else f"iteration {first_finite}"
+            )
+            ax.set_title(
+                f"Convergence\nbest {result.score_kind} constant at {constant:.4g} "
+                f"(reached at {reached})",
+                fontsize="medium",
+            )
 
     return warnings

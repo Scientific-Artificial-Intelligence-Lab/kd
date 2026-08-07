@@ -192,21 +192,66 @@ class TestCoefficientBarEdgeCases:
         finally:
             plt.close(fig)
 
-    def test_nan_coefficient_handled(self) -> None:
+    def test_nan_coefficient_draws_no_bar_and_marks_na(self) -> None:
+        import math
+
         result = _make_result_with_coefficients([1.0, float("nan"), 0.5])
         fig, ax = plt.subplots()
         try:
             warnings = plot_coefficient_bar(result, ax)
-            assert isinstance(warnings, list)
+            assert any("N/A" in w for w in warnings)
+            assert math.isnan(ax.patches[1].get_height())
+            assert any(t.get_text() == "N/A" for t in ax.texts)
         finally:
             plt.close(fig)
 
     def test_inf_coefficient_handled(self) -> None:
+        import math
+
         result = _make_result_with_coefficients([1.0, float("inf"), 0.5])
         fig, ax = plt.subplots()
         try:
             warnings = plot_coefficient_bar(result, ax)
-            assert isinstance(warnings, list)
+            assert any("N/A" in w for w in warnings)
+            assert math.isnan(ax.patches[1].get_height())
+        finally:
+            plt.close(fig)
+
+    def test_nan_ground_truth_marks_na_and_warns(self) -> None:
+        import math
+
+        result = _make_result_with_coefficients([1.0, -0.5])
+        gt = torch.tensor([1.1, float("nan")])
+        fig, ax = plt.subplots()
+        try:
+            warnings = plot_coefficient_bar(result, ax, ground_truth=gt)
+            assert any("ground-truth" in w and "N/A" in w for w in warnings)
+
+            assert math.isnan(ax.patches[3].get_height())
+            assert any(t.get_text() == "N/A" for t in ax.texts)
+        finally:
+            plt.close(fig)
+
+    def test_wide_range_nan_never_labelled_zero(self) -> None:
+        result = _make_result_with_coefficients([1000.0, float("nan"), 0.5])
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            texts = [t.get_text() for t in ax.texts]
+            assert "0" not in texts
+            assert "N/A" in texts
+        finally:
+            plt.close(fig)
+
+    def test_unparseable_term_label_is_marker_not_raw_ir(self) -> None:
+        raw_ir = "add(u,"
+        result = _make_result_with_coefficients([1.0, 0.5], terms=["u", raw_ir])
+        fig, ax = plt.subplots()
+        try:
+            plot_coefficient_bar(result, ax)
+            labels = [t.get_text() for t in ax.get_xticklabels()]
+            assert raw_ir not in labels
+            assert "unrenderable" in labels
         finally:
             plt.close(fig)
 
@@ -231,6 +276,36 @@ class TestCoefficientBarEdgeCases:
             assert any(
                 "mismatch" in w.lower() or "length" in w.lower() for w in warnings
             )
+        finally:
+            plt.close(fig)
+
+    def test_ground_truth_wrong_length_skips_overlay(self) -> None:
+        result = _make_result_with_coefficients(
+            [0.0, -4.3, 0.0, 0.0, 0.0], selected_indices=[1]
+        )
+        fig, ax = plt.subplots()
+        try:
+            warnings = plot_coefficient_bar(
+                result, ax, ground_truth=torch.tensor([-1.0, 0.1, 0.0])
+            )
+            assert any("length" in w.lower() for w in warnings)
+            assert len(ax.patches) == 1
+        finally:
+            plt.close(fig)
+
+    def test_ground_truth_full_length_projects_onto_selected(self) -> None:
+        result = _make_result_with_coefficients(
+            [0.0, -4.3, 0.0], selected_indices=[1]
+        )
+        fig, ax = plt.subplots()
+        try:
+            warnings = plot_coefficient_bar(
+                result, ax, ground_truth=torch.tensor([7.0, -1.0, 9.0])
+            )
+            assert warnings == []
+            heights = [p.get_height() for p in ax.patches]
+            assert len(heights) == 2
+            assert heights[1] == pytest.approx(-1.0)
         finally:
             plt.close(fig)
 

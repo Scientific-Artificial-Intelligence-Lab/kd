@@ -179,6 +179,21 @@ class TestAssertDatasetSupportedMatrix:
             f"{message!r}"
         )
 
+    @pytest.mark.unit
+    def test_order_two_mismatch_names_dlga_as_the_real_remedy(self) -> None:
+        from kd.core.platform.requirements import assert_dataset_supported
+
+        reqs = _plugin("sga").derivative_requirements
+        with pytest.raises(NotImplementedError) as excinfo:
+            assert_dataset_supported(2, DataTopology.GRID, reqs, "sga")
+        message = str(excinfo.value)
+        assert re.search(r"(?i)dlga", message), (
+            f"order-2 mismatch must name the real remedy (dlga): {message!r}"
+        )
+        assert "target_lhs_order" in message, (
+            f"order-2 mismatch must name the actual config knob: {message!r}"
+        )
+
 
 
 

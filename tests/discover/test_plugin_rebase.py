@@ -88,7 +88,7 @@ def _components(evaluator: _CountingEvaluator) -> PlatformComponents:
         dataset=MagicMock(),
         executor=MagicMock(),
         evaluator=evaluator,
-        context=MagicMock(),
+        context=MagicMock(training_result=None),
         registry=MagicMock(),
         recorder=None,
     )

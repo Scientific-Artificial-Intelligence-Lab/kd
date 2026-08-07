@@ -9,7 +9,6 @@ from kd.search.term_utils import fold_add, infer_max_atomic_order
 @pytest.mark.parametrize(
     ("terms", "expected"),
     [
-        pytest.param([], "1", id="empty-defensive-fallback"),
         pytest.param(["u"], "u", id="single"),
         pytest.param(
             ["u", "u_x", "u_xx"],
@@ -20,6 +19,11 @@ from kd.search.term_utils import fold_add, infer_max_atomic_order
 )
 def test_fold_add_preserves_term_order(terms: list[str], expected: str) -> None:
     assert fold_add(terms) == expected
+
+
+def test_fold_add_rejects_empty_term_list() -> None:
+    with pytest.raises(ValueError, match="at least one term"):
+        fold_add([])
 
 
 @pytest.mark.parametrize(
