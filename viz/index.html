@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/">
+        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/viz/">
       
       
+        <link rel="prev" href="../algorithms/pysindy/">
       
-        <link rel="next" href="examples/">
+      
+        <link rel="next" href="howto/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>KD</title>
+        <title>Visualization - KD</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,13 +53,13 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="stylesheets/kd.css">
+      <link rel="stylesheet" href="../stylesheets/kd.css">
     
-      <link rel="stylesheet" href="javascripts/katex/katex.min.css">
+      <link rel="stylesheet" href="../javascripts/katex/katex.min.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -82,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quick-start" class="md-skip">
+        <a href="#visualization" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href=".." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Visualization
             
           </span>
         </div>
@@ -213,8 +215,6 @@
           
             
               
-                
-              
               <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -224,7 +224,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href=".." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -239,35 +239,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -283,79 +258,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Algorithms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualization
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -387,7 +289,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="examples/" class="md-nav__link ">
+            <a href="../examples/" class="md-nav__link ">
               
   
   
@@ -431,7 +333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="examples/getting_started/" class="md-nav__link">
+      <a href="../examples/getting_started/" class="md-nav__link">
         
   
   
@@ -463,8 +365,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -480,11 +384,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -505,7 +409,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -551,7 +455,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="design/" class="md-nav__link ">
+            <a href="../design/" class="md-nav__link ">
               
   
   
@@ -595,7 +499,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/responsibilities/" class="md-nav__link">
+      <a href="../design/responsibilities/" class="md-nav__link">
         
   
   
@@ -623,7 +527,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/ir/" class="md-nav__link">
+      <a href="../design/ir/" class="md-nav__link">
         
   
   
@@ -651,7 +555,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/scores/" class="md-nav__link">
+      <a href="../design/scores/" class="md-nav__link">
         
   
   
@@ -679,7 +583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/resume/" class="md-nav__link">
+      <a href="../design/resume/" class="md-nav__link">
         
   
   
@@ -707,7 +611,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/batch/" class="md-nav__link">
+      <a href="../design/batch/" class="md-nav__link">
         
   
   
@@ -798,7 +702,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/shape/" class="md-nav__link">
+      <a href="../data/shape/" class="md-nav__link">
         
   
   
@@ -826,7 +730,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/datasets/" class="md-nav__link">
+      <a href="../data/datasets/" class="md-nav__link">
         
   
   
@@ -854,7 +758,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/derivatives/" class="md-nav__link">
+      <a href="../data/derivatives/" class="md-nav__link">
         
   
   
@@ -922,7 +826,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="algorithms/" class="md-nav__link ">
+            <a href="../algorithms/" class="md-nav__link ">
               
   
   
@@ -966,7 +870,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/sga/" class="md-nav__link">
+      <a href="../algorithms/sga/" class="md-nav__link">
         
   
   
@@ -994,7 +898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/dlga/" class="md-nav__link">
+      <a href="../algorithms/dlga/" class="md-nav__link">
         
   
   
@@ -1022,7 +926,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/discover/" class="md-nav__link">
+      <a href="../algorithms/discover/" class="md-nav__link">
         
   
   
@@ -1050,7 +954,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/eqgpt/" class="md-nav__link">
+      <a href="../algorithms/eqgpt/" class="md-nav__link">
         
   
   
@@ -1078,7 +982,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/llm4ed/" class="md-nav__link">
+      <a href="../algorithms/llm4ed/" class="md-nav__link">
         
   
   
@@ -1106,7 +1010,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysr/" class="md-nav__link">
+      <a href="../algorithms/pysr/" class="md-nav__link">
         
   
   
@@ -1134,7 +1038,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysindy/" class="md-nav__link">
+      <a href="../algorithms/pysindy/" class="md-nav__link">
         
   
   
@@ -1167,6 +1071,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1182,15 +1088,15 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="viz/" class="md-nav__link ">
+            <a href="./" class="md-nav__link md-nav__link--active">
               
   
   
@@ -1208,13 +1114,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+              <label class="md-nav__link md-nav__link--active" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1234,7 +1140,7 @@
   
   
     <li class="md-nav__item">
-      <a href="viz/howto/" class="md-nav__link">
+      <a href="howto/" class="md-nav__link">
         
   
   
@@ -1311,7 +1217,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="api/" class="md-nav__link ">
+            <a href="../api/" class="md-nav__link ">
               
   
   
@@ -1355,7 +1261,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/model/" class="md-nav__link">
+      <a href="../api/model/" class="md-nav__link">
         
   
   
@@ -1383,7 +1289,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/config/" class="md-nav__link">
+      <a href="../api/config/" class="md-nav__link">
         
   
   
@@ -1411,7 +1317,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/data/" class="md-nav__link">
+      <a href="../api/data/" class="md-nav__link">
         
   
   
@@ -1439,7 +1345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/datasets/" class="md-nav__link">
+      <a href="../api/datasets/" class="md-nav__link">
         
   
   
@@ -1467,7 +1373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/terms/" class="md-nav__link">
+      <a href="../api/terms/" class="md-nav__link">
         
   
   
@@ -1495,7 +1401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/viz/" class="md-nav__link">
+      <a href="../api/viz/" class="md-nav__link">
         
   
   
@@ -1523,7 +1429,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/resume/" class="md-nav__link">
+      <a href="../api/resume/" class="md-nav__link">
         
   
   
@@ -1551,7 +1457,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/harness/" class="md-nav__link">
+      <a href="../api/harness/" class="md-nav__link">
         
   
   
@@ -1586,7 +1492,7 @@
   
   
     <li class="md-nav__item">
-      <a href="about/" class="md-nav__link">
+      <a href="../about/" class="md-nav__link">
         
   
   
@@ -1614,9 +1520,7 @@
             
             
               
-                
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" hidden>
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -1624,6 +1528,8 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
+  
+    
   
   
     <label class="md-nav__title" for="__toc">
@@ -1633,10 +1539,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#shared-panels" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick start
+        Shared panels
       
     </span>
   </a>
@@ -1644,43 +1550,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
+  <a href="#each-algorithms-own-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Algorithms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualization
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
+        Each algorithm's own diagnostics
       
     </span>
   </a>
@@ -1701,165 +1574,196 @@
               <article class="md-content__inner md-typeset">
                 
                   
-  
 
 
 
-
-<div class="kd-hero">
-<div class="kd-hero__inner">
-  <div class="kd-hero__eyebrow">equation discovery · symbolic regression</div>
-  <h1 class="kd-hero__title">Discovering equations from data</h1>
-  <p class="kd-hero__lede">
-    <b>KD (Knowledge Discovery)</b> puts several equation-discovery algorithms behind one
-    intermediate representation and one API, and refits their results in a common context
-    so the numbers can be compared.
-  </p>
-
-<div class="kd-readout kd-readout--hero" style="--kd-fig-ar: 2.755">
-  <div class="kd-readout__bar">
-    <span>SGA-PDE · kdv · seed 42</span>
-    <span class="kd-readout__metric">generation 200 / 200 · nmse 2.70e-06 · AIC <b>-19.42</b></span>
-  </div>
-  <img class="kd-readout__fig" src="images/sga-field.png"
-       alt="Heatmap of the kdv field u over x and t">
-  <div class="kd-readout__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(-0.0025\,u_{xxx}\)</span></div>
-  <div class="kd-readout__cap">The field the run was given, and the equation it returned from it. Nothing narrowed the search to those two terms: they were assembled out of operators during the run.</div>
-</div>
-
-  <div class="kd-hero__actions">
-    <a class="kd-btn kd-btn--primary" href="#quick-start">Quick start</a>
-    <a class="kd-btn kd-btn--ghost" href="examples/">Examples</a>
-  </div>
-</div>
-<div class="kd-hero__cue">scroll</div>
-</div>
-
-<div class="kd-flow">
-<h2 id="quick-start">Quick start</h2>
-<p>KD needs Python 3.11 and <a href="https://docs.astral.sh/uv/"><code>uv</code></a>. A dataset is coordinate
-arrays and field arrays; the bundled benchmarks return the same <code>PDEDataset</code>, so
-<code>kd.load_burgers()</code> can stand in for the two lines below while you try it out.</p>
-<div class="kd-step">1 &nbsp;install</div>
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>-b<span class="w"> </span>trunk<span class="w"> </span>https://github.com/Scientific-Artificial-Intelligence-Lab/kd.git
-<span class="nb">cd</span><span class="w"> </span>kd<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync
-</code></pre></div>
-<div class="kd-step">2 &nbsp;fit</div>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
-
-<span class="c1"># your own field u, on a 256 × 201 (x, t) grid</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">PDEDataset</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="n">t</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="n">u</span><span class="p">},</span> <span class="n">lhs</span><span class="o">=</span><span class="s2">&quot;u_t&quot;</span><span class="p">)</span>
-
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span>
-</code></pre></div>
-<div class="kd-out">
-<div class="kd-out__tag">5 generations · AIC -28.78</div>
-<div class="kd-out__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(+0.1002\,u_{xx}\)</span></div>
-</div>
-<h2 id="examples">Examples</h2>
-<p>Worked runs end to end: the data, the call, the equation that came back, and the figures
-that check it.</p>
-<div class="kd-grid">
-<a class="kd-card" href="examples/getting_started/">
-  <div class="kd-card__thumb"><img src="images/sga-field.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>notebook</span></div>
-<div class="kd-card__name">Getting started</div>
-<div class="kd-card__body">Load a bundled benchmark, fit in one call, read the result.</div>
-</div>
-</a>
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__thumb"><img src="images/sga-compare.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>worked example</span></div>
-<div class="kd-card__name">KdV with SGA-PDE</div>
-<div class="kd-card__body">A genetic search with no candidate library, and the residual it leaves behind.</div>
-</div>
-</a>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Comparing two algorithms</div>
-</div>
-</span>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Noisy data</div>
-</div>
-</span>
-</div>
-<h2 id="algorithms">Algorithms</h2>
-<p>Seven, behind one call. Change <code>algorithm=</code> and nothing else moves.</p>
-<div class="kd-grid">
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__eyebrow"><span>AIC</span><span>medium</span><span>finite_diff autograd</span></div>
-<div class="kd-card__name">SGA-PDE</div>
-<div class="kd-card__body">A genetic search over expression trees; the coefficients come from the algorithm's own sparse regression.</div>
-</a>
-<a class="kd-card" href="algorithms/dlga/">
-  <div class="kd-card__eyebrow"><span>DLGA fitness</span><span>heavy</span><span>autograd</span></div>
-<div class="kd-card__name">DLGA-PDE</div>
-<div class="kd-card__body">A neural network fits the field and supplies derivatives; a genetic algorithm searches term sets over a candidate library.</div>
-</a>
-<a class="kd-card" href="algorithms/discover/">
-  <div class="kd-card__eyebrow"><span>reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">DISCOVER</div>
-<div class="kd-card__body">A policy network emits expressions symbol by symbol, trained with policy gradients.</div>
-</a>
-<a class="kd-card" href="algorithms/eqgpt/">
-  <div class="kd-card__eyebrow"><span>EqGPT reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">EqGPT</div>
-<div class="kd-card__body">A pretrained transformer reads the field and proposes equations, then fine-tunes on reward.</div>
-</a>
-<a class="kd-card" href="algorithms/llm4ed/">
-  <div class="kd-card__eyebrow"><span>LLM4ED sparse reward</span><span>medium</span><span>finite_diff</span></div>
-<div class="kd-card__name">LLM4ED</div>
-<div class="kd-card__body">A large language model proposes and revises candidate equations round by round, filtered by a sparse reward.</div>
-</a>
-<a class="kd-card" href="algorithms/pysr/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>medium</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySR</div>
-<div class="kd-card__body">Multi-population evolutionary search returning a complexity/error Pareto front.</div>
-</a>
-<a class="kd-card" href="algorithms/pysindy/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>light</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySINDy</div>
-<div class="kd-card__body">Sparse regression over a supplied candidate library, solved in one pass.</div>
-</a>
-</div>
-<h2 id="visualization">Visualization</h2>
-<p>The seven algorithms work in completely different ways; looking at them does not. Change
-<code>algorithm=</code> and the rendering call stays as it is, drawing that algorithm's own process.</p>
-<p><a href="viz/"></p>
-<figure class="kd-figure kd-figure--wide">
-  <img src="images/sga-panels.png" alt="SGA-PDE's offspring diversity, complexity evolution and fitness spread panels">
-  <figcaption>Three diagnostic panels from one SGA-PDE run on KdV. Open the gallery.</figcaption>
+<h1 id="visualization">Visualization</h1>
+<p>The seven algorithms KD supports work in different ways: a population of
+expression trees, a neural network paired with a genetic search, a policy
+network emitting expressions symbol by symbol, a pretrained Transformer, rounds
+of proposals from a large language model, a one-shot sparse regression over a
+candidate library. Looking at any of them is the same call: hand the fitted result to
+<code>kd.VizEngine</code> and one call renders the whole set of figures. Switch
+<code>algorithm=</code> and the figures follow, with nothing new to learn about how to read
+them. This page is the gallery; <a href="howto/">Figure generation</a> covers how to
+render them for your own run.</p>
+<h2 id="shared-panels">Shared panels</h2>
+<p>Whichever algorithm ran, <code>VizEngine</code> draws the same group: best score per
+iteration (the convergence curve), measured against predicted, the equation
+typeset and as a structure tree, and the residual as a histogram and as a
+spatial map. Pass the dataset as well and it adds a coefficient bar chart, the
+field comparison (observed, integrated prediction, difference), the <code>u_t</code>
+residual field, time slices and an error heatmap.</p>
+<p>The three figures below come from one run: SGA-PDE on the KdV dataset that ships
+with KD, 200 generations, seed 42.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/sga-field.png" alt="Heatmap of the KdV field u(x, t)">
+  <figcaption>The observations: u(x, t) of the KdV dataset. Every other figure here is computed against it.</figcaption>
 </figure>
-<p></a></p>
-<h2 id="design">Design</h2>
-<div class="kd-grid">
-<a class="kd-card" href="design/">
-  <div class="kd-card__eyebrow"><span>design</span></div>
-<div class="kd-card__name">Platform and plugins</div>
-<div class="kd-card__body">Seven algorithms as plugins over one set of shared services, and the decisions that let them share it.</div>
-</a>
-<a class="kd-card" href="data/shape/">
-  <div class="kd-card__eyebrow"><span>data</span></div>
-<div class="kd-card__name">Data requirements</div>
-<div class="kd-card__body">Fields, coordinate axes, grid or scattered points, and how the left-hand side is chosen.</div>
-</a>
-<a class="kd-card" href="design/scores/">
-  <div class="kd-card__eyebrow"><span>score</span></div>
-<div class="kd-card__name">Score conventions and comparability</div>
-<div class="kd-card__body">Each algorithm builds its own final score. Refit the terms in one shared context before comparing.</div>
-</a>
-</div>
-</div>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/sga-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
+  <figcaption>The discovered equation put back against the data: measured u_t on the left, the equation's u_t in the middle on a shared color scale, their difference on the right. The NMSE of this run is 2.7e-06.</figcaption>
+</figure>
+
+<figure class="kd-figure" markdown="0">
+  <img src="../images/sga-convergence.png" alt="Best AIC and population mean AIC per generation">
+  <figcaption>The convergence curve: the solid line is the best score per generation, an AIC for this run, where lower is better, settling at −19.42. The dashed line is the same run's population mean, which keeps moving after the best has settled.</figcaption>
+</figure>
+
+<h2 id="each-algorithms-own-diagnostics">Each algorithm's own diagnostics</h2>
+<p>The shared group answers whether the result is right; an algorithm's own panels
+answer how it got there, so each algorithm declares and draws its own:</p>
+<ul>
+<li><strong>SGA-PDE, DLGA-PDE</strong>: population-level records, per generation the diversity of the
+  candidates, the term count of the candidate equations and the score spread of
+  the survivors, plus the training loss of the neural-network surrogate (filled
+  in only when the platform trained one). SGA-PDE also draws the genome tree of its
+  best individual.</li>
+<li><strong>DISCOVER</strong>: the policy network's training record, per iteration the reward
+  (one curve for the elite subset, one for the full batch), the entropy
+  regularizer and the reward baseline.</li>
+<li><strong>EqGPT</strong>: the reward of the candidate pool per epoch and its spread, plus the
+  cross-entropy loss of each epoch's fine-tune. In multi-case mode it adds the
+  reward of the discovered structure on every case.</li>
+<li><strong>LLM4ED</strong>: the reward spread of the candidate pool per round, the count of
+  invalid candidates, and the cumulative number of language-model calls.</li>
+<li><strong>PySR</strong>: the Pareto front (complexity against loss), KD's independent
+  re-score of that same front, and the two scores against each other.</li>
+<li><strong>PySINDy</strong>: one comparison figure putting the NMSE of PySINDy's native
+  coefficients next to the NMSE of KD's independent refit.</li>
+</ul>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/sga-panels.png" alt="Offspring diversity, complexity evolution and fitness spread panels">
+  <figcaption>SGA-PDE's three panels, from the KdV run above. Left: distinct candidate expressions per generation. Middle: mean term count of the generation's candidates. Right: mean AIC of the surviving population.</figcaption>
+</figure>
+
+<p>Of the seven algorithms, SGA-PDE is the one whose panels are rendered here so far;
+the figures for the other six are still to be rendered. The table below lists the
+panels each algorithm draws from its per-iteration record. Two more are composed at
+render time and are not in it: SGA-PDE's genome tree, and EqGPT's panels in multi-case
+and steady mode. At run time <code>plugin.list_plots()</code> returns the complete set.</p>
+<table>
+<thead>
+<tr>
+<th>Algorithm</th>
+<th>Panel</th>
+<th>Title</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SGA-PDE</td>
+<td><code>population_diversity</code></td>
+<td>Offspring Diversity</td>
+</tr>
+<tr>
+<td>SGA-PDE</td>
+<td><code>complexity_evolution</code></td>
+<td>Complexity Evolution</td>
+</tr>
+<tr>
+<td>SGA-PDE</td>
+<td><code>fitness_spread</code></td>
+<td>Fitness Spread</td>
+</tr>
+<tr>
+<td>SGA-PDE</td>
+<td><code>surrogate_training</code></td>
+<td>Surrogate Training Curve</td>
+</tr>
+<tr>
+<td>DLGA-PDE</td>
+<td><code>fitness_spread</code></td>
+<td>Fitness Spread</td>
+</tr>
+<tr>
+<td>DLGA-PDE</td>
+<td><code>population_diversity</code></td>
+<td>Population Diversity</td>
+</tr>
+<tr>
+<td>DLGA-PDE</td>
+<td><code>complexity_evolution</code></td>
+<td>Complexity Evolution</td>
+</tr>
+<tr>
+<td>DLGA-PDE</td>
+<td><code>surrogate_training</code></td>
+<td>Surrogate Training Curve</td>
+</tr>
+<tr>
+<td>DISCOVER</td>
+<td><code>reward_convergence</code></td>
+<td>Reward (Mean of Top ε)</td>
+</tr>
+<tr>
+<td>DISCOVER</td>
+<td><code>reward_full_mean</code></td>
+<td>Reward (Full-Batch Mean)</td>
+</tr>
+<tr>
+<td>DISCOVER</td>
+<td><code>entropy_loss_decay</code></td>
+<td>Entropy Loss</td>
+</tr>
+<tr>
+<td>DISCOVER</td>
+<td><code>baseline_ewma</code></td>
+<td>Reward Baseline</td>
+</tr>
+<tr>
+<td>EqGPT</td>
+<td><code>reward_convergence</code></td>
+<td>Reward Convergence</td>
+</tr>
+<tr>
+<td>EqGPT</td>
+<td><code>pool_reward_spread</code></td>
+<td>Pool Reward Spread</td>
+</tr>
+<tr>
+<td>EqGPT</td>
+<td><code>finetune_loss</code></td>
+<td>Fine-tune Loss</td>
+</tr>
+<tr>
+<td>LLM4ED</td>
+<td><code>pool_reward_spread</code></td>
+<td>Pool Reward Spread</td>
+</tr>
+<tr>
+<td>LLM4ED</td>
+<td><code>invalid_count</code></td>
+<td>Invalid Count</td>
+</tr>
+<tr>
+<td>LLM4ED</td>
+<td><code>llm_calls</code></td>
+<td>Cumulative LLM Calls</td>
+</tr>
+<tr>
+<td>PySR</td>
+<td><code>pareto_front</code></td>
+<td>Pareto Front</td>
+</tr>
+<tr>
+<td>PySR</td>
+<td><code>kd_audit_path</code></td>
+<td>kd Audit Path</td>
+</tr>
+<tr>
+<td>PySR</td>
+<td><code>score_agreement</code></td>
+<td>Score Agreement</td>
+</tr>
+<tr>
+<td>PySINDy</td>
+<td><code>native_refit_agreement</code></td>
+<td>Native vs Refit NMSE</td>
+</tr>
+</tbody>
+</table>
 
 
 
@@ -1867,13 +1771,8 @@ that check it.</p>
 
 
 
-  
-  
 
 
-
-
-  
 
 
 
@@ -1920,18 +1819,18 @@ that check it.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="javascripts/katex/katex.min.js"></script>
+        <script src="../javascripts/katex/katex.min.js"></script>
       
-        <script src="javascripts/katex/auto-render.min.js"></script>
+        <script src="../javascripts/katex/auto-render.min.js"></script>
       
-        <script src="javascripts/katex.js"></script>
+        <script src="../javascripts/katex.js"></script>
       
-        <script src="javascripts/home.js"></script>
+        <script src="../javascripts/home.js"></script>
       
     
   </body>

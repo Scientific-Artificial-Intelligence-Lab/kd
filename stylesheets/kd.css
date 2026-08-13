@@ -1,0 +1,744 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap");
+
+:root {
+  --kd-void:   #1b1035;
+  --kd-plum:   #46256b;
+  --kd-teal:   #21918c;
+  --kd-moss:   #5ec962;
+  --kd-signal: #d8e219;
+  --kd-paper:  #f6f5f9;
+  --kd-slate:  #6b6880;
+
+  --kd-display: "Space Grotesk", "IBM Plex Sans", "Noto Sans SC", sans-serif;
+  --kd-body: "IBM Plex Sans", "Noto Sans SC", -apple-system, sans-serif;
+  --kd-mono: "IBM Plex Mono", ui-monospace, "Noto Sans Mono CJK SC", monospace;
+
+  --md-primary-fg-color: var(--kd-plum);
+  --md-primary-fg-color--light: var(--kd-teal);
+  --md-primary-fg-color--dark: var(--kd-void);
+  --md-accent-fg-color: var(--kd-teal);
+  --md-default-bg-color: var(--kd-paper);
+  --md-typeset-a-color: var(--kd-teal);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #14101f;
+  --md-default-fg-color: #e8e6f0;
+  --md-default-fg-color--light: #b9b5c9;
+  --md-typeset-color: #e2e0ea;
+  --md-typeset-a-color: #4fd1c9;
+  --md-accent-fg-color: #4fd1c9;
+  --kd-paper: #14101f;
+  --kd-slate: #a9a4bd;
+}
+
+body, .md-typeset {
+  font-family: var(--kd-body);
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  font-family: var(--kd-display);
+  letter-spacing: -0.018em;
+  font-weight: 700;
+}
+
+.md-typeset h1 { font-size: 1.95rem; line-height: 1.18; margin-bottom: .5em; }
+.md-typeset h2 {
+  font-size: 1.18rem;
+  margin-top: 2.6em;
+  padding-top: .85em;
+  border-top: 1px solid color-mix(in srgb, var(--kd-plum) 18%, transparent);
+}
+.md-typeset h3 { font-size: 1rem; }
+
+.md-header {
+  background: var(--kd-void);
+  box-shadow: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--kd-teal) 30%, transparent);
+}
+.md-header__title { font-family: var(--kd-display); letter-spacing: .01em; }
+.md-tabs { background: var(--kd-void); }
+.md-main { overflow-x: clip; }
+
+/* ---------- hero ---------------------------------------------------- */
+
+.kd-hero {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-top: -2.5rem;
+  padding: 4.4rem 1.2rem 3.6rem;
+  z-index: 1;
+  background:
+    radial-gradient(120% 140% at 12% 0%, #4401542e 0%, transparent 62%),
+    linear-gradient(100deg, #1b1035 0%, #241947 46%, #17303f 100%);
+  color: #efedf7;
+  overflow: hidden;
+}
+
+.kd-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    #440154 0%, #3b528b 26%, #21918c 52%, #5ec962 78%, #fde725 100%);
+}
+
+.kd-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(90deg, #ffffff0a 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 46px);
+  pointer-events: none;
+}
+
+.kd-hero__inner {
+  position: relative;
+  max-width: 61rem;
+  margin: 0 auto;
+}
+
+.kd-hero__eyebrow {
+  font-family: var(--kd-mono);
+  font-size: .66rem;
+  letter-spacing: .19em;
+  text-transform: uppercase;
+  color: #8fd8d3;
+  margin-bottom: 1.1rem;
+}
+
+.md-typeset .kd-hero__title {
+  font-family: var(--kd-display);
+  font-size: clamp(1.6rem, 3.6vw, 2.35rem);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  margin: 0 0 .85rem;
+  color: #fbfaff;
+}
+
+.md-typeset .kd-hero__lede {
+  max-width: 38rem;
+  font-size: .82rem;
+  line-height: 1.75;
+  color: #c3bed8;
+  margin: 0 0 2.2rem;
+}
+
+/* the readout: one instrument resolving one equation */
+
+.kd-readout {
+  border: 1px solid #ffffff1f;
+  border-radius: .55rem;
+  background: #0f0a1fb8;
+  backdrop-filter: blur(2px);
+  padding: 1.15rem 1.3rem 1.25rem;
+  max-width: 46rem;
+}
+
+.kd-readout__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  /* The strip also sits inside an algorithm page's narrow reading column, not
+     just the full-width hero: wrap between the two halves, never inside one. */
+  flex-wrap: wrap;
+  gap: .25rem 1rem;
+  font-family: var(--kd-mono);
+  font-size: .64rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #8b85a8;
+  margin-bottom: .85rem;
+}
+.kd-readout__bar > span {
+  white-space: nowrap;
+}
+/* Except on a phone, where the run half alone is wider than the screen and
+   holding it on one line just cuts it off. The separators are surrounded by
+   spaces, so it breaks between fields rather than inside a number. */
+@media screen and (max-width: 30em) {
+  .kd-readout__bar > span { white-space: normal; }
+}
+
+.kd-readout__metric { color: #8fd8d3; }
+.kd-readout__metric b { color: var(--kd-signal); font-weight: 500; }
+
+/* The equation is what the strip is for, so it is set at heading scale rather
+   than at the size of the run line above it. The lower bound keeps it inside an
+   algorithm page's narrow reading column, where the strip also appears. */
+.kd-readout__eq {
+  font-family: var(--kd-mono);
+  font-size: clamp(1.1rem, 3.2vw, 1.9rem);
+  line-height: 1.4;
+  color: #efedf7;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .35em;
+  margin: .45rem 0 .2rem;
+}
+
+.kd-eq__lhs { color: #8fd8d3; }
+.kd-eq__op { color: #8b85a8; }
+.kd-eq__coef { color: var(--kd-signal); }
+.kd-eq__times { color: #8b85a8; margin: 0 .1em; }
+
+.kd-eq__term {
+  animation: kd-term-in .55s cubic-bezier(.2, .7, .3, 1) backwards;
+  animation-delay: calc(.25s + var(--i) * .18s);
+}
+
+@keyframes kd-term-in {
+  from { opacity: 0; transform: translateY(.3em); }
+}
+
+/* The field the run was given, inside the card, between the run line and the
+   answer. Only the homepage copy of the strip carries it: on an algorithm page
+   the same figure is already a few paragraphs up. */
+/* The card is as wide as the figure it carries, not as wide as the column it
+   sits in. The field is much wider than it is tall, so at the height one screen
+   can spare it only reached about two thirds of a 58rem card, and the rest of
+   the card was empty with the run line stranded above the gap. Sizing the card
+   from the figure puts the run line, the equation and the caption on the
+   field's own two edges. --kd-fig-ar comes from the PNG (generate.py reads it
+   out of the file), so a differently proportioned figure resizes the card
+   instead of reopening the gap; 58rem stays as the upper bound, and the two
+   added terms are the card's horizontal padding and border. */
+.kd-readout--hero {
+  --kd-fig-h: 34vh;
+  max-width: min(58rem, calc(var(--kd-fig-h) * var(--kd-fig-ar, 2.7) + 2.6rem + 2px));
+}
+/* The card has to fit one screen with the heading, the lede and the buttons, so
+   the field is capped by viewport height rather than by its own aspect ratio. */
+.kd-readout__fig {
+  display: block;
+  width: 100%;
+  max-height: var(--kd-fig-h);
+  object-fit: contain;
+  object-position: left center;
+  margin: .1rem 0 .5rem;
+  border-radius: .35rem;
+}
+.kd-readout__cap {
+  font-size: .7rem;
+  line-height: 1.65;
+  color: #9a94b6;
+  margin-top: .55rem;
+  max-width: 42rem;
+}
+
+.kd-hero__actions { margin-top: 2rem; display: flex; gap: .7rem; flex-wrap: wrap; }
+
+.kd-hero__cue {
+  position: absolute;
+  left: 50%;
+  bottom: 1.1rem;
+  transform: translateX(-50%);
+  font-family: var(--kd-mono);
+  font-size: .58rem;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #6f6890;
+}
+
+.md-typeset .kd-btn {
+  font-family: var(--kd-body);
+  font-size: .74rem;
+  font-weight: 500;
+  letter-spacing: .02em;
+  padding: .6rem 1.15rem;
+  border-radius: .35rem;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background .18s, border-color .18s, transform .18s;
+}
+.md-typeset .kd-btn--primary { background: var(--kd-teal); color: #06231f; }
+.md-typeset .kd-btn--primary:hover { background: #2ba9a3; transform: translateY(-1px); }
+.md-typeset .kd-btn--ghost { border-color: #ffffff40; color: #e4e0f2; }
+.md-typeset .kd-btn--ghost:hover { border-color: var(--kd-teal); color: #fff; }
+.md-typeset .kd-btn:focus-visible { outline: 2px solid var(--kd-signal); outline-offset: 3px; }
+
+/* ---------- homepage choreography ------------------------------------ */
+/* The first screen is the run and nothing else: no header, no sidebar, nothing
+   to read past. Scrolling dissolves it in place while the page below comes up
+   over it, and the navigation arrives with the page.
+
+   Everything here is behind a class ``home.js`` adds. The default -- no script,
+   or a reader who asked for less motion -- is the same page, static: the hero
+   scrolls away like any other block and the navigation is there from the start.
+   Nothing below may be the only thing making content visible. */
+
+html.kd-home--fx { --kd-p: 0; --kd-q: 0; }
+html.kd-home { --kd-bleed: 0px; --kd-bleed-right: 0px; }
+
+/* The page runs edge to edge here, so the sidebar sits against the left of the
+   window the way it does on the sites this layout follows, rather than at the
+   left of a centred 61rem grid with a white gutter beside it. The reading
+   width comes back below, per block. */
+html.kd-home .md-main__inner { max-width: none; margin: 0; }
+html.kd-home .md-content { min-width: 0; }
+html.kd-home .md-content__inner { max-width: none; padding: 0; }
+html.kd-home .md-content__inner::before { display: none; }
+
+html.kd-home .kd-hero { margin-top: 0; }
+
+/* Reach back across the sidebar column, which ``home.js`` measures. The
+   fallback is the ordinary breakout, correct whenever that column is zero. */
+html.kd-home .kd-hero {
+  width: auto;
+  margin-left: calc(-1 * var(--kd-bleed));
+  margin-right: calc(-1 * var(--kd-bleed-right));
+  padding-inline: 1.2rem;
+}
+/* Centred on the window, not on what is left of it beside the sidebar: on the
+   first screen the sidebar is not shown yet, and a hero centred behind an
+   invisible column reads as sitting off to one side. Without the choreography
+   the sidebar is there from the start, so then it does have to be allowed for. */
+html.kd-home .kd-hero__inner { max-width: 58rem; }
+html.kd-home:not(.kd-home--fx) .kd-hero { padding-left: calc(var(--kd-bleed) + 1.2rem); }
+
+/* Pinning the first screen only pays for itself where there is a sidebar to
+   reveal. Below that width the navigation lives behind the drawer button, and a
+   card this tall does not fit one phone screen anyway, so the hero is an
+   ordinary block that scrolls away. */
+@media screen and (min-width: 76.25em) {
+  html.kd-home--fx .kd-hero {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 2.2rem;
+  }
+}
+/* The width is explicit because the auto side margins that centre this also
+   turn off the cross-axis stretch it would otherwise get from the flex column,
+   which leaves it shrink-to-fit at its longest line -- wider than the window on
+   a narrow screen, and clipped by the hero's own overflow. */
+html.kd-home--fx .kd-hero__inner { width: 100%; will-change: opacity, transform; }
+
+/* One screen holds the heading, the lede, the card and the buttons, so the
+   spacing between them is tighter here than in the block-in-a-page version the
+   same hero markup gets elsewhere. */
+html.kd-home .md-typeset .kd-hero__lede { margin-bottom: 1.5rem; }
+html.kd-home .kd-hero__eyebrow { margin-bottom: .8rem; }
+html.kd-home .kd-hero__actions { margin-top: 1.4rem; }
+html.kd-home .kd-readout { padding: .9rem 1.15rem 1rem; }
+html.kd-home .kd-readout__bar { margin-bottom: .55rem; }
+/* Tighter than the standalone card above: less padding, and a shorter field,
+   because here the buttons and the scroll cue have to fit under it. The card
+   width follows from both (see .kd-readout--hero). */
+html.kd-home .kd-readout--hero {
+  --kd-fig-h: min(30vh, 15rem);
+  max-width: min(58rem, calc(var(--kd-fig-h) * var(--kd-fig-ar, 2.7) + 2.3rem + 2px));
+}
+/* Below roughly 740px of window the one-screen budget stops covering the four
+   blocks at that spacing: the card narrows with the field, which costs the
+   caption a line. Close the gaps between the blocks rather than let the buttons
+   fall past the fold -- a 1366x768 laptop lands here. */
+@media screen and (max-height: 46em) {
+  html.kd-home .kd-readout--hero { --kd-fig-h: min(28vh, 15rem); }
+  html.kd-home .md-typeset .kd-hero__lede { margin-bottom: .9rem; }
+  html.kd-home .kd-hero__eyebrow { margin-bottom: .5rem; }
+  html.kd-home .kd-hero__actions { margin-top: 1rem; }
+  html.kd-home .kd-readout__cap { line-height: 1.5; }
+}
+html.kd-home .kd-readout__eq { font-size: clamp(1rem, 2.6vw, 1.55rem); margin: .3rem 0 .15rem; }
+
+/* The page below carries its own background out to the full width, so it hides
+   the hero as it arrives rather than sliding a narrow column over it. Both the
+   background and the content ramp with the scroll: the block comes up
+   translucent and the hero is visible dissolving underneath it. */
+html.kd-home .kd-flow {
+  position: relative;
+  z-index: 2;
+  padding: 0 1.2rem 1px;
+}
+html.kd-home .kd-flow::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--kd-bleed-right)) 0 calc(-1 * var(--kd-bleed));
+  background: var(--md-default-bg-color);
+  z-index: -1;
+}
+html.kd-home--fx .kd-flow::before { opacity: calc(var(--kd-q) * 1.6); }
+html.kd-home--fx .kd-flow > * { opacity: calc((var(--kd-q) - 0.3) * 2.4); }
+/* The reading width, back inside a page that is otherwise edge to edge. */
+html.kd-home .kd-flow > * { max-width: 54rem; margin-inline: auto; }
+html.kd-home .kd-flow > .kd-figure--wide { max-width: 62rem; }
+/* The first heading would otherwise open right against the hero it replaced. */
+html.kd-home .kd-flow > h2:first-child { border-top: 0; margin-top: 0; padding-top: 3.4rem; }
+
+/* The header and the sidebar are the "more information" the scroll reveals --
+   but only where the sidebar exists. On a narrow screen the header bar carries
+   the drawer button, which is the only way to the navigation at all, so it
+   stays put and stays visible.
+
+   The sidebar itself is dark, in the hero's own palette: on this page it first
+   appears over the run card, and a paper-white panel would cut across it. */
+@media screen and (min-width: 76.25em) {
+  /* Out of the flow, so the bar does not push the hero down while invisible. */
+  html.kd-home .md-header { position: fixed; inset: 0 0 auto 0; }
+  html.kd-home--fx .md-header { opacity: var(--kd-p); pointer-events: none; }
+  html.kd-home--fx.kd-home--past .md-header { pointer-events: auto; }
+
+  html.kd-home .md-sidebar--primary {
+    top: 0;
+    height: 100vh;
+    padding: 3.4rem .5rem 1rem 0;
+    background: #170f2d;
+    border-right: 1px solid #ffffff1a;
+    z-index: 6;
+  }
+  /* Material paints the sidebar title on the page background, to hide the
+     links scrolling under it. That background is the paper colour. */
+  html.kd-home .md-sidebar--primary .md-nav__title {
+    color: #efedf7;
+    background: #170f2d;
+    box-shadow: none;
+  }
+  html.kd-home .md-sidebar--primary .md-nav__link {
+    color: #cfc9e4;
+  }
+  html.kd-home .md-sidebar--primary .md-nav__link:is(:hover, :focus),
+  html.kd-home .md-sidebar--primary .md-nav__link--active { color: #8fd8d3; }
+  html.kd-home--fx .md-sidebar--primary {
+    opacity: calc(var(--kd-p) * var(--kd-p));
+    pointer-events: none;
+  }
+  html.kd-home--fx.kd-home--past .md-sidebar--primary { pointer-events: auto; }
+}
+
+/* ---------- quick start ---------------------------------------------- */
+
+.kd-step {
+  font-family: var(--kd-mono);
+  font-size: .62rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--kd-slate);
+  margin: 1.6rem 0 .5rem;
+}
+.kd-flow .kd-step:first-of-type { margin-top: 1.1rem; }
+
+.kd-out {
+  margin-top: .8rem;
+  padding: .85rem 1.1rem .95rem;
+  border-left: 3px solid var(--kd-teal);
+  border-radius: 0 .4rem .4rem 0;
+  background: color-mix(in srgb, var(--kd-plum) 7%, var(--md-default-bg-color));
+}
+.kd-out__tag {
+  font-family: var(--kd-mono);
+  font-size: .62rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--kd-slate);
+  margin-bottom: .5rem;
+}
+.kd-out__eq {
+  font-size: 1.15rem;
+  color: var(--md-default-fg-color);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .3em;
+  overflow-x: auto;
+}
+.kd-out__eq .kd-eq__lhs { color: var(--kd-teal); }
+
+/* ---------- instrument cards ---------------------------------------- */
+
+.kd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: .9rem;
+  margin: 1.4rem 0 0;
+}
+
+.kd-card {
+  display: block;
+  padding: 1.15rem 1.2rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--kd-plum) 20%, transparent);
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--kd-paper) 60%, #fff);
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+}
+[data-md-color-scheme="slate"] .kd-card { background: #1c1730; }
+.kd-card:hover {
+  border-color: var(--kd-teal);
+  box-shadow: 0 6px 22px #1b103514;
+  transform: translateY(-2px);
+}
+.kd-card:focus-visible { outline: 2px solid var(--kd-teal); outline-offset: 3px; }
+
+.kd-card__eyebrow {
+  font-family: var(--kd-mono);
+  font-size: .6rem;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--kd-slate);
+  display: flex;
+  /* Wrap between labels, never inside one: score kinds run as long as
+     "LLM4ED sparse reward" and a mid-token break reads as a typo. */
+  flex-wrap: wrap;
+  gap: .15rem .5rem;
+  align-items: center;
+  margin-bottom: .55rem;
+}
+.kd-card__eyebrow span { white-space: nowrap; }
+.kd-card__eyebrow span::before { content: "· "; color: color-mix(in srgb, var(--kd-teal) 70%, transparent); }
+.kd-card__eyebrow span:first-child::before { content: none; }
+
+.kd-card__name {
+  font-family: var(--kd-display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin-bottom: .4rem;
+}
+.kd-card__body { font-size: .76rem; line-height: 1.7; color: var(--md-default-fg-color--light); }
+
+/* ---------- spec strip (generated from the descriptor) --------------- */
+
+.kd-spec {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1px;
+  background: color-mix(in srgb, var(--kd-plum) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
+  border-radius: .45rem;
+  overflow: hidden;
+  margin: 1.4rem 0 2rem;
+}
+
+.kd-spec__cell { background: var(--md-default-bg-color); padding: .7rem .85rem .75rem; }
+.kd-spec__label {
+  font-family: var(--kd-mono);
+  font-size: .58rem;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--kd-slate);
+  margin-bottom: .32rem;
+}
+.kd-spec__value {
+  font-family: var(--kd-mono);
+  font-size: .78rem;
+  color: var(--md-default-fg-color);
+}
+.kd-spec__value em { font-style: normal; color: var(--kd-teal); }
+
+/* ---------- tables --------------------------------------------------- */
+
+.md-typeset table:not([class]) {
+  border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
+  border-radius: .45rem;
+  font-size: .74rem;
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  background: color-mix(in srgb, var(--kd-plum) 7%, transparent);
+  font-family: var(--kd-mono);
+  font-size: .6rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--kd-slate);
+}
+.md-typeset table:not([class]) td { border-top: 1px solid color-mix(in srgb, var(--kd-plum) 10%, transparent); }
+.md-typeset table:not([class]) td:first-child { white-space: nowrap; }
+.md-typeset table code { font-size: .95em; background: transparent; padding: 0; color: var(--md-default-fg-color); }
+
+.kd-tier { font-family: var(--kd-mono); font-size: .68rem; color: var(--kd-slate); white-space: nowrap; }
+.kd-tier::before {
+  content: "";
+  display: inline-block;
+  width: .42em; height: .42em;
+  border-radius: 50%;
+  margin-right: .45em;
+  vertical-align: .06em;
+}
+.kd-tier--safe::before { background: var(--kd-moss); }
+.kd-tier--init::before { background: transparent; box-shadow: inset 0 0 0 1px var(--kd-slate); }
+
+/* ---------- misc ----------------------------------------------------- */
+
+.md-typeset code { font-family: var(--kd-mono); }
+.md-typeset .admonition, .md-typeset details {
+  border-radius: .45rem;
+  border-left-width: 3px;
+  font-size: .76rem;
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
+}
+.md-nav__title { font-family: var(--kd-display); }
+.md-typeset .headerlink { color: color-mix(in srgb, var(--kd-teal) 55%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .kd-eq__term { animation: none; }
+  .kd-card, .md-typeset .kd-btn { transition: none; }
+  .md-typeset .kd-card:hover, .md-typeset .kd-btn--primary:hover { transform: none; }
+}
+
+/* ---- figures and placeholders (demo pages) ---- */
+
+.md-typeset .kd-figure {
+  display: block;
+  width: 100%;
+  margin: 1.6rem 0;
+}
+.kd-figure figcaption {
+  margin-top: .5rem;
+  font-size: .78rem;
+  color: var(--kd-slate);
+}
+/* Break out of the reading column: the field and comparison panels carry
+   detail that the text measure is too narrow to show. */
+.kd-figure--wide { margin-inline: calc(-1 * clamp(0px, 6vw, 4rem)); }
+/* An algorithm page carries both sidebars, so its reading column is far
+   narrower than a hidden-toc page's; give the wide figures more room there. */
+@media screen and (min-width: 76.25em) {
+  .kd-figure--wide { margin-inline: calc(-1 * clamp(0px, 12vw, 11rem)); }
+}
+
+.kd-figure__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 13rem;
+  border: 1px dashed color-mix(in srgb, var(--kd-slate) 55%, transparent);
+  border-radius: .5rem;
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--kd-slate) 6%, transparent) 0 10px,
+    transparent 10px 20px
+  );
+  color: var(--kd-slate);
+  font-family: var(--kd-mono);
+  font-size: .8rem;
+  letter-spacing: .04em;
+}
+.kd-figure__placeholder::after {
+  content: attr(data-kd-note);
+  display: block;
+  margin-left: .75rem;
+  padding-left: .75rem;
+  border-left: 1px solid color-mix(in srgb, var(--kd-slate) 35%, transparent);
+  font-size: .72rem;
+  opacity: .75;
+}
+
+.kd-card__thumb {
+  min-height: 7.5rem;
+  margin: -1.1rem -1.2rem .9rem;
+  border-radius: .5rem .5rem 0 0;
+  border-width: 0 0 1px 0;
+}
+.kd-card__thumb::after { display: none; }
+.kd-card__thumb img {
+  display: block;
+  width: 100%;
+  height: 7.5rem;
+  object-fit: cover;
+  border-radius: .5rem .5rem 0 0;
+}
+.kd-card--empty { opacity: .55; }
+
+.md-typeset .kd-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: .4rem;
+}
+
+.md-typeset .kd-compare .md-typeset__table { display: block; width: 100%; }
+.md-typeset .kd-compare table:not([class]) { display: table; width: 100%; }
+.kd-compare td:first-child,
+.kd-compare th:first-child { width: 7rem; color: var(--kd-slate); }
+
+/* ---------- API 索引表 ------------------------------------------------- */
+/* 名字列是调用式（等宽、不折行），不给说明列一个下限的话它会被挤成一条窄带，
+   一句话要换四行。两列各给一半，名字过长时让名字列自己横向滚。 */
+.kd-api { overflow-x: auto; }
+.kd-api table:not([class]) { table-layout: fixed; width: 100%; }
+.kd-api table:not([class]) td:first-child,
+.kd-api table:not([class]) th:first-child { width: 50%; }
+.kd-api table:not([class]) td:first-child { overflow-x: auto; }
+
+/* ---------- 分层架构图 ------------------------------------------------- */
+/* 用 HTML 而不是 SVG 或 ASCII：这张图的内容全是要读的字，SVG 里的文字不重排，
+   窄屏上层名会压到条目上；ASCII 版还得靠手打空格对齐，一改就散。 */
+
+.kd-layers {
+  display: grid;
+  gap: .4rem;
+  margin: 1.5rem 0 2rem;
+}
+.kd-layer {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: .35rem 1rem;
+  align-items: baseline;
+  padding: .7rem .9rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--kd-teal) 55%, transparent);
+  border-radius: .45rem;
+}
+.kd-layer__name {
+  font-family: var(--kd-mono);
+  font-size: .58rem;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--kd-slate);
+}
+.kd-layer__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem .9rem;
+  font-family: var(--kd-mono);
+  font-size: .76rem;
+  line-height: 1.6;
+}
+.kd-layer--plugins .kd-layer__items { color: var(--kd-teal); }
+
+/* ---------- 单次 fit 的流水线图 ---------------------------------------- */
+/* 复用分层图的盒子（.kd-layer），换掉两处：格与格之间画一个向下的箭头，说明
+   这里读的是时间顺序不是依赖顺序；每格多一行 __lead 用正文字体讲这一步做什么，
+   条目行退回等宽字体列出涉及的名字。 */
+
+.kd-flow { margin: 1.5rem 0 2rem; }
+.kd-flow .kd-layer {
+  border-left-color: color-mix(in srgb, var(--kd-plum) 42%, transparent);
+}
+/* 显式的箭头 div 而不是 ::before：伪元素要靠绝对定位摆放，父盒子一改内边距
+   就得跟着调；这里多几行标记换一个不会飘的位置。 */
+.kd-flow__arrow {
+  font-family: var(--kd-mono);
+  font-size: .8rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--kd-slate) 70%, transparent);
+  padding: .45rem 0 .45rem 1.9rem;
+}
+.kd-layer__lead,
+.kd-flow .kd-layer__items { grid-column: 2; }
+.kd-layer__lead {
+  font-size: .84rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 44em) {
+  .kd-layer { grid-template-columns: 1fr; }
+  /* 单列下第二列不存在，不复位会长出一条空的隐式列 */
+  .kd-layer__lead,
+  .kd-flow .kd-layer__items { grid-column: 1; }
+  .kd-flow__arrow { padding-left: .9rem; }
+}

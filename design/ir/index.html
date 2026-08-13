@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/">
+        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/design/ir/">
       
       
+        <link rel="prev" href="../responsibilities/">
       
-        <link rel="next" href="examples/">
+      
+        <link rel="next" href="../scores/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>KD</title>
+        <title>Equation representation - KD</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,13 +53,13 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="stylesheets/kd.css">
+      <link rel="stylesheet" href="../../stylesheets/kd.css">
     
-      <link rel="stylesheet" href="javascripts/katex/katex.min.css">
+      <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -82,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quick-start" class="md-skip">
+        <a href="#equation-representation" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href="../.." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Equation representation
             
           </span>
         </div>
@@ -213,8 +215,6 @@
           
             
               
-                
-              
               <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -224,7 +224,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href="../.." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -239,35 +239,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -283,79 +258,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Algorithms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualization
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -387,7 +289,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="examples/" class="md-nav__link ">
+            <a href="../../examples/" class="md-nav__link ">
               
   
   
@@ -431,7 +333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="examples/getting_started/" class="md-nav__link">
+      <a href="../../examples/getting_started/" class="md-nav__link">
         
   
   
@@ -463,8 +365,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -480,11 +384,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -505,7 +409,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -520,6 +424,8 @@
                 
   
   
+    
+  
   
   
     
@@ -543,15 +449,15 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="design/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -575,7 +481,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -595,7 +501,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/responsibilities/" class="md-nav__link">
+      <a href="../responsibilities/" class="md-nav__link">
         
   
   
@@ -620,10 +526,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="design/ir/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equation representation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -639,6 +572,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#term-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Term syntax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notation-on-the-input-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notation on the input side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conversion-per-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conversion per algorithm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-equation-in-a-result" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The equation in a result
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structural-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Structural comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -651,7 +659,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/scores/" class="md-nav__link">
+      <a href="../scores/" class="md-nav__link">
         
   
   
@@ -679,7 +687,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/resume/" class="md-nav__link">
+      <a href="../resume/" class="md-nav__link">
         
   
   
@@ -707,7 +715,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/batch/" class="md-nav__link">
+      <a href="../batch/" class="md-nav__link">
         
   
   
@@ -798,7 +806,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/shape/" class="md-nav__link">
+      <a href="../../data/shape/" class="md-nav__link">
         
   
   
@@ -826,7 +834,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/datasets/" class="md-nav__link">
+      <a href="../../data/datasets/" class="md-nav__link">
         
   
   
@@ -854,7 +862,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/derivatives/" class="md-nav__link">
+      <a href="../../data/derivatives/" class="md-nav__link">
         
   
   
@@ -922,7 +930,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="algorithms/" class="md-nav__link ">
+            <a href="../../algorithms/" class="md-nav__link ">
               
   
   
@@ -966,7 +974,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/sga/" class="md-nav__link">
+      <a href="../../algorithms/sga/" class="md-nav__link">
         
   
   
@@ -994,7 +1002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/dlga/" class="md-nav__link">
+      <a href="../../algorithms/dlga/" class="md-nav__link">
         
   
   
@@ -1022,7 +1030,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/discover/" class="md-nav__link">
+      <a href="../../algorithms/discover/" class="md-nav__link">
         
   
   
@@ -1050,7 +1058,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/eqgpt/" class="md-nav__link">
+      <a href="../../algorithms/eqgpt/" class="md-nav__link">
         
   
   
@@ -1078,7 +1086,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/llm4ed/" class="md-nav__link">
+      <a href="../../algorithms/llm4ed/" class="md-nav__link">
         
   
   
@@ -1106,7 +1114,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysr/" class="md-nav__link">
+      <a href="../../algorithms/pysr/" class="md-nav__link">
         
   
   
@@ -1134,7 +1142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysindy/" class="md-nav__link">
+      <a href="../../algorithms/pysindy/" class="md-nav__link">
         
   
   
@@ -1190,7 +1198,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="viz/" class="md-nav__link ">
+            <a href="../../viz/" class="md-nav__link ">
               
   
   
@@ -1234,7 +1242,7 @@
   
   
     <li class="md-nav__item">
-      <a href="viz/howto/" class="md-nav__link">
+      <a href="../../viz/howto/" class="md-nav__link">
         
   
   
@@ -1311,7 +1319,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="api/" class="md-nav__link ">
+            <a href="../../api/" class="md-nav__link ">
               
   
   
@@ -1355,7 +1363,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/model/" class="md-nav__link">
+      <a href="../../api/model/" class="md-nav__link">
         
   
   
@@ -1383,7 +1391,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -1411,7 +1419,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/data/" class="md-nav__link">
+      <a href="../../api/data/" class="md-nav__link">
         
   
   
@@ -1439,7 +1447,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/datasets/" class="md-nav__link">
+      <a href="../../api/datasets/" class="md-nav__link">
         
   
   
@@ -1467,7 +1475,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/terms/" class="md-nav__link">
+      <a href="../../api/terms/" class="md-nav__link">
         
   
   
@@ -1495,7 +1503,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/viz/" class="md-nav__link">
+      <a href="../../api/viz/" class="md-nav__link">
         
   
   
@@ -1523,7 +1531,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/resume/" class="md-nav__link">
+      <a href="../../api/resume/" class="md-nav__link">
         
   
   
@@ -1551,7 +1559,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/harness/" class="md-nav__link">
+      <a href="../../api/harness/" class="md-nav__link">
         
   
   
@@ -1586,7 +1594,7 @@
   
   
     <li class="md-nav__item">
-      <a href="about/" class="md-nav__link">
+      <a href="../../about/" class="md-nav__link">
         
   
   
@@ -1614,9 +1622,7 @@
             
             
               
-                
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" hidden>
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -1624,6 +1630,8 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
+  
+    
   
   
     <label class="md-nav__title" for="__toc">
@@ -1633,10 +1641,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#term-syntax" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick start
+        Term syntax
       
     </span>
   </a>
@@ -1644,10 +1652,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
+  <a href="#notation-on-the-input-side" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Examples
+        Notation on the input side
       
     </span>
   </a>
@@ -1655,10 +1663,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
+  <a href="#conversion-per-algorithm" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Algorithms
+        Conversion per algorithm
       
     </span>
   </a>
@@ -1666,10 +1674,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
+  <a href="#the-equation-in-a-result" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Visualization
+        The equation in a result
       
     </span>
   </a>
@@ -1677,10 +1685,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
+  <a href="#structural-comparison" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design
+        Structural comparison
       
     </span>
   </a>
@@ -1701,165 +1709,146 @@
               <article class="md-content__inner md-typeset">
                 
                   
-  
 
 
 
-
-<div class="kd-hero">
-<div class="kd-hero__inner">
-  <div class="kd-hero__eyebrow">equation discovery · symbolic regression</div>
-  <h1 class="kd-hero__title">Discovering equations from data</h1>
-  <p class="kd-hero__lede">
-    <b>KD (Knowledge Discovery)</b> puts several equation-discovery algorithms behind one
-    intermediate representation and one API, and refits their results in a common context
-    so the numbers can be compared.
-  </p>
-
-<div class="kd-readout kd-readout--hero" style="--kd-fig-ar: 2.755">
-  <div class="kd-readout__bar">
-    <span>SGA-PDE · kdv · seed 42</span>
-    <span class="kd-readout__metric">generation 200 / 200 · nmse 2.70e-06 · AIC <b>-19.42</b></span>
-  </div>
-  <img class="kd-readout__fig" src="images/sga-field.png"
-       alt="Heatmap of the kdv field u over x and t">
-  <div class="kd-readout__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(-0.0025\,u_{xxx}\)</span></div>
-  <div class="kd-readout__cap">The field the run was given, and the equation it returned from it. Nothing narrowed the search to those two terms: they were assembled out of operators during the run.</div>
-</div>
-
-  <div class="kd-hero__actions">
-    <a class="kd-btn kd-btn--primary" href="#quick-start">Quick start</a>
-    <a class="kd-btn kd-btn--ghost" href="examples/">Examples</a>
-  </div>
-</div>
-<div class="kd-hero__cue">scroll</div>
-</div>
-
-<div class="kd-flow">
-<h2 id="quick-start">Quick start</h2>
-<p>KD needs Python 3.11 and <a href="https://docs.astral.sh/uv/"><code>uv</code></a>. A dataset is coordinate
-arrays and field arrays; the bundled benchmarks return the same <code>PDEDataset</code>, so
-<code>kd.load_burgers()</code> can stand in for the two lines below while you try it out.</p>
-<div class="kd-step">1 &nbsp;install</div>
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>-b<span class="w"> </span>trunk<span class="w"> </span>https://github.com/Scientific-Artificial-Intelligence-Lab/kd.git
-<span class="nb">cd</span><span class="w"> </span>kd<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync
+<h1 id="equation-representation">Equation representation</h1>
+<p>Everywhere an equation shows up in KD it is the same term strings: an algorithm's input
+configuration, the answer it hands back, the argument to <code>kd.evaluate_terms</code>. Each
+algorithm holds candidates in its own data structure internally and converts on the way
+out.</p>
+<p>The notation describes structure, not display. It is not trying to look like the
+notation in a paper; it is trying to guarantee that one law, whoever derived it, is
+written as one string.</p>
+<h2 id="term-syntax">Term syntax</h2>
+<p>A term is a prefix function call, or a terminal token.</p>
+<table>
+<thead>
+<tr>
+<th>Written</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>u</code></td>
+<td>the field itself</td>
+</tr>
+<tr>
+<td><code>u_x</code>, <code>u_xx</code></td>
+<td>first and second spatial derivatives, as terminal tokens</td>
+</tr>
+<tr>
+<td><code>diff_x(u)</code>, <code>diff2_x(u)</code></td>
+<td>the same derivatives, as calls</td>
+</tr>
+<tr>
+<td><code>diff_x(diff2_x(u))</code></td>
+<td>third derivative</td>
+</tr>
+<tr>
+<td><code>mul(u, u_x)</code></td>
+<td><code>u</code> times <code>u_x</code></td>
+</tr>
+<tr>
+<td><code>add(u_xx, mul(u, u_x))</code></td>
+<td>a sum of two terms</td>
+</tr>
+</tbody>
+</table>
+<p>The built-in operators are <code>add</code>, <code>sub</code>, <code>mul</code>, <code>div</code>, <code>neg</code>, <code>n2</code> (square), <code>n3</code>
+(cube), <code>recip</code> (reciprocal), <code>sin</code>, <code>cos</code>, <code>exp</code>, <code>log</code>, and <code>lap</code>, the spatial
+Laplacian: it sums the second derivative over the dataset's spatial axes, so on two
+spatial axes <code>lap(u)</code> is <code>u_xx + u_yy</code>, and <code>lap(lap(u))</code> gives the biharmonic term.
+Six of them route through
+guarded implementations: <code>div</code> and <code>recip</code> floor a near-zero denominator, <code>log</code> floors
+a near-zero argument, and <code>exp</code>, <code>n2</code> and <code>n3</code> clamp their input magnitude, so none of
+these six produces an inf or a nan from a zero denominator or an overflowing exponent.</p>
+<p>Coefficients are not part of a term: an algorithm hands back terms, coefficients and a
+left-hand side separately, and the term string describes structure only. Whether two
+terms are the same is therefore independent of what multiplies them: <code>mul(u, u_x)</code> is
+<code>mul(u, u_x)</code> whether the fit put -1 or -0.5 in front of it. Writing a constant into a
+term is accepted (<code>mul(2, u)</code> is a valid term), but the fitted coefficient absorbs it,
+so it buys nothing.</p>
+<p>How far the terminal tokens go is set by <code>max_order</code> (a parameter of
+<code>kd.evaluate_terms</code> and <code>kd.validate_terms</code>), which defaults to 2, so <code>u_xx</code> can be
+written directly. Derivatives written as calls are not bounded by <code>max_order</code>, so
+<code>diff_x(diff2_x(u))</code> resolves under the default settings (the on-the-fly
+finite-difference scheme reaches third order).</p>
+<h2 id="notation-on-the-input-side">Notation on the input side</h2>
+<p>Candidate-term libraries and operator sets are written in the same IR as the terms that
+come back out:</p>
+<div class="highlight"><pre><span></span><code><span class="n">kd</span><span class="o">.</span><span class="n">PySINDyConfig</span><span class="p">()</span><span class="o">.</span><span class="n">terms</span>          <span class="c1"># (&#39;u&#39;, &#39;u_x&#39;, &#39;u_xx&#39;, &#39;mul(u, u_x)&#39;)</span>
+<span class="n">kd</span><span class="o">.</span><span class="n">PySRConfig</span><span class="p">()</span><span class="o">.</span><span class="n">terms</span>             <span class="c1"># (&#39;u&#39;, &#39;u_x&#39;, &#39;u_xx&#39;, &#39;mul(u, u_x)&#39;)</span>
+<span class="n">kd</span><span class="o">.</span><span class="n">DLGAConfig</span><span class="p">()</span><span class="o">.</span><span class="n">library</span>           <span class="c1"># [&#39;u&#39;, &#39;u_x&#39;, &#39;u_xx&#39;, &#39;u_xxx&#39;]</span>
+<span class="n">kd</span><span class="o">.</span><span class="n">DiscoverConfig</span><span class="p">()</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">operators</span>
+<span class="c1"># [&#39;add&#39;, &#39;mul&#39;, &#39;sub&#39;, &#39;div&#39;, &#39;sin&#39;, &#39;cos&#39;, &#39;diff_x&#39;, &#39;diff2_x&#39;]</span>
 </code></pre></div>
-<div class="kd-step">2 &nbsp;fit</div>
+<p>A candidate library assembled for one algorithm can go straight to another algorithm, or to
+<code>kd.evaluate_terms</code> for a refit. When a library carries a terminal token above the
+default <code>max_order</code> (<code>u_xxx</code> in the <code>DLGAConfig</code> list above), raise <code>max_order</code> to that
+order for the refit:</p>
+<div class="highlight"><pre><span></span><code><span class="n">kd</span><span class="o">.</span><span class="n">evaluate_terms</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">kd</span><span class="o">.</span><span class="n">DLGAConfig</span><span class="p">()</span><span class="o">.</span><span class="n">library</span><span class="p">,</span> <span class="n">max_order</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="conversion-per-algorithm">Conversion per algorithm</h2>
+<ul>
+<li><strong>SGA-PDE</strong> searches expression trees and maps the node names on the way out: <code>+</code> becomes
+  <code>add</code>, <code>*</code> becomes <code>mul</code>, <code>^2</code> becomes <code>n2</code>, and the two derivative operators <code>d</code> and
+  <code>d^2</code> render as <code>diff_x(...)</code> / <code>diff2_x(...)</code> against the differentiation axis.</li>
+<li><strong>PySR</strong> returns a SymPy expression. It is expanded, split at the top-level sum, and
+  each part is stripped of its numeric coefficient and serialized to IR; the platform
+  refits the coefficients.</li>
+<li><strong>DISCOVER</strong> builds its trees from the IR operator names directly; the operator set
+  above is its own.</li>
+<li><strong>PySINDy</strong> and <strong>DLGA-PDE</strong> select columns from a candidate library that is already IR.</li>
+</ul>
+<h2 id="the-equation-in-a-result">The equation in a result</h2>
+<p><code>model.best_expr_</code> is a display string and each algorithm renders it its own way (SGA-PDE
+bakes the fitted coefficients into the text), so it is not the thing to align two
+algorithms on.</p>
+<p>The equation-level object is <code>model.result_.equation</code>: terms paired with their
+coefficients, plus a left-hand side <code>LhsSpec(field='u', axis='t', order=1)</code>, that is,
+<code>u_t</code>.</p>
+<h2 id="structural-comparison">Structural comparison</h2>
+<p><code>kd.law_signature(equation)</code> reduces an equation to a signature: the left-hand side
+joins the term set, terms are sorted in canonical form, and the coefficient vector is
+normalized with a fixed sign anchor. Two equations with the same structure get the same
+<code>structure_key</code>, whatever string each of them prints.</p>
+<p>Canonical form reorders the arguments of <code>add</code> and <code>mul</code> (they commute) and performs no
+algebraic simplification, so <code>mul(u, u_x)</code> and <code>mul(u_x, u)</code> are one term. Stopping at
+commutativity is deliberate: simplification means a body of algebraic rules, and the
+more rules there are, the less obvious the reason two equations were called the same
+one.</p>
+<p>The two runs below differ only in how the PySINDy candidate library is spelled and ordered:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
-<span class="c1"># your own field u, on a 256 × 201 (x, t) grid</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">PDEDataset</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="n">t</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="n">u</span><span class="p">},</span> <span class="n">lhs</span><span class="o">=</span><span class="s2">&quot;u_t&quot;</span><span class="p">)</span>
-
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_kdv</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">terms</span> <span class="ow">in</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">&quot;u_x&quot;</span><span class="p">,</span> <span class="s2">&quot;u_xx&quot;</span><span class="p">,</span> <span class="s2">&quot;diff_x(diff2_x(u))&quot;</span><span class="p">,</span> <span class="s2">&quot;mul(u, u_x)&quot;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">&quot;mul(u_x, u)&quot;</span><span class="p">,</span> <span class="s2">&quot;diff_x(diff2_x(u))&quot;</span><span class="p">,</span> <span class="s2">&quot;u_x&quot;</span><span class="p">,</span> <span class="s2">&quot;u_xx&quot;</span><span class="p">),</span>
+<span class="p">]:</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span>
+        <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;pysindy&quot;</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">kd</span><span class="o">.</span><span class="n">PySINDyConfig</span><span class="p">(</span><span class="n">terms</span><span class="o">=</span><span class="n">terms</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">),</span>
+        <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="n">signature</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">law_signature</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="o">.</span><span class="n">equation</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">signature</span><span class="o">.</span><span class="n">structure_key</span><span class="p">,</span> <span class="n">signature</span><span class="o">.</span><span class="n">terms</span><span class="p">)</span>
 </code></pre></div>
-<div class="kd-out">
-<div class="kd-out__tag">5 generations · AIC -28.78</div>
-<div class="kd-out__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(+0.1002\,u_{xx}\)</span></div>
-</div>
-<h2 id="examples">Examples</h2>
-<p>Worked runs end to end: the data, the call, the equation that came back, and the figures
-that check it.</p>
-<div class="kd-grid">
-<a class="kd-card" href="examples/getting_started/">
-  <div class="kd-card__thumb"><img src="images/sga-field.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>notebook</span></div>
-<div class="kd-card__name">Getting started</div>
-<div class="kd-card__body">Load a bundled benchmark, fit in one call, read the result.</div>
-</div>
-</a>
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__thumb"><img src="images/sga-compare.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>worked example</span></div>
-<div class="kd-card__name">KdV with SGA-PDE</div>
-<div class="kd-card__body">A genetic search with no candidate library, and the residual it leaves behind.</div>
-</div>
-</a>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Comparing two algorithms</div>
-</div>
-</span>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Noisy data</div>
-</div>
-</span>
-</div>
-<h2 id="algorithms">Algorithms</h2>
-<p>Seven, behind one call. Change <code>algorithm=</code> and nothing else moves.</p>
-<div class="kd-grid">
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__eyebrow"><span>AIC</span><span>medium</span><span>finite_diff autograd</span></div>
-<div class="kd-card__name">SGA-PDE</div>
-<div class="kd-card__body">A genetic search over expression trees; the coefficients come from the algorithm's own sparse regression.</div>
-</a>
-<a class="kd-card" href="algorithms/dlga/">
-  <div class="kd-card__eyebrow"><span>DLGA fitness</span><span>heavy</span><span>autograd</span></div>
-<div class="kd-card__name">DLGA-PDE</div>
-<div class="kd-card__body">A neural network fits the field and supplies derivatives; a genetic algorithm searches term sets over a candidate library.</div>
-</a>
-<a class="kd-card" href="algorithms/discover/">
-  <div class="kd-card__eyebrow"><span>reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">DISCOVER</div>
-<div class="kd-card__body">A policy network emits expressions symbol by symbol, trained with policy gradients.</div>
-</a>
-<a class="kd-card" href="algorithms/eqgpt/">
-  <div class="kd-card__eyebrow"><span>EqGPT reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">EqGPT</div>
-<div class="kd-card__body">A pretrained transformer reads the field and proposes equations, then fine-tunes on reward.</div>
-</a>
-<a class="kd-card" href="algorithms/llm4ed/">
-  <div class="kd-card__eyebrow"><span>LLM4ED sparse reward</span><span>medium</span><span>finite_diff</span></div>
-<div class="kd-card__name">LLM4ED</div>
-<div class="kd-card__body">A large language model proposes and revises candidate equations round by round, filtered by a sparse reward.</div>
-</a>
-<a class="kd-card" href="algorithms/pysr/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>medium</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySR</div>
-<div class="kd-card__body">Multi-population evolutionary search returning a complexity/error Pareto front.</div>
-</a>
-<a class="kd-card" href="algorithms/pysindy/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>light</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySINDy</div>
-<div class="kd-card__body">Sparse regression over a supplied candidate library, solved in one pass.</div>
-</a>
-</div>
-<h2 id="visualization">Visualization</h2>
-<p>The seven algorithms work in completely different ways; looking at them does not. Change
-<code>algorithm=</code> and the rendering call stays as it is, drawing that algorithm's own process.</p>
-<p><a href="viz/"></p>
-<figure class="kd-figure kd-figure--wide">
-  <img src="images/sga-panels.png" alt="SGA-PDE's offspring diversity, complexity evolution and fitness spread panels">
-  <figcaption>Three diagnostic panels from one SGA-PDE run on KdV. Open the gallery.</figcaption>
-</figure>
-<p></a></p>
-<h2 id="design">Design</h2>
-<div class="kd-grid">
-<a class="kd-card" href="design/">
-  <div class="kd-card__eyebrow"><span>design</span></div>
-<div class="kd-card__name">Platform and plugins</div>
-<div class="kd-card__body">Seven algorithms as plugins over one set of shared services, and the decisions that let them share it.</div>
-</a>
-<a class="kd-card" href="data/shape/">
-  <div class="kd-card__eyebrow"><span>data</span></div>
-<div class="kd-card__name">Data requirements</div>
-<div class="kd-card__body">Fields, coordinate axes, grid or scattered points, and how the left-hand side is chosen.</div>
-</a>
-<a class="kd-card" href="design/scores/">
-  <div class="kd-card__eyebrow"><span>score</span></div>
-<div class="kd-card__name">Score conventions and comparability</div>
-<div class="kd-card__body">Each algorithm builds its own final score. Refit the terms in one shared context before comparing.</div>
-</a>
-</div>
-</div>
+<div class="highlight"><pre><span></span><code>add(diff_x(diff2_x(u)), mul(u,u_x))
+1f62a06976f85133 (&#39;diff_x(diff2_x(u))&#39;, &#39;mul(u,u_x)&#39;, &#39;u_t&#39;)
+add(mul(u,u_x), diff_x(diff2_x(u)))
+1f62a06976f85133 (&#39;diff_x(diff2_x(u))&#39;, &#39;mul(u,u_x)&#39;, &#39;u_t&#39;)
+</code></pre></div>
+<p>The display strings differ, the <code>structure_key</code> does not. That key is what to align
+results on across algorithms.</p>
+<p>Settle on one spelling for the derivatives before you align on it. The canonical form
+does no algebraic rewriting, so the terminal token <code>u_xx</code> and the call <code>diff2_x(u)</code> are
+two different terms, and one equation written both ways yields two different
+<code>structure_key</code> values. Give the algorithms you are comparing libraries in the same
+spelling: either both <code>u_xxx</code> or both <code>diff_x(diff2_x(u))</code>.</p>
 
 
 
@@ -1867,13 +1856,8 @@ that check it.</p>
 
 
 
-  
-  
 
 
-
-
-  
 
 
 
@@ -1920,18 +1904,18 @@ that check it.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="javascripts/katex/katex.min.js"></script>
+        <script src="../../javascripts/katex/katex.min.js"></script>
       
-        <script src="javascripts/katex/auto-render.min.js"></script>
+        <script src="../../javascripts/katex/auto-render.min.js"></script>
       
-        <script src="javascripts/katex.js"></script>
+        <script src="../../javascripts/katex.js"></script>
       
-        <script src="javascripts/home.js"></script>
+        <script src="../../javascripts/home.js"></script>
       
     
   </body>

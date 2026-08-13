@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/">
+        <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/design/batch/">
       
       
+        <link rel="prev" href="../resume/">
       
-        <link rel="next" href="examples/">
+      
+        <link rel="next" href="../../data/shape/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>KD</title>
+        <title>Batch experiments - KD</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,13 +53,13 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="stylesheets/kd.css">
+      <link rel="stylesheet" href="../../stylesheets/kd.css">
     
-      <link rel="stylesheet" href="javascripts/katex/katex.min.css">
+      <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -82,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quick-start" class="md-skip">
+        <a href="#batch-experiments-and-evidence" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href="../.." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Batch experiments
             
           </span>
         </div>
@@ -213,8 +215,6 @@
           
             
               
-                
-              
               <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -224,7 +224,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
+    <a href="../.." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -239,35 +239,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -283,79 +258,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Algorithms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualization
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -387,7 +289,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="examples/" class="md-nav__link ">
+            <a href="../../examples/" class="md-nav__link ">
               
   
   
@@ -431,7 +333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="examples/getting_started/" class="md-nav__link">
+      <a href="../../examples/getting_started/" class="md-nav__link">
         
   
   
@@ -463,8 +365,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -480,11 +384,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -505,7 +409,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -520,6 +424,8 @@
                 
   
   
+    
+  
   
   
     
@@ -543,15 +449,15 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="design/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -575,7 +481,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -595,7 +501,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/responsibilities/" class="md-nav__link">
+      <a href="../responsibilities/" class="md-nav__link">
         
   
   
@@ -623,7 +529,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/ir/" class="md-nav__link">
+      <a href="../ir/" class="md-nav__link">
         
   
   
@@ -651,7 +557,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/scores/" class="md-nav__link">
+      <a href="../scores/" class="md-nav__link">
         
   
   
@@ -679,7 +585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="design/resume/" class="md-nav__link">
+      <a href="../resume/" class="md-nav__link">
         
   
   
@@ -704,10 +610,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="design/batch/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch experiments
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -723,6 +656,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-experiment-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The experiment plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failed-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Failed entries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-evidence-store" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The evidence store
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consensus-across-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consensus across runs
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -798,7 +795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/shape/" class="md-nav__link">
+      <a href="../../data/shape/" class="md-nav__link">
         
   
   
@@ -826,7 +823,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/datasets/" class="md-nav__link">
+      <a href="../../data/datasets/" class="md-nav__link">
         
   
   
@@ -854,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="data/derivatives/" class="md-nav__link">
+      <a href="../../data/derivatives/" class="md-nav__link">
         
   
   
@@ -922,7 +919,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="algorithms/" class="md-nav__link ">
+            <a href="../../algorithms/" class="md-nav__link ">
               
   
   
@@ -966,7 +963,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/sga/" class="md-nav__link">
+      <a href="../../algorithms/sga/" class="md-nav__link">
         
   
   
@@ -994,7 +991,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/dlga/" class="md-nav__link">
+      <a href="../../algorithms/dlga/" class="md-nav__link">
         
   
   
@@ -1022,7 +1019,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/discover/" class="md-nav__link">
+      <a href="../../algorithms/discover/" class="md-nav__link">
         
   
   
@@ -1050,7 +1047,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/eqgpt/" class="md-nav__link">
+      <a href="../../algorithms/eqgpt/" class="md-nav__link">
         
   
   
@@ -1078,7 +1075,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/llm4ed/" class="md-nav__link">
+      <a href="../../algorithms/llm4ed/" class="md-nav__link">
         
   
   
@@ -1106,7 +1103,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysr/" class="md-nav__link">
+      <a href="../../algorithms/pysr/" class="md-nav__link">
         
   
   
@@ -1134,7 +1131,7 @@
   
   
     <li class="md-nav__item">
-      <a href="algorithms/pysindy/" class="md-nav__link">
+      <a href="../../algorithms/pysindy/" class="md-nav__link">
         
   
   
@@ -1190,7 +1187,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="viz/" class="md-nav__link ">
+            <a href="../../viz/" class="md-nav__link ">
               
   
   
@@ -1234,7 +1231,7 @@
   
   
     <li class="md-nav__item">
-      <a href="viz/howto/" class="md-nav__link">
+      <a href="../../viz/howto/" class="md-nav__link">
         
   
   
@@ -1311,7 +1308,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="api/" class="md-nav__link ">
+            <a href="../../api/" class="md-nav__link ">
               
   
   
@@ -1355,7 +1352,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/model/" class="md-nav__link">
+      <a href="../../api/model/" class="md-nav__link">
         
   
   
@@ -1383,7 +1380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -1411,7 +1408,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/data/" class="md-nav__link">
+      <a href="../../api/data/" class="md-nav__link">
         
   
   
@@ -1439,7 +1436,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/datasets/" class="md-nav__link">
+      <a href="../../api/datasets/" class="md-nav__link">
         
   
   
@@ -1467,7 +1464,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/terms/" class="md-nav__link">
+      <a href="../../api/terms/" class="md-nav__link">
         
   
   
@@ -1495,7 +1492,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/viz/" class="md-nav__link">
+      <a href="../../api/viz/" class="md-nav__link">
         
   
   
@@ -1523,7 +1520,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/resume/" class="md-nav__link">
+      <a href="../../api/resume/" class="md-nav__link">
         
   
   
@@ -1551,7 +1548,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/harness/" class="md-nav__link">
+      <a href="../../api/harness/" class="md-nav__link">
         
   
   
@@ -1586,7 +1583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="about/" class="md-nav__link">
+      <a href="../../about/" class="md-nav__link">
         
   
   
@@ -1614,9 +1611,7 @@
             
             
               
-                
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" hidden>
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -1624,6 +1619,8 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
+  
+    
   
   
     <label class="md-nav__title" for="__toc">
@@ -1633,10 +1630,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#the-experiment-plan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick start
+        The experiment plan
       
     </span>
   </a>
@@ -1644,10 +1641,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
+  <a href="#failed-entries" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Examples
+        Failed entries
       
     </span>
   </a>
@@ -1655,10 +1652,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#algorithms" class="md-nav__link">
+  <a href="#the-evidence-store" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Algorithms
+        The evidence store
       
     </span>
   </a>
@@ -1666,21 +1663,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visualization" class="md-nav__link">
+  <a href="#consensus-across-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Visualization
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
+        Consensus across runs
       
     </span>
   </a>
@@ -1701,165 +1687,109 @@
               <article class="md-content__inner md-typeset">
                 
                   
-  
 
 
 
-
-<div class="kd-hero">
-<div class="kd-hero__inner">
-  <div class="kd-hero__eyebrow">equation discovery · symbolic regression</div>
-  <h1 class="kd-hero__title">Discovering equations from data</h1>
-  <p class="kd-hero__lede">
-    <b>KD (Knowledge Discovery)</b> puts several equation-discovery algorithms behind one
-    intermediate representation and one API, and refits their results in a common context
-    so the numbers can be compared.
-  </p>
-
-<div class="kd-readout kd-readout--hero" style="--kd-fig-ar: 2.755">
-  <div class="kd-readout__bar">
-    <span>SGA-PDE · kdv · seed 42</span>
-    <span class="kd-readout__metric">generation 200 / 200 · nmse 2.70e-06 · AIC <b>-19.42</b></span>
-  </div>
-  <img class="kd-readout__fig" src="images/sga-field.png"
-       alt="Heatmap of the kdv field u over x and t">
-  <div class="kd-readout__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(-0.0025\,u_{xxx}\)</span></div>
-  <div class="kd-readout__cap">The field the run was given, and the equation it returned from it. Nothing narrowed the search to those two terms: they were assembled out of operators during the run.</div>
-</div>
-
-  <div class="kd-hero__actions">
-    <a class="kd-btn kd-btn--primary" href="#quick-start">Quick start</a>
-    <a class="kd-btn kd-btn--ghost" href="examples/">Examples</a>
-  </div>
-</div>
-<div class="kd-hero__cue">scroll</div>
-</div>
-
-<div class="kd-flow">
-<h2 id="quick-start">Quick start</h2>
-<p>KD needs Python 3.11 and <a href="https://docs.astral.sh/uv/"><code>uv</code></a>. A dataset is coordinate
-arrays and field arrays; the bundled benchmarks return the same <code>PDEDataset</code>, so
-<code>kd.load_burgers()</code> can stand in for the two lines below while you try it out.</p>
-<div class="kd-step">1 &nbsp;install</div>
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>-b<span class="w"> </span>trunk<span class="w"> </span>https://github.com/Scientific-Artificial-Intelligence-Lab/kd.git
-<span class="nb">cd</span><span class="w"> </span>kd<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync
-</code></pre></div>
-<div class="kd-step">2 &nbsp;fit</div>
+<h1 id="batch-experiments-and-evidence">Batch experiments and evidence</h1>
+<p>One fit answers one question. The questions that come up in practice are plural: does
+this result hold at another seed, on another dataset, under another algorithm?
+<code>kd.harness</code> runs the plural version and keeps what it ran, so the aggregate can be
+computed from records instead of from notes.</p>
+<h2 id="the-experiment-plan">The experiment plan</h2>
+<p>An <code>ExperimentPlan</code> is an ordered matrix of entries, each naming an algorithm, a
+dataset, a seed and the settings for that run. Its hash covers the matrix including the
+order, so the hash identifies the exact study. Datasets are referred to by name and
+resolved at run time, which keeps the plan itself free of data.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd.harness</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExperimentPlan</span><span class="p">,</span> <span class="n">PlanEntry</span><span class="p">,</span> <span class="n">run_plan</span>
 
-<span class="c1"># your own field u, on a 256 × 201 (x, t) grid</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">PDEDataset</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="n">t</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="n">u</span><span class="p">},</span> <span class="n">lhs</span><span class="o">=</span><span class="s2">&quot;u_t&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">generate_burgers_data</span><span class="p">(</span><span class="n">nx</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">nu</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="n">ExperimentPlan</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;burgers-seed-stability&quot;</span><span class="p">,</span>
+    <span class="n">entries</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span>
+        <span class="n">PlanEntry</span><span class="p">(</span>
+            <span class="n">instrument</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span>
+            <span class="n">dataset_ref</span><span class="o">=</span><span class="s2">&quot;burgers&quot;</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">model_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;generations&quot;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span> <span class="s2">&quot;population&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">seed</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">entries</span><span class="p">),</span> <span class="n">plan</span><span class="o">.</span><span class="n">plan_hash</span><span class="p">()[:</span><span class="mi">10</span><span class="p">])</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">run_plan</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">datasets</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;burgers&quot;</span><span class="p">:</span> <span class="n">dataset</span><span class="p">},</span> <span class="n">store_root</span><span class="o">=</span><span class="s2">&quot;out/burgers-seeds&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">outcome</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">outcomes</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">outcome</span><span class="o">.</span><span class="n">entry_index</span><span class="p">,</span> <span class="n">outcome</span><span class="o">.</span><span class="n">entry</span><span class="o">.</span><span class="n">instrument</span><span class="p">,</span> <span class="n">outcome</span><span class="o">.</span><span class="n">entry</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span> <span class="n">outcome</span><span class="o">.</span><span class="n">status</span><span class="p">)</span>
 </code></pre></div>
-<div class="kd-out">
-<div class="kd-out__tag">5 generations · AIC -28.78</div>
-<div class="kd-out__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(+0.1002\,u_{xx}\)</span></div>
-</div>
-<h2 id="examples">Examples</h2>
-<p>Worked runs end to end: the data, the call, the equation that came back, and the figures
-that check it.</p>
-<div class="kd-grid">
-<a class="kd-card" href="examples/getting_started/">
-  <div class="kd-card__thumb"><img src="images/sga-field.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>notebook</span></div>
-<div class="kd-card__name">Getting started</div>
-<div class="kd-card__body">Load a bundled benchmark, fit in one call, read the result.</div>
-</div>
-</a>
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__thumb"><img src="images/sga-compare.png" alt=""></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>worked example</span></div>
-<div class="kd-card__name">KdV with SGA-PDE</div>
-<div class="kd-card__body">A genetic search with no candidate library, and the residual it leaves behind.</div>
-</div>
-</a>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Comparing two algorithms</div>
-</div>
-</span>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Noisy data</div>
-</div>
-</span>
-</div>
-<h2 id="algorithms">Algorithms</h2>
-<p>Seven, behind one call. Change <code>algorithm=</code> and nothing else moves.</p>
-<div class="kd-grid">
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__eyebrow"><span>AIC</span><span>medium</span><span>finite_diff autograd</span></div>
-<div class="kd-card__name">SGA-PDE</div>
-<div class="kd-card__body">A genetic search over expression trees; the coefficients come from the algorithm's own sparse regression.</div>
-</a>
-<a class="kd-card" href="algorithms/dlga/">
-  <div class="kd-card__eyebrow"><span>DLGA fitness</span><span>heavy</span><span>autograd</span></div>
-<div class="kd-card__name">DLGA-PDE</div>
-<div class="kd-card__body">A neural network fits the field and supplies derivatives; a genetic algorithm searches term sets over a candidate library.</div>
-</a>
-<a class="kd-card" href="algorithms/discover/">
-  <div class="kd-card__eyebrow"><span>reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">DISCOVER</div>
-<div class="kd-card__body">A policy network emits expressions symbol by symbol, trained with policy gradients.</div>
-</a>
-<a class="kd-card" href="algorithms/eqgpt/">
-  <div class="kd-card__eyebrow"><span>EqGPT reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">EqGPT</div>
-<div class="kd-card__body">A pretrained transformer reads the field and proposes equations, then fine-tunes on reward.</div>
-</a>
-<a class="kd-card" href="algorithms/llm4ed/">
-  <div class="kd-card__eyebrow"><span>LLM4ED sparse reward</span><span>medium</span><span>finite_diff</span></div>
-<div class="kd-card__name">LLM4ED</div>
-<div class="kd-card__body">A large language model proposes and revises candidate equations round by round, filtered by a sparse reward.</div>
-</a>
-<a class="kd-card" href="algorithms/pysr/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>medium</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySR</div>
-<div class="kd-card__body">Multi-population evolutionary search returning a complexity/error Pareto front.</div>
-</a>
-<a class="kd-card" href="algorithms/pysindy/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>light</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySINDy</div>
-<div class="kd-card__body">Sparse regression over a supplied candidate library, solved in one pass.</div>
-</a>
-</div>
-<h2 id="visualization">Visualization</h2>
-<p>The seven algorithms work in completely different ways; looking at them does not. Change
-<code>algorithm=</code> and the rendering call stays as it is, drawing that algorithm's own process.</p>
-<p><a href="viz/"></p>
-<figure class="kd-figure kd-figure--wide">
-  <img src="images/sga-panels.png" alt="SGA-PDE's offspring diversity, complexity evolution and fitness spread panels">
-  <figcaption>Three diagnostic panels from one SGA-PDE run on KdV. Open the gallery.</figcaption>
-</figure>
-<p></a></p>
-<h2 id="design">Design</h2>
-<div class="kd-grid">
-<a class="kd-card" href="design/">
-  <div class="kd-card__eyebrow"><span>design</span></div>
-<div class="kd-card__name">Platform and plugins</div>
-<div class="kd-card__body">Seven algorithms as plugins over one set of shared services, and the decisions that let them share it.</div>
-</a>
-<a class="kd-card" href="data/shape/">
-  <div class="kd-card__eyebrow"><span>data</span></div>
-<div class="kd-card__name">Data requirements</div>
-<div class="kd-card__body">Fields, coordinate axes, grid or scattered points, and how the left-hand side is chosen.</div>
-</a>
-<a class="kd-card" href="design/scores/">
-  <div class="kd-card__eyebrow"><span>score</span></div>
-<div class="kd-card__name">Score conventions and comparability</div>
-<div class="kd-card__body">Each algorithm builds its own final score. Refit the terms in one shared context before comparing.</div>
-</a>
-</div>
-</div>
+<div class="highlight"><pre><span></span><code>burgers-seed-stability 3 1ec66c4dac
+0 sga 0 completed
+1 sga 1 completed
+2 sga 2 completed
+</code></pre></div>
+<p>Widening the study is an edit to those entries: add an algorithm, add a dataset, add
+seeds. Nothing around the plan changes, and the new matrix gets its own hash.</p>
+<p>Entries run one after another. Parallel execution is a separate call that shards a plan
+across subprocesses, pinning the numerical libraries to one thread per worker, holding
+the heavy algorithms to one at a time, giving each shard a wall-clock limit and folding
+the shards back into a single store afterwards, replaying every record and checking that
+none of them changed on the way.</p>
+<h2 id="failed-entries">Failed entries</h2>
+<p>An entry that raises is recorded with its error type and message, and the remaining
+entries still run. Each outcome carries one of three statuses: the fit completed, it
+raised, or it finished without sealing a record. The one failure that does stop a batch
+is a failure to write the evidence, on the grounds that a batch that cannot record what
+it did is not worth continuing.</p>
+<h2 id="the-evidence-store">The evidence store</h2>
+<p>Records are written atomically and never overwritten, and the index is rewritten after
+every outcome, so an interrupted batch keeps everything that finished. The directory has
+to be fresh: a store is not appended to.</p>
+<p>Reopening one re-checks it rather than trusting it. The plan hash is recomputed from the
+persisted plan, every record is verified against its own hash and against the plan slot
+it claims, records under one dataset name have to share one data fingerprint, and a file
+in the records directory that the index does not list is an error rather than a
+curiosity. What comes back is read-only. Each store also carries the environment it ran
+in: the KD, Python and torch versions, the platform string, and the commit when the run
+happened inside a checkout.</p>
+<h2 id="consensus-across-runs">Consensus across runs</h2>
+<p><code>build_consensus</code> is a pure function over a sealed store. Runs are grouped by the
+canonical set of terms they selected, so two runs that print differently but chose the
+same law land in the same class:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">kd.harness</span><span class="w"> </span><span class="kn">import</span> <span class="n">EvidenceStore</span><span class="p">,</span> <span class="n">build_consensus</span>
+
+<span class="n">store</span> <span class="o">=</span> <span class="n">EvidenceStore</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;out/burgers-seeds&quot;</span><span class="p">)</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">build_consensus</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">dataset_consensus</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">datasets</span><span class="p">:</span>
+    <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">dataset_consensus</span><span class="o">.</span><span class="n">classes</span><span class="p">:</span>
+        <span class="n">members</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">instrument</span><span class="si">}</span><span class="s2">/seed</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">seed</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">members</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">structure_key</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span> <span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="n">members</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;   &quot;</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">terms</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="n">dataset_consensus</span><span class="o">.</span><span class="n">adjacency</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;adjacency&quot;</span><span class="p">,</span> <span class="n">pair</span><span class="o">.</span><span class="n">structure_key_a</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span> <span class="n">pair</span><span class="o">.</span><span class="n">structure_key_b</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span>
+              <span class="n">pair</span><span class="o">.</span><span class="n">relation</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">pair</span><span class="o">.</span><span class="n">jaccard</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>9f6aa9b928 | sga/seed0, sga/seed1
+    (&#39;diff_x(u_x)&#39;, &#39;mul(u,u_x)&#39;, &#39;u_t&#39;)
+0bb825b5f3 | sga/seed2
+    (&#39;diff2_x(sub(u,x))&#39;, &#39;diff_x(n2(u))&#39;, &#39;u_t&#39;)
+adjacency 9f6aa9b928 0bb825b5f3 overlap 0.2
+</code></pre></div>
+<p>Two classes out of three runs, and the second one is worth reading before calling the
+algorithm unstable: <code>diff_x(n2(u))</code> is the derivative of <code>u²</code>, which is <code>2·u·u_x</code>, and
+<code>diff2_x(sub(u, x))</code> is the second derivative of <code>u - x</code>, which is <code>u_xx</code>. Seed 2 found
+the same law in a different notation, and the adjacency line is where that shows up.
+Term sets are grouped, not simplified, which is why the report reports a relation
+between classes instead of quietly merging them.</p>
+<p>Each class is described along four independent axes: whether the structure agrees,
+whether the support agrees, whether the coefficients agree, and whether the empirical
+fit agrees. They stay separate, and there is no single confidence number folding them
+together, because the interesting cases are the ones where the axes disagree. Alongside
+them the report records how far the corroboration reaches, from several algorithms
+across different derivative sources down to a single run, so a class supported by three
+seeds of one algorithm is not read as a class supported by three algorithms.</p>
+<p>The whole report renders to Markdown and to a JSON artifact, both deterministic: the
+same evidence renders byte for byte the same way.</p>
 
 
 
@@ -1867,13 +1797,8 @@ that check it.</p>
 
 
 
-  
-  
 
 
-
-
-  
 
 
 
@@ -1920,18 +1845,18 @@ that check it.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="javascripts/katex/katex.min.js"></script>
+        <script src="../../javascripts/katex/katex.min.js"></script>
       
-        <script src="javascripts/katex/auto-render.min.js"></script>
+        <script src="../../javascripts/katex/auto-render.min.js"></script>
       
-        <script src="javascripts/katex.js"></script>
+        <script src="../../javascripts/katex.js"></script>
       
-        <script src="javascripts/home.js"></script>
+        <script src="../../javascripts/home.js"></script>
       
     
   </body>
