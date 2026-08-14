@@ -1981,7 +1981,7 @@ what <code>best_score_</code> measures in
 )
           –
           <div class="doc-md-description">
-            <p>Random seed for reproducibility. It threads into the default config for dlga / discover / pysr / pysindy (and SGA) when <code>config=</code> is unset, otherwise the config's own seed wins.</p>
+            <p>Random seed for reproducibility. It threads into every algorithm's default config when <code>config=</code> is unset; otherwise the config's own seed wins. Passing the facade <code>seed=</code> together with <code>config=</code> is rejected by <code>_validate_config_exclusivity</code>.</p>
           </div>
         </li>
         <li class="doc-section-item field-body">
@@ -2116,7 +2116,7 @@ what <code>best_score_</code> measures in
 )
           –
           <div class="doc-md-description">
-            <p>Forwarded to <code>SGAConfig</code> if the field name matches an allowed (non-explicitly-mapped) field. Unknown or colliding kwargs raise <code>TypeError</code>.</p>
+            <p>Forwarded to the selected algorithm's config dataclass when the field is not already owned by a facade parameter. Unknown, cross-algorithm, colliding, or JSON-type-invalid fields raise at construction.</p>
           </div>
         </li>
     </ul>

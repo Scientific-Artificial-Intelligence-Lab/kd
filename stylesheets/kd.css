@@ -13,6 +13,19 @@
   --kd-body: "IBM Plex Sans", "Noto Sans SC", -apple-system, sans-serif;
   --kd-mono: "IBM Plex Mono", ui-monospace, "Noto Sans Mono CJK SC", monospace;
 
+  /* The two letters of the name, wherever the mark appears. Cyan is the accent
+     the header and the buttons already carry; lavender is the hero's own purple
+     lifted far enough to read. Two pairs: one for dark grounds (the hero, the
+     header bar, the drawer band, the homepage sidebar -- dark whatever scheme
+     the reader is in), one for this page's own ground. Within each pair the two
+     hexes are matched on relative luminance (dark .515/.499, paper .107/.111),
+     so neither letter recedes at 19px; both pairs clear 4.5:1 on their ground
+     by a wide margin (5.8 to 9.6). */
+  --kd-mark-k-dk: #4fd1c9;
+  --kd-mark-d-dk: #c3b1f9;
+  --kd-mark-k: #0e6763;
+  --kd-mark-d: #6a45c0;
+
   --md-primary-fg-color: var(--kd-plum);
   --md-primary-fg-color--light: var(--kd-teal);
   --md-primary-fg-color--dark: var(--kd-void);
@@ -30,7 +43,13 @@
   --md-accent-fg-color: #4fd1c9;
   --kd-paper: #14101f;
   --kd-slate: #a9a4bd;
+  --kd-mark-k: var(--kd-mark-k-dk);
+  --kd-mark-d: var(--kd-mark-d-dk);
 }
+
+/* Wherever the name is spelled out, K and D carry these two. */
+.kd-k { color: var(--kd-mark-k); }
+.kd-d { color: var(--kd-mark-d); }
 
 body, .md-typeset {
   font-family: var(--kd-body);
@@ -112,14 +131,38 @@ body, .md-typeset {
   margin-bottom: 1.1rem;
 }
 
+/* The name is two letters, so the heading is set as a mark with a line under it
+   that expands the letters, rather than as a sentence. The two children carry
+   the sizes; the h1's own size is neutral so nothing inherits from it. */
 .md-typeset .kd-hero__title {
   font-family: var(--kd-display);
-  font-size: clamp(1.6rem, 3.6vw, 2.35rem);
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1.16;
-  letter-spacing: -0.02em;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   margin: 0 0 .85rem;
   color: #fbfaff;
+}
+
+.kd-hero__mark {
+  display: block;
+  font-size: clamp(3rem, 6.5vw, 4.6rem);
+}
+
+/* The hero is dark under either colour scheme, so it takes the dark-ground
+   pair. The two letters are kerned tighter than the rest of the wordmark's
+   tracking so they read as one mark rather than as two initials. */
+.kd-hero { --kd-mark-k: var(--kd-mark-k-dk); --kd-mark-d: var(--kd-mark-d-dk); }
+.kd-hero__mark .kd-k { letter-spacing: -0.05em; }
+
+.kd-hero__tag {
+  display: block;
+  margin-top: .45rem;
+  font-size: clamp(1rem, 1.7vw, 1.22rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: #d5d0e6;
 }
 
 .md-typeset .kd-hero__lede {
@@ -332,6 +375,7 @@ html.kd-home .kd-hero__eyebrow { margin-bottom: .8rem; }
 html.kd-home .kd-hero__actions { margin-top: 1.4rem; }
 html.kd-home .kd-readout { padding: .9rem 1.15rem 1rem; }
 html.kd-home .kd-readout__bar { margin-bottom: .55rem; }
+html.kd-home .kd-readout__eq { font-size: clamp(1rem, 2.6vw, 1.55rem); margin: .3rem 0 .15rem; }
 /* Tighter than the standalone card above: less padding, and a shorter field,
    because here the buttons and the scroll cue have to fit under it. The card
    width follows from both (see .kd-readout--hero). */
@@ -339,18 +383,34 @@ html.kd-home .kd-readout--hero {
   --kd-fig-h: min(30vh, 15rem);
   max-width: min(58rem, calc(var(--kd-fig-h) * var(--kd-fig-ar, 2.7) + 2.3rem + 2px));
 }
-/* Below roughly 740px of window the one-screen budget stops covering the four
-   blocks at that spacing: the card narrows with the field, which costs the
-   caption a line. Close the gaps between the blocks rather than let the buttons
-   fall past the fold -- a 1366x768 laptop lands here. */
-@media screen and (max-height: 46em) {
+/* Below roughly 830px of window the one-screen budget stops covering the five
+   blocks at this spacing. Shrink the wordmark, close the gaps between the blocks
+   and set the lede on tighter leading rather than let the buttons fall past the
+   fold -- a 1366x768 laptop lands here, and so does a maximised browser on a
+   1440x900 screen once its own chrome is subtracted. The threshold is where the
+   full-size layout stops fitting, measured, not a round number -- and there are
+   three of them because Material scales the root font up at 100em and 125em of
+   width, which scales every rem in the hero with it. */
+@media screen and (max-height: 52em),
+       screen and (min-width: 100em) and (max-height: 60em),
+       screen and (min-width: 125em) and (max-height: 68em) {
   html.kd-home .kd-readout--hero { --kd-fig-h: min(28vh, 15rem); }
-  html.kd-home .md-typeset .kd-hero__lede { margin-bottom: .9rem; }
+  /* The wordmark gives up the most here because it is the tallest block in the
+     hero and the only one whose size is decoration rather than reading. */
+  html.kd-home .kd-hero__mark { font-size: clamp(2.2rem, 4.4vw, 2.8rem); }
+  html.kd-home .kd-hero__tag { font-size: 1rem; margin-top: .3rem; }
+  html.kd-home .md-typeset .kd-hero__title { margin-bottom: .5rem; }
+  html.kd-home .md-typeset .kd-hero__lede { margin-bottom: .8rem; line-height: 1.6; }
   html.kd-home .kd-hero__eyebrow { margin-bottom: .5rem; }
-  html.kd-home .kd-hero__actions { margin-top: 1rem; }
+  html.kd-home .kd-hero__actions { margin-top: .9rem; }
   html.kd-home .kd-readout__cap { line-height: 1.5; }
+  /* Inside the card too, so the last few pixels come out of the padding rather
+     than out of the field: shrinking the figure here would narrow the card and
+     cost the caption another line, which is the opposite of a saving. */
+  html.kd-home .kd-readout { padding: .7rem 1.15rem .8rem; }
+  html.kd-home .kd-readout__bar { margin-bottom: .4rem; }
+  html.kd-home .kd-readout__eq { margin: .15rem 0 .1rem; }
 }
-html.kd-home .kd-readout__eq { font-size: clamp(1rem, 2.6vw, 1.55rem); margin: .3rem 0 .15rem; }
 
 /* The page below carries its own background out to the full width, so it hides
    the hero as it arrives rather than sliding a narrow column over it. Both the
@@ -580,8 +640,100 @@ html.kd-home .kd-flow > h2:first-child { border-top: 0; margin-top: 0; padding-t
   box-shadow: none;
   border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
 }
-.md-nav__title { font-family: var(--kd-display); }
 .md-typeset .headerlink { color: color-mix(in srgb, var(--kd-teal) 55%, transparent); }
+
+/* ---- the name in the theme's own chrome ------------------------------ */
+
+/* The header bar and the sidebar title are where the theme prints the site
+   name, and it prints it as one text node, which cannot carry two colours.
+   Both places hold exactly the two letters, so the letters are set as the
+   element's own ::before and ::after and the text node is collapsed. Nothing
+   is lost to a screen reader: the links around it already carry aria-label
+   "KD", and the collapsed node is still in the accessibility tree. */
+.md-header__topic:first-child .md-ellipsis,
+.md-nav--primary > .md-nav__title {
+  font-size: 0;
+}
+.md-header__topic:first-child .md-ellipsis::before,
+.md-nav--primary > .md-nav__title::before {
+  content: "K";
+  color: var(--kd-mark-k);
+}
+.md-header__topic:first-child .md-ellipsis::after,
+.md-nav--primary > .md-nav__title::after {
+  content: "D";
+  color: var(--kd-mark-d);
+}
+.md-header__topic:first-child .md-ellipsis::before,
+.md-header__topic:first-child .md-ellipsis::after,
+.md-nav--primary > .md-nav__title::before,
+.md-nav--primary > .md-nav__title::after {
+  font-family: var(--kd-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.md-header__topic:first-child .md-ellipsis::before,
+.md-header__topic:first-child .md-ellipsis::after { font-size: .95rem; }
+/* Larger than the links under it: this is the mark, not a nav item. */
+.md-nav--primary > .md-nav__title::before,
+.md-nav--primary > .md-nav__title::after { font-size: 1.15rem; }
+
+/* The logo slot carries the mark itself rather than the theme's stock icon,
+   which was the one thing left on the page that belonged to no palette. The
+   anchor keeps its href and its aria-label, so it is still the link home. */
+/* The theme's own rule for the icon is two classes deep, and it sets it to
+   block, which would put each letter on its own line; both have to be answered
+   here. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg,
+.md-nav__title .md-nav__button.md-logo svg { display: none; }
+/* Only above the drawer breakpoint: below it the theme hides this button
+   altogether and the drawer button takes the corner. */
+@media screen and (min-width: 76.25em) {
+  .md-header__button.md-logo { display: flex; align-items: baseline; }
+}
+.md-logo::before,
+.md-logo::after {
+  font-family: var(--kd-display);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2rem;
+}
+.md-logo::before { content: "K"; color: var(--kd-mark-k); letter-spacing: -0.05em; }
+.md-logo::after { content: "D"; color: var(--kd-mark-d); }
+
+/* With the mark in the logo slot the site name beside it is a second copy of
+   the same two letters. The theme's two header topics are absolutely
+   positioned, so hiding the first leaves the page title's slide-in on scroll
+   exactly as it was. Below the drawer breakpoint the theme hides the logo and
+   the topic is the only place the name appears, so there it stays. */
+@media screen and (min-width: 76.25em) {
+  .md-header__topic:first-child { display: none; }
+}
+
+/* On a phone that same title becomes the drawer's band, on the primary purple
+   under either colour scheme. The band's height and top padding were there to
+   clear the stock icon above the text; with the icon gone the text moves up
+   into the space rather than leaving a hole. */
+@media screen and (max-width: 76.1875em) {
+  .md-nav--primary > .md-nav__title {
+    height: auto;
+    padding: 1.4rem .8rem .9rem;
+    --kd-mark-k: var(--kd-mark-k-dk);
+    --kd-mark-d: var(--kd-mark-d-dk);
+  }
+  .md-nav--primary > .md-nav__title > .md-logo { display: none; }
+  .md-nav--primary > .md-nav__title::before,
+  .md-nav--primary > .md-nav__title::after { font-size: 1.5rem; }
+}
+
+/* The header is dark on every page, and so is the sidebar on the homepage, so
+   both take the light pair whatever colour scheme the reader is in. */
+.md-header,
+html.kd-home .md-sidebar--primary {
+  --kd-mark-k: var(--kd-mark-k-dk);
+  --kd-mark-d: var(--kd-mark-d-dk);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .kd-eq__term { animation: none; }
