@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import kd.search.llm4ed as pkg
-import kd.search.llm4ed.backend as backend_mod
 from kd.llm import LLMParams, LLMProvider, LLMRequest, LLMResponse
-from kd.search.llm4ed import FakeLlm4edBackend
 from kd.search.llm4ed.parse import Llm4edParseError, parse_equation
 from kd.search.llm4ed.prompts import (
     build_evolution_prompt,
@@ -15,6 +12,7 @@ from kd.search.llm4ed.prompts import (
     classify_prompt,
     parse_response,
 )
+from tests.unit.search.llm4ed._fake_backend import FakeLlm4edBackend
 
 OPERANDS = ("x", "u_x", "u_xx", "u_xxx", "u")
 
@@ -24,36 +22,6 @@ def _text(fake: FakeLlm4edBackend, prompt: str, seed: int) -> str:
         prompt=prompt, seed=seed, params=LLMParams(temperature=0.8, max_tokens=16)
     )
     return fake.complete(request).text
-
-
-_RETIRED_SYMBOLS = (
-    "Llm4edBackend",
-    "RealLlm4edBackend",
-    "Llm4edBackendError",
-)
-
-
-def test_legacy_backend_symbols_are_retired() -> None:
-
-    still_exported = [name for name in _RETIRED_SYMBOLS if hasattr(pkg, name)]
-    assert not still_exported, f"package still exports: {still_exported}"
-    still_in_module = [
-        name for name in _RETIRED_SYMBOLS if hasattr(backend_mod, name)
-    ]
-    assert not still_in_module, f"backend.py still defines: {still_in_module}"
-
-
-def test_legacy_symbols_absent_from_dunder_all() -> None:
-    exported = set(getattr(pkg, "__all__", ()))
-    leaked = exported.intersection(_RETIRED_SYMBOLS)
-    assert not leaked, f"__all__ still advertises retired symbols: {sorted(leaked)}"
-
-
-def test_fake_backend_survives_and_is_exported() -> None:
-
-
-    assert hasattr(pkg, "FakeLlm4edBackend")
-    assert "FakeLlm4edBackend" in set(getattr(pkg, "__all__", ()))
 
 
 def test_fake_backend_satisfies_llmprovider_by_name_and_call_shape() -> None:

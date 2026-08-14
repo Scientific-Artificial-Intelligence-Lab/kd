@@ -7,14 +7,11 @@ import pytest
 import torch
 
 from kd.search.discover.data.loader import load_kdv_mat
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 
 
-_DATA_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde"
-    / "data_new" / "Kdv.mat"
-)
+_DATA_PATH = REFERENCE_DATA_DIR / "Kdv.mat"
 
 
 

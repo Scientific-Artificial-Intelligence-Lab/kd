@@ -13,6 +13,7 @@ from kd.search.dlga.viz import (
     render_surrogate,
     surrogate_data,
 )
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -81,6 +82,11 @@ _PLOT_METRIC: dict[str, str] = {
     "complexity_evolution": GEN_MEAN_COMPLEXITY_KEY,
     "fitness_spread": POP_MEAN_AIC_KEY,
 }
+
+
+
+
+_COUNT_METRICS: frozenset[str] = frozenset({N_UNIQUE_KEY})
 
 
 
@@ -173,6 +179,9 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
 
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(metric)
+    integer_ticks(ax)
+    if metric in _COUNT_METRICS:
+        integer_ticks(ax, "y")
     ax.set_title(title)
 
     if not series:

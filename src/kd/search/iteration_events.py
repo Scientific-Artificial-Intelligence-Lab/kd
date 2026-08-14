@@ -6,17 +6,24 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final, TextIO
 
 from kd.core.jsonsafe import finite_or_none
 
 __all__ = [
+    "ITEREVENT_DIAGNOSTICS_KEYS",
     "ITEREVENT_SCHEME",
     "ITEREVENT_SCHEMA_VERSION",
+    "PHASE_SCHEME",
+    "PHASE_SCHEMA_VERSION",
+    "PHASE_VOCABULARY",
     "IterationEvent",
     "IterationEventEmitter",
     "IterationEventSinkError",
+    "PhaseEvent",
+    "PhaseWriter",
 ]
 
 
@@ -25,6 +32,22 @@ __all__ = [
 
 ITEREVENT_SCHEME: Final[str] = "kd-iterevent-v1"
 ITEREVENT_SCHEMA_VERSION: Final[int] = 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+ITEREVENT_DIAGNOSTICS_KEYS: Final[frozenset[str]] = frozenset(
+    {"n_unique_candidates", "mean_complexity"}
+)
 
 _MIN_EVERY_N: Final[int] = 1
 
@@ -118,10 +141,28 @@ def _validate_optional_str(value: object, *, field: str) -> None:
 
 
 def _validate_optional_dict(value: object, *, field: str) -> None:
-    if value is not None and not isinstance(value, dict):
+    if value is None:
+        return
+    if not isinstance(value, dict):
         raise ValueError(
             f"IterationEvent.{field} must be a dict or None, got {value!r}"
         )
+    unknown = set(value) - ITEREVENT_DIAGNOSTICS_KEYS
+    if unknown:
+        raise ValueError(
+            f"IterationEvent.{field}: keys outside the white-list "
+            f"{sorted(unknown)!r}"
+        )
+    for key, entry in value.items():
+        if entry is not None and (
+            isinstance(entry, bool)
+            or not isinstance(entry, (int, float))
+            or not math.isfinite(entry)
+        ):
+            raise ValueError(
+                f"IterationEvent.{field}[{key!r}] must be finite or None, "
+                f"got {entry!r}"
+            )
 
 
 def _validate_optional_finite(value: object, *, field: str) -> None:
@@ -212,6 +253,17 @@ class IterationEventEmitter:
         candidates: list[str],
         results: list[Any],
     ) -> IterationEvent:
+        valid_complexities = [
+            result.complexity for result in results if result.is_valid
+        ]
+        diagnostics: dict[str, Any] = {
+            "n_unique_candidates": len(set(candidates)),
+            "mean_complexity": (
+                sum(valid_complexities) / len(valid_complexities)
+                if valid_complexities
+                else None
+            ),
+        }
         raw_expression: str = algorithm.best_expression
         if raw_expression:
             best_expression: str | None = raw_expression
@@ -232,7 +284,7 @@ class IterationEventEmitter:
             best_score=best_score,
             best_expression=best_expression,
             elapsed_seconds=time.perf_counter() - self._t0,
-            diagnostics=None,
+            diagnostics=diagnostics,
         )
 
     def _write_sink(self, event: IterationEvent) -> None:
@@ -267,3 +319,126 @@ class IterationEventEmitter:
             sink = self._sink
             self._sink = None
             sink.close()
+
+
+
+
+
+
+PHASE_SCHEME: Final[str] = "kd-runphase-v1"
+PHASE_SCHEMA_VERSION: Final[int] = 1
+
+PHASE_FIT_STARTED: Final[str] = "fit_started"
+PHASE_SEARCH_STARTED: Final[str] = "search_started"
+PHASE_SEARCH_ENDED: Final[str] = "search_ended"
+PHASE_SEARCH_CRASHED: Final[str] = "search_crashed"
+PHASE_VOCABULARY: Final[frozenset[str]] = frozenset(
+    {
+        PHASE_FIT_STARTED,
+        PHASE_SEARCH_STARTED,
+        PHASE_SEARCH_ENDED,
+        PHASE_SEARCH_CRASHED,
+    }
+)
+
+_PHASE_V1_FIELDS: Final[tuple[str, ...]] = (
+    "schema_version",
+    "scheme",
+    "phase",
+    "created_at",
+    "elapsed_seconds",
+)
+_PHASE_V1_FIELD_SET: Final[frozenset[str]] = frozenset(_PHASE_V1_FIELDS)
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseEvent:
+
+    schema_version: int
+    scheme: str
+    phase: str
+    created_at: str
+    elapsed_seconds: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {field: getattr(self, field) for field in _PHASE_V1_FIELDS}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PhaseEvent:
+        if not isinstance(data, dict):
+            raise ValueError(f"PhaseEvent payload must be a dict, got {type(data)}")
+        keys = set(data)
+        unknown = keys - _PHASE_V1_FIELD_SET
+        if unknown:
+            raise ValueError(f"PhaseEvent: unknown keys {sorted(unknown)!r}")
+        missing = _PHASE_V1_FIELD_SET - keys
+        if missing:
+            raise ValueError(f"PhaseEvent: missing keys {sorted(missing)!r}")
+        if type(data["schema_version"]) is not int:
+            raise ValueError(
+                f"PhaseEvent.schema_version must be an int, "
+                f"got {data['schema_version']!r}"
+            )
+        for str_field in ("scheme", "phase", "created_at"):
+            value = data[str_field]
+            if not isinstance(value, str) or not value:
+                raise ValueError(
+                    f"PhaseEvent.{str_field} must be a non-empty str, got {value!r}"
+                )
+        _validate_required_finite(data["elapsed_seconds"], field="elapsed_seconds")
+        if data["scheme"] != PHASE_SCHEME:
+            raise ValueError(
+                f"PhaseEvent: unsupported scheme {data['scheme']!r}; "
+                f"expected {PHASE_SCHEME!r}"
+            )
+        if data["schema_version"] != PHASE_SCHEMA_VERSION:
+            raise ValueError(
+                f"PhaseEvent: unsupported schema_version "
+                f"{data['schema_version']!r}; expected {PHASE_SCHEMA_VERSION!r}"
+            )
+        if data["phase"] not in PHASE_VOCABULARY:
+            raise ValueError(
+                f"PhaseEvent: unknown phase {data['phase']!r}; "
+                f"expected one of {sorted(PHASE_VOCABULARY)!r}"
+            )
+        return cls(**{field: data[field] for field in _PHASE_V1_FIELDS})
+
+
+class PhaseWriter:
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._t0 = time.perf_counter()
+        self._created = False
+
+    def write(self, phase: str) -> None:
+        if phase not in PHASE_VOCABULARY:
+            raise ValueError(
+                f"unknown phase {phase!r}; expected one of "
+                f"{sorted(PHASE_VOCABULARY)!r}"
+            )
+        event = PhaseEvent(
+            schema_version=PHASE_SCHEMA_VERSION,
+            scheme=PHASE_SCHEME,
+            phase=phase,
+            created_at=datetime.now(timezone.utc).isoformat(
+                timespec="seconds"
+            ),
+            elapsed_seconds=time.perf_counter() - self._t0,
+        )
+        line = json.dumps(
+            event.to_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        mode = "a" if self._created else "x"
+        try:
+            with self._path.open(mode, encoding="utf-8") as sink:
+                sink.write(line + "\n")
+                sink.flush()
+        except OSError as exc:
+            raise IterationEventSinkError(
+                f"Failed to write phase event to {self._path!r}: {exc}"
+            ) from exc
+        self._created = True

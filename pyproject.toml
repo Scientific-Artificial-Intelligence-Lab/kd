@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.5.1"
+version = "0.6.0"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -65,11 +65,11 @@ pysr = [
 pysindy = [
     "pysindy>=2.1,<3",
 ]
-# Optional LLM proposer backend for the LLM4ED (EDL) plugin. The
-# RealLlm4edBackend targets any OpenAI-compatible chat endpoint (OpenAI,
-# DeepSeek, a local vLLM, ...). The SDK is imported LAZILY via
+# Optional LLM proposer backend for the LLM4ED (EDL) plugin. The provider
+# behind it, kd.llm.OpenAICompatProvider, targets any OpenAI-compatible chat
+# endpoint (OpenAI, DeepSeek, a local vLLM, ...). The SDK is imported LAZILY via
 # importlib.import_module("openai") — ``import kd`` never requires it, and CI
-# runs entirely on the offline FakeLlm4edBackend. Install with
+# uses test-side scripted providers and replay tapes. Install with
 # ``pip install kd[llm4ed]`` / ``uv sync --extra llm4ed`` only when running
 # ``Model(algorithm="llm4ed")`` against a real endpoint.
 llm4ed = [
@@ -82,6 +82,7 @@ llm4ed = [
 # langchain-openai provides the OpenAI-compatible chat model kd's convention
 # targets (OPENAI_API_KEY / OPENAI_BASE_URL).
 agent = [
+    "deepagents>=0.7,<1",
     "langchain>=1.3,<2",
     "langchain-openai>=1.0",
 ]

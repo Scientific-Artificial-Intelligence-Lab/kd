@@ -5,6 +5,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 from kd.viz.gap_notes import (
     NO_MEASUREMENT,
@@ -168,6 +169,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(_YLABEL[name])
+    integer_ticks(ax)
     ax.set_title(_plot_title(name))
 
     if name == "pool_reward_spread":

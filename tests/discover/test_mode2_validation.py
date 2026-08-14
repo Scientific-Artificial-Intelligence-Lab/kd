@@ -29,6 +29,7 @@ from kd.data.schema import (
 from kd.search.discover.builder import build_engine
 from kd.search.discover.config import DiscoverConfig, PINNConfig
 from kd.search.discover.data.loader import load_burgers_mat, load_chafee_infante_npy
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 from kd.search.discover.pinn.collocation import generate_collocation_points
 from kd.search.discover.pinn.cycle import PINNCycleResult, PINNCycleRunner
 from kd.search.discover.pinn.executor import PINNExecutor, make_pinn_dataset
@@ -44,16 +45,7 @@ SEED = 42
 NOISE_LEVEL = 0.5
 
 
-_DATA_ROOT = (
-    Path(__file__).parent.parent.parent
-    / "refs"
-    / "discover"
-    / "dso"
-    / "dso"
-    / "task"
-    / "pde"
-    / "data_new"
-)
+_DATA_ROOT = REFERENCE_DATA_DIR
 BURGERS_MAT = _DATA_ROOT / "burgers.mat"
 CHAFEE_DIR = _DATA_ROOT
 

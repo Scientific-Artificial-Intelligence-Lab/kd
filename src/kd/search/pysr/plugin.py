@@ -76,6 +76,7 @@ class PySRPlugin:
 
 
     one_shot: ClassVar[bool] = True
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="pysr",

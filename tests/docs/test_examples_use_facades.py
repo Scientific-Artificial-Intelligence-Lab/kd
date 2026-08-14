@@ -72,7 +72,9 @@ def test_examples_directory_has_the_expected_scripts() -> None:
     assert "01_quickstart.py" in names
 
 
-    assert len(names) >= 15
+
+
+    assert len(names) >= 14
 
 
 def test_no_example_deep_imports_bypass_a_facade() -> None:

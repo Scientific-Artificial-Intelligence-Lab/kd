@@ -22,6 +22,7 @@ from kd.search.discover.builder import build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.data.loader import load_burgers_mat
 from kd.search.discover.engine import DiscoverEngine
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 from kd.search.discover.plugin import DiscoverConfig as PluginConfig
 from kd.search.discover.plugin import DISCOVERPlugin
 from kd.search.discover.tokens.library import LibraryConfig
@@ -32,11 +33,7 @@ from tests.discover._noise_helpers import add_noise_tensor
 
 
 
-BURGERS_DATA = (
-    Path(__file__).parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
-    / "burgers.mat"
-)
+BURGERS_DATA = REFERENCE_DATA_DIR / "burgers.mat"
 
 SEED = 42
 SMOKE_ITERATIONS = 5

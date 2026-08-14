@@ -73,6 +73,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 import kd
 from kd import DLGAConfig, EqGPTConfig, Llm4edConfig
@@ -391,6 +392,8 @@ for name, result in results.items():
         range(len(prog)), prog, marker=".", markersize=4, label=display_name(name)
     )
 ax_p.set_xlabel("Iteration")
+# Iteration is an index; without this a short run ticks at 1.5.
+ax_p.xaxis.set_major_locator(MaxNLocator(integer=True))
 ax_p.set_ylabel("Normalized best-score progress")
 ax_p.set_title("Search progress (per-engine normalized to [0, 1])")
 ax_p.grid(alpha=0.25)

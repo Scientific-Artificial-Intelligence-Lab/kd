@@ -34,6 +34,7 @@ from kd.data.derivatives.finite_diff import (
     is_uniform_grid,
 )
 from kd.search.discover.evaluation.reward import compute_reward
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 if TYPE_CHECKING:
     from kd.data.schema import PDEDataset
@@ -47,10 +48,7 @@ COEF_ABS_TOL: float = 1e-4
 REWARD_ABS_TOL: float = 1e-5
 METRIC_REL_TOL: float = 1e-4
 
-_PROJECT_ROOT: Path = Path(__file__).parent.parent.parent
-_DATA_DIR: Path = (
-    _PROJECT_ROOT / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
-)
+_DATA_DIR: Path = REFERENCE_DATA_DIR
 _BURGERS_MAT: Path = _DATA_DIR / "burgers.mat"
 _CHAFEE_DIR: Path = _DATA_DIR
 _MIN_BURGERS_BYTES: int = 100_000

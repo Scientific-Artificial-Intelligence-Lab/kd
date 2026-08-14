@@ -4,13 +4,21 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final
 
+from kd.core.strict_keys import strict_keys as _strict_keys_core
 from kd.harness.plan import ExperimentPlan
+from kd.harness.recording import RecordingOptions
 from kd.search.run_spec import canonicalize_config
 
 DISPATCH_ARTIFACT_TAG: Final[str] = "kd-dispatch-v1"
-DISPATCH_SCHEMA_VERSION: Final[int] = 1
+
+
+
+
+
+DISPATCH_SCHEMA_VERSION: Final[int] = 2
 
 _DISPATCH_V1_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -21,6 +29,21 @@ _DISPATCH_V1_KEYS: Final[frozenset[str]] = frozenset(
         "shards",
         "datasets",
         "resources",
+    }
+)
+_DISPATCH_V2_KEYS: Final[frozenset[str]] = _DISPATCH_V1_KEYS | {"recording"}
+_DISPATCH_KEYS_BY_VERSION: Final[dict[int, frozenset[str]]] = {
+    1: _DISPATCH_V1_KEYS,
+    2: _DISPATCH_V2_KEYS,
+}
+_DISPATCH_V2_RECORDING_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "events_every_n",
+        "checkpoint_every",
+        "checkpoint_keep_last",
+        "phases",
+        "catalog",
+        "resume_from",
     }
 )
 _DISPATCH_V1_SHARD_KEYS: Final[frozenset[str]] = frozenset(
@@ -52,15 +75,12 @@ def _strict_keys(
 ) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise DispatchManifestError(f"{object_name} must be a JSON object")
-    actual = frozenset(data)
-    unknown = actual - required
-    if unknown:
-        keys = ", ".join(repr(key) for key in sorted(unknown))
-        raise DispatchManifestError(f"Unknown {object_name} field(s): {keys}")
-    missing = required - actual
-    if missing:
-        keys = ", ".join(repr(key) for key in sorted(missing))
-        raise DispatchManifestError(f"Missing required {object_name} field(s): {keys}")
+    _strict_keys_core(
+        data,
+        object_name=object_name,
+        required=required,
+        error_cls=DispatchManifestError,
+    )
     return data
 
 
@@ -174,6 +194,48 @@ class DispatchResources:
 
 
 @dataclass(frozen=True, kw_only=True)
+class DispatchRecording:
+
+    options: RecordingOptions
+    catalog: str | None = None
+    resume_from: dict[int, str] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.options, RecordingOptions):
+            raise DispatchManifestError(
+                "recording options must be a RecordingOptions; "
+                f"got {type(self.options).__name__}"
+            )
+        if self.catalog is not None:
+            if not isinstance(self.catalog, str) or not self.catalog:
+                raise DispatchManifestError(
+                    f"recording catalog must be null or a non-empty str; "
+                    f"got {self.catalog!r}"
+                )
+            if Path(self.catalog).is_absolute():
+                raise DispatchManifestError(
+                    "recording catalog must be relative to the batch root "
+                    f"(manifest relocatability); got {self.catalog!r}"
+                )
+        if self.resume_from is not None:
+            if not isinstance(self.resume_from, dict):
+                raise DispatchManifestError(
+                    "recording resume_from must be null or an object"
+                )
+            for index, path in self.resume_from.items():
+                if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+                    raise DispatchManifestError(
+                        "recording resume_from keys must be non-negative ints "
+                        f"(bool rejected); got {index!r}"
+                    )
+                if not isinstance(path, str) or not path:
+                    raise DispatchManifestError(
+                        f"recording resume_from[{index}] must be a non-empty "
+                        f"str; got {path!r}"
+                    )
+
+
+@dataclass(frozen=True, kw_only=True)
 class DispatchManifest:
 
     plan: ExperimentPlan
@@ -181,6 +243,7 @@ class DispatchManifest:
     shards: tuple[ShardSpec, ...]
     datasets: dict[str, DispatchDatasetSpec]
     resources: DispatchResources
+    recording: DispatchRecording | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.plan, ExperimentPlan):
@@ -236,6 +299,18 @@ class DispatchManifest:
             raise DispatchManifestError(
                 "manifest resources must be a DispatchResources"
             )
+        if self.recording is not None:
+            if not isinstance(self.recording, DispatchRecording):
+                raise DispatchManifestError(
+                    "manifest recording must be a DispatchRecording or None"
+                )
+            if self.recording.resume_from is not None:
+                for index in self.recording.resume_from:
+                    if index not in seen_indices:
+                        raise DispatchManifestError(
+                            f"recording resume_from index {index} is not covered "
+                            "by any shard entry_indices"
+                        )
 
 
 def _shard_payload(shard: ShardSpec) -> dict[str, Any]:
@@ -247,6 +322,24 @@ def _shard_payload(shard: ShardSpec) -> dict[str, Any]:
         "heavy": shard.heavy,
         "timeout_seconds": shard.timeout_seconds,
         "memory_max_gb": shard.memory_max_gb,
+    }
+
+
+def _recording_payload(recording: DispatchRecording | None) -> dict[str, Any] | None:
+    if recording is None:
+        return None
+    return {
+        "events_every_n": recording.options.events_every_n,
+        "checkpoint_every": recording.options.checkpoint_every,
+        "checkpoint_keep_last": recording.options.checkpoint_keep_last,
+        "phases": recording.options.phases,
+        "catalog": recording.catalog,
+
+        "resume_from": (
+            None
+            if recording.resume_from is None
+            else {str(k): v for k, v in recording.resume_from.items()}
+        ),
     }
 
 
@@ -265,6 +358,7 @@ def manifest_to_payload(manifest: DispatchManifest) -> dict[str, Any]:
             "max_concurrent_heavy": manifest.resources.max_concurrent_heavy,
             "grace_seconds": manifest.resources.grace_seconds,
         },
+        "recording": _recording_payload(manifest.recording),
     }
 
 
@@ -301,18 +395,75 @@ def _decode_resources(payload: Any) -> DispatchResources:
     )
 
 
+def _decode_recording(payload: Any) -> DispatchRecording | None:
+    if payload is None:
+        return None
+    data = _strict_keys(
+        payload, object_name="recording", required=_DISPATCH_V2_RECORDING_KEYS
+    )
+    try:
+        options = RecordingOptions(
+            events_every_n=data["events_every_n"],
+            checkpoint_every=data["checkpoint_every"],
+            checkpoint_keep_last=data["checkpoint_keep_last"],
+            phases=data["phases"],
+        )
+    except ValueError as exc:
+        raise DispatchManifestError(f"recording options: {exc}") from exc
+    resume_raw = data["resume_from"]
+    resume_from: dict[int, str] | None = None
+    if resume_raw is not None:
+        if not isinstance(resume_raw, dict):
+            raise DispatchManifestError("recording resume_from must be an object")
+        resume_from = {}
+        malformed_key: str | None = None
+        for key, value in resume_raw.items():
+            if not isinstance(key, str):
+                raise DispatchManifestError(
+                    f"recording resume_from key {key!r} is not a str"
+                )
+            if re.fullmatch(r"0|[1-9][0-9]*", key) is None:
+                malformed_key = key
+            try:
+                index = int(key)
+            except (TypeError, ValueError) as exc:
+                raise DispatchManifestError(
+                    f"recording resume_from key {key!r} is not an int"
+                ) from exc
+            resume_from[index] = value
+        if len(resume_from) != len(resume_raw):
+            raise DispatchManifestError(
+                "recording resume_from contains a duplicate index"
+            )
+        if malformed_key is not None:
+            raise DispatchManifestError(
+                f"recording resume_from key {malformed_key!r} is not a "
+                "canonical non-negative integer"
+            )
+    return DispatchRecording(
+        options=options, catalog=data["catalog"], resume_from=resume_from
+    )
+
+
 def decode_manifest_payload(payload: Any) -> DispatchManifest:
-    _strict_keys(payload, object_name="dispatch manifest", required=_DISPATCH_V1_KEYS)
+    if not isinstance(payload, dict):
+        raise DispatchManifestError("dispatch manifest must be a JSON object")
+
+    version = payload.get("dispatch_schema_version")
+    if type(version) is not int or version not in _DISPATCH_KEYS_BY_VERSION:
+        raise DispatchManifestError(
+            f"unsupported dispatch_schema_version: got {version!r}; "
+            f"supported: {sorted(_DISPATCH_KEYS_BY_VERSION)!r}"
+        )
+    _strict_keys(
+        payload,
+        object_name="dispatch manifest",
+        required=_DISPATCH_KEYS_BY_VERSION[version],
+    )
     if payload["artifact"] != DISPATCH_ARTIFACT_TAG:
         raise DispatchManifestError(
             f"artifact tag mismatch: got {payload['artifact']!r}, "
             f"expected {DISPATCH_ARTIFACT_TAG!r}"
-        )
-    version = payload["dispatch_schema_version"]
-    if type(version) is not int or version != DISPATCH_SCHEMA_VERSION:
-        raise DispatchManifestError(
-            f"unsupported dispatch_schema_version: got {version!r}; "
-            f"supported: {[DISPATCH_SCHEMA_VERSION]!r}"
         )
     plan_payload = payload["plan"]
     if not isinstance(plan_payload, dict):
@@ -333,10 +484,14 @@ def decode_manifest_payload(payload: Any) -> DispatchManifest:
     datasets = {ref: _decode_dataset(spec) for ref, spec in datasets_payload.items()}
 
     resources = _decode_resources(payload["resources"])
+    recording = (
+        _decode_recording(payload["recording"]) if version >= 2 else None
+    )
     return DispatchManifest(
         plan=plan,
         plan_hash=payload["plan_hash"],
         shards=shards,
         datasets=datasets,
         resources=resources,
+        recording=recording,
     )

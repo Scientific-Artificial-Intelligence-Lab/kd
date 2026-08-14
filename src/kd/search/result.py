@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import torch
 from torch import Tensor
@@ -28,6 +29,9 @@ from kd.core.expr.naming import parse_derivative_name
 from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
 from kd.search.records import RunRecord, validate_invalid_reason
+
+if TYPE_CHECKING:
+    from kd.search.sketch_outcome import SketchOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +266,12 @@ class RunManifest:
     - ``artifacts``: reserved for artifact-bearing algorithms (weights / data)
       to record ``{sha256, size, ...}`` per artifact; else ``None``.
     - ``resumed``: whether this invocation consumed a runner checkpoint restore.
+    - ``resume_source``: resume provenance (M4 lineage) — the exact
+      ``_record_schema.LINEAGE_FIELDS`` key set (``resume_from`` path plus the
+      source checkpoint's run id / config hash / final status / iteration, each
+      nullable when the source predates the recording layout); ``None`` for a
+      fresh run. The path is an operational pointer, not a content identity —
+      it never enters ``RunSpec`` or any sealed hash.
 
     The round-trip contract is ``RunManifest.from_dict(m.to_dict()) == m``.
     """
@@ -272,6 +282,7 @@ class RunManifest:
     terms: list[str] | None = None
     artifacts: dict[str, Any] | None = None
     resumed: bool = False
+    resume_source: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation of this manifest.
@@ -290,6 +301,7 @@ class RunManifest:
             "terms": self.terms,
             "artifacts": self.artifacts,
             "resumed": self.resumed,
+            "resume_source": self.resume_source,
         }
 
     @classmethod
@@ -307,6 +319,7 @@ class RunManifest:
             terms=data.get("terms"),
             artifacts=data.get("artifacts"),
             resumed=data.get("resumed", False),
+            resume_source=data.get("resume_source"),
         )
 
 
@@ -351,6 +364,20 @@ class ExperimentResult(RunResult):
     score_kind: str = DEFAULT_SCORE_KIND
     score_direction: str = DEFAULT_SCORE_DIRECTION
 
+
+
+
+
+
+
+
+
+
+    finalize_failures: tuple[str, ...] = ()
+
+
+    sketch_outcome: SketchOutcome | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe (RFC 8259) representation of the result."""
         return {
@@ -390,13 +417,17 @@ class ExperimentResult(RunResult):
         """
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", encoding="utf-8") as handle:
+
+
+        tmp_path = output_path.with_name(f"{output_path.name}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
             json.dump(
                 self.to_dict(),
                 handle,
                 indent=JSON_INDENT_SPACES,
                 allow_nan=False,
             )
+        os.replace(tmp_path, output_path)
         logger.debug("Saved experiment result to %s", output_path)
 
     @classmethod

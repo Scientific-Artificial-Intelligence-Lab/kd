@@ -197,6 +197,7 @@ class Llm4edPlugin:
 
     config_cls: ClassVar[type[Llm4edConfig]] = Llm4edConfig
     one_shot: ClassVar[bool] = False
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="llm4ed",

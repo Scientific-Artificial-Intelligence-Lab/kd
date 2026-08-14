@@ -144,6 +144,7 @@ def _header(**overrides: object) -> dict[str, object]:
         "scheme": "kd-ckptman-v1",
         "schema_version": CKPTMAN_SCHEMA_VERSION,
         "entries": [],
+        "lineage": None,
     }
     base.update(overrides)
     return base
@@ -170,8 +171,21 @@ def test_load_wrong_scheme(tmp_path: Path) -> None:
 
 
 def test_load_wrong_schema_version(tmp_path: Path) -> None:
-    _write_raw_manifest(tmp_path, _header(schema_version=2))
+    _write_raw_manifest(tmp_path, _header(schema_version=3))
     with pytest.raises(CheckpointManifestError, match="schema_version"):
+        load_checkpoint_manifest(tmp_path)
+
+
+def test_load_v1_header_without_lineage(tmp_path: Path) -> None:
+    payload = _header(schema_version=1)
+    del payload["lineage"]
+    _write_raw_manifest(tmp_path, payload)
+    assert load_checkpoint_manifest(tmp_path) == ()
+
+
+def test_load_v2_rejects_malformed_lineage(tmp_path: Path) -> None:
+    _write_raw_manifest(tmp_path, _header(lineage={"resume_from": ""}))
+    with pytest.raises(CheckpointManifestError, match="lineage"):
         load_checkpoint_manifest(tmp_path)
 
 

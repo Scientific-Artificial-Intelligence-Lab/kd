@@ -12,6 +12,7 @@ from kd.core.equation import Form
 from kd.core.equation.library import TermLibrarySpec
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
+from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.schema import DataTopology
 from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
 from kd.search.protocol import PlatformComponents
@@ -26,12 +27,15 @@ from kd.search.pysindy.backend import (
     default_backend_factory,
 )
 from kd.search.pysindy.config import PySINDyConfig
+from kd.search.pysindy.sketch_backend import compile_for_pysindy
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.term_utils import infer_max_atomic_order
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+    from kd.search.protocol import DiscoveryTask
 
 ALGORITHM_NAME = "pysindy"
 INITIAL_BEST_EXPRESSION = ""
@@ -66,6 +70,7 @@ class PySINDyPlugin:
     )
     config_cls: ClassVar[type[PySINDyConfig]] = PySINDyConfig
     one_shot: ClassVar[bool] = True
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
 
 
@@ -79,6 +84,14 @@ class PySINDyPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                sketch=SketchClauseLevels(
+                    fixed_terms="lowered",
+                    anchors="exit_checked",
+                    hole_count="exit_checked",
+                    derivative_order="generation_enforced",
+                    operator_set="generation_enforced",
+                    field_axis_set="generation_enforced",
+                ),
             ),
         ),
         knobs=(
@@ -107,13 +120,23 @@ class PySINDyPlugin:
         self,
         config: PySINDyConfig | None = None,
         *,
+        task: DiscoveryTask | None = None,
         backend_factory: Callable[
             [PySINDyConfig], PySINDyOptimizerBackend
         ]
         | None = None,
     ) -> None:
         self._config = config or PySINDyConfig()
-        self._library = TermLibrarySpec.from_terms(self._config.terms)
+        if task is None:
+            effective_terms = self._config.terms
+            self._sketch_compile_report: CompileReport | None = None
+            self._pinned_terms: tuple[str, ...] = ()
+        else:
+            compiled = compile_for_pysindy(task.sketch, self._config.terms)
+            effective_terms = compiled.effective_terms
+            self._sketch_compile_report = compiled.report
+            self._pinned_terms = tuple(pin.term_ir for pin in task.sketch.pinned)
+        self._library = TermLibrarySpec.from_terms(effective_terms)
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
         self._recorder: VizRecorder | None = None
@@ -199,8 +222,14 @@ class PySINDyPlugin:
         return list(self._terms) if self._terms is not None else None
 
     @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        return self._sketch_compile_report
+
+    @property
     def derivative_requirements(self) -> DerivativeReqs:
-        max_order = infer_max_atomic_order(list(self._library.terms))
+        max_order = infer_max_atomic_order(
+            [*self._library.terms, *self._pinned_terms]
+        )
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),

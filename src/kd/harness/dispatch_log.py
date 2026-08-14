@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from kd.core.jsonsafe import JSON_INDENT_SPACES
+from kd.core.strict_keys import strict_keys as _strict_keys_core
 from kd.harness._dispatch_schema import SHARD_ID_RE
 
 DISPATCH_LOG_ARTIFACT_TAG: Final[str] = "kd-dispatch-log-v1"
@@ -65,15 +66,12 @@ def _strict_keys(
 ) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise DispatchLogError(f"{object_name} must be a JSON object")
-    actual = frozenset(data)
-    unknown = actual - required
-    if unknown:
-        keys = ", ".join(repr(key) for key in sorted(unknown))
-        raise DispatchLogError(f"Unknown {object_name} field(s): {keys}")
-    missing = required - actual
-    if missing:
-        keys = ", ".join(repr(key) for key in sorted(missing))
-        raise DispatchLogError(f"Missing required {object_name} field(s): {keys}")
+    _strict_keys_core(
+        data,
+        object_name=object_name,
+        required=required,
+        error_cls=DispatchLogError,
+    )
     return data
 
 

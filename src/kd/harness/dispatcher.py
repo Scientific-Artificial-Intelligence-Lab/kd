@@ -460,6 +460,12 @@ def run_dispatch(
 
     dispatch.claim_ledger()
     log = dispatch.run()
+
+
+
+    from kd.harness.dispatch_report import write_dispatch_report
+
+    write_dispatch_report(manifest, log, batch_root)
     return DispatchResult(batch_root=batch_root, manifest=manifest, log=log)
 
 

@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import pickle
 import time
@@ -26,6 +27,8 @@ from kd.core.equation import (
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.naming import parse_derivative_name
 from kd.core.platform.requirements import DerivativeReqs, assert_dataset_supported
+from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY, CompileReport
+from kd.core.verify import verify_equation
 from kd.data.schema import PDEDataset, compute_dataset_fingerprint
 from kd.search.callbacks import RunnerCallback, VizDataCollector
 from kd.search.checkpoint_payload import (
@@ -34,8 +37,10 @@ from kd.search.checkpoint_payload import (
     atomic_torch_save,
     build_checkpoint_payload,
 )
+from kd.search.descriptor import InstrumentDescriptor, assert_sketch_supported
 from kd.search.lifecycle import SearchLifecycle
 from kd.search.protocol import (
+    DiscoveryTask,
     IterativeSearchAlgorithm,
     PlatformComponents,
     ScoreContract,
@@ -54,6 +59,7 @@ from kd.search.result import (
     invalid_evaluation_result,
 )
 from kd.search.run_spec import RunSpec, canonicalize_config
+from kd.search.sketch_outcome import SketchOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +147,13 @@ class ExperimentRunner:
         self._pending_restore_state: dict[str, Any] | None = None
         self._resumed = False
 
+
+
+        self._resume_source: dict[str, Any] | None = None
+
+
+        self._task: DiscoveryTask | None = None
+
     @property
     def lifecycle(self) -> SearchLifecycle | None:
         return self._lifecycle
@@ -151,7 +164,10 @@ class ExperimentRunner:
         *,
         preprocessing_seconds: float | None = None,
     ) -> ExperimentResult:
+        raw_task = getattr(components, "task", None)
+        self._task = raw_task if isinstance(raw_task, DiscoveryTask) else None
         self._assert_algorithm_protocol()
+        self._assert_sketch_capability()
         self._assert_dataset_supported(components)
         self._assert_run_identity_serializable()
         self._current_iteration = 0
@@ -264,7 +280,7 @@ class ExperimentRunner:
             crashed = True
             raise
         finally:
-            self._finalize_callbacks(callbacks, crashed=crashed)
+            finalize_failures = self._finalize_callbacks(callbacks, crashed=crashed)
 
 
 
@@ -278,6 +294,7 @@ class ExperimentRunner:
             recorder,
             early_stopped,
             preprocessing_seconds,
+            finalize_failures,
         )
         self._emit_safety_counter_summary()
         return result
@@ -316,6 +333,21 @@ class ExperimentRunner:
             assert_dataset_supported(
                 dataset.lhs_order, dataset.topology, reqs, algorithm
             )
+
+    def _assert_sketch_capability(self) -> None:
+        if self._task is None:
+            return
+        descriptor = getattr(self._algorithm, "descriptor", None)
+        if not isinstance(descriptor, InstrumentDescriptor):
+            raise TypeError(
+                f"{type(self._algorithm).__name__} must declare a descriptor "
+                "of type InstrumentDescriptor to run a sketch task"
+            )
+        assert_sketch_supported(
+            descriptor,
+            self._task.sketch,
+            algorithm=descriptor.algorithm,
+        )
 
     def _assert_run_identity_serializable(self) -> None:
 
@@ -401,7 +433,8 @@ class ExperimentRunner:
 
     def _finalize_callbacks(
         self, callbacks: list[RunnerCallback], *, crashed: bool
-    ) -> None:
+    ) -> list[str]:
+        failures: list[str] = []
         for cb in callbacks:
             member = (
                 "on_experiment_end_status"
@@ -416,12 +449,16 @@ class ExperimentRunner:
                     handler(self._algorithm, crashed=crashed)
                 else:
                     cb.on_experiment_end(self._algorithm)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Callback %r.%s raised",
                     type(cb).__name__,
                     member,
                 )
+                failures.append(
+                    f"{type(cb).__name__}.{member}: {type(exc).__name__}: {exc}"
+                )
+        return failures
 
     def _build_experiment_result(
         self,
@@ -429,6 +466,7 @@ class ExperimentRunner:
         recorder: VizRecorder,
         early_stopped: bool,
         preprocessing_seconds: float | None,
+        finalize_failures: list[str],
     ) -> ExperimentResult:
         final_eval = self._final_eval()
         actual = self._actual()
@@ -438,7 +476,14 @@ class ExperimentRunner:
         if isinstance(self._algorithm, ScoreContract):
             score_kind = self._algorithm.score_kind
             score_direction = self._algorithm.score_direction
-        equation = self._build_equation(components, final_eval)
+        sketch_outcome: SketchOutcome | None = None
+        if self._task is not None:
+            if final_eval.form is Form.HOMOGENEOUS:
+                raise TypeError("sketch tasks cannot produce a HOMOGENEOUS final_eval")
+            sketch_outcome = self._build_sketch_outcome(components, final_eval)
+            equation = sketch_outcome.solution
+        else:
+            equation = self._build_equation(components, final_eval)
         if final_eval.form is Form.HOMOGENEOUS:
             lhs_label = HOMOGENEOUS_LHS_LABEL
         elif isinstance(equation, Evolution):
@@ -526,6 +571,7 @@ class ExperimentRunner:
             run_spec=run_spec,
             manifest_terms=manifest.terms,
             cost=cost,
+            support_from_equation=self._task is not None,
         )
         return ExperimentResult(
             best_expression=self._algorithm.best_expression,
@@ -545,7 +591,71 @@ class ExperimentRunner:
             run_record=run_record,
             score_kind=score_kind,
             score_direction=score_direction,
+            finalize_failures=tuple(finalize_failures),
+            sketch_outcome=sketch_outcome,
         )
+
+    def _build_sketch_outcome(
+        self,
+        components: PlatformComponents,
+        final_eval: EvaluationResult,
+    ) -> SketchOutcome:
+        task = self._task
+        assert task is not None
+        compile_report = self._sketch_compile_report(task)
+        lifted = task.compiled.lift(None if task.compiled.closed else final_eval)
+        if lifted is None:
+            return SketchOutcome(
+                solution=None,
+                best_candidate=None,
+                verdict=None,
+                compile_report=compile_report,
+                full_verify=None,
+                failure="lift: no liftable law from final_eval",
+            )
+
+        try:
+            verdict = task.sketch.matches(lifted)
+        except ValueError as exc:
+            logger.warning("Sketch match failed: %s", exc)
+            return SketchOutcome(
+                solution=None,
+                best_candidate=lifted,
+                verdict=None,
+                compile_report=compile_report,
+                full_verify=None,
+                failure=f"matches: {exc}",
+            )
+
+        full_verify = None
+        failure = None
+        verify_failed = False
+        if components.context is None:
+            failure = "verify: platform context is unavailable"
+        else:
+            try:
+                full_verify = verify_equation(
+                    lifted,
+                    executor=components.executor,
+                    context=components.context,
+                )
+            except ValueError as exc:
+                logger.warning("Sketch verification failed: %s", exc)
+                failure = f"verify: {exc}"
+                verify_failed = True
+        solution = lifted if verdict.overall and not verify_failed else None
+        return SketchOutcome(
+            solution=solution,
+            best_candidate=lifted,
+            verdict=verdict,
+            compile_report=compile_report,
+            full_verify=full_verify,
+            failure=failure,
+        )
+
+    def _sketch_compile_report(self, task: DiscoveryTask) -> CompileReport:
+        report = getattr(self._algorithm, "sketch_compile_report", None)
+        return report if isinstance(report, CompileReport) else task.compiled.report
 
     def _build_equation(
         self,
@@ -628,6 +738,14 @@ class ExperimentRunner:
         reqs = getattr(self._algorithm, "derivative_requirements", None)
         if isinstance(reqs, DerivativeReqs):
             config["provider_kind"] = reqs.provider_kind
+        if self._task is not None:
+
+
+
+
+
+
+            config[SKETCH_CONFIG_KEY] = copy.deepcopy(self._task.payload)
         return config
 
     def _build_manifest(self, components: PlatformComponents) -> RunManifest:
@@ -648,6 +766,7 @@ class ExperimentRunner:
             terms=getattr(self._algorithm, "terms", None),
             artifacts=getattr(self._algorithm, "artifacts", None),
             resumed=self._resumed,
+            resume_source=self._resume_source,
         )
 
     def _final_eval(self) -> EvaluationResult:
@@ -743,8 +862,17 @@ class ExperimentRunner:
     def save_checkpoint(self, path: Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        payload = (
+            build_checkpoint_payload(self._current_iteration, self._algorithm)
+            if self._task is None
+            else build_checkpoint_payload(
+                self._current_iteration,
+                self._algorithm,
+                task=self._task,
+            )
+        )
         atomic_torch_save(
-            build_checkpoint_payload(self._current_iteration, self._algorithm),
+            payload,
             path,
         )
         logger.debug("Saved checkpoint to %s", path)
@@ -754,11 +882,13 @@ class ExperimentRunner:
         path: Path,
         *,
         config_guard: Callable[[object, object], None] | None = None,
+        resume_source: dict[str, Any] | None = None,
     ) -> None:
         raw = self._torch_load_checkpoint(Path(path))
         data = self._validate_checkpoint_payload(raw)
         if config_guard is not None:
             config_guard(data.get("config"), data.get("config_canon_scheme"))
+        self._resume_source = resume_source
         self._algorithm.state = data["algorithm_state"]
 
 

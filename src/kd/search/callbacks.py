@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
@@ -35,7 +36,7 @@ from kd.search.recorder import BEST_SCORE_KEY
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
-    from kd.search.protocol import SearchAlgorithm
+    from kd.search.protocol import DiscoveryTask, SearchAlgorithm
     from kd.search.recorder import VizRecorder
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ __all__ = [
     "LoggingCallback",
     "RunnerCallback",
     "VizDataCollector",
+    "WallClockBudgetCallback",
 ]
 
 
@@ -260,6 +262,46 @@ class EarlyStoppingCallback:
 
 
 
+class WallClockBudgetCallback:
+
+    def __init__(self, max_seconds: float) -> None:
+        if max_seconds <= 0:
+            raise ValueError(f"max_seconds must be > 0, got {max_seconds}")
+        self._max_seconds = max_seconds
+        self._started: float = time.perf_counter()
+
+    @property
+    def should_stop(self) -> bool:
+        return time.perf_counter() - self._started > self._max_seconds
+
+    @property
+    def max_seconds(self) -> float:
+        return self._max_seconds
+
+    def on_experiment_start(self, algorithm: Any) -> None:
+        self._started = time.perf_counter()
+
+    def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
+        pass
+
+    def on_iteration_end(
+        self,
+        iteration: int,
+        algorithm: Any,
+        candidates: list[str],
+        results: list[Any],
+    ) -> None:
+        pass
+
+    def on_experiment_end(self, algorithm: Any) -> None:
+        pass
+
+
+
+
+
+
+
 class CheckpointCallback:
 
     def __init__(
@@ -267,6 +309,8 @@ class CheckpointCallback:
         directory: Path,
         every_n: int = 10,
         keep_last_n: int | None = None,
+        lineage: dict[str, Any] | None = None,
+        task: DiscoveryTask | None = None,
     ) -> None:
         if every_n < _MIN_EVERY_N:
             raise ValueError(f"every_n must be >= 1, got {every_n}")
@@ -281,6 +325,8 @@ class CheckpointCallback:
         self._directory = Path(directory)
         self._every_n = every_n
         self._keep_last_n = keep_last_n
+        self._lineage = lineage
+        self._task = task
         self._last_iteration: int = -1
         self._manifest: CheckpointManifestWriter | None = None
 
@@ -289,7 +335,9 @@ class CheckpointCallback:
         return False
 
     def on_experiment_start(self, algorithm: Any) -> None:
-        self._manifest = CheckpointManifestWriter.create(self._directory)
+        self._manifest = CheckpointManifestWriter.create(
+            self._directory, lineage=self._lineage
+        )
         self._last_iteration = -1
 
     def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
@@ -306,7 +354,13 @@ class CheckpointCallback:
         if iteration % self._every_n == 0:
             filename = _CHECKPOINT_PATTERN.format(iteration=iteration)
             manifest = self._require_manifest()
-            payload = build_checkpoint_payload(iteration, algorithm)
+            payload = (
+                build_checkpoint_payload(iteration, algorithm)
+                if self._task is None
+                else build_checkpoint_payload(
+                    iteration, algorithm, task=self._task
+                )
+            )
             atomic_torch_save(payload, self._directory / filename)
             manifest.append(
                 build_manifest_entry(
@@ -325,7 +379,12 @@ class CheckpointCallback:
 
     def on_experiment_end_status(self, algorithm: Any, *, crashed: bool) -> None:
         manifest = self._require_manifest()
-        payload = build_checkpoint_payload(max(self._last_iteration, 0), algorithm)
+        iteration = max(self._last_iteration, 0)
+        payload = (
+            build_checkpoint_payload(iteration, algorithm)
+            if self._task is None
+            else build_checkpoint_payload(iteration, algorithm, task=self._task)
+        )
         atomic_torch_save(payload, self._directory / _CHECKPOINT_FINAL)
         manifest.append(
             build_manifest_entry(

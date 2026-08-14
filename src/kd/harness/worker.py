@@ -54,6 +54,34 @@ def run_worker(
     if shard.device is not None:
         device_kwargs["device"] = shard.device
 
+
+
+
+
+    recording_kwargs: dict[str, Any] = {}
+    if manifest.recording is not None:
+        recording = manifest.recording
+        batch_root = dispatch_path.parent
+        resume_map: dict[int, Path] | None = None
+        if recording.resume_from is not None:
+            resume_map = {
+                index: (
+                    Path(raw) if Path(raw).is_absolute() else batch_root / raw
+                )
+                for index, raw in recording.resume_from.items()
+            }
+        recording_kwargs = {
+            "recording": recording.options,
+            "catalog_path": (
+                batch_root / recording.catalog
+                if recording.catalog is not None
+                else None
+            ),
+            "entry_indices": shard.entry_indices,
+            "resume_from": resume_map,
+            "plan_hash": manifest.plan_hash,
+        }
+
     logger.info(
         "worker: running shard %s (%d entries) into %s",
         shard_id,
@@ -66,6 +94,7 @@ def run_worker(
         store_root=shard_root,
         model_factory=model_factory,
         **device_kwargs,
+        **recording_kwargs,
     )
     return shard_root
 

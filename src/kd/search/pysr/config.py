@@ -25,6 +25,22 @@ _DEFAULT_BINARY_OPERATORS: tuple[str, ...] = ("+", "-", "*", "/")
 _DEFAULT_UNARY_OPERATORS: tuple[str, ...] = ("sin", "cos", "exp", "log")
 
 
+
+
+
+
+
+_TYPED_PYSR_FIELDS: tuple[str, ...] = (
+    "niterations",
+    "population_size",
+    "populations",
+    "maxsize",
+    "binary_operators",
+    "unary_operators",
+    "random_state",
+)
+
+
 @dataclass(frozen=True)
 class PySRConfig:
     """Frozen configuration for a PySR symbolic-regression run.
@@ -81,3 +97,14 @@ class PySRConfig:
             raise ValueError(f"maxsize must be > 0, got {self.maxsize}")
         if self.population_size <= 0:
             raise ValueError(f"population_size must be > 0, got {self.population_size}")
+        if self.extra_pysr_kwargs:
+            collisions = sorted(
+                set(self.extra_pysr_kwargs) & set(_TYPED_PYSR_FIELDS)
+            )
+            if collisions:
+                raise ValueError(
+                    "extra_pysr_kwargs must not override typed fields "
+                    f"{collisions}; set the typed field instead "
+                    "(niterations is facade-owned: use Model(generations=...), "
+                    "and random_state is Model(seed=...))"
+                )

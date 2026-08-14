@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Final
 
+from kd.core.strict_keys import strict_keys as _strict_keys_core
 from kd.search.records import StrictDecodeError
 from kd.search.run_spec import canonicalize_config
 
@@ -19,7 +20,8 @@ PLAN_HASH_SCHEME: Final[str] = "kd-plan-v1"
 _RESERVED_MODEL_KWARGS: Final[frozenset[str]] = frozenset(
     {
         "algorithm", "seed", "config", "callbacks", "provider",
-        "surrogate_model", "checkpoint_dir", "verbose", "device",
+        "surrogate_model", "checkpoint_dir", "checkpoint_every",
+        "checkpoint_keep_last", "phases_path", "verbose", "device",
     }
 )
 
@@ -45,15 +47,12 @@ _PLAN_V1_ENTRY_FIELDS: Final[frozenset[str]] = frozenset(
 def _strict_keys(
     data: dict[str, Any], *, object_name: str, required: frozenset[str]
 ) -> None:
-    actual = frozenset(data)
-    unknown = actual - required
-    if unknown:
-        keys = ", ".join(repr(key) for key in sorted(unknown))
-        raise StrictDecodeError(f"Unknown {object_name} field(s): {keys}")
-    missing = required - actual
-    if missing:
-        keys = ", ".join(repr(key) for key in sorted(missing))
-        raise StrictDecodeError(f"Missing required {object_name} field(s): {keys}")
+    _strict_keys_core(
+        data,
+        object_name=object_name,
+        required=required,
+        error_cls=StrictDecodeError,
+    )
 
 
 def _as_dict(value: object, *, field: str) -> dict[str, Any]:

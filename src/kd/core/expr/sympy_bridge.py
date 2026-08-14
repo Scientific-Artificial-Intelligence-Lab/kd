@@ -14,13 +14,17 @@ from sympy import Expr
 from sympy.core.relational import Equality
 from torch import Tensor
 
+from kd.core.expr.display_spelling import diff_display_class, lap_display_class
 from kd.core.expr.naming import build_derivative_name
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_LHS_LABEL = "u_t"
 _DIFF_NAME_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
-_LAP_FUNC = sympy.Function("lap")
+
+
+
+_LAP_FUNC = lap_display_class()
 
 _KD_OPS: dict[str, Callable[..., Any]] = {
     "add": lambda left, right: left + right,
@@ -35,7 +39,10 @@ _KD_OPS: dict[str, Callable[..., Any]] = {
     "cos": sympy.cos,
     "exp": sympy.exp,
     "log": sympy.log,
-    "lap": _LAP_FUNC,
+
+
+
+    "lap": lambda value: _LAP_FUNC(value),
 }
 
 
@@ -92,7 +99,7 @@ def _make_diff_callable(name: str) -> Callable[[Expr], Expr] | None:
         return None
     order_str, axis = match.groups()
     order = int(order_str) if order_str else 1
-    diff_func = sympy.Function(name)
+    diff_func = diff_display_class(name, axis, order)
 
     def _diff(expr: Expr) -> Expr:
 

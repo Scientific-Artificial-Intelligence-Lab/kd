@@ -13,6 +13,7 @@ from kd.core.expr.sympy_bridge import (
     symbolic_diff,
     to_latex,
     to_sympy,
+    to_unicode,
 )
 
 
@@ -256,6 +257,72 @@ class TestToLatex:
     def test_nonstrict_invalid_returns_string(self) -> None:
         result = to_latex("@@@invalid!!!", strict=False)
         assert isinstance(result, str)
+
+
+class TestCompositeDerivativeSpelling:
+
+    def test_latex_composite_diff_renders_subscript(self) -> None:
+        latex = to_latex("diff_x(mul(u, u))")
+        assert "diff" not in latex
+        assert "operatorname" not in latex
+        assert "_{x}" in latex
+
+    def test_latex_higher_order_merges_order_into_subscript(self) -> None:
+        latex = to_latex("diff2_x(mul(u, u_x))")
+        assert "diff" not in latex
+        assert "_{xx}" in latex
+
+    def test_latex_lap_renders_nabla(self) -> None:
+        latex = to_latex("lap(u)")
+        assert "operatorname" not in latex
+        assert "nabla" in latex
+
+    def test_latex_power_of_composite_diff(self) -> None:
+        latex = to_latex("n2(diff_x(n2(u)))")
+        assert "diff" not in latex
+
+    def test_unicode_composite_diff_renders_subscript(self) -> None:
+        text = to_unicode("diff_x(mul(u, u))")
+        assert "diff" not in text
+        assert "ₓ" in text
+
+    def test_unicode_lap_renders_nabla(self) -> None:
+        text = to_unicode("lap(u)")
+        assert "lap" not in text
+        assert "∇" in text
+
+    def test_unicode_power_of_lap_parenthesizes_base(self) -> None:
+
+        text = to_unicode("n2(lap(u))")
+        assert "(∇²(u))" in text
+
+    def test_str_single_line_fallback_no_ir_name(self) -> None:
+
+
+        flat = str(to_sympy("diff_x(mul(u, u))"))
+        assert "diff" not in flat
+        assert "\n" not in flat
+
+    def test_stock_sympy_latex_on_public_rhs_is_clean(self) -> None:
+
+
+        result = format_pde(["diff_x(mul(u, u))"], torch.tensor([-0.5]))
+        assert "operatorname" not in sympy.latex(result.rhs)
+
+    def test_wrong_arity_lap_rejected_in_strict_mode(self) -> None:
+
+
+        with pytest.raises(ValueError):
+            to_latex("lap(u, u_x)")
+
+    def test_format_pde_composite_diff_clean_on_both_renderings(self) -> None:
+        result = format_pde(
+            ["diff2_x(diff_x(u))", "diff_x(mul(u, u))"],
+            torch.tensor([-0.0025, -0.5]),
+            lhs="u_t",
+        )
+        assert "diff" not in result.latex
+        assert "diff" not in result.unicode
 
 
 

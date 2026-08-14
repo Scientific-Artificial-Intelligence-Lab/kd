@@ -14,17 +14,7 @@ from kd.llm.protocol import (
     LLMTapeMismatchError,
     LLMUsage,
 )
-from kd.llm.tape import (
-    TapeRecordingProvider,
-    TapeReplayProvider,
-    load_tape_entries,
-    request_from_json,
-    request_hash,
-    request_to_json,
-    response_from_json,
-    response_to_json,
-    usage_to_json,
-)
+from kd.llm.tape import TapeRecordingProvider, TapeReplayProvider
 
 __all__ = [
     "DEFAULT_API_KEY_ENV_VAR",
@@ -41,11 +31,4 @@ __all__ = [
     "OpenAICompatProvider",
     "TapeRecordingProvider",
     "TapeReplayProvider",
-    "load_tape_entries",
-    "request_from_json",
-    "request_hash",
-    "request_to_json",
-    "response_from_json",
-    "response_to_json",
-    "usage_to_json",
 ]

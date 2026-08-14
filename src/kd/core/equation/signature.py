@@ -115,7 +115,7 @@ def _parse_term(term_ir: str) -> ast.expr:
     return parsed.body
 
 
-def _canonical_term(term_ir: str, coefficient: float) -> tuple[str, float]:
+def law_term_entry(term_ir: str, coefficient: float) -> tuple[str, float]:
     node = _rewrite_aliases(_parse_term(term_ir))
     while (
         isinstance(node, ast.Call)
@@ -129,6 +129,10 @@ def _canonical_term(term_ir: str, coefficient: float) -> tuple[str, float]:
     return canonicalize_expression(ast.unparse(node)), coefficient
 
 
+def law_term_key(term_ir: str) -> str:
+    return law_term_entry(term_ir, 1.0)[0]
+
+
 def _scalar_value(coefficient: object) -> float:
     if not isinstance(coefficient, Scalar):
         raise NotImplementedError(
@@ -139,7 +143,7 @@ def _scalar_value(coefficient: object) -> float:
 
 def _f0_entries(eq: Equation) -> tuple[list[tuple[str, float]], Form, LhsSpec | None]:
     entries = [
-        _canonical_term(term_ir, _scalar_value(coefficient))
+        law_term_entry(term_ir, _scalar_value(coefficient))
         for term_ir, coefficient in eq.terms
     ]
     if isinstance(eq, Evolution):
@@ -258,4 +262,6 @@ __all__ = [
     "compare_laws",
     "law_signature",
     "law_signature_from_evidence",
+    "law_term_entry",
+    "law_term_key",
 ]

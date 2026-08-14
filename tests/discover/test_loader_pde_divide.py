@@ -8,12 +8,10 @@ import pytest
 import torch
 
 from kd.search.discover.data.loader import load_pde_divide_npy
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
-_DATA_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde"
-    / "data_new" / "PDE_divide.npy"
-)
+
+_DATA_PATH = REFERENCE_DATA_DIR / "PDE_divide.npy"
 
 
 

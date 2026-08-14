@@ -11,10 +11,14 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import Form
+from kd.core.equation.signature import law_term_key
+from kd.core.equation.sketch import Sketch, constraint_admits
 from kd.core.evaluator import EvaluationResult
+from kd.core.expr.term_features import analyze_term
 from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
 from kd.core.platform.requirements import DerivativeReqs
+from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import DX_ZERO_FLOOR, UNIFORM_GRID_RTOL
 from kd.data.schema import DataTopology
@@ -28,10 +32,19 @@ from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
 from kd.search.sga import tree_render as _tree_render
 from kd.search.sga import viz as _viz_helpers
-from kd.search.sga.config import DEDUP_MODES, OPS, ROOT, SGAConfig, build_den
+from kd.search.sga.config import DEDUP_MODES, OP1, OP2, OPS, ROOT, SGAConfig, build_den
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
-from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde
+from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde, execute_tree
 from kd.search.sga.pde import PDE
+
+
+
+
+from kd.search.sga.sketch_backend import (
+    SGACompiled,
+    _fingerprint,
+    compile_for_sga,
+)
 from kd.search.sga.train import CandidateResult, TrainResult, evaluate_candidate
 from kd.viz.extension import PlotInfo
 
@@ -55,9 +68,19 @@ def _field_model_artifact(model: FieldModel) -> dict[str, str | int]:
         },
     )
 
+
 _AIC_LOWER_BOUND = -100.0
 
 _MAX_RESAMPLE_PER_INDIVIDUAL = 50
+
+_SKETCH_LEVELS = SketchClauseLevels(
+    fixed_terms="lowered",
+    anchors="exit_checked",
+    hole_count="exit_checked",
+    derivative_order="generation_enforced",
+    operator_set="generation_enforced",
+    field_axis_set="generation_enforced",
+)
 
 _FAILED_EVAL_ERROR_MESSAGE = "Candidate evaluation failed"
 
@@ -163,17 +186,41 @@ class SGAPlugin:
 
     config_cls: ClassVar[type[SGAConfig]] = SGAConfig
     one_shot: ClassVar[bool] = False
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "native"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="sga",
         summary="Genetic PDE structure search with SGA's internal sparse fit.",
         cost_class="medium",
+
+
+
+
+
+
+
+
+
+
         modes=(
             InstrumentMode(
                 name="default",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                sketch=_SKETCH_LEVELS,
+                description="Platform finite-difference derivatives.",
+            ),
+            InstrumentMode(
+                name="autograd",
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="autograd",
+                sketch=_SKETCH_LEVELS,
+                description=(
+                    "use_autograd=True: SGA trains its own field surrogate and "
+                    "differentiates it with autograd."
+                ),
             ),
         ),
         knobs=(
@@ -213,12 +260,18 @@ class SGAPlugin:
         self._best_expression: str = ""
         self._best_formatted_cache: str | None = None
         self._vars: list[str] = []
+        self._ops = OPS
+        self._root = ROOT
+        self._op1 = OP1
+        self._op2 = OP2
         self._data_dict: dict[str, Tensor] = {}
         self._den: tuple[tuple[str, int], ...] = ()
         self._diff_ctx: DiffContext | None = None
         self._default_terms: Tensor | None = None
         self._default_term_name: str | None = None
         self._y: Tensor | None = None
+        self._sketch: Sketch | None = None
+        self._sketch_compiled: SGACompiled | None = None
         self._rng: torch.Generator = torch.Generator()
         self._prepared: bool = False
         self._restore_pending: bool = False
@@ -273,6 +326,12 @@ class SGAPlugin:
         return self._config.num
 
     @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        if self._sketch_compiled is None:
+            return None
+        return self._sketch_compiled.report
+
+    @property
     def surrogate_train_seconds(self) -> float | None:
         result = self._surrogate_training_result
         if result is None:
@@ -298,6 +357,12 @@ class SGAPlugin:
     def prepare(self, components: PlatformComponents) -> None:
         self._prepared = False
         self._clear_pending_generation()
+        self._ops = OPS
+        self._root = ROOT
+        self._op1 = OP1
+        self._op2 = OP2
+        self._sketch = None
+        self._sketch_compiled = None
 
 
 
@@ -402,12 +467,44 @@ class SGAPlugin:
 
         self._vars = sorted(data_dict.keys())
 
+        task = components.task
+        if task is not None:
+            default_name = (
+                dataset.lhs_field
+                if dataset.lhs_field and dataset.lhs_field in data_dict
+                else None
+            )
+            compiled = compile_for_sga(
+                task.sketch,
+                vars=self._vars,
+                den=self._den,
+                ops=self._ops,
+                root=self._root,
+                op1=self._op1,
+                op2=self._op2,
+                default_term_name=default_name,
+                config=self._config,
+            )
+            self._sketch = task.sketch
+            self._sketch_compiled = compiled
+            self._vars = list(compiled.vars)
+            self._den = compiled.den
+            self._ops = compiled.ops
+            self._root = compiled.root
+            self._op1 = compiled.op1
+            self._op2 = compiled.op2
+
 
 
         self._y = self._extract_lhs_target(dataset, context)
+        if task is not None and not task.compiled.closed:
+            self._lower_sketch_target()
 
 
-        if dataset.lhs_field and dataset.lhs_field in data_dict:
+        default_kept = (
+            self._sketch_compiled is None or self._sketch_compiled.default_kept
+        )
+        if default_kept and dataset.lhs_field and dataset.lhs_field in data_dict:
             self._default_terms = data_dict[dataset.lhs_field].flatten().unsqueeze(1)
             self._default_term_name = dataset.lhs_field
         else:
@@ -603,9 +700,7 @@ class SGAPlugin:
             invalid_reason=(
                 None
                 if is_valid
-                else _invalid_reason_for_aic_mse(
-                    candidate.aic_score, candidate.mse
-                )
+                else _invalid_reason_for_aic_mse(candidate.aic_score, candidate.mse)
             ),
             selected_indices=list(candidate.selected_indices),
             residuals=residuals,
@@ -710,6 +805,85 @@ class SGAPlugin:
             return 0.0
         var = float(torch.var(self._y, correction=0).item())
         return var if math.isfinite(var) else 0.0
+
+    def _lower_sketch_target(self) -> None:
+        compiled = self._sketch_compiled
+        assert compiled is not None
+        assert self._y is not None
+        if not compiled.pinned:
+            return
+        lowered = self._y
+        for key, signed_value, tree in compiled.pinned:
+            column = execute_tree(tree, self._data_dict, self._diff_ctx)
+            if not bool(torch.isfinite(column).all().item()):
+                raise ValueError(
+                    f"pinned sketch term {key!r} evaluates to a non-finite "
+                    "column on SGA's own footing; fix the pin or the dataset"
+                )
+            lowered = lowered - signed_value * column
+        variance = float(lowered.var(correction=0).detach().item())
+        if not math.isfinite(variance) or variance <= 0.0:
+            raise ValueError(
+                "lowered SGA sketch target variance must be finite and positive; "
+                "the pinned terms leave no residual to regress — the sketch is "
+                "effectively closed on this dataset"
+            )
+        self._y = lowered
+
+    def _sketch_admissible(self, pde: PDE) -> bool:
+        sketch = self._sketch
+        compiled = self._sketch_compiled
+
+        assert sketch is not None and compiled is not None
+        if not sketch.holes and not sketch.anchored:
+            return True
+        for tree in pde.terms:
+            try:
+                key = law_term_key(tree_to_kd_expr(tree))
+                features = analyze_term(key, sketch.vocabulary)
+            except ValueError:
+                return False
+            if key in compiled.pinned_keys:
+                return False
+            if _fingerprint(features) in compiled.pinned_fingerprints:
+                return False
+            if key in compiled.anchored_keys:
+                continue
+            if not any(
+                constraint_admits(hole.constraint, features) for hole in sketch.holes
+            ):
+                return False
+        return True
+
+    def _selected_within_capacity(
+        self, result: EvaluationResult, *, terms: list[str]
+    ) -> bool:
+        sketch = self._sketch
+        compiled = self._sketch_compiled
+        assert sketch is not None and compiled is not None
+        if not sketch.holes:
+            return True
+        selected = result.selected_indices
+        if selected is None:
+            return True
+        seats: dict[str, set[str]] = {hole.id: set() for hole in sketch.holes}
+        for index in selected:
+            if not 0 <= index < len(terms):
+                return True
+            try:
+                key = law_term_key(terms[index])
+                features = analyze_term(key, sketch.vocabulary)
+            except ValueError:
+
+
+                continue
+            if key in compiled.anchored_keys:
+                continue
+            for hole in sketch.holes:
+                if constraint_admits(hole.constraint, features):
+                    seats[hole.id].add(key)
+                    break
+        return all(len(seats[hole.id]) <= hole.max_count for hole in sketch.holes)
 
     def _format_best_expression(self) -> str:
         res = self.build_final_result()
@@ -1053,15 +1227,25 @@ class SGAPlugin:
         population: list[PDE] = []
         scores: list[float] = []
         for i in range(self._config.num):
-            pde = random_pde(self._config, self._vars, OPS, ROOT, self._den, self._rng)
-            aic, pruned = _safe_evaluate_aic(
-                pde,
-                self._data_dict,
-                self._default_terms,
-                self._y,
+            pde = random_pde(
                 self._config,
-                self._diff_ctx,
+                self._vars,
+                self._ops,
+                self._root,
+                self._den,
+                self._rng,
             )
+            if self._sketch_compiled is not None and not self._sketch_admissible(pde):
+                aic, pruned = _INVALID_AIC, pde
+            else:
+                aic, pruned = _safe_evaluate_aic(
+                    pde,
+                    self._data_dict,
+                    self._default_terms,
+                    self._y,
+                    self._config,
+                    self._diff_ctx,
+                )
 
             retries = 0
             while not _is_valid_aic(aic) and retries < _MAX_RESAMPLE_PER_INDIVIDUAL:
@@ -1075,27 +1259,39 @@ class SGAPlugin:
                 pde = random_pde(
                     self._config,
                     self._vars,
-                    OPS,
-                    ROOT,
+                    self._ops,
+                    self._root,
                     self._den,
                     self._rng,
                 )
-                aic, pruned = _safe_evaluate_aic(
-                    pde,
-                    self._data_dict,
-                    self._default_terms,
-                    self._y,
-                    self._config,
-                    self._diff_ctx,
-                )
+                if self._sketch_compiled is not None and not self._sketch_admissible(
+                    pde
+                ):
+                    aic, pruned = _INVALID_AIC, pde
+                else:
+                    aic, pruned = _safe_evaluate_aic(
+                        pde,
+                        self._data_dict,
+                        self._default_terms,
+                        self._y,
+                        self._config,
+                        self._diff_ctx,
+                    )
                 retries += 1
 
             if not _is_valid_aic(aic):
+                suspect = (
+                    "the sketch's admissibility constraints (holes/anchors "
+                    "against SGA's grammar), then data, derivative quality, "
+                    "or STRidge config"
+                    if self._sketch_compiled is not None
+                    else "data, derivative quality, or STRidge config"
+                )
                 raise RuntimeError(
                     f"Init population failed: individual {i} still has "
                     f"invalid AIC after {_MAX_RESAMPLE_PER_INDIVIDUAL} resample "
                     f"retries. All random candidates are pathological — "
-                    f"check data, derivative quality, or STRidge config."
+                    f"check {suspect}."
                 )
 
 
@@ -1114,7 +1310,6 @@ class SGAPlugin:
             self._best_formatted_cache = None
 
     def _apply_genetic_ops(self) -> list[PDE]:
-        from kd.search.sga.config import OP1, OP2
         from kd.search.sga.genetic import crossover, mutate, replace
 
 
@@ -1173,8 +1368,8 @@ class SGAPlugin:
             m = mutate(
                 population[i],
                 self._vars,
-                OP1,
-                OP2,
+                self._op1,
+                self._op2,
                 self._den,
                 cfg.p_mute,
                 self._rng,
@@ -1183,8 +1378,8 @@ class SGAPlugin:
                 m = replace(
                     m,
                     self._vars,
-                    OPS,
-                    ROOT,
+                    self._ops,
+                    self._root,
                     self._den,
                     cfg.depth,
                     cfg.p_var,
@@ -1219,10 +1414,20 @@ class SGAPlugin:
         candidate_pde: PDE,
         on_duplicate: Callable[[], None],
     ) -> _ScoredPDE | None:
+        if self._sketch_compiled is not None and not self._sketch_admissible(
+            candidate_pde
+        ):
+            return None
+
         mode = self._config.dedup_mode
 
         if mode == "none":
-            return self._score_offspring(candidate_pde)
+            scored = self._score_offspring(candidate_pde)
+            if self._sketch_compiled is not None and not self._selected_within_capacity(
+                scored.result, terms=self._build_term_list(scored.pde)
+            ):
+                return None
+            return scored
 
         pre_key: str | None = None
         if mode in ("pre_prune", "dual"):
@@ -1234,6 +1439,15 @@ class SGAPlugin:
                 self._pde_lib.add(pre_key)
 
         scored = self._score_offspring(candidate_pde)
+
+
+
+
+
+        if self._sketch_compiled is not None and not self._selected_within_capacity(
+            scored.result, terms=self._build_term_list(scored.pde)
+        ):
+            return None
 
         if mode in ("post_prune", "dual"):
 
@@ -1363,12 +1577,8 @@ class SGAPlugin:
             gen_mean_aic = _INVALID_AIC
             gen_best_nmse = float("inf")
             gen_mean_complexity = float("nan")
-        pop_scores = [
-            score for score in (self._scores or []) if math.isfinite(score)
-        ]
-        pop_mean_aic = (
-            sum(pop_scores) / len(pop_scores) if pop_scores else _INVALID_AIC
-        )
+        pop_scores = [score for score in (self._scores or []) if math.isfinite(score)]
+        pop_mean_aic = sum(pop_scores) / len(pop_scores) if pop_scores else _INVALID_AIC
         metrics: dict[str, float | int] = {
             _GEN_BEST_AIC_KEY: gen_best_aic,
             _GEN_MEAN_AIC_KEY: gen_mean_aic,

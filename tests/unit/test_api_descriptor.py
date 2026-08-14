@@ -43,10 +43,19 @@ class TestInstrumentSchemasFacade:
         assert len(algorithms) == len(set(algorithms))
 
     def test_facade_composes_every_registry_class(self) -> None:
-        assert instrument_schemas() == [
-            tool_schema(plugin_cls)
-            for plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.values()
-        ]
+        schemas = instrument_schemas()
+        plugin_classes = list(_PLUGIN_CLASS_BY_ALGORITHM.values())
+
+        assert len(schemas) == len(plugin_classes)
+        for schema, plugin_cls in zip(schemas, plugin_classes, strict=True):
+            assert schema.keys() - tool_schema(plugin_cls).keys() == {
+                "facade_params"
+            }
+            assert {
+                key: value
+                for key, value in schema.items()
+                if key != "facade_params"
+            } == tool_schema(plugin_cls)
 
     def test_json_round_trip_contains_only_primitives(self) -> None:
         schemas = instrument_schemas()
@@ -61,4 +70,18 @@ class TestInstrumentSchemasFacade:
                 assert mode["forms"] == sorted(mode["forms"])
                 assert isinstance(mode["topologies"], list)
                 assert mode["topologies"] == sorted(mode["topologies"])
+
+    def test_every_instrument_advertises_its_identity_breaking_fields(self) -> None:
+
+
+
+        by_algorithm = {
+            schema["algorithm"]: schema["identity_breaking_fields"]
+            for schema in instrument_schemas()
+        }
+        for algorithm, fields in by_algorithm.items():
+            assert isinstance(fields, list), algorithm
+            assert fields == sorted(fields), algorithm
+        assert "use_autograd" in by_algorithm["sga"]
+        assert "library" in by_algorithm["dlga"]
 

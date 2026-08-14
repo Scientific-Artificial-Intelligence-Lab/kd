@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -10,6 +11,7 @@ from typing import Any, Literal
 import torch
 
 from kd.search.discover.config import DiscoverConfig, PINNConfig
+from kd.search.discover.paths import BASELINE_RESULTS_DIR
 from kd.search.discover.runners.mode2_helpers import resolve_device
 from kd.search.discover.runners.mode2_payload import (
     SUPPORTED_PAYLOAD_PDES,
@@ -17,7 +19,6 @@ from kd.search.discover.runners.mode2_payload import (
 )
 from kd.search.discover.runners.pde_registry import (
     PDE_REGISTRY,
-    PROJECT_ROOT,
     PDESpec,
     TierSettings,
 )
@@ -25,7 +26,7 @@ from kd.search.discover.tokens.library import LibraryConfig
 
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = PROJECT_ROOT / "refs" / "baseline" / "results"
+OUTPUT_DIR = BASELINE_RESULTS_DIR
 OBS_RATIO = 0.04
 MIN_OBS_POINTS = 10
 
@@ -428,8 +429,12 @@ def save_payload(
     out_dir.mkdir(parents=True, exist_ok=True)
     filename = f"mode2_{spec.output_prefix}_{tier}_seed{seed}.json"
     out_path = out_dir / filename
-    with open(out_path, "w", encoding="utf-8") as fh:
+
+
+    tmp_path = out_path.with_name(f"{out_path.name}.tmp")
+    with tmp_path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
+    os.replace(tmp_path, out_path)
     return out_path
 
 

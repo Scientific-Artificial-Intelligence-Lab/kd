@@ -1,7 +1,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import NoReturn
 
 import pytest
@@ -9,6 +8,7 @@ import torch
 
 from kd.search.discover.candidates import CandidateSnapshot
 from kd.search.discover.config import DiscoverConfig, PINNConfig
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 from kd.search.discover.runners.mode2_payload import (
     _build_burgers_config_payload,
     _build_burgers_diagnostics,
@@ -246,16 +246,7 @@ def test_default_output_dir_is_legacy_baseline_results() -> None:
 
 
 
-_REFS_PDE_DATA = (
-    Path(__file__).resolve().parents[2]
-    / "refs"
-    / "discover"
-    / "dso"
-    / "dso"
-    / "task"
-    / "pde"
-    / "data_new"
-)
+_REFS_PDE_DATA = REFERENCE_DATA_DIR
 _requires_refs_data = pytest.mark.skipif(
     not _REFS_PDE_DATA.exists(),
     reason="requires refs/ reference PDE data (not shipped in the public tree)",

@@ -65,6 +65,9 @@ class TestPlotConvergence:
         assert not any("constant" in t.get_text().lower() for t in ax.texts)
         plt.close(fig)
 
+
+
+
     def test_varied_curve_has_plain_title(
         self, mock_experiment_result: ExperimentResult
     ) -> None:

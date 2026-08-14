@@ -22,6 +22,7 @@ uv run python examples/15_remote_dataset.py # on-demand HuggingFace dataset (nee
 uv run python examples/16_eqgpt.py # EqGPT (pretrained GPT proposer) on Burgers (needs pretrained weights)
 uv run python examples/17_llm4ed.py # LLM4ED (LLM equation proposer) on diffusion, offline canned provider (zero network)
 uv run python examples/19_batch_harness.py # kd.harness: run a plan of fits, seal the evidence, read the consensus
+uv run python examples/21_sketch_discovery.py # sketch: pin known terms, constrain the unknown remainder, certified exit
 uv run --with jupyter jupyter notebook examples/notebooks/getting_started.ipynb # narrated walkthrough with inline outputs
 ```
 
@@ -48,6 +49,8 @@ Each file is self-contained.
 | 17_llm4ed.py | **LLM4ED**: an LLM proposes candidate PDE right-hand sides as text, kd scores each by an EDL sparse-regression reward and evolves an elite pool. Runs offline with an inline canned `provider=` (zero network, no API key); the script comments show the real-backend path (`base_url` + `OPENAI_API_KEY`, optional `tape_record_path`) | ~10 sec |
 | 18 (retired) | Retired (numbering gaps stay retired; no renumbering) | - |
 | 19_batch_harness.py | **Batch a plan of fits and aggregate it** (`kd.harness`): an ordered (instrument, dataset, seed) matrix runs into a fresh evidence store, the store re-opens read-only and self-verifies, and `build_consensus` groups the runs into structure classes with a Markdown + JSON rendering. Also shows how to read a class split that is only a notation difference | ~5 s |
+| 20 (retired) | Retired (numbering gaps stay retired; no renumbering) | - |
+| 21_sketch_discovery.py | **Discover with a sketch** (`Model.fit(dataset, sketch=...)`): pin the advection term of Burgers with its exact coefficient, leave one order-2 hole, and let SGA's native compiler search only the admissible grammar. The exit certifies the solution against every sketch clause and restores the pin exactly | ~30 s |
 | notebooks/getting_started.ipynb | **Narrated getting-started notebook**: load Burgers, preview the field, fit SGA, compare against truth, and keep inline outputs for GitHub | ~1-2 min |
 
 ### Scalar symbolic regression (bypass)

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any
+import math
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
@@ -11,13 +12,14 @@ from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
+from kd.core.linear_solve._helpers import is_cpu_alloc_failure
 from kd.core.linear_solve.least_squares import LeastSquaresSolver
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import FiniteDiffProvider
 from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer
-from kd.search.protocol import PlatformComponents
+from kd.search.protocol import DiscoveryTask, PlatformComponents
 
 if TYPE_CHECKING:
     from kd.data.derivatives.base import DerivativeProvider
@@ -110,11 +112,15 @@ class PlatformBuilder:
         device: str | None = None,
         *,
         compute_condition_number: bool = False,
+        task: DiscoveryTask | None = None,
+        sketch_lower_owner: Literal["platform", "native"] = "platform",
     ) -> None:
         self._dataset = dataset
         self._reqs = reqs
         self._device: torch.device | None = _resolve_device(device)
         self._compute_condition_number = compute_condition_number
+        self._task = task
+        self._sketch_lower_owner = sketch_lower_owner
 
 
 
@@ -129,6 +135,10 @@ class PlatformBuilder:
 
         self._surrogate_training = None
         if self._reqs.provider_kind == "none":
+            if self._task is not None and self._sketch_lower_owner == "platform":
+                raise NotImplementedError(
+                    "platform sketch lower requires a platform evaluator"
+                )
 
 
 
@@ -144,6 +154,7 @@ class PlatformBuilder:
                 evaluator=None,
                 context=None,
                 registry=registry,
+                task=self._task,
             )
         dataset = self._resolve_lhs(self._dataset)
         provider = self._build_provider(dataset)
@@ -157,6 +168,7 @@ class PlatformBuilder:
             evaluator=evaluator,
             context=context,
             registry=registry,
+            task=self._task,
         )
 
 
@@ -251,6 +263,20 @@ class PlatformBuilder:
 
 
         lhs = lhs.to(context.device)
+
+
+
+
+
+
+
+        if (
+            self._task is not None
+            and self._sketch_lower_owner == "platform"
+            and self._task.sketch.pinned
+            and not self._task.compiled.closed
+        ):
+            lhs = self._lower_sketch_target(lhs, executor, context)
         return Evaluator(
             executor=executor,
             solver=solver,
@@ -258,6 +284,47 @@ class PlatformBuilder:
             lhs=lhs,
             report_condition_number=self._compute_condition_number,
         )
+
+    def _lower_sketch_target(
+        self,
+        lhs: torch.Tensor,
+        executor: PythonExecutor,
+        context: ExecutionContext,
+    ) -> torch.Tensor:
+        assert self._task is not None
+        lowered = lhs
+        for pin in self._task.sketch.pinned:
+            try:
+                column = (
+                    executor.execute(pin.term_ir, context)
+                    .value.detach()
+                    .flatten()
+                    .to(context.device)
+                )
+            except torch.cuda.OutOfMemoryError:
+
+
+                raise
+            except RuntimeError as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
+                raise ValueError(
+                    f"failed to execute pinned sketch term {pin.term_ir!r}"
+                ) from exc
+            except Exception as exc:
+                raise ValueError(
+                    f"failed to execute pinned sketch term {pin.term_ir!r}"
+                ) from exc
+            lowered = lowered - pin.value * column
+        variance = float(lowered.var(correction=0).detach().item())
+        if not math.isfinite(variance) or variance <= 0.0:
+            raise ValueError(
+                "lowered sketch target variance must be finite and positive; "
+                "the pinned terms explain this target exactly, leaving no "
+                "residual to regress — the sketch is effectively closed on "
+                "this data (drop the unknown clauses, or reconsider the pins)"
+            )
+        return lowered
 
 
 

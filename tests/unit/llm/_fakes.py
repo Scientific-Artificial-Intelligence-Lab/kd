@@ -37,7 +37,8 @@ class BoomError(Exception):
 
 
 
-_OMIT: Final[Any] = object()
+OMIT: Final[Any] = object()
+_OMIT: Final[Any] = OMIT
 
 
 class RecordingChatClient:
@@ -47,7 +48,7 @@ class RecordingChatClient:
         *,
         fail_times: int = 0,
         content: str = "u_xx - u",
-        model: Any = _OMIT,
+        model: Any = "served-model-default",
         usage: Any = _OMIT,
     ) -> None:
         self._fail_times = fail_times

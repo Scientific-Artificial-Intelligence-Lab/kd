@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
+from kd.search.discover.paths import PROJECT_ROOT, REFERENCE_DATA_DIR
+
 
 SCHEMA_VERSION: Final[int] = 2
 
@@ -45,24 +47,8 @@ CHAFEE_OPERATORS: Final[tuple[str, ...]] = (
     "n3",
 )
 
-_PROJECT_ROOT: Final[Path] = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent.parent
-)
-DEFAULT_BURGERS_DATA: Final[Path] = (
-    _PROJECT_ROOT
-    / "refs"
-    / "discover"
-    / "dso"
-    / "dso"
-    / "task"
-    / "pde"
-    / "data_new"
-    / "burgers.mat"
-)
-DEFAULT_CHAFEE_DATA_DIR: Final[Path] = (
-    _PROJECT_ROOT / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
-)
-PROJECT_ROOT: Final[Path] = _PROJECT_ROOT
+DEFAULT_BURGERS_DATA: Final[Path] = REFERENCE_DATA_DIR / "burgers.mat"
+DEFAULT_CHAFEE_DATA_DIR: Final[Path] = REFERENCE_DATA_DIR
 
 
 def project_relative(path: Path) -> str:

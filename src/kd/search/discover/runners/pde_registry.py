@@ -4,9 +4,9 @@ from __future__ import annotations
 from typing import Any
 
 
+from kd.search.discover.paths import PROJECT_ROOT
 from kd.search.discover.runners._pde_specs._base import (
     DATA_DIR,
-    PROJECT_ROOT,
     PDESpec,
     TierSettings,
 )

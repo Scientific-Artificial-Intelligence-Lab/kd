@@ -28,7 +28,11 @@ RESERVED_MODEL_KWARGS = (
     "provider",
     "surrogate_model",
     "checkpoint_dir",
+    "checkpoint_every",
+    "checkpoint_keep_last",
+    "phases_path",
     "verbose",
+    "device",
 )
 
 
@@ -315,7 +319,7 @@ def test_plan_v1_tables_match_dataclass_fields_today() -> None:
 
 
 
-def test_reserved_model_kwargs_is_nine_keys_including_device() -> None:
+def test_reserved_model_kwargs_cover_harness_owned_keys() -> None:
 
 
 
@@ -328,6 +332,9 @@ def test_reserved_model_kwargs_is_nine_keys_including_device() -> None:
             "provider",
             "surrogate_model",
             "checkpoint_dir",
+            "checkpoint_every",
+            "checkpoint_keep_last",
+            "phases_path",
             "verbose",
             "device",
         }

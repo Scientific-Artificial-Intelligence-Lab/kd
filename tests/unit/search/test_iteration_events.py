@@ -9,11 +9,18 @@ from typing import Any
 import pytest
 
 from kd.search.iteration_events import (
+    ITEREVENT_DIAGNOSTICS_KEYS,
     ITEREVENT_SCHEMA_VERSION,
     ITEREVENT_SCHEME,
+    PHASE_SCHEMA_VERSION,
+    PHASE_SCHEME,
+    PHASE_SEARCH_CRASHED,
+    PHASE_VOCABULARY,
     IterationEvent,
     IterationEventEmitter,
     IterationEventSinkError,
+    PhaseEvent,
+    PhaseWriter,
 )
 
 pytestmark = pytest.mark.unit
@@ -26,8 +33,9 @@ pytestmark = pytest.mark.unit
 
 class _StubResult:
 
-    def __init__(self, is_valid: bool = True) -> None:
+    def __init__(self, is_valid: bool = True, complexity: int = 2) -> None:
         self.is_valid = is_valid
+        self.complexity = complexity
 
 
 class _StubAlgorithm:
@@ -325,3 +333,120 @@ class TestSinkLifetime:
         emitter.on_experiment_end(_StubAlgorithm())
         emitter.on_experiment_end(_StubAlgorithm())
         assert emitter._sink is None
+
+
+
+
+
+
+
+class TestDiagnostics:
+
+    def test_emitted_diagnostics_are_whitelisted_boundary_stats(
+        self, tmp_path: Path
+    ) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append)
+        algo = _StubAlgorithm()
+        emitter.on_experiment_start(algo)
+        results = [
+            _StubResult(is_valid=True, complexity=2),
+            _StubResult(is_valid=True, complexity=4),
+            _StubResult(is_valid=False, complexity=9),
+        ]
+        emitter.on_iteration_end(0, algo, ["a", "a", "b"], results)
+        diagnostics = events[0].diagnostics
+        assert diagnostics is not None
+        assert set(diagnostics) <= ITEREVENT_DIAGNOSTICS_KEYS
+        assert diagnostics["n_unique_candidates"] == 2
+        assert diagnostics["mean_complexity"] == 3.0
+
+    def test_all_invalid_batch_degrades_mean_complexity_to_none(self) -> None:
+        events: list[IterationEvent] = []
+        emitter = IterationEventEmitter(on_event=events.append)
+        algo = _StubAlgorithm()
+        emitter.on_experiment_start(algo)
+        emitter.on_iteration_end(0, algo, ["a"], [_StubResult(is_valid=False)])
+        diagnostics = events[0].diagnostics
+        assert diagnostics is not None
+        assert diagnostics["mean_complexity"] is None
+
+    def test_from_dict_rejects_key_outside_whitelist(self) -> None:
+        data = _make_event().to_dict()
+        data["diagnostics"] = {"secret_channel": 1.0}
+        with pytest.raises(ValueError, match="white-list"):
+            IterationEvent.from_dict(data)
+
+    def test_from_dict_rejects_non_finite_diagnostic_value(self) -> None:
+        data = _make_event().to_dict()
+        data["diagnostics"] = {"mean_complexity": float("inf")}
+        with pytest.raises(ValueError, match="mean_complexity"):
+            IterationEvent.from_dict(data)
+
+
+
+
+
+
+
+class TestPhaseEvents:
+
+    def test_writer_appends_decodable_lines(self, tmp_path: Path) -> None:
+        path = tmp_path / "phases.jsonl"
+        writer = PhaseWriter(path)
+        writer.write("fit_started")
+        writer.write("search_started")
+        writer.write("search_ended")
+        writer.write(PHASE_SEARCH_CRASHED)
+        lines = path.read_text().splitlines()
+        decoded = [PhaseEvent.from_dict(json.loads(line)) for line in lines]
+        assert [event.phase for event in decoded] == [
+            "fit_started",
+            "search_started",
+            "search_ended",
+            "search_crashed",
+        ]
+        elapsed = [event.elapsed_seconds for event in decoded]
+        assert elapsed == sorted(elapsed)
+
+    def test_first_write_exclusive_creates(self, tmp_path: Path) -> None:
+        path = tmp_path / "phases.jsonl"
+        path.write_text("occupied\n")
+        writer = PhaseWriter(path)
+        with pytest.raises(IterationEventSinkError, match="phase"):
+            writer.write("fit_started")
+
+    def test_writer_rejects_unknown_phase(self, tmp_path: Path) -> None:
+        writer = PhaseWriter(tmp_path / "phases.jsonl")
+        with pytest.raises(ValueError, match="phase"):
+            writer.write("warming_up")
+
+    def test_from_dict_rejects_foreign_scheme_and_phase(self) -> None:
+        writer_line = {
+            "schema_version": PHASE_SCHEMA_VERSION,
+            "scheme": PHASE_SCHEME,
+            "phase": "fit_started",
+            "created_at": "2026-08-09T00:00:00+00:00",
+            "elapsed_seconds": 0.0,
+        }
+        assert PhaseEvent.from_dict(dict(writer_line)).phase == "fit_started"
+        assert "fit_started" in PHASE_VOCABULARY
+        assert PHASE_SEARCH_CRASHED in PHASE_VOCABULARY
+        bad_scheme = {**writer_line, "scheme": "kd-iterevent-v1"}
+        with pytest.raises(ValueError, match="scheme"):
+            PhaseEvent.from_dict(bad_scheme)
+        bad_phase = {**writer_line, "phase": "warming_up"}
+        with pytest.raises(ValueError, match="phase"):
+            PhaseEvent.from_dict(bad_phase)
+
+    def test_phase_recorder_writes_crashed_terminal_phase(
+        self, tmp_path: Path
+    ) -> None:
+        from kd.api import _PhaseRecorder
+
+        path = tmp_path / "phases.jsonl"
+        recorder = _PhaseRecorder(PhaseWriter(path))
+        recorder.on_experiment_end_status(_StubAlgorithm(), crashed=True)
+
+        event = PhaseEvent.from_dict(json.loads(path.read_text()))
+        assert event.phase == PHASE_SEARCH_CRASHED

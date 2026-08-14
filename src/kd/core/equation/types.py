@@ -34,7 +34,9 @@ class Field:
 class Hole:
 
     def __post_init__(self) -> None:
-        raise NotImplementedError("Hole coefficients are reserved for step 6")
+        raise NotImplementedError(
+            "Hole coefficients are reserved; holes live at the Sketch layer"
+        )
 
 
 @dataclass(frozen=True)
@@ -44,7 +46,7 @@ class Posterior:
     sigma: float
 
     def __post_init__(self) -> None:
-        raise NotImplementedError("Posterior coefficients are reserved for step 6")
+        raise NotImplementedError("Posterior coefficients are reserved")
 
 
 Coefficient: TypeAlias = Scalar | Field | Hole | Posterior

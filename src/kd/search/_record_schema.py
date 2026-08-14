@@ -4,6 +4,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
+from kd.core.strict_keys import strict_keys as _strict_keys_core
+
 
 class RecordSchemaError(ValueError):
     pass
@@ -60,21 +62,72 @@ def strict_keys(
     required: frozenset[str],
     optional: frozenset[str] = frozenset(),
 ) -> None:
-    actual = frozenset(data)
-    unknown = actual - required - optional
-    if unknown:
-        keys = ", ".join(repr(key) for key in sorted(unknown))
-        raise StrictDecodeError(f"Unknown {object_name} field(s): {keys}")
-    missing = required - actual
-    if missing:
-        keys = ", ".join(repr(key) for key in sorted(missing))
-        raise StrictDecodeError(f"Missing required {object_name} field(s): {keys}")
+    _strict_keys_core(
+        data,
+        object_name=object_name,
+        required=required,
+        optional=optional,
+        error_cls=StrictDecodeError,
+    )
 
 
 def as_dict(value: object, *, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise StrictDecodeError(f"{field} must be an object")
     return cast(dict[str, Any], value)
+
+
+
+
+
+
+
+
+LINEAGE_FIELDS: tuple[str, ...] = (
+    "resume_from",
+    "source_run_id",
+    "source_config_hash",
+    "source_final_status",
+    "source_iteration",
+)
+_LINEAGE_FIELD_SET = frozenset(LINEAGE_FIELDS)
+
+
+def validate_lineage(
+    lineage: object,
+    *,
+    error_cls: type[Exception] = StrictDecodeError,
+) -> dict[str, Any] | None:
+    if lineage is None:
+        return None
+    if not isinstance(lineage, Mapping):
+        raise error_cls(f"lineage must be an object or null; got {lineage!r}")
+    keys = frozenset(lineage)
+    if keys != _LINEAGE_FIELD_SET:
+        raise error_cls(
+            f"lineage keys must be exactly {sorted(_LINEAGE_FIELD_SET)!r}; "
+            f"got {sorted(keys)!r}"
+        )
+    resume_from = lineage["resume_from"]
+    if not isinstance(resume_from, str) or not resume_from:
+        raise error_cls(
+            f"lineage.resume_from must be a non-empty str; got {resume_from!r}"
+        )
+    for field in ("source_run_id", "source_config_hash", "source_final_status"):
+        value = lineage[field]
+        if value is not None and (not isinstance(value, str) or not value):
+            raise error_cls(
+                f"lineage.{field} must be a non-empty str or None; got {value!r}"
+            )
+    iteration = lineage["source_iteration"]
+    if iteration is not None and (
+        type(iteration) is not int or iteration < 0
+    ):
+        raise error_cls(
+            "lineage.source_iteration must be a non-negative int or None "
+            f"(bool rejected); got {iteration!r}"
+        )
+    return {field: lineage[field] for field in LINEAGE_FIELDS}
 
 
 _EQUATION_FIELDS = frozenset({"form", "lhs_spec", "terms", "attrs", "active_indices"})

@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 
 from torch import Tensor
 
-from kd.core.equation import Equation
+from kd.core.equation import Equation, Scalar
 from kd.core.equation import to_dict as equation_to_dict
 from kd.core.equation.library import TermLibrarySpec
+from kd.core.equation.projection import active_law
 from kd.core.evaluator import EvaluationResult
 from kd.core.jsonsafe import sanitize_float
 from kd.search.records import (
@@ -100,6 +101,28 @@ def active_support_and_coefficients(
     return support, coefficients
 
 
+def active_support_and_coefficients_from_equation(
+    equation: Equation | None,
+) -> tuple[list[str] | None, list[float | None] | None]:
+    if equation is None:
+        return None, None
+    projected = active_law(equation)
+    support = [term_ir for term_ir, _coefficient in projected.terms]
+    coefficients = [
+        sanitize_float(_scalar_coefficient(term_ir, coefficient))
+        for term_ir, coefficient in projected.terms
+    ]
+    return support, coefficients
+
+
+def _scalar_coefficient(term_ir: str, coefficient: object) -> float:
+    if not isinstance(coefficient, Scalar):
+        raise NotImplementedError(
+            f"{type(coefficient).__name__} coefficient for {term_ir!r} is reserved"
+        )
+    return float(coefficient.value)
+
+
 def _assert_catalog_fingerprint(
     run_spec: RunSpec,
     manifest_terms: list[str] | None,
@@ -128,10 +151,16 @@ def _build_evidence(
     score_kind: str,
     score_direction: str,
     headline_coefficient_source: str,
+    support_from_equation: bool,
 ) -> EvidenceRecord:
 
 
-    support, coefficients = active_support_and_coefficients(final_eval)
+    if support_from_equation:
+        support, coefficients = active_support_and_coefficients_from_equation(
+            equation
+        )
+    else:
+        support, coefficients = active_support_and_coefficients(final_eval)
     return EvidenceRecord(
         instrument=instrument,
         dataset_name=dataset_name,
@@ -178,6 +207,7 @@ def assemble_run_record(
     run_spec: RunSpec,
     manifest_terms: list[str] | None = None,
     cost: RunCost,
+    support_from_equation: bool = False,
 ) -> RunRecord:
     _assert_catalog_fingerprint(run_spec, manifest_terms)
     evidence = _build_evidence(
@@ -192,6 +222,7 @@ def assemble_run_record(
         score_kind=score_kind,
         score_direction=score_direction,
         headline_coefficient_source=headline_coefficient_source,
+        support_from_equation=support_from_equation,
     )
 
 

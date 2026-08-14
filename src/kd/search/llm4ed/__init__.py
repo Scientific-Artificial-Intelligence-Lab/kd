@@ -11,7 +11,6 @@ Du et al. 2024):
   valid_coef gate + EDL error taxonomy (inner solve: ``_stridge``, a verbatim
   numpy port of EDL's inner STRidge);
 - :mod:`kd.search.llm4ed.reward` -- sparse reward, round(4) canonical;
-- :mod:`kd.search.llm4ed.backend` -- offline deterministic Fake provider;
 - :mod:`kd.search.llm4ed.prompts` -- EDL prompt templates, response parsers,
   and seeded term permutation.
 
@@ -26,7 +25,6 @@ engines; the top-level ``kd`` namespace carries :class:`Llm4edConfig` alone.
 
 from __future__ import annotations
 
-from kd.search.llm4ed.backend import FakeLlm4edBackend
 from kd.search.llm4ed.config import Llm4edConfig
 from kd.search.llm4ed.fd import (
     OPERAND_ORDER,
@@ -82,7 +80,6 @@ __all__ = [
     "ERROR_ABNORMAL_COEF",
     "ERROR_LSTSQ",
     "OPERAND_ORDER",
-    "FakeLlm4edBackend",
     "InexpressibleTermError",
     "Llm4edConfig",
     "Llm4edParseError",

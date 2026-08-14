@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from kd.harness.dispatch import (
     _DISPATCH_V1_DATASET_KEYS,
     _DISPATCH_V1_KEYS,
@@ -17,13 +18,14 @@ from kd.harness.dispatch import (
     DispatchDatasetSpec,
     DispatchManifest,
     DispatchManifestError,
+    DispatchRecording,
     DispatchResources,
     ShardSpec,
     read_dispatch_manifest,
     write_dispatch_manifest,
 )
-
 from kd.harness.plan import ExperimentPlan, PlanEntry
+from kd.harness.recording import RecordingOptions
 
 
 
@@ -84,10 +86,13 @@ def _valid_payload(plan: ExperimentPlan) -> dict[str, Any]:
     }
 
 
-def _manifest(plan: ExperimentPlan) -> DispatchManifest:
+def _manifest(
+    plan: ExperimentPlan, recording: DispatchRecording | None = None
+) -> DispatchManifest:
     return DispatchManifest(
         plan=plan,
         plan_hash=plan.plan_hash(),
+        recording=recording,
         shards=(
             ShardSpec(
                 shard_id="shard-00",
@@ -122,12 +127,28 @@ def _write_payload(tmp_path: Path, payload: Any) -> Path:
     return path
 
 
+def _with_recording_resume(
+    payload: dict[str, Any], resume_from: dict[str, str]
+) -> dict[str, Any]:
+    payload["dispatch_schema_version"] = 2
+    payload["recording"] = {
+        "events_every_n": 1,
+        "checkpoint_every": None,
+        "checkpoint_keep_last": None,
+        "phases": True,
+        "catalog": None,
+        "resume_from": resume_from,
+    }
+    return payload
+
+
 
 
 
 def test_tag_and_version_constants_are_literal() -> None:
     assert DISPATCH_ARTIFACT_TAG == "kd-dispatch-v1"
-    assert DISPATCH_SCHEMA_VERSION == 1
+
+    assert DISPATCH_SCHEMA_VERSION == 2
 
 
 
@@ -169,7 +190,8 @@ def test_serialized_tree_key_sets_match_frozen_tables(tmp_path: Path) -> None:
     written = write_dispatch_manifest(_manifest(_plan()), tmp_path / "batch")
     payload = json.loads(Path(written).read_text(encoding="utf-8"))
 
-    assert set(payload) == set(_DISPATCH_V1_KEYS)
+    assert set(payload) == set(_DISPATCH_V1_KEYS) | {"recording"}
+    assert payload["recording"] is None
     for shard in payload["shards"]:
         assert set(shard) == set(_DISPATCH_V1_SHARD_KEYS)
     for spec in payload["datasets"].values():
@@ -282,7 +304,7 @@ def test_read_rejects_unknown_resources_key(tmp_path: Path) -> None:
         read_dispatch_manifest(_write_payload(tmp_path, payload))
 
 
-@pytest.mark.parametrize("version", [True, 2, "1", 0, None])
+@pytest.mark.parametrize("version", [True, 3, "1", 0, None])
 def test_read_rejects_bad_schema_version(tmp_path: Path, version: object) -> None:
     payload = _valid_payload(_plan())
     payload["dispatch_schema_version"] = version
@@ -431,3 +453,72 @@ def test_dataclass_construction_reruns_validation() -> None:
             timeout_seconds=None,
             memory_max_gb=None,
         )
+
+
+
+
+
+def test_v1_payload_decodes_with_recording_none(tmp_path: Path) -> None:
+    manifest = read_dispatch_manifest(
+        _write_payload(tmp_path, _valid_payload(_plan()))
+    )
+    assert manifest.recording is None
+
+
+def test_recording_block_roundtrips(tmp_path: Path) -> None:
+    recording = DispatchRecording(
+        options=RecordingOptions(events_every_n=2, checkpoint_every=5),
+        catalog="catalog.jsonl",
+        resume_from={1: "../prior/shards/shard-00/runs/entry-0001/checkpoints/x.pt"},
+    )
+    manifest = _manifest(_plan(), recording=recording)
+    written = write_dispatch_manifest(manifest, tmp_path / "batch")
+    reread = read_dispatch_manifest(written)
+    assert reread == manifest
+    assert reread.recording is not None
+    assert reread.recording.resume_from == recording.resume_from
+
+
+def test_recording_rejects_absolute_catalog_and_bad_resume_index() -> None:
+    with pytest.raises(DispatchManifestError, match="catalog"):
+        DispatchRecording(
+            options=RecordingOptions(), catalog="/abs/catalog.jsonl"
+        )
+    plan = _plan()
+    with pytest.raises(DispatchManifestError, match="resume_from"):
+        _manifest(
+            plan,
+            recording=DispatchRecording(
+                options=RecordingOptions(), resume_from={99: "x.pt"}
+            ),
+        )
+
+
+def test_recording_rejects_resume_index_outside_shard_coverage() -> None:
+    plan = _plan()
+    base = _manifest(plan)
+    with pytest.raises(DispatchManifestError, match="resume_from.*1"):
+        DispatchManifest(
+            plan=plan,
+            plan_hash=plan.plan_hash(),
+            shards=(base.shards[0],),
+            datasets=base.datasets,
+            resources=base.resources,
+            recording=DispatchRecording(
+                options=RecordingOptions(), resume_from={1: "x.pt"}
+            ),
+        )
+
+
+def test_recording_rejects_malformed_resume_key(tmp_path: Path) -> None:
+    payload = _with_recording_resume(_valid_payload(_plan()), {"+1": "x.pt"})
+    with pytest.raises(DispatchManifestError, match="resume_from"):
+        read_dispatch_manifest(_write_payload(tmp_path, payload))
+
+
+def test_recording_rejects_aliasing_resume_keys(tmp_path: Path) -> None:
+    payload = _with_recording_resume(
+        _valid_payload(_plan()), {"1": "a.pt", "01": "b.pt"}
+    )
+    with pytest.raises(DispatchManifestError, match="duplicate"):
+        read_dispatch_manifest(_write_payload(tmp_path, payload))

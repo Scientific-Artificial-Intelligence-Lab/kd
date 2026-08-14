@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from kd.core.equation.canonical import canonicalize_expression
-from kd.search.discover.golden.constants import PROJECT_ROOT
 from kd.search.discover.golden.fixture_io import load_fixture
+from kd.search.discover.paths import GOLDEN_BASELINE_DIR
 
-GOLDEN_DIR: Path = PROJECT_ROOT / "refs" / "baseline" / "golden"
+GOLDEN_DIR: Path = GOLDEN_BASELINE_DIR
 
 
 class _Lock:

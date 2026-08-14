@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -283,9 +284,11 @@ def write_verification_artifact(
         "report": report.to_dict(),
     }
     target = Path(path)
-    target.write_text(
+    tmp_path = target.with_name(f"{target.name}.tmp")
+    tmp_path.write_text(
         json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8"
     )
+    os.replace(tmp_path, target)
     return target
 
 

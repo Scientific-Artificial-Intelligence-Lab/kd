@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import torch
+
+from kd.data.schema import PDEDataset
 from kd.harness.plan import ExperimentPlan, PlanEntry
 from kd.harness.store import EvidenceStore, environment_fingerprint
 from kd.search.records import (
@@ -17,6 +20,15 @@ from kd.search.records import (
     seal_record_hash,
 )
 from kd.search.run_spec import RUN_SPEC_HASH_SCHEME, RunSpec
+
+
+def make_tiny_dataset(name: str = "burgers_tiny") -> PDEDataset:
+    x = torch.linspace(0.0, 1.0, 4)
+    t = torch.linspace(0.0, 0.5, 3)
+    u = x.reshape(-1, 1) + t.reshape(1, -1)
+    return PDEDataset.from_arrays(
+        name=name, coords={"x": x, "t": t}, fields={"u": u}, lhs="u_t"
+    )
 
 
 def make_record(

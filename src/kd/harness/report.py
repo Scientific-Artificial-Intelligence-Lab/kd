@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -10,7 +11,11 @@ from kd.search.mini_table import escape_cell as _escape_cell
 from kd.search.records import RunRecord
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from kd.harness.store import EvidenceStore
+
+REPORT_FILENAME = "report.md"
 
 _COMPLETED = "completed"
 _FAILURE_HEADER = (
@@ -119,3 +124,11 @@ def build_store_report(store: EvidenceStore) -> str:
         attempts=store.attempts,
         records=store.records,
     )
+
+
+def write_store_report(store: EvidenceStore) -> Path:
+    report_path = store.root / REPORT_FILENAME
+    tmp_path = report_path.with_name(f"{report_path.name}.tmp")
+    tmp_path.write_text(build_store_report(store), encoding="utf-8")
+    os.replace(tmp_path, report_path)
+    return report_path

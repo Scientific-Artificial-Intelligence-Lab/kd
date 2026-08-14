@@ -1,11 +1,13 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kd.harness._dispatch_schema import DispatchManifest
 from kd.harness.dispatch_log import DispatchLog, WorkerLogRow
-from kd.harness.report import build_store_report
+from kd.harness.report import REPORT_FILENAME, build_store_report
 
 if TYPE_CHECKING:
     from kd.harness.store import EvidenceStore
@@ -59,7 +61,18 @@ def build_batch_report(
     return build_store_report(store) + "\n" + render_dispatch_markdown(manifest, log)
 
 
+def write_dispatch_report(
+    manifest: DispatchManifest, log: DispatchLog, batch_root: Path
+) -> Path:
+    report_path = Path(batch_root) / REPORT_FILENAME
+    tmp_path = report_path.with_name(f"{report_path.name}.tmp")
+    tmp_path.write_text(render_dispatch_markdown(manifest, log), encoding="utf-8")
+    os.replace(tmp_path, report_path)
+    return report_path
+
+
 __all__ = [
     "build_batch_report",
     "render_dispatch_markdown",
+    "write_dispatch_report",
 ]

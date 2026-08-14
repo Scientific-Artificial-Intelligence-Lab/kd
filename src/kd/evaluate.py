@@ -333,7 +333,7 @@ def _require_nonempty(terms: Sequence[str]) -> list[str]:
 def _resolve_lhs_order(dataset: PDEDataset, lhs_order: int | None) -> int:
     """Resolve the effective LHS order: derive from dataset, or honor override.
 
-    Decision A (DATA-0): ``lhs_order=None`` (default) DERIVES the order from
+    ``lhs_order=None`` (default) DERIVES the order from
     ``dataset.lhs_order`` — the single source of truth — so the agent entry
     stays consistent with the dataset by default. An explicit value is a
     deliberate OVERRIDE (request semantics): it may differ from

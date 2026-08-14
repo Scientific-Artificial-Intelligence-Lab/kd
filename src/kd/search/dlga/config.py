@@ -41,9 +41,27 @@ class DLGAConfig:
             )
         },
     )
+    """Coefficient mode of the search; only ``"constant"`` (constant-coefficient
+    equations) is implemented. The values ``"adaptive"`` and ``"auto"`` pass
+    configuration validation but raise ``NotImplementedError`` when the algorithm is
+    constructed.
+    """
     library: list[str] = field(default_factory=lambda: ["u", "u_x", "u_xx", "u_xxx"])
+    """Ordered vocabulary of tokens that candidate terms are built from, defaulting to
+    ``["u", "u_x", "u_xx", "u_xxx"]``. Each term is a product of tokens drawn from
+    this list, and the ordering matters: one of the mutation operators shifts a token
+    to an adjacent entry.
+    """
     solver: Literal["svd_null_space", "ols"] = "svd_null_space"
+    """Solver used to fit each candidate's coefficients against the left-hand side:
+    ``"svd_null_space"`` takes the null space of the augmented system (total least
+    squares), ``"ols"`` uses ordinary least squares.
+    """
     lhs_auto_select: bool = True
+    """When True, every candidate is fitted against both the first time derivative
+    (``u_t``) and the second (``u_tt``), and the branch with the lower NMSE is kept.
+    When False, only ``u_t`` is built and used as the left-hand side.
+    """
 
 
 
@@ -51,6 +69,11 @@ class DLGAConfig:
 
 
     target_lhs_order: int = 1
+    """Order of the time derivative this configuration targets as the left-hand side: 1
+    for ``u_t``, 2 for ``u_tt``. It must equal the dataset's own left-hand-side order
+    or the fit is rejected before it starts, and order 2 additionally requires
+    ``lhs_auto_select=True``.
+    """
 
 
 
@@ -82,8 +105,21 @@ class DLGAConfig:
 
 
     epsilon: float = 1e-3
+    """Complexity penalty in the genetic fitness ``NMSE + epsilon * length``, where
+    ``length`` is the total number of tokens across the candidate's terms. Raise it
+    to push the search toward shorter equations; the useful value is problem-
+    dependent, and the packaged presets span 1e-6 to 1e-3.
+    """
     pop_size: int = 400
+    """Number of candidate equations in each generation of the genetic search, which is
+    also how many candidates the platform evaluates per iteration.
+    """
     seed: int = 0
+    """Random seed of the genetic search: it seeds the generator behind the initial
+    population and every crossover, mutation, add and delete draw, and is also
+    forwarded to the surrogate network's training. Runs differing only in this value
+    explore different candidates.
+    """
 
 
 
@@ -104,16 +140,46 @@ class DLGAConfig:
             )
         },
     )
+    """Reserved for the planned ``mode="auto"`` escalation: the best NMSE above which
+    the search would hand over to an adaptive, variable-coefficient stage. It has no
+    effect today, because ``"constant"`` is the only implemented mode, and the 1e-3
+    default is an untuned placeholder.
+    """
 
 
     max_modules: int = 5
+    """Maximum number of additive terms allowed in one candidate equation."""
     max_module_length: int = 5
+    """Maximum number of tokens multiplied together inside a single term."""
     partial_prob: float = 0.6
+    """Probability, from 0 to 1, of extending a randomly built term with one more
+    factor. The term stops growing once it reaches ``max_module_length``.
+    """
     genes_prob: float = 0.6
+    """Probability, from 0 to 1, of adding one more term while a random candidate
+    equation is built. Generation stops once the candidate reaches ``max_modules``
+    terms.
+    """
     crossover_rate: float = 0.8
+    """Probability that a pair of surviving candidates exchanges one term during
+    crossover, from 0 to 1. Survivors are paired off in order, and each pair either
+    swaps one randomly chosen term or passes through unchanged.
+    """
     mutation_rate: float = 0.4
+    """Probability that a mutation shifts one factor of one term along ``library``, from
+    0 to 1. The shift is to an adjacent entry, except for a factor sitting at the
+    first entry, which is redrawn from the whole ``library``.
+    """
     add_rate: float = 0.4
+    """Probability that a newly built random term is appended to a candidate, from 0 to
+    1. The term is added only if the candidate is below ``max_modules`` and does not
+    already contain it.
+    """
     delete_rate: float = 0.5
+    """Probability that one term is dropped from a candidate, from 0 to 1. A candidate
+    that is down to a single term is left unchanged. The draw is independent of
+    ``add_rate``, so one candidate can gain and lose a term in the same generation.
+    """
 
 
 
@@ -129,9 +195,23 @@ class DLGAConfig:
     surrogate_hidden_sizes: list[int] = field(
         default_factory=lambda: [50, 50, 50, 50, 50]
     )
+    """Widths of the hidden layers in the neural network fitted to the field data, one
+    hidden layer per entry (default five layers of 50 units). The search
+    differentiates this network for the derivatives it scores, so its capacity bounds
+    their accuracy.
+    """
     surrogate_activation: Literal["tanh", "sin", "relu"] = "sin"
+    """Activation applied after each hidden layer of the fitted network: ``tanh``,
+    ``sin``, or ``relu``. The default ``sin`` stays smooth under the repeated
+    differentiation the search relies on, which ``relu`` does not.
+    """
     surrogate_lr: float = 1e-3
+    """Learning rate of the Adam optimizer used to fit the network to the field data."""
     surrogate_max_epochs: int = 50000
+    """Maximum number of epochs to spend fitting the network, one full-batch Adam step
+    per epoch. It trades run time against derivative accuracy: dropping the default
+    50000 to a few thousand finishes much sooner with coarser derivatives.
+    """
 
 
 
@@ -140,8 +220,23 @@ class DLGAConfig:
 
 
     surrogate_patience: int | None = None
+    """Number of consecutive epochs without validation-loss improvement after which the
+    fit stops early. ``None``, the default, disables early stopping and runs the full
+    ``surrogate_max_epochs`` budget; other values need ``surrogate_val_ratio`` above
+    0 to take effect.
+    """
     surrogate_val_ratio: float = 0.2
+    """Fraction of the samples held out to measure validation loss while fitting the
+    network, from 0 up to but not including 1. Setting it to 0 trains on every sample
+    and leaves ``surrogate_patience`` and ``surrogate_restore_best`` with no signal
+    to act on.
+    """
     surrogate_restore_best: bool = True
+    """If True, the weights from the epoch with the lowest validation loss are restored
+    at the end of the fit instead of keeping the last epoch's weights. Has no effect
+    when ``surrogate_val_ratio`` is 0, since there is no validation loss to rank
+    epochs by.
+    """
 
     def __post_init__(self) -> None:
         if self.mode not in {"constant", "adaptive", "auto"}:

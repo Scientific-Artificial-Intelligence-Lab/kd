@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz.axes import integer_ticks
 from kd.viz.plots._field_panels import (
     _RESIDUAL_PERCENTILE,
     _RESIDUAL_SIGN,
@@ -114,6 +115,8 @@ def _render_histogram(
 
     ax.set_xlabel(f"Residual ({_RESIDUAL_SIGN})")
     ax.set_ylabel("Count")
+
+    integer_ticks(ax, "y")
     ax.set_title("Residual Distribution")
 
 
@@ -207,6 +210,11 @@ def _render_spatial(
 
     ax.set_xlabel("axis-1 index")
     ax.set_ylabel("axis-0 index")
+
+
+
+    integer_ticks(ax, "x")
+    integer_ticks(ax, "y")
 
 
 def _empty_panel(ax: Axes, text: str, title: str) -> None:

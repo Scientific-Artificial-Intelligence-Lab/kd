@@ -489,10 +489,10 @@ class TestPlatformComponents:
         assert "registry" in field_names
 
     @pytest.mark.unit
-    def test_exactly_six_fields(self) -> None:
+    def test_exactly_seven_fields(self) -> None:
         fields = dataclasses.fields(PlatformComponents)
-        assert len(fields) == 6, (
-            f"Expected 6 fields, got {len(fields)}: {[f.name for f in fields]}"
+        assert len(fields) == 7, (
+            f"Expected 7 fields, got {len(fields)}: {[f.name for f in fields]}"
         )
 
     @pytest.mark.unit

@@ -289,7 +289,7 @@ class PDEDataset:
 
         ``lhs_order`` is the integer order of the LHS time/axis derivative
         (``1`` -> u_t, ``2`` -> u_tt). ``0`` is the honest homogeneous case (no
-        evolution LHS, ``Σ term = 0``; arch041 step 3b / C-A) and is legal, but
+        evolution LHS, ``Σ term = 0``) and is legal, but
         ONLY with an empty ``lhs_axis`` AND an empty ``lhs_field``: a homogeneous
         equation singles out no distinguished LHS derivative, axis, or field, so
         naming any is a contradiction. A negative or non-integer (incl. bool /
@@ -319,7 +319,7 @@ class PDEDataset:
 
         A homogeneous SCATTERED dataset (``lhs_order == 0``) has no distinguished
         LHS, so every coordinate in ``axis_order`` is spatial -- required for
-        ``lap``/``BiLaplace`` on the steady homogeneous path (arch041 step 3c2).
+        ``lap``/``BiLaplace`` on the steady homogeneous path.
         The all-axes semantics are SCATTERED-scoped (least-power: the steady path
         is always SCATTERED, and no GRID-homogeneous consumer needs them): every
         other empty-``lhs_axis`` dataset keeps ``[]``. In particular the GRID
@@ -500,8 +500,8 @@ class PDEDataset:
     ) -> PDEDataset:
         """Factory: wrap raw per-point scatter arrays into a SCATTERED dataset.
 
-        Honest representation for "no grid + scattered points" data (arch041
-        step 3b-ii-a / charter C-A④). Unlike :meth:`from_arrays` (grid), the
+        Honest representation for "no grid + scattered points" data.
+        Unlike :meth:`from_arrays` (grid), the
         coordinates are UNORDERED per-point samples: every ``coords[axis]`` is a
         1-D length-``N`` vector of per-point coordinate values (NOT the sorted
         grid axis), every ``fields[field]`` is a 1-D length-``N`` vector of

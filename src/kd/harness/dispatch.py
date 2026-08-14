@@ -15,11 +15,14 @@ from kd.harness._dispatch_schema import (
     _DISPATCH_V1_KEYS,
     _DISPATCH_V1_RESOURCES_KEYS,
     _DISPATCH_V1_SHARD_KEYS,
+    _DISPATCH_V2_KEYS,
+    _DISPATCH_V2_RECORDING_KEYS,
     DISPATCH_ARTIFACT_TAG,
     DISPATCH_SCHEMA_VERSION,
     DispatchDatasetSpec,
     DispatchManifest,
     DispatchManifestError,
+    DispatchRecording,
     DispatchResources,
     ShardSpec,
     decode_manifest_payload,
@@ -34,11 +37,14 @@ __all__ = [
     "_DISPATCH_V1_KEYS",
     "_DISPATCH_V1_RESOURCES_KEYS",
     "_DISPATCH_V1_SHARD_KEYS",
+    "_DISPATCH_V2_KEYS",
+    "_DISPATCH_V2_RECORDING_KEYS",
     "DatasetResolverError",
     "DispatchDatasetSpec",
     "DispatchAllocationError",
     "DispatchManifest",
     "DispatchManifestError",
+    "DispatchRecording",
     "DispatchResources",
     "ShardSpec",
     "build_dispatch_manifest",
@@ -186,6 +192,7 @@ def build_dispatch_manifest(
     memory_max_gb: float | None = None,
     grace_seconds: float = 30.0,
     entry_indices: Sequence[int] | None = None,
+    recording: DispatchRecording | None = None,
 ) -> DispatchManifest:
     if (n_workers is None) == (allocation is None):
         raise DispatchAllocationError(
@@ -255,6 +262,7 @@ def build_dispatch_manifest(
         resources=DispatchResources(
             max_concurrent_heavy=max_concurrent_heavy, grace_seconds=grace_seconds
         ),
+        recording=recording,
     )
 
 

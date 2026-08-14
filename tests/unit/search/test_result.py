@@ -568,6 +568,28 @@ class TestRunManifestRoundTrip:
         assert restored.terms is None
         assert restored.artifacts is None
 
+    def test_resume_source_round_trip(self) -> None:
+        lineage = {
+            "resume_from": "/runs/a/checkpoints/checkpoint_final.pt",
+            "source_run_id": "sga-20260809-000000-abcdef",
+            "source_config_hash": "0" * 64,
+            "source_final_status": "completed",
+            "source_iteration": 9,
+        }
+        m = RunManifest(
+            dataset_cache_fingerprint="fp",
+            kd_version="0.1.0",
+            seed=7,
+            resumed=True,
+            resume_source=lineage,
+        )
+        restored = RunManifest.from_dict(m.to_dict())
+        assert restored == m
+        assert restored.resume_source == lineage
+        legacy = m.to_dict()
+        del legacy["resume_source"]
+        assert RunManifest.from_dict(legacy).resume_source is None
+
     @pytest.mark.parametrize("seed", [0, 1, 42, -1, 2**31])
     def test_round_trip_preserves_seed_int(self, seed: int) -> None:
         m = RunManifest(dataset_cache_fingerprint="fp", kd_version="0.1.0", seed=seed)

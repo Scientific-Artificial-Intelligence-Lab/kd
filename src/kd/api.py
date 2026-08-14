@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import functools
+import logging
 import time
 import warnings
 from pathlib import Path
@@ -24,6 +25,9 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 
+from kd.core.equation.sketch import Sketch
+from kd.core.equation.types import LhsSpec
+from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.search import tool_schema
 from kd.search.callbacks import (
     CheckpointCallback,
@@ -31,9 +35,14 @@ from kd.search.callbacks import (
     RunnerCallback,
 )
 from kd.search.checkpoint_manifest import (
+    KIND_FINAL,
     MANIFEST_FILENAME,
     CheckpointManifestError,
     load_checkpoint_manifest,
+)
+from kd.search.config_fields import (
+    FACADE_MAPPED,
+    normalize_config_kwargs,
 )
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
@@ -44,14 +53,22 @@ from kd.search.discover.config import (
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt.config import EqGPTConfig
 from kd.search.eqgpt.plugin import EqGPTPlugin
+from kd.search.iteration_events import (
+    PHASE_FIT_STARTED,
+    PHASE_SEARCH_CRASHED,
+    PHASE_SEARCH_ENDED,
+    PHASE_SEARCH_STARTED,
+    PhaseWriter,
+)
 from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
-from kd.search.protocol import FacadeWiringContract, PlatformComponents
+from kd.search.protocol import DiscoveryTask, FacadeWiringContract, PlatformComponents
 from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.plugin import PySINDyPlugin
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
 from kd.search.result import DEFAULT_SCORE_KIND
 from kd.search.resume_policy import CONFIG_ARTIFACT_KEYS, check_resume_config
+from kd.search.run_dir import CHECKPOINTS_DIRNAME, run_id_of_run_dir
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 
@@ -66,6 +83,8 @@ if TYPE_CHECKING:
     from kd.search.result import ExperimentResult
 
 __all__ = ["Model", "instrument_schemas"]
+
+logger = logging.getLogger(__name__)
 
 
 _ConfigT = TypeVar("_ConfigT")
@@ -100,14 +119,6 @@ _PLUGIN_CLASS_BY_ALGORITHM: dict[str, type[FacadeWiringContract]] = {
     "pysindy": PySINDyPlugin,
 }
 _SUPPORTED_ALGORITHMS = tuple(_PLUGIN_CLASS_BY_ALGORITHM)
-
-
-def instrument_schemas() -> list[dict[str, Any]]:
-    """Return agent-facing schemas for facade plugins in registration order."""
-    return [
-        tool_schema(plugin_cls)
-        for plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.values()
-    ]
 
 
 
@@ -151,16 +162,130 @@ _GENERATIONS_INTO_CONFIG = frozenset({"pysr"})
 
 
 
-_SGA_FIELDS = frozenset(f.name for f in dataclasses.fields(SGAConfig))
-_EXPLICITLY_MAPPED = frozenset(
-    {"num", "depth", "width", "aic_ratio", "seed", "use_autograd"}
-)
-_ALLOWED_KWARGS = _SGA_FIELDS - _EXPLICITLY_MAPPED
 
 
 
 
-_PRETTY_MAPPED = {"num": "population", "use_autograd": "derivatives"}
+
+
+_FACADE_PARAM_DEFAULTS: dict[str, Any] = {
+    "generations": _DEFAULT_GENERATIONS,
+    "population": _DEFAULT_POPULATION,
+    "depth": _DEFAULT_DEPTH,
+    "width": _DEFAULT_WIDTH,
+    "aic_ratio": _DEFAULT_AIC_RATIO,
+    "derivatives": _DEFAULT_DERIVATIVES,
+    "seed": _DEFAULT_SEED,
+}
+_FACADE_PARAM_LITERALS: dict[str, list[str]] = {
+    "derivatives": sorted(_VALID_DERIVATIVES),
+}
+
+
+def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
+    """Describe the facade parameters this algorithm consumes, and where.
+
+    ``effect`` is derived from the same two predicates
+    ``_warn_if_generations_unused`` reads (``one_shot`` and
+    ``_GENERATIONS_INTO_CONFIG``), so a caller reading the schema and a caller
+    reading the warning cannot be told different things.
+    """
+    into_config = {
+        facade_name: field_name
+        for field_name, facade_name in FACADE_MAPPED[algorithm].items()
+    }
+    rows: list[dict[str, Any]] = []
+    for name in sorted(set(into_config) | {"generations"}):
+        field_name = into_config.get(name)
+        if field_name is not None:
+            effect = "config_field"
+        elif _PLUGIN_CLASS_BY_ALGORITHM[algorithm].one_shot:
+            effect = "unused"
+        else:
+            effect = "max_iterations"
+        default = _FACADE_PARAM_DEFAULTS[name]
+        rows.append(
+            {
+                "name": name,
+                "kind": type(default).__name__,
+                "default": default,
+                "literal_values": _FACADE_PARAM_LITERALS.get(name),
+                "config_field": field_name,
+                "effect": effect,
+            }
+        )
+    return rows
+
+
+def instrument_schemas() -> list[dict[str, Any]]:
+    """Return agent-facing schemas for facade plugins in registration order."""
+    return [
+        {**tool_schema(plugin_cls), "facade_params": _facade_param_rows(algorithm)}
+        for algorithm, plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.items()
+    ]
+
+
+
+
+
+_CONFIG_FIELDS_BY_ALGORITHM = {
+    algorithm: frozenset(
+        field.name for field in dataclasses.fields(plugin_cls.config_cls)
+    )
+    for algorithm, plugin_cls in _PLUGIN_CLASS_BY_ALGORITHM.items()
+}
+_CONFIG_FIELD_OWNERS = {
+    name: tuple(
+        algorithm
+        for algorithm, fields in _CONFIG_FIELDS_BY_ALGORITHM.items()
+        if name in fields
+    )
+    for name in set().union(*_CONFIG_FIELDS_BY_ALGORITHM.values())
+}
+
+
+
+
+
+
+
+class _PhaseRecorder:
+    """RunnerCallback writing search start and terminal phase lines.
+
+    The facade writes ``fit_started`` directly at fit entry (before
+    preprocessing and ``prepare()``); this callback marks the runner-loop
+    boundaries through the existing callback seam. It is placed FIRST in the
+    callback list so ``search_started`` lands even when a user callback's
+    ``on_experiment_start`` raises. Pure observer: never requests stopping.
+    """
+
+    def __init__(self, writer: PhaseWriter) -> None:
+        self._writer = writer
+
+    @property
+    def should_stop(self) -> bool:
+        """A phase recorder never requests stopping."""
+        return False
+
+    def on_experiment_start(self, algorithm: Any) -> None:
+        """Mark the post-``prepare()`` search-loop start."""
+        self._writer.write(PHASE_SEARCH_STARTED)
+
+    def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
+        """No-op (phases are lifecycle boundaries, not iterations)."""
+
+    def on_iteration_end(
+        self,
+        iteration: int,
+        algorithm: Any,
+        candidates: list[str],
+        results: list[Any],
+    ) -> None:
+        """No-op (phases are lifecycle boundaries, not iterations)."""
+
+    def on_experiment_end_status(self, algorithm: Any, *, crashed: bool) -> None:
+        """Mark the search-loop terminal status."""
+        self._writer.write(PHASE_SEARCH_CRASHED if crashed else PHASE_SEARCH_ENDED)
 
 
 
@@ -172,14 +297,25 @@ class _ProgressPrinter:
     """RunnerCallback that prints per-iteration progress to stdout.
 
     Prints ``[kd] Generation N/M | best <metric>=... | expr=...`` with an
-    algorithm-aware metric label. Emits a final ``[kd] Done.`` line on
-    experiment end. ``M`` is the run's EFFECTIVE iteration count (1 for a
-    one-shot plugin), not the requested ``generations``, which for a one-shot
-    run would advertise iterations the runner never drives.
+    algorithm-aware metric label. Emits a final ``[kd] Done.`` line when the
+    search loop COMPLETED, and nothing at all when it crashed (see
+    ``on_experiment_end_status``). ``M`` is the run's EFFECTIVE iteration count
+    (1 for a one-shot plugin), not the requested ``generations``, which for a
+    one-shot run would advertise iterations the runner never drives.
+
+    This is the one DECORATIVE callback in the facade's list, and the only one
+    that absorbs a failure of its own: the harness pins ``verbose=False`` on
+    every batch path, so a progress line exists only for an interactive fit,
+    while ``verbose`` itself defaults to True. A dead stdout (``kd ... | head``,
+    a closed terminal, a console that cannot encode the expression) therefore
+    mutes the printer for the rest of the run instead of aborting a search that
+    is otherwise healthy. Every other callback in the list either writes
+    evidence or decides stopping, and keeps propagating.
     """
 
     def __init__(self, total_generations: int) -> None:
         self._total = total_generations
+        self._muted = False
 
     @property
     def should_stop(self) -> bool:
@@ -207,19 +343,65 @@ class _ProgressPrinter:
 
 
         label = _score_label(algorithm)
-        print(
+        self._emit(
             f"{_PROGRESS_PREFIX} Generation {gen:>3}/{self._total} | "
             f"best {label}={algorithm.best_score:.4g} | "
             f"expr={algorithm.best_expression}"
         )
 
     def on_experiment_end(self, algorithm: SearchAlgorithm) -> None:
-        """Print final summary line."""
+        """Print final summary line (direct / manual finalize path)."""
+        self.on_experiment_end_status(algorithm, crashed=False)
+
+    def on_experiment_end_status(
+        self, algorithm: SearchAlgorithm, *, crashed: bool
+    ) -> None:
+        """Print the final summary line, or nothing when the loop crashed.
+
+        Optional extension member (G2c §3.2) dispatched by the runner's
+        finalize seam. ``crashed`` is checked BEFORE any algorithm read: a run
+        that unwound on an exception has no completed search to summarize (its
+        traceback is the message), and the algorithm that just failed is the
+        last object to interrogate for a headline.
+        """
+        if crashed:
+            return
         label = _score_label(algorithm)
-        print(
+        self._emit(
             f"{_PROGRESS_PREFIX} Done. Best: {algorithm.best_expression} "
             f"({label}={algorithm.best_score:.4g})"
         )
+
+    def _emit(self, line: str) -> None:
+        """Write one ALREADY-RENDERED line, muting the printer if stdout fails.
+
+        The caller renders, so an algorithm property or label lookup that
+        raises is still a real failure and keeps its normal fate: raised from
+        the iteration path it aborts the run, raised from the finalize path the
+        runner isolates it onto ``ExperimentResult.finalize_failures`` like any
+        other teardown failure. Only the write itself is inside the ``try``.
+        ``flush=True`` is what brings a closed pipe's ``BrokenPipeError`` here
+        instead of leaving it to surface at an arbitrary later write or at
+        interpreter shutdown; note that a broken pipe still costs the process
+        the usual ignored-exception line at shutdown, which a library must not
+        try to suppress (that would mean redirecting the application's own
+        stdout file descriptor).
+        """
+        if self._muted:
+            return
+        try:
+            print(line, flush=True)
+        except (OSError, ValueError) as exc:
+
+
+
+            self._muted = True
+            logger.warning(
+                "Progress printing disabled after a stdout failure (%s: %s); "
+                "the search continues.",
+                type(exc).__name__,
+                exc,
+            )
 
 
 def _score_label(algorithm: SearchAlgorithm) -> str:
@@ -251,7 +433,7 @@ class Model:
     Limitations:
         Most packaged engines fit a **first-order LHS** only (e.g.
         ``u_t = f(u, u_x, ...)``). A dataset carries its LHS order via
-        ``dataset.lhs_order`` (the single source of truth — DATA-0; e.g.
+        ``dataset.lhs_order`` (the single source of truth; e.g.
         ``u_tt`` for the wave equation ``u_tt = c**2 * u_xx``), and an
         unsupported ``(algorithm, lhs_order)`` combination fails loud at
         ``fit`` time rather than silently fitting the wrong target.
@@ -264,21 +446,19 @@ class Model:
 
     Args:
         algorithm: Search algorithm name. Supported: ``"sga"`` (default,
-            full facade-parameter coverage), ``"dlga"`` (driven through
-            ``config=DLGAConfig(...)`` + ``surrogate_model=`` only),
-            ``"discover"`` (driven through ``config=DiscoverConfig(...)``
-            only), ``"pysr"`` (driven through ``config=PySRConfig(...)``;
-            ``generations`` maps to PySR's internal GP ``niterations``), or
-            ``"eqgpt"`` (driven through ``config=EqGPTConfig(...)`` ONLY;
-            ``config`` is MANDATORY because ``sparsity_alpha`` is a per-problem
-            hyperparameter with no facade default, decision D5), or
-            ``"llm4ed"`` (an LLM equation proposer, driven through
-            ``config=Llm4edConfig(...)``; the real backend needs
+            with dedicated facade parameters), ``"dlga"``, ``"discover"``,
+            ``"pysr"`` (``generations`` maps to PySR's internal GP
+            ``niterations``),
+            ``"eqgpt"`` (``sparsity_alpha`` is required because it is a
+            per-problem hyperparameter with no facade default, decision D5),
+            ``"llm4ed"`` (an LLM equation proposer; the real backend needs
             ``base_url=`` + an ``OPENAI_API_KEY`` env var, or inject an offline
             ``provider=`` for deterministic runs), or ``"pysindy"`` (native
-            PySINDy STLSQ over the kd term library, driven through
-            ``config=PySINDyConfig(...)``; ``generations`` does not map to the
+            PySINDy STLSQ over the kd term library; ``generations`` does not map to the
             optimizer's ``max_iter``).
+            Every algorithm's JSON-reachable config fields may be passed by
+            their config field names through ``**kwargs``; inspect
+            ``kd.instrument_schemas()`` for the exact surface.
             For non-SGA algorithms the individual facade parameters below
             (population/depth/width/aic_ratio/derivatives) are SGA-only.
         generations: Search-loop length (default 50). The five iterative
@@ -302,12 +482,10 @@ class Model:
             finite-difference provider remains in place for tree-internal
             derivative operators. SGA-only — DLGA always uses autograd,
             discover uses finite-diff.
-        seed: Random seed for reproducibility. It threads into the default
-            config for dlga / discover / pysr / pysindy (and SGA) when ``config=`` is
-            unset, otherwise the config's own seed wins. For eqgpt the seed
-            comes ONLY via ``EqGPTConfig(seed=...)``: passing the facade
-            ``seed=`` together with ``config=`` is rejected by
-            ``_validate_config_exclusivity``.
+        seed: Random seed for reproducibility. It threads into every
+            algorithm's default config when ``config=`` is unset; otherwise
+            the config's own seed wins. Passing the facade ``seed=`` together
+            with ``config=`` is rejected by ``_validate_config_exclusivity``.
         verbose: When True, print per-iteration progress to stdout. The label
             is algorithm-aware (``AIC`` for SGA, ``DLGA fitness`` for DLGA,
             ``reward`` for discover, ``NMSE`` for pysr, ``EqGPT reward`` for
@@ -316,11 +494,11 @@ class Model:
         config: Optional pre-built ``SGAConfig``, ``DLGAConfig``,
             ``DiscoverConfig``, ``PySRConfig``, ``EqGPTConfig``,
             ``Llm4edConfig``, or ``PySINDyConfig``. When provided, it is the
-            single source of plugin settings; passing any non-default
-            SGA-related facade
+            single source of plugin settings; passing any algorithm-specific
+            config fields or overlapping facade
             parameters (``population``, ``depth``, ``width``, ``aic_ratio``,
             ``derivatives``, ``seed``) or extra ``kwargs`` raises
-            ``ValueError`` (SGA path) / ``TypeError`` (DLGA + discover paths).
+            ``ValueError``.
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
             ``checkpoint_dir``/``checkpoint_every``, (for DLGA)
             ``surrogate_model``, and (for llm4ed) ``provider`` remain effective
@@ -349,10 +527,10 @@ class Model:
         provider: Optional pre-built ``kd.llm.LLMProvider`` forwarded to
             ``Llm4edPlugin(provider=...)``. llm4ed-only — passing it with any
             other algorithm raises ``TypeError`` (silent drop is a
-            bug-attractor). Carries the offline ``FakeProvider`` /
-            ``TapeReplayProvider`` for deterministic runs, or a caller-built
-            canonical chain. When ``None`` and ``algorithm='llm4ed'``, the
-            plugin builds its default chain in ``prepare()`` from the config's
+            bug-attractor). Accepts a ``TapeReplayProvider`` for deterministic
+            offline runs, or a caller-written provider satisfying the
+            ``LLMProvider`` protocol. When ``None`` and ``algorithm='llm4ed'``,
+            the plugin builds its default chain in ``prepare()`` from the config's
             transport knobs (``base_url`` + an ``OPENAI_API_KEY`` env var).
             The injected instance is REUSED across ``fit`` calls and NOT reset
             (like ``callbacks``, unlike the self-built default chain, which is
@@ -376,7 +554,7 @@ class Model:
             ``checkpoint_final.pt`` at experiment end, alongside a
             ``manifest.json`` evidence ledger (``kd-ckptman-v1``): the ledger
             is the only entry point a controller uses to select a resumable
-            checkpoint (R2.1-O4). The directory is manifest-managed and refuses
+            checkpoint. The directory is manifest-managed and refuses
             reuse: pointing ``checkpoint_dir`` at a non-empty directory fails
             loud with a ``CheckpointManifestError`` (a ``ValueError``), so use a
             FRESH directory per run. ``None`` (default) disables checkpointing
@@ -389,16 +567,28 @@ class Model:
             without it raises ``ValueError`` at construction (a silent
             no-op would be a bug-attractor), as does any value < 1.
         checkpoint_keep_last: Retention bound on PERIODIC checkpoints. ``None``
-            (default) keeps all of them (存证优先); an ``int >= 1`` keeps only the
-            N most recent periodic checkpoints, pruning older ones from both the
-            manifest and disk. The final checkpoint is exempt (never counted,
+            (default) keeps every one, so that the evidence trail stays
+            complete; an ``int >= 1`` keeps only the N most recent periodic
+            checkpoints, pruning older ones from both the manifest and disk.
+            The final checkpoint is exempt (never counted,
             never pruned). Requires ``checkpoint_dir``: a value < 1, or passing
             it without ``checkpoint_dir``, raises ``ValueError`` at construction.
-        **kwargs: Forwarded to ``SGAConfig`` if the field name matches an
-            allowed (non-explicitly-mapped) field. Unknown or colliding
-            kwargs raise ``TypeError``. SGA-only — DLGA and discover paths
-            raise if any kwargs are supplied (drive those algorithms via
-            ``config=DLGAConfig(...)`` / ``config=DiscoverConfig(...)``).
+        phases_path: Optional ``phases.jsonl`` sink (``kd-runphase-v1``). When
+            set, every ``fit`` writes three phase lines — ``fit_started``
+            (before preprocessing and ``prepare()``), ``search_started`` (the
+            runner loop begins), then ``search_ended`` or ``search_crashed``
+            — so the minutes-scale pre-search gap (e.g. a DLGA surrogate
+            build) is distinguishable
+            from a hung process. The first line of a fit exclusive-creates the
+            file: a reused path fails loud instead of interleaving two fits
+            (same discipline as the iteration-event sink). Observability only;
+            never part of the run's scientific identity.
+        **kwargs: Forwarded to the selected algorithm's config dataclass when
+            the field is not already owned by a facade parameter. Unknown,
+            cross-algorithm, colliding, or JSON-type-invalid fields raise at
+            construction. Python-only fields reject JSON values but still
+            accept real Python objects; use ``kd.instrument_schemas()`` to
+            inspect each row's ``settable_from`` and declared type.
             Three such fields are agent-tunable training-budget knobs for the
             ``derivatives='autograd'`` surrogate (they only take effect in
             autograd mode, but their validation runs for every SGA config —
@@ -454,6 +644,7 @@ class Model:
         checkpoint_every: int = _UNSET,
         checkpoint_keep_last: int | None = None,
         device: str | None = None,
+        phases_path: str | Path | None = None,
         **kwargs: Any,
     ) -> None:
 
@@ -484,13 +675,14 @@ class Model:
         )
         self._validate_device(device)
         self._validate_derivatives(derivatives_resolved)
-        self._validate_kwargs(kwargs)
+        self._check_kwarg_names(algorithm, kwargs)
         self._validate_field_model(kwargs, derivatives_resolved)
 
 
         self._validate_config_exclusivity(
             config, population, depth, width, aic_ratio, derivatives, seed, kwargs
         )
+        kwargs = self._normalize_kwarg_values(algorithm, kwargs)
         self._validate_callbacks(callbacks)
 
 
@@ -502,7 +694,6 @@ class Model:
 
         self._validate_algorithm_arg_exclusivity(
             algorithm,
-            kwargs=kwargs,
             surrogate_model=surrogate_model,
             provider=provider,
             population=population,
@@ -515,7 +706,7 @@ class Model:
 
 
 
-        self._validate_discover_config_facade_compat(algorithm, config)
+        self._validate_discover_config_facade_compat(algorithm, config, kwargs)
 
 
 
@@ -542,6 +733,9 @@ class Model:
 
 
         self.checkpoint_keep_last = checkpoint_keep_last
+        self.phases_path: Path | None = (
+            Path(phases_path) if phases_path is not None else None
+        )
 
 
 
@@ -671,24 +865,67 @@ class Model:
             )
 
     @staticmethod
-    def _validate_kwargs(kwargs: dict[str, Any]) -> None:
-        """Reject unknown kwargs and kwargs that collide with facade params."""
-        unknown = set(kwargs) - _SGA_FIELDS
+    def _check_kwarg_names(algorithm: str, kwargs: dict[str, Any]) -> None:
+        """Reject kwarg NAMES this algorithm's config does not forward.
+
+        Split from the value gate because the two run at different points in
+        ``__init__``'s frozen validator order (freeze spec §2): names are
+        checked before ``_validate_config_exclusivity`` so a typo outranks the
+        config= conflict, values after it so ``config=`` plus a JSON-invalid
+        value still reports the config conflict. Running the whole gate twice
+        would recompute an invariant already established.
+
+        No-op for an unregistered algorithm: ``_validate_algorithm_supported``
+        owns that error, and pre-empting it here would change which exception a
+        bad algorithm name raises.
+        """
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM.get(algorithm)
+        if plugin_cls is None:
+            return
+        fields = _CONFIG_FIELDS_BY_ALGORITHM[algorithm]
+        mapped = FACADE_MAPPED[algorithm]
+        forwardable = fields - mapped.keys()
+        unknown = set(kwargs) - forwardable - mapped.keys()
         if unknown:
-            raise TypeError(
-                f"Unknown keyword arguments for kd.Model: {sorted(unknown)}. "
-                f"Valid extra kwargs (forwarded to SGAConfig): "
-                f"{sorted(_ALLOWED_KWARGS)}"
+            owners = {
+                name: _CONFIG_FIELD_OWNERS.get(name, ()) for name in sorted(unknown)
+            }
+            declared_elsewhere = {
+                name: value for name, value in owners.items() if value
+            }
+            owner_text = (
+                f" Declared by registered algorithm configs: {declared_elsewhere}."
+                if declared_elsewhere
+                else ""
             )
-        collision = set(kwargs) & _EXPLICITLY_MAPPED
+            raise TypeError(
+                f"Model(algorithm={algorithm!r}) fields={sorted(unknown)} are not "
+                f"fields of {plugin_cls.config_cls.__name__}.{owner_text} Check "
+                "kd.instrument_schemas() for legal names. Legal config kwargs "
+                f"for this algorithm are {sorted(forwardable)}."
+            )
+        collision = set(kwargs) & mapped.keys()
         if collision:
             hints = ", ".join(
-                f"{k} (use '{_PRETTY_MAPPED.get(k, k)}=' instead)"
-                for k in sorted(collision)
+                f"{name} (use {mapped[name]}= instead)" for name in sorted(collision)
             )
             raise TypeError(
-                f"Keyword arguments collide with explicit facade parameters: {hints}"
+                f"Model(algorithm={algorithm!r}) fields={sorted(collision)} collide "
+                f"with facade-owned parameters: {hints}."
             )
+    @staticmethod
+    def _normalize_kwarg_values(
+        algorithm: str, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Validate JSON-native kwarg VALUES and coerce lists to containers.
+
+        Names were already cleared by ``_check_kwarg_names`` earlier in
+        ``__init__``.
+        """
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM.get(algorithm)
+        if plugin_cls is None:
+            return dict(kwargs)
+        return normalize_config_kwargs(plugin_cls, algorithm, kwargs)
 
     @staticmethod
     def _validate_field_model(kwargs: dict[str, Any], derivatives: str) -> None:
@@ -718,7 +955,7 @@ class Model:
         seed: Any,
         kwargs: dict[str, Any],
     ) -> None:
-        """Reject mixing ``config=`` with overlapping SGA-related parameters.
+        """Reject mixing ``config=`` with overlapping algorithm parameters.
 
         Receives the SENTINEL-bearing values from ``__init__`` so that
         ``Model(config=cfg, population=20)`` (where 20 happens to equal the
@@ -758,7 +995,6 @@ class Model:
     def _validate_algorithm_arg_exclusivity(
         algorithm: str,
         *,
-        kwargs: dict[str, Any],
         surrogate_model: torch.nn.Module | None,
         provider: LLMProvider | None,
         population: Any,
@@ -776,13 +1012,10 @@ class Model:
         - ``provider`` is meaningful only for ``algorithm='llm4ed'`` — passing
           it on any other algorithm would silently drop it, so raise.
 
-        - ``algorithm='dlga'`` + SGA-only facade params (``population``,
-          ``depth``, ``width``, ``aic_ratio``, ``derivatives``) or extra
-          kwargs (``lam``, ``p_var``, ``autograd_train_*``, ...) would
-          also silently drop. Raise — DLGA users must drive non-default
-          settings through ``DLGAConfig`` via ``config=``. The same applies
-          to ``discover`` (drive via ``DiscoverConfig``) and ``pysr`` (drive
-          via ``PySRConfig``).
+        - non-SGA algorithms still reject the dedicated SGA facade parameters
+          (``population``, ``depth``, ``width``, ``aic_ratio``,
+          ``derivatives``). Algorithm config fields travel through the generic
+          kwargs path and are validated separately.
         """
         if algorithm != "dlga" and surrogate_model is not None:
             raise TypeError(
@@ -800,7 +1033,6 @@ class Model:
             )
         Model._reject_sga_only_params_for_non_sga(
             algorithm,
-            kwargs=kwargs,
             population=population,
             depth=depth,
             width=width,
@@ -812,7 +1044,6 @@ class Model:
     def _reject_sga_only_params_for_non_sga(
         algorithm: str,
         *,
-        kwargs: dict[str, Any],
         population: Any,
         depth: Any,
         width: Any,
@@ -821,13 +1052,11 @@ class Model:
     ) -> None:
         """Raise if SGA-only facade params ride a non-SGA algorithm path.
 
-        DLGA / DISCOVER / PySR are driven exclusively via their own
-        ``config=`` object; the individual SGA facade knobs
+        The individual SGA facade knobs
         (``population``/``depth``/``width``/``aic_ratio``/``derivatives``) and
-        any extra ``kwargs`` are not exposed for them and would otherwise be
-        silently dropped (a classic bug-attractor). The error names the offending
-        params and the config class to use instead. No-op for ``sga`` (whose
-        knobs are first-class) and any algorithm not in the registry.
+        would otherwise be silently dropped on other algorithms. The error
+        names the offending params and the selected config class. No-op for
+        ``sga`` and any algorithm not in the registry.
         """
 
 
@@ -848,16 +1077,13 @@ class Model:
             sga_only_set.append("aic_ratio")
         if derivatives is not _UNSET:
             sga_only_set.append("derivatives")
-        if kwargs:
-            sga_only_set.extend(sorted(kwargs))
         if sga_only_set:
             raise TypeError(
                 f"Model(algorithm={algorithm!r}, ...): the following SGA-only "
                 f"parameters cannot be passed alongside {algorithm}: "
-                f"{sorted(set(sga_only_set))}. Drive {algorithm} via "
-                f"``config={config_class}(...)`` instead — the facade does not "
-                f"expose individual {algorithm} fields as ``Model(...)`` "
-                "parameters."
+                f"{sorted(set(sga_only_set))}. Set {algorithm}'s own fields by "
+                f"name as kwargs (see kd.instrument_schemas()), or pass "
+                f"``config={config_class}(...)`` instead."
             )
 
     @staticmethod
@@ -871,8 +1097,9 @@ class Model:
         | EqGPTConfig
         | Llm4edConfig
         | None,
+        kwargs: dict[str, Any],
     ) -> None:
-        """Guard DiscoverConfig fields that have no effect under the facade.
+        """Reject a Discover PINN request from either config input route.
 
         The facade drives the search loop via ``generations`` and single-steps
         DISCOVER's engine through ExperimentRunner — it never runs the
@@ -880,35 +1107,36 @@ class Model:
 
         ``pinn`` is a hard error: silently falling back to MODE1 when the user
         asked for the PINN surrogate yields wrong scientific conclusions.
-        ``n_iterations`` / ``stability_selection`` only ever shorten the run or
-        skip a post-hoc filter (never wrong science), so they warn rather than
-        raise — this also keeps the ``DiscoverConfig.burgers_preset()`` /
-        ``chafee_preset()`` reference configs (which carry a non-default
-        ``n_iterations``) usable under the facade.
-
-        No-op unless ``algorithm == "discover"`` with a ``DiscoverConfig``.
-        These fields apply on the standalone / MODE2 entry points
-        (the standalone research runner); the check belongs in the facade layer,
-        not ``DiscoverConfig.__post_init__`` (the config is shared by all paths).
-
-        Reads the caller's ``config`` *before* ``__init__`` deep-copies it —
-        safe only because ``DiscoverConfig`` is frozen and the guarded fields
-        are top-level immutable scalars (no post-construction mutate window).
-        If they ever become mutable, move this check after the deep-copy.
+        The three ignored scalar fields are warned about only after the
+        effective config has constructed successfully; see
+        ``_warn_discover_config_facade_compat``.
         """
-        if algorithm != "discover" or not isinstance(config, DiscoverConfig):
+        if algorithm != "discover":
             return
 
-        if config.pinn is not None:
-            raise TypeError(
-                "Model(algorithm='discover', config=DiscoverConfig(pinn=...)): "
-                "MODE2 PINN is unreachable via the facade and would be silently "
-                "ignored (the run falls back to MODE1 finite-diff). Use the "
-                "standalone MODE2 research entry point (not part of the packaged "
-                "API), or drop pinn."
-            )
 
 
+        if isinstance(config, DiscoverConfig):
+            if config.pinn is not None:
+                Model._reject_discover_pinn("config=DiscoverConfig(pinn=...)")
+            Model._warn_discover_config_facade_compat(config)
+        elif kwargs.get("pinn") is not None:
+            Model._reject_discover_pinn("pinn=...")
+
+    @staticmethod
+    def _reject_discover_pinn(route: str) -> None:
+        """Raise the MODE2 hard error, naming the route the value arrived on."""
+        raise TypeError(
+            f"Model(algorithm='discover', {route}): "
+            "MODE2 PINN is unreachable via the facade and would be silently "
+            "ignored (the run falls back to MODE1 finite-diff). Use the "
+            "standalone MODE2 research entry point (not part of the packaged "
+            "API), or drop pinn."
+        )
+
+    @staticmethod
+    def _warn_discover_config_facade_compat(config: DiscoverConfig) -> None:
+        """Warn after a valid effective Discover config has been constructed."""
         ignored: list[str] = []
         if config.n_iterations != DEFAULT_N_ITERATIONS:
             ignored.append(
@@ -925,7 +1153,7 @@ class Model:
             )
         if ignored:
             warnings.warn(
-                "Model(algorithm='discover', config=DiscoverConfig(...)): these "
+                "Model(algorithm='discover'): these "
                 f"fields have no effect under the facade and are ignored: "
                 f"{ignored}.",
                 stacklevel=3,
@@ -1036,6 +1264,8 @@ class Model:
         self,
         dataset: PDEDataset,
         resume_from: str | Path | None = None,
+        *,
+        sketch: Sketch | None = None,
     ) -> Model:
         """Run the search and populate post-fit attributes.
 
@@ -1116,13 +1346,25 @@ class Model:
                 ``ValueError`` first. Cross-DATA resume re-prices the best-score
                 gate onto the new data for DISCOVER only; SGA/DLGA keep the
                 restored best as their ratchet baseline.
+            sketch: Optional semantic search-space contract for this fit
+                (``kd.Sketch``): pinned terms are deducted from the
+                regression target and restored with their exact coefficients,
+                and the run's result carries a sound ``SketchOutcome``
+                (``result_.sketch_outcome``) whose ``solution`` is only filled
+                when the discovered law satisfies every sketch clause. The
+                sketch is part of the run's scientific identity (RunSpec /
+                checkpoint / resume).
 
         Returns:
             ``self`` for sklearn-style chaining.
 
         Raises:
             NotImplementedError: If ``algorithm`` is not supported.
-            ValueError: If the dataset is missing the required LHS field
+            TypeError: If ``sketch`` is neither a ``Sketch`` nor ``None``.
+            ValueError: If ``sketch`` uses a clause the algorithm's capability
+                declaration does not support, targets a non-evolution dataset,
+                or declares an LHS differing from the dataset's resolved LHS;
+                or if the dataset is missing the required LHS field
                 or axis; or if ``resume_from`` is not a kd checkpoint payload
                 / has a mismatched version or algorithm / is a corrupt or
                 truncated file; or if a resumed config changes an
@@ -1157,6 +1399,36 @@ class Model:
                 f"Supported algorithms: {list(_SUPPORTED_ALGORITHMS)}"
             )
 
+        task: DiscoveryTask | None = None
+        if sketch is not None:
+            from kd.core.platform.builder import resolve_lhs_defaults
+            from kd.search.descriptor import assert_sketch_supported
+
+            if not isinstance(sketch, Sketch):
+                raise TypeError(
+                    f"sketch must be a Sketch or None, got {type(sketch).__name__}"
+                )
+            plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
+            assert_sketch_supported(
+                plugin_cls.descriptor,
+                sketch,
+                algorithm=self.algorithm,
+            )
+            if dataset.lhs_order == 0:
+                raise ValueError("sketch requires an evolution dataset")
+            dataset = resolve_lhs_defaults(dataset)
+            dataset_lhs = LhsSpec(
+                dataset.lhs_field,
+                dataset.lhs_axis,
+                dataset.lhs_order,
+            )
+            if dataset_lhs != sketch.lhs_spec:
+                raise ValueError(
+                    "sketch LHS does not match the resolved dataset LHS: "
+                    f"sketch={sketch.lhs_spec!r}, dataset={dataset_lhs!r}"
+                )
+            task = DiscoveryTask.from_sketch(sketch)
+
 
 
 
@@ -1176,15 +1448,47 @@ class Model:
 
 
 
-        plugin, batch_size = self._build_plugin()
+        phase_writer = (
+            PhaseWriter(self.phases_path) if self.phases_path is not None else None
+        )
+        if phase_writer is not None:
+            phase_writer.write(PHASE_FIT_STARTED)
+
+
+
+
+
+
+        resume_lineage = (
+            self._build_resume_lineage(Path(resume_from))
+            if resume_from is not None
+            else None
+        )
+
+
+
+
+        plugin, batch_size = self._build_plugin(task=task)
         self._algorithm = plugin
 
         max_iterations = self._effective_max_iterations()
+        callbacks = (
+            self._build_callbacks(
+                lineage=resume_lineage,
+                phase_writer=phase_writer,
+            )
+            if task is None
+            else self._build_callbacks(
+                lineage=resume_lineage,
+                phase_writer=phase_writer,
+                task=task,
+            )
+        )
         runner = ExperimentRunner(
             algorithm=plugin,
             max_iterations=max_iterations,
             batch_size=batch_size,
-            callbacks=self._build_callbacks(),
+            callbacks=callbacks,
         )
 
 
@@ -1206,11 +1510,16 @@ class Model:
 
 
         if resume_from is not None:
+            live_config = (
+                plugin.config
+                if task is None
+                else {**dict(plugin.config), SKETCH_CONFIG_KEY: task.payload}
+            )
             config_guard = functools.partial(
                 check_resume_config,
                 algorithm=self.algorithm,
                 plugin_cls=_PLUGIN_CLASS_BY_ALGORITHM[self.algorithm],
-                live_config=plugin.config,
+                live_config=live_config,
 
 
 
@@ -1241,9 +1550,17 @@ class Model:
                         "select a resumable checkpoint via the manifest "
                         "(charter §4.3), not by naming an unlisted file."
                     )
-            runner.load_checkpoint(resume_path, config_guard=config_guard)
+            runner.load_checkpoint(
+                resume_path,
+                config_guard=config_guard,
+                resume_source=resume_lineage,
+            )
         build_started = time.perf_counter()
-        components = self._build_components(dataset)
+        components = (
+            self._build_components(dataset)
+            if task is None
+            else self._build_components(dataset, task=task)
+        )
         preprocessing_seconds = time.perf_counter() - build_started
         self._result = runner.run(
             components,
@@ -1269,7 +1586,9 @@ class Model:
         "pysindy": "_build_pysindy_config",
     }
 
-    def _build_plugin(self) -> tuple[SearchAlgorithm, int]:
+    def _build_plugin(
+        self, *, task: DiscoveryTask | None = None
+    ) -> tuple[SearchAlgorithm, int]:
         """Construct the search plugin for the configured ``algorithm``.
 
         Generic over the ``_PLUGIN_CLASS_BY_ALGORITHM`` registry: look up the
@@ -1295,7 +1614,9 @@ class Model:
 
 
         plugin_factory = cast("Callable[..., FacadeWiringContract]", plugin_cls)
-        if self.algorithm == "dlga":
+        if self.algorithm == "pysindy":
+            plugin = plugin_factory(cfg, task=task)
+        elif self.algorithm == "dlga":
 
 
 
@@ -1350,37 +1671,34 @@ class Model:
         return default_factory()
 
     def _build_dlga_config(self) -> DLGAConfig:
-        """Resolve the DLGAConfig: user override (deep-copied) or facade default.
+        """Resolve the DLGAConfig from an override or normalized field kwargs.
 
-        Unlike SGA, the facade does not yet expose individual DLGA fields as
-        ``Model(...)`` parameters — power users must pass a complete
-        ``DLGAConfig`` via ``config=`` for non-default settings. The default
-        path (``Model(algorithm='dlga')`` without ``config=``) yields
-        ``DLGAConfig(seed=self.seed)`` which targets Xu 2020 Stage I baseline
-        (sin+5×50, SVD null space, pop_size=400). See ``_resolve_config`` for
-        the shared override/deep-copy/type-check mechanics.
-        """
-        return self._resolve_config(DLGAConfig, lambda: DLGAConfig(seed=self.seed))
-
-    def _build_discover_config(self) -> DiscoverConfig:
-        """Resolve the DiscoverConfig: user override (deep-copied) or facade default.
-
-        Same pattern as ``_build_dlga_config``: the facade does not expose
-        individual DISCOVER fields as ``Model(...)`` parameters — users must
-        pass a complete ``DiscoverConfig`` via ``config=`` for non-default
-        settings. The default path (``Model(algorithm='discover', seed=N)``
-        without ``config=``) yields ``DiscoverConfig(seed=self.seed)`` so the
-        facade ``seed=`` parameter threads through to the plugin (mirrors SGA's
-        ``_build_config``). See ``_resolve_config`` for the shared mechanics.
+        The default path threads the facade seed into the config, then applies
+        every algorithm-owned field admitted by the generic kwargs gate.
         """
         return self._resolve_config(
-            DiscoverConfig, lambda: DiscoverConfig(seed=self.seed)
+            DLGAConfig,
+            lambda: DLGAConfig(seed=self.seed, **self._extra_kwargs),
         )
+
+    def _build_discover_config(self) -> DiscoverConfig:
+        """Resolve DiscoverConfig and warn about facade-ignored valid fields.
+
+        Warnings are emitted only after the config dataclass has accepted the
+        complete input, so a rejected construction never warns first.
+        """
+        config = self._resolve_config(
+            DiscoverConfig,
+            lambda: DiscoverConfig(seed=self.seed, **self._extra_kwargs),
+        )
+        if self._config_override is None:
+            self._warn_discover_config_facade_compat(config)
+        return config
 
     def _build_pysr_config(self) -> PySRConfig:
         """Resolve the PySRConfig: user override (deep-copied) or facade default.
 
-        Same pattern as ``_build_discover_config``. With a user
+        With a user
         ``config=PySRConfig(...)`` the config is the single source of truth and
         is deep-copied verbatim (its ``niterations`` is preserved). Without one,
         the facade ``generations`` knob maps to PySR's *internal* GP loop length
@@ -1389,43 +1707,49 @@ class Model:
         plugin; see ``fit``) — and the facade ``seed=`` parameter threads
         through as ``PySRConfig(seed=self.seed)`` (PySR's ``random_state``;
         mirrors SGA/DLGA/DISCOVER builders, and keeps the RunManifest seed
-        truthful). See ``_resolve_config`` for the shared mechanics.
+        truthful). Config-field schemas publish the dataclass default
+        ``niterations=40``; the facade's effective omitted default remains 50
+        because ``generations`` owns this field. Other normalized kwargs are
+        forwarded unchanged. See ``_resolve_config`` for the shared mechanics.
         """
         return self._resolve_config(
             PySRConfig,
-            lambda: PySRConfig(niterations=self.generations, seed=self.seed),
+            lambda: PySRConfig(
+                niterations=self.generations,
+                seed=self.seed,
+                **self._extra_kwargs,
+            ),
         )
 
     def _build_pysindy_config(self) -> PySINDyConfig:
         """Resolve PySINDy config without mapping facade generations.
 
         ``max_iter`` is the native STLSQ convergence cap, not the kd search
-        loop length. Configure it only through ``config=PySINDyConfig(...)``.
-        The default path threads the facade seed into manifest bookkeeping.
+        loop length. The default path threads the facade seed into manifest
+        bookkeeping and forwards normalized PySINDy config fields.
         """
         return self._resolve_config(
             PySINDyConfig,
-            lambda: PySINDyConfig(seed=self.seed),
+            lambda: PySINDyConfig(seed=self.seed, **self._extra_kwargs),
         )
 
     def _build_eqgpt_config(self) -> EqGPTConfig:
-        """Resolve the EqGPTConfig: user override (deep-copied), required.
+        """Resolve EqGPTConfig from an override or required field kwargs.
 
-        Unlike SGA/DLGA/DISCOVER/PySR, there is no facade default: EqGPTConfig
-        requires ``sparsity_alpha`` (D5: per-problem, not a constant), so a
-        bare ``Model(algorithm='eqgpt')`` with no ``config=`` cannot resolve
-        one and the default factory raises rather than silently guessing a
-        value. See ``_resolve_config`` for the shared mechanics.
+        ``sparsity_alpha`` remains required (D5: per-problem, not a constant).
+        Supplying it as a normalized kwarg is now the JSON path; a bare model
+        still raises with both supported remediations.
         """
         return self._resolve_config(EqGPTConfig, self._no_eqgpt_default)
 
-    @staticmethod
-    def _no_eqgpt_default() -> EqGPTConfig:
-        """Default factory for EqGPT: there is none (D5), so raise loud."""
+    def _no_eqgpt_default(self) -> EqGPTConfig:
+        """Build EqGPT from kwargs, or reject the truly missing required field."""
+        if "sparsity_alpha" in self._extra_kwargs:
+            return EqGPTConfig(seed=self.seed, **self._extra_kwargs)
         raise TypeError(
-            "Model(algorithm='eqgpt') requires config=EqGPTConfig(...) "
-            "(sparsity_alpha has no facade default, D5); e.g. "
-            "config=EqGPTConfig(sparsity_alpha=0.02)."
+            "Model(algorithm='eqgpt') requires EqGPTConfig.sparsity_alpha "
+            "(it has no facade default, D5); pass sparsity_alpha=0.02 as a "
+            "kwarg or config=EqGPTConfig(sparsity_alpha=0.02)."
         )
 
     def _build_llm4ed_config(self) -> Llm4edConfig:
@@ -1442,7 +1766,8 @@ class Model:
         ``_resolve_config`` for the shared mechanics.
         """
         return self._resolve_config(
-            Llm4edConfig, lambda: Llm4edConfig(seed=self.seed)
+            Llm4edConfig,
+            lambda: Llm4edConfig(seed=self.seed, **self._extra_kwargs),
         )
 
     @property
@@ -1561,7 +1886,12 @@ class Model:
             **self._extra_kwargs,
         )
 
-    def _build_components(self, dataset: PDEDataset) -> PlatformComponents:
+    def _build_components(
+        self,
+        dataset: PDEDataset,
+        *,
+        task: DiscoveryTask | None = None,
+    ) -> PlatformComponents:
         """Wire up the platform stack for the given dataset (declarative).
 
         Resolves plugin-declared ``DerivativeReqs`` (via
@@ -1584,7 +1914,17 @@ class Model:
 
         reqs = _resolve_derivative_requirements(self._algorithm)
         self._check_dataset_supported(dataset, reqs)
-        return PlatformBuilder(dataset, reqs, device=self.device).build()
+        if task is None:
+            return PlatformBuilder(dataset, reqs, device=self.device).build()
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
+        sketch_lower_owner = plugin_cls.sketch_lower_owner
+        return PlatformBuilder(
+            dataset,
+            reqs,
+            device=self.device,
+            task=task,
+            sketch_lower_owner=sketch_lower_owner,
+        ).build()
 
     def _check_dataset_supported(
         self,
@@ -1593,9 +1933,9 @@ class Model:
     ) -> None:
         """Fail loud when the dataset's (topology, LHS order) is unsupported.
 
-        Delegates to ``assert_dataset_supported`` (arch041 step 3b / C-A): the
-        dataset's ``topology`` must be in the plugin's ``supported_topologies``,
-        and its ``lhs_order`` (the DATA-0 science target) must equal the plugin's
+        Delegates to ``assert_dataset_supported``: the dataset's ``topology``
+        must be in the plugin's ``supported_topologies``, and its
+        ``lhs_order`` (the science target) must equal the plugin's
         selected ``reqs.lhs_order``. A mismatch means the chosen algorithm cannot
         honestly fit the dataset, so raise HERE — before the (expensive)
         ``PlatformBuilder.build()`` / surrogate training — rather than silently
@@ -1636,23 +1976,85 @@ class Model:
             return 1
         return self.generations
 
-    def _build_callbacks(self) -> list[RunnerCallback]:
+    def _build_resume_lineage(self, resume_path: Path) -> dict[str, Any]:
+        """Assemble the M4 resume-provenance dict (``LINEAGE_FIELDS`` face).
+
+        Enrichment only — the authoritative resume gates (manifest fence, tier
+        guard, payload validation) run unchanged in ``fit``. A source outside
+        the recording layout (legacy directory with no ledger and no run-dir
+        manifest) yields ``None`` for every ``source_*`` field; a
+        manifest-managed source contributes the selected entry's
+        ``config_hash`` / ``iteration`` and the directory's final entry's
+        ``final_status``; a source inside a standard run directory contributes
+        that run's id via :func:`kd.search.run_dir.run_id_of_run_dir`.
+        """
+        resolved = resume_path.resolve()
+        parent = resolved.parent
+        source_config_hash: str | None = None
+        source_iteration: int | None = None
+        source_final_status: str | None = None
+        if (parent / MANIFEST_FILENAME).exists():
+            entries = load_checkpoint_manifest(parent)
+            selected = next(
+                (e for e in entries if e.filename == resume_path.name), None
+            )
+            if selected is not None:
+                source_config_hash = selected.config_hash
+                source_iteration = selected.iteration
+            final = next((e for e in entries if e.kind == KIND_FINAL), None)
+            if final is not None:
+                source_final_status = final.final_status
+        return {
+            "resume_from": str(resume_path),
+            "source_run_id": (
+                run_id_of_run_dir(parent.parent)
+                if parent.name == CHECKPOINTS_DIRNAME
+                else None
+            ),
+            "source_config_hash": source_config_hash,
+            "source_final_status": source_final_status,
+            "source_iteration": source_iteration,
+        }
+
+    def _build_callbacks(
+        self,
+        *,
+        lineage: dict[str, Any] | None = None,
+        phase_writer: PhaseWriter | None = None,
+        task: DiscoveryTask | None = None,
+    ) -> list[RunnerCallback]:
         """Return the runner callback list.
 
-        Always starts with any user-provided callbacks (in order). Appends a
-        FRESH ``CheckpointCallback`` when ``checkpoint_dir`` is set (fresh
-        per fit so ``_last_iteration`` cannot leak across fits), then
-        ``_ProgressPrinter`` when ``verbose=True``.
+        Order: the phase recorder FIRST (``search_started`` must land even if
+        a user callback's ``on_experiment_start`` raises), then any
+        user-provided callbacks (in order), then a FRESH
+        ``CheckpointCallback`` when ``checkpoint_dir`` is set (fresh per fit
+        so ``_last_iteration`` cannot leak across fits; carrying this fit's
+        resume lineage for the ledger header), then ``_ProgressPrinter`` when
+        ``verbose=True``.
         """
-        cbs: list[RunnerCallback] = list(self._user_callbacks or [])
+        cbs: list[RunnerCallback] = []
+        if phase_writer is not None:
+            cbs.append(cast(RunnerCallback, _PhaseRecorder(phase_writer)))
+        cbs.extend(self._user_callbacks or [])
         if self.checkpoint_dir is not None:
-            cbs.append(
+            checkpoint = (
                 CheckpointCallback(
                     directory=self.checkpoint_dir,
                     every_n=self.checkpoint_every,
                     keep_last_n=self.checkpoint_keep_last,
+                    lineage=lineage,
+                )
+                if task is None
+                else CheckpointCallback(
+                    directory=self.checkpoint_dir,
+                    every_n=self.checkpoint_every,
+                    keep_last_n=self.checkpoint_keep_last,
+                    lineage=lineage,
+                    task=task,
                 )
             )
+            cbs.append(checkpoint)
         if self.verbose:
             cbs.append(
                 _ProgressPrinter(total_generations=self._effective_max_iterations())

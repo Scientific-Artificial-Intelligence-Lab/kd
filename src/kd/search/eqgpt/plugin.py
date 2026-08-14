@@ -102,6 +102,7 @@ class EqGPTPlugin:
 
     config_cls: ClassVar[type[EqGPTConfig]] = EqGPTConfig
     one_shot: ClassVar[bool] = False
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="eqgpt",

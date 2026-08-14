@@ -8,7 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
-from kd.search._record_schema import RecordSchemaError, StrictDecodeError, strict_keys
+from kd.search._record_schema import (
+    RecordSchemaError,
+    StrictDecodeError,
+    strict_keys,
+    validate_lineage,
+)
 
 
 
@@ -20,7 +25,13 @@ from kd.search.checkpoint_payload import _CHECKPOINT_TMP_SUFFIX as _TMP_SUFFIX
 
 
 CKPTMAN_SCHEME: Final[str] = "kd-ckptman-v1"
-CKPTMAN_SCHEMA_VERSION: Final[int] = 1
+
+
+
+
+
+
+CKPTMAN_SCHEMA_VERSION: Final[int] = 2
 MANIFEST_FILENAME: Final[str] = "manifest.json"
 
 KIND_PERIODIC: Final[str] = "periodic"
@@ -60,9 +71,18 @@ _CKPTMAN_V1_FIELDS: Final[tuple[str, ...]] = (
 _CKPTMAN_V1_FIELD_SET: Final[frozenset[str]] = frozenset(_CKPTMAN_V1_FIELDS)
 
 
-_CKPTMAN_HEADER_KEYS: Final[frozenset[str]] = frozenset(
+
+
+_CKPTMAN_HEADER_KEYS_V1: Final[frozenset[str]] = frozenset(
     {"scheme", "schema_version", "entries"}
 )
+_CKPTMAN_HEADER_KEYS_V2: Final[frozenset[str]] = _CKPTMAN_HEADER_KEYS_V1 | {
+    "lineage"
+}
+_CKPTMAN_HEADER_KEYS_BY_VERSION: Final[dict[int, frozenset[str]]] = {
+    1: _CKPTMAN_HEADER_KEYS_V1,
+    2: _CKPTMAN_HEADER_KEYS_V2,
+}
 
 
 class CheckpointManifestError(RecordSchemaError):
@@ -241,11 +261,19 @@ def load_checkpoint_manifest(
         raise CheckpointManifestError(
             "checkpoint manifest payload must be a JSON object"
         )
+
+
+    version = data.get("schema_version")
+    if type(version) is not int or version not in _CKPTMAN_HEADER_KEYS_BY_VERSION:
+        raise CheckpointManifestError(
+            f"unsupported checkpoint manifest schema_version: got {version!r}; "
+            f"supported: {sorted(_CKPTMAN_HEADER_KEYS_BY_VERSION)!r}"
+        )
     try:
         strict_keys(
             data,
             object_name="checkpoint manifest header",
-            required=_CKPTMAN_HEADER_KEYS,
+            required=_CKPTMAN_HEADER_KEYS_BY_VERSION[version],
         )
     except StrictDecodeError as exc:
         raise CheckpointManifestError(str(exc)) from exc
@@ -256,12 +284,12 @@ def load_checkpoint_manifest(
             f"unsupported checkpoint manifest scheme: got {scheme!r}; "
             f"expected {CKPTMAN_SCHEME!r}"
         )
-    version = data["schema_version"]
-    if type(version) is not int or version != CKPTMAN_SCHEMA_VERSION:
-        raise CheckpointManifestError(
-            f"unsupported checkpoint manifest schema_version: got {version!r}; "
-            f"supported: {[CKPTMAN_SCHEMA_VERSION]!r}"
-        )
+    if version >= 2:
+
+
+
+
+        validate_lineage(data["lineage"], error_cls=CheckpointManifestError)
 
     raw_entries = data["entries"]
     if not isinstance(raw_entries, list):

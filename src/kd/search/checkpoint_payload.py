@@ -5,16 +5,20 @@ import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
+from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.search.resume_policy import CONFIG_ARTIFACT_KEYS, config_artifact_overlay
 from kd.search.run_spec import (
     CONFIG_CANON_SCHEME,
     ConfigCanonicalizationError,
     canonicalize_config,
 )
+
+if TYPE_CHECKING:
+    from kd.search.protocol import DiscoveryTask
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +50,15 @@ def atomic_torch_save(payload: dict[str, Any], path: Path) -> None:
         raise
 
 
-def build_checkpoint_payload(iteration: int, algorithm: Any) -> dict[str, Any]:
+def build_checkpoint_payload(
+    iteration: int,
+    algorithm: Any,
+    *,
+    task: DiscoveryTask | None = None,
+) -> dict[str, Any]:
     config_snapshot = _config_snapshot(algorithm)
+    if task is not None and config_snapshot is not None:
+        config_snapshot[SKETCH_CONFIG_KEY] = canonicalize_config(task.payload)
     return {
         "version": CHECKPOINT_VERSION,
         "iteration": iteration,

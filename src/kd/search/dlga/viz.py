@@ -13,6 +13,7 @@ from kd.search.surrogate_log import (
     SURROGATE_TRAIN_LOSS_KEY,
     SURROGATE_VAL_LOSS_KEY,
 )
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -72,6 +73,12 @@ _PLOT_METRIC: dict[str, str] = {
 
 
 
+
+
+_COUNT_METRICS: frozenset[str] = frozenset({N_UNIQUE_KEY})
+
+
+
 _PLOT_INFOS: tuple[PlotInfo, ...] = (
     PlotInfo(
         name="fitness_spread",
@@ -113,7 +120,7 @@ _PLOT_INFOS: tuple[PlotInfo, ...] = (
         name="surrogate_training",
         title="Surrogate Training Curve",
         description=(
-            "NN_1 surrogate (Xu 2020 §2.B) training loss vs epoch (log-y): "
+            "NN_1 surrogate (Xu 2020 §2.2.1) training loss vs epoch (log-y): "
             "train and — when a validation split exists — validation MSE, with "
             "the best-validation epoch marked. This is the 'deep learning' "
             "evidence of the DLGA pipeline — the autograd-derivative source the "
@@ -176,6 +183,9 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
 
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(metric)
+    integer_ticks(ax)
+    if metric in _COUNT_METRICS:
+        integer_ticks(ax, "y")
     ax.set_title(title)
 
     if not series:
@@ -189,6 +199,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
             va="center",
         )
         return [f"plugin plot '{name}': {_NO_DATA_TEXT} ({reason})"]
+
 
 
 
@@ -259,6 +270,7 @@ def render_surrogate(ax: Axes, recorder: VizRecorder | None) -> list[str]:
 
     ax.set_xlabel(_SURROGATE_X_LABEL)
     ax.set_ylabel(_SURROGATE_Y_LABEL)
+    integer_ticks(ax)
     ax.set_title(_plot_title(_SURROGATE_PLOT_NAME))
 
     if not epochs or not train:

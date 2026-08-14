@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
 from kd.search.run_spec import (
@@ -29,7 +30,10 @@ __all__ = [
 
 
 
-SCIENCE_AXIS_DENYLISTS: Final[dict[str, frozenset[str]]] = {
+
+
+
+SCIENCE_AXIS_DENYLISTS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({
     "sga": frozenset({"use_autograd", "field_model"}),
 
 
@@ -46,7 +50,7 @@ SCIENCE_AXIS_DENYLISTS: Final[dict[str, frozenset[str]]] = {
     ),
     "pysindy": frozenset({"terms"}),
     "llm4ed": frozenset(),
-}
+})
 
 
 
@@ -114,6 +118,10 @@ def config_artifact_overlay(
 def resolve_field_tier(
     plugin_cls: type[FacadeWiringContract], algorithm: str, field: str
 ) -> ResumeTier:
+    from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
+
+    if field == SKETCH_CONFIG_KEY:
+        return "identity_breaking"
     for knob in plugin_cls.descriptor.knobs:
         if knob.name == field:
             return knob.resume_tier

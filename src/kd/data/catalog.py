@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from kd.data.remote._loaders import (
     load_llm4ed_fisher,
@@ -325,6 +326,21 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
 
 def list_datasets() -> list[DatasetSpec]:
     return [DATASET_CATALOG[dataset_id] for dataset_id in sorted(DATASET_CATALOG)]
+
+
+def list_datasets_answer_blind() -> list[dict[str, Any]]:
+    return [_answer_blind_row(spec) for spec in list_datasets()]
+
+
+def _answer_blind_row(spec: DatasetSpec) -> dict[str, Any]:
+    return {
+        "id": spec.id,
+        "axes": list(spec.axes),
+        "lhs": spec.lhs,
+        "fmt": spec.fmt,
+        "tier": spec.tier,
+        "tags": list(spec.tags),
+    }
 
 
 def get_dataset(dataset_id: str) -> DatasetSpec:

@@ -7,15 +7,12 @@ import pytest
 import torch
 
 from kd.search.discover.data.loader import load_fisher_nonlinear_mat
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 
 
 
-_DATA_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde"
-    / "data_new" / "fisher_nonlin_groundtruth.mat"
-)
+_DATA_PATH = REFERENCE_DATA_DIR / "fisher_nonlin_groundtruth.mat"
 
 
 

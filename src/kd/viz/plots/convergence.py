@@ -6,6 +6,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from kd.search.recorder import BEST_SCORE_KEY
+from kd.viz.axes import integer_ticks
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -58,6 +59,7 @@ def plot_convergence(
         with style_context(style):
             ax.set_xlabel("Iteration")
             ax.set_ylabel(ylabel)
+            integer_ticks(ax)
             ax.set_title("Convergence")
             ax.text(
                 0.5,
@@ -90,6 +92,7 @@ def plot_convergence(
         with style_context(style):
             ax.set_xlabel("Iteration")
             ax.set_ylabel(ylabel)
+            integer_ticks(ax)
             ax.set_title("Convergence")
             ax.text(
                 0.5,
@@ -105,6 +108,7 @@ def plot_convergence(
         ax.plot(iterations, finite_scores, marker=".", markersize=3)
         ax.set_xlabel("Iteration")
         ax.set_ylabel(ylabel)
+        integer_ticks(ax)
 
 
 

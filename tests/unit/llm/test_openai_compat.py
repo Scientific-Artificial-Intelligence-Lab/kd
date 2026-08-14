@@ -10,6 +10,7 @@ from kd.llm import openai_compat as oc_mod
 from kd.llm.openai_compat import DEFAULT_API_KEY_ENV_VAR, OpenAICompatProvider
 from kd.llm.protocol import LLMBackendError, LLMResponse, LLMUsage
 from tests.unit.llm._fakes import (
+    OMIT,
     BoomError,
     RecordingChatClient,
     TransientError,
@@ -258,18 +259,16 @@ class TestResponseMapping:
         assert resp.usage.completion_tokens == 22
         assert resp.usage.total_tokens == 33
 
-    def test_defensive_read_when_response_lacks_model_and_usage(self) -> None:
+    def test_absent_usage_maps_to_none(self) -> None:
         client = RecordingChatClient(fail_times=0, content="u_xx - u*u_x")
         provider, _ = _provider_with_client(client)
         resp = provider.complete(make_request(prompt="prompt", seed=5))
         assert isinstance(resp, LLMResponse)
         assert resp.text == "u_xx - u*u_x"
-        assert resp.model == "gpt-x"
+        assert resp.model == "served-model-default"
         assert resp.usage is None
 
-    def test_defensive_usage_mapping_tolerates_missing_token_fields(
-        self,
-    ) -> None:
+    def test_partial_usage_maps_to_none(self) -> None:
         client = RecordingChatClient(
             fail_times=0,
             usage=make_sdk_usage_partial(completion_tokens=None),
@@ -277,13 +276,15 @@ class TestResponseMapping:
         provider, _ = _provider_with_client(client)
         resp = provider.complete(make_request(prompt="prompt", seed=5))
 
-        assert isinstance(resp.usage, LLMUsage)
-        assert resp.usage.prompt_tokens == 0
-        assert resp.usage.completion_tokens == 0
-        assert resp.usage.total_tokens is None
+        assert resp.usage is None
 
-    def test_present_none_model_falls_back_to_configured_model(self) -> None:
-        client = RecordingChatClient(fail_times=0, model=None)
+    @pytest.mark.parametrize(
+        "model",
+        [OMIT, None, ""],
+        ids=["attribute-absent", "present-none", "present-empty"],
+    )
+    def test_missing_served_model_fails_loud(self, model: object) -> None:
+        client = RecordingChatClient(fail_times=0, model=model)
         provider, _ = _provider_with_client(client)
-        resp = provider.complete(make_request(prompt="prompt", seed=5))
-        assert resp.model == "gpt-x"
+        with pytest.raises(LLMBackendError, match="model id"):
+            provider.complete(make_request(prompt="prompt", seed=5))

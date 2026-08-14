@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from kd.core.jsonsafe import sanitize_float
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 from kd.viz.gap_notes import (
     GapVocabulary,
@@ -75,6 +76,10 @@ _YLABEL: dict[str, str] = {
     "invalid_count": "invalid events",
     "llm_calls": "cumulative calls",
 }
+
+
+
+_COUNT_PLOTS: frozenset[str] = frozenset({"invalid_count", "llm_calls"})
 _NO_DATA_TEXT = "No data"
 _X_LABEL = "Round"
 _LINE_MARKER = "."
@@ -121,6 +126,9 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
     _check_known_name(name)
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(_YLABEL[name])
+    integer_ticks(ax)
+    if name in _COUNT_PLOTS:
+        integer_ticks(ax, "y")
     ax.set_title(_plot_title(name))
 
     if name == "pool_reward_spread":

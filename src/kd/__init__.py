@@ -1,7 +1,7 @@
 """kd - Symbolic regression platform for PDE discovery."""
 
 from kd.api import Model, instrument_schemas
-from kd.core.equation import law_signature
+from kd.core.equation import Sketch, law_signature
 from kd.core.evaluator import EvaluationResult
 from kd.core.verify import VerificationReport, VerifyPolicy, verify_equation
 from kd.data import (
@@ -69,7 +69,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 
 
@@ -101,6 +101,7 @@ __all__ = [
     "PySINDyConfig",
     "PySRConfig",
     "SGAConfig",
+    "Sketch",
     "TabularDataset",
     "TaskType",
     "TermRejection",

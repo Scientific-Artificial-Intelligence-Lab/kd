@@ -16,6 +16,7 @@ from kd.search.callbacks import (
     EarlyStoppingCallback,
     LoggingCallback,
     RunnerCallback,
+    WallClockBudgetCallback,
 )
 from kd.search.iteration_events import IterationEvent, IterationEventEmitter
 from kd.search.protocol import PlatformComponents
@@ -1653,6 +1654,70 @@ class TestIterationEventEmitterRunnerIntegration:
         assert len(events) == 1
         assert events[0].n_candidates == 4
         assert events[0].n_invalid == 1
+
+
+
+
+
+
+
+class TestWallClockBudgetCallback:
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("max_seconds", [0.0, -1.0])
+    def test_non_positive_budget_is_refused(self, max_seconds: float) -> None:
+        with pytest.raises(ValueError, match="max_seconds"):
+            WallClockBudgetCallback(max_seconds)
+
+    @pytest.mark.unit
+    def test_an_exhausted_budget_stops_after_one_completed_iteration(
+        self, mock_components: PlatformComponents, tmp_path: Path
+    ) -> None:
+
+
+
+        from kd.search.checkpoint_manifest import (
+            KIND_FINAL,
+            load_checkpoint_manifest,
+        )
+
+        runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(),
+            max_iterations=5,
+            batch_size=2,
+            callbacks=[
+                WallClockBudgetCallback(1e-9),
+                CheckpointCallback(directory=tmp_path, every_n=1),
+            ],
+        )
+
+        result = runner.run(mock_components)
+
+        assert result.early_stopped is True
+        assert result.iterations == 1
+        final = [
+            entry
+            for entry in load_checkpoint_manifest(tmp_path)
+            if entry.kind == KIND_FINAL
+        ]
+        assert len(final) == 1
+        resumed_runner = ExperimentRunner(
+            algorithm=RecordingAlgorithm(), max_iterations=1, batch_size=2
+        )
+        resumed_runner.load_checkpoint(tmp_path / final[0].filename)
+        assert resumed_runner.run(mock_components).iterations == 1
+
+    @pytest.mark.unit
+    def test_experiment_start_restarts_the_clock(self, mock_algo: Any) -> None:
+
+
+        callback = WallClockBudgetCallback(0.02)
+        while not callback.should_stop:
+            pass
+
+        callback.on_experiment_start(mock_algo)
+
+        assert callback.should_stop is False
 
 
 

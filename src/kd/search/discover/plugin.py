@@ -166,6 +166,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     config_cls: ClassVar[type[DiscoverConfig]] = DiscoverConfig
     one_shot: ClassVar[bool] = False
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="discover",

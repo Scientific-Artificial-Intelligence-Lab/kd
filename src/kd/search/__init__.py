@@ -32,12 +32,14 @@ direct-import-sanctioned at its own module path.
 
 from __future__ import annotations
 
+from kd.core.platform.sketch_compile import SketchClauseLevels
 from kd.search.callbacks import (
     CheckpointCallback,
     EarlyStoppingCallback,
     LoggingCallback,
     RunnerCallback,
     VizDataCollector,
+    WallClockBudgetCallback,
 )
 from kd.search.checkpoint_manifest import (
     CKPTMAN_SCHEMA_VERSION,
@@ -51,15 +53,22 @@ from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt import EqGPTConfig, EqGPTPlugin
 from kd.search.iteration_events import (
+    ITEREVENT_DIAGNOSTICS_KEYS,
     ITEREVENT_SCHEMA_VERSION,
     ITEREVENT_SCHEME,
+    PHASE_SCHEMA_VERSION,
+    PHASE_SCHEME,
+    PHASE_VOCABULARY,
     IterationEvent,
     IterationEventEmitter,
     IterationEventSinkError,
+    PhaseEvent,
+    PhaseWriter,
 )
 from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
 from kd.search.mini_table import build_mini_table
 from kd.search.protocol import (
+    DiscoveryTask,
     IterativeSearchAlgorithm,
     PlatformComponents,
     SearchAlgorithm,
@@ -74,25 +83,46 @@ from kd.search.result import (
     RunResult,
     default_final_result,
 )
+from kd.search.run_catalog import (
+    CATALOG_FILENAME,
+    DEFAULT_RUNS_ROOT,
+    RUNCAT_SCHEME,
+    append_catalog_row,
+    catalog_row_from_record,
+    catalog_row_from_result,
+)
+from kd.search.run_dir import (
+    RUNDIR_SCHEME,
+    RunDirPaths,
+    create_run_dir,
+    finalize_run_dir,
+    new_run_id,
+    run_id_of_run_dir,
+)
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
+from kd.search.sketch_outcome import SketchOutcome, write_sketch_artifact
 
 __all__ = [
     "BEST_SCORE_KEY",
+    "CATALOG_FILENAME",
     "CKPTMAN_SCHEMA_VERSION",
     "CKPTMAN_SCHEME",
     "CheckpointCallback",
     "CheckpointManifestEntry",
     "CheckpointManifestError",
+    "DEFAULT_RUNS_ROOT",
     "DISCOVERPlugin",
     "DLGAConfig",
     "DLGAPlugin",
     "DiscoverConfig",
+    "DiscoveryTask",
     "EarlyStoppingCallback",
     "EqGPTConfig",
     "EqGPTPlugin",
     "ExperimentResult",
     "ExperimentRunner",
+    "ITEREVENT_DIAGNOSTICS_KEYS",
     "ITEREVENT_SCHEMA_VERSION",
     "ITEREVENT_SCHEME",
     "InstrumentDescriptor",
@@ -105,22 +135,44 @@ __all__ = [
     "Llm4edConfig",
     "Llm4edPlugin",
     "LoggingCallback",
+    "PHASE_SCHEMA_VERSION",
+    "PHASE_SCHEME",
+    "PHASE_VOCABULARY",
+    "PhaseEvent",
+    "PhaseWriter",
     "PlatformComponents",
     "PySINDyConfig",
     "PySINDyPlugin",
     "PySRConfig",
     "PySRPlugin",
+    "RUNCAT_SCHEME",
+    "RUNDIR_SCHEME",
+    "RunDirPaths",
     "RunRecord",
     "RunResult",
     "RunnerCallback",
     "SGAConfig",
     "SGAPlugin",
     "SearchAlgorithm",
+    "SketchClauseLevels",
+    "SketchOutcome",
     "TerminatingSearchAlgorithm",
     "VizDataCollector",
     "VizRecorder",
+    "WallClockBudgetCallback",
+    "append_catalog_row",
     "build_mini_table",
+
+
+
+    "catalog_row_from_record",
+    "catalog_row_from_result",
+    "create_run_dir",
     "default_final_result",
+    "finalize_run_dir",
     "load_checkpoint_manifest",
+    "new_run_id",
+    "run_id_of_run_dir",
     "tool_schema",
+    "write_sketch_artifact",
 ]

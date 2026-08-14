@@ -22,15 +22,12 @@ from kd.data.derivatives.finite_diff import (
 from kd.search.discover.builder import build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.data.loader import load_burgers_mat
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_DATA_PATH = (
-    Path(__file__).parent.parent.parent.parent.parent
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
-    / "burgers.mat"
-)
+_DEFAULT_DATA_PATH = REFERENCE_DATA_DIR / "burgers.mat"
 
 SEED = 42
 MAX_DERIV_ORDER = 2
@@ -69,7 +66,9 @@ def main() -> None:
     config = DiscoverConfig()
     logger.info(
         "Starting DISCOVER: %d iterations, batch=%d, max_length=%d",
-        config.n_iterations, config.batch_size, config.max_length,
+        config.n_iterations,
+        config.batch_size,
+        config.max_length,
     )
 
     torch.manual_seed(SEED)

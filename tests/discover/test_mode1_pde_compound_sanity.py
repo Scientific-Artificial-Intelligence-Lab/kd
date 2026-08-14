@@ -22,16 +22,12 @@ from kd.core.linear_solve.least_squares import (
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
 )
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 if TYPE_CHECKING:
     from kd.search.discover.config import DiscoverConfig
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-_DATA_PATH: Path = (
-    _PROJECT_ROOT
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde"
-    / "data_new" / "PDE_compound.npy"
-)
+_DATA_PATH: Path = REFERENCE_DATA_DIR / "PDE_compound.npy"
 
 
 _MIN_DATA_BYTES: int = 50_000
@@ -147,7 +143,7 @@ def sanity_config() -> DiscoverConfig:
 
 
 
-@pytest.mark.smoke
+@pytest.mark.integration
 def test_engine_completes_without_raising(
     pde_compound_components: _PlatformBundle,
     sanity_config: DiscoverConfig,
@@ -162,7 +158,7 @@ def test_engine_completes_without_raising(
     )
 
 
-@pytest.mark.smoke
+@pytest.mark.integration
 def test_best_reward_above_sanity_threshold(
     pde_compound_components: _PlatformBundle,
     sanity_config: DiscoverConfig,
@@ -182,7 +178,7 @@ def test_best_reward_above_sanity_threshold(
     )
 
 
-@pytest.mark.smoke
+@pytest.mark.integration
 def test_controller_explores_ground_truth_tokens(
     pde_compound_components: _PlatformBundle,
     sanity_config: DiscoverConfig,

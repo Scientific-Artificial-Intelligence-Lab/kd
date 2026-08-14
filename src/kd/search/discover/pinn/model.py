@@ -13,6 +13,7 @@ import torch.nn.functional as functional
 from torch import Tensor
 
 from kd.models import FieldModel
+from kd.search.checkpoint_payload import atomic_torch_save
 from kd.search.discover.config import PINNConfig
 from kd.search.discover.pinn._memory_log import _log_memory
 
@@ -230,7 +231,7 @@ class PINNModel(nn.Module):
         return result
 
     def save_checkpoint(self, path: str | Path) -> None:
-        torch.save({_STATE_DICT_KEY: self.state_dict()}, Path(path))
+        atomic_torch_save({_STATE_DICT_KEY: self.state_dict()}, Path(path))
 
     def load_checkpoint(self, path: str | Path) -> None:
         checkpoint = torch.load(

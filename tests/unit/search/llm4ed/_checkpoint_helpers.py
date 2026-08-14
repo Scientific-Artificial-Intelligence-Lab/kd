@@ -6,8 +6,8 @@ import pickle
 from typing import Any
 
 from kd.llm import LLMProvider, LLMRequest, LLMResponse
-from kd.search.llm4ed import FakeLlm4edBackend
 from kd.search.llm4ed.plugin import Llm4edPlugin
+from tests.unit.search.llm4ed._fake_backend import FakeLlm4edBackend
 
 
 class RecordingProvider:

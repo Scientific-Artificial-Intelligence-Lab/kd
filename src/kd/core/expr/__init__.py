@@ -11,6 +11,7 @@ from kd.core.expr.sympy_bridge import (
     to_sympy,
     to_unicode,
 )
+from kd.core.expr.term_features import TermFeatures, TermVocabulary, analyze_term
 from kd.core.expr.term_key import structure_term_key
 from kd.core.expr.terms import split_terms
 from kd.core.expr.validator import (
@@ -34,6 +35,9 @@ __all__ = [
 
     "split_terms",
     "structure_term_key",
+    "TermFeatures",
+    "TermVocabulary",
+    "analyze_term",
 
     "FormattedEquation",
     "are_equivalent",

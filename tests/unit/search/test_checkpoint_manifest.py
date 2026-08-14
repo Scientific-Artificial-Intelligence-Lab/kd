@@ -22,6 +22,7 @@ from kd.search.checkpoint_manifest import (
     CheckpointManifestWriter,
     build_manifest_entry,
     config_hash_of_snapshot,
+    load_checkpoint_manifest,
 )
 
 _VALID_HASH = "a" * 64
@@ -79,7 +80,8 @@ def _payload(**overrides: object) -> dict[str, object]:
 
 def test_scheme_constants() -> None:
     assert CKPTMAN_SCHEME == "kd-ckptman-v1"
-    assert CKPTMAN_SCHEMA_VERSION == 1
+
+    assert CKPTMAN_SCHEMA_VERSION == 2
     assert MANIFEST_FILENAME == "manifest.json"
     assert CKPTMAN_CONFIG_HASH_SCHEME == "kd-confighash-v1"
 
@@ -429,7 +431,8 @@ def test_full_manifest_round_trip(tmp_path: object) -> None:
     writer.append(_final_entry())
 
     raw = json.loads((directory / MANIFEST_FILENAME).read_text())
-    assert set(raw) == {"scheme", "schema_version", "entries"}
+    assert set(raw) == {"scheme", "schema_version", "entries", "lineage"}
+    assert raw["lineage"] is None
     assert raw["scheme"] == CKPTMAN_SCHEME
     assert raw["schema_version"] == CKPTMAN_SCHEMA_VERSION
 
@@ -444,6 +447,31 @@ def test_full_manifest_round_trip(tmp_path: object) -> None:
 
 
 
+
+
+def test_writer_create_seals_lineage_into_header(tmp_path: object) -> None:
+    from pathlib import Path
+
+    directory = Path(tmp_path) / "ckpt"
+    lineage = {
+        "resume_from": "/runs/a/checkpoints/checkpoint_final.pt",
+        "source_run_id": None,
+        "source_config_hash": "0" * 64,
+        "source_final_status": "completed",
+        "source_iteration": 3,
+    }
+    CheckpointManifestWriter.create(directory, lineage=lineage)
+    raw = json.loads((directory / MANIFEST_FILENAME).read_text())
+    assert raw["lineage"] == lineage
+    assert load_checkpoint_manifest(directory) == ()
+
+
+def test_writer_create_rejects_malformed_lineage(tmp_path: object) -> None:
+    from pathlib import Path
+
+    directory = Path(tmp_path) / "ckpt"
+    with pytest.raises(CheckpointManifestError, match="lineage"):
+        CheckpointManifestWriter.create(directory, lineage={"resume_from": ""})
 
 
 def test_writer_create_fresh_dir_writes_empty_ledger(tmp_path: object) -> None:

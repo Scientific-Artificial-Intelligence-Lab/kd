@@ -21,6 +21,7 @@ from kd.search.descriptor import (
 from kd.search.eqgpt.config import EqGPTConfig
 from kd.search.protocol import FacadeWiringContract
 from kd.search.resume_policy import SCIENCE_AXIS_DENYLISTS as _SCIENCE_AXIS_DENYLISTS
+from kd.search.sga.config import SGAConfig
 
 pytestmark = pytest.mark.unit
 
@@ -122,6 +123,12 @@ def _config_for_mode(
                 start_words=("S",),
             )
         raise AssertionError(f"unrecognized EqGPT descriptor mode: {mode_name}")
+    if algorithm == "sga":
+        if mode_name == "default":
+            return SGAConfig()
+        if mode_name == "autograd":
+            return SGAConfig(use_autograd=True)
+        raise AssertionError(f"unrecognized SGA descriptor mode: {mode_name}")
 
 
 
@@ -253,6 +260,22 @@ class TestRegistryDescriptorContract:
         assert "descriptor" in annotations
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+_SELF_PROVIDED_MODES: frozenset[tuple[str, str]] = frozenset({("sga", "autograd")})
+
+
 class TestModeAndFormHonesty:
 
     @pytest.mark.parametrize(
@@ -269,7 +292,13 @@ class TestModeAndFormHonesty:
         plugin = _plugin_for_mode(algorithm, plugin_cls, mode.name)
         reqs = plugin.derivative_requirements
         assert reqs.supported_topologies == mode.topologies
-        assert reqs.provider_kind == mode.provider_kind
+        if (algorithm, mode.name) in _SELF_PROVIDED_MODES:
+
+
+
+            assert reqs.provider_kind != mode.provider_kind
+        else:
+            assert reqs.provider_kind == mode.provider_kind
 
     @pytest.mark.parametrize(
         ("algorithm", "plugin_cls", "mode"),

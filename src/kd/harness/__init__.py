@@ -24,6 +24,7 @@ from kd.harness.dispatch import (
     DispatchDatasetSpec,
     DispatchManifest,
     DispatchManifestError,
+    DispatchRecording,
     build_dispatch_manifest,
     read_dispatch_manifest,
     resolve_dataset,
@@ -38,7 +39,11 @@ from kd.harness.dispatch_log import (
     read_dispatch_log,
     write_dispatch_log,
 )
-from kd.harness.dispatch_report import build_batch_report, render_dispatch_markdown
+from kd.harness.dispatch_report import (
+    build_batch_report,
+    render_dispatch_markdown,
+    write_dispatch_report,
+)
 from kd.harness.dispatcher import (
     DispatchResult,
     DispatchRunError,
@@ -54,7 +59,8 @@ from kd.harness.merge import (
     merge_shards,
 )
 from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan, PlanEntry
-from kd.harness.report import build_plan_report, build_store_report
+from kd.harness.recording import RecordingOptions
+from kd.harness.report import build_plan_report, build_store_report, write_store_report
 from kd.harness.runner import PlanRunResult, run_plan
 from kd.harness.store import EvidenceStore, EvidenceStoreError, environment_fingerprint
 
@@ -76,6 +82,7 @@ __all__ = [
     "DispatchManifest",
     "DispatchManifestError",
     "DispatchMergeError",
+    "DispatchRecording",
     "DispatchResult",
     "DispatchRunError",
     "EpisodeOutcome",
@@ -86,6 +93,7 @@ __all__ = [
     "MergeReplayError",
     "PlanEntry",
     "PlanRunResult",
+    "RecordingOptions",
     "ShardMappingError",
     "ShardMissingError",
     "VerificationStatus",
@@ -112,4 +120,6 @@ __all__ = [
     "write_consensus_artifact",
     "write_dispatch_log",
     "write_dispatch_manifest",
+    "write_dispatch_report",
+    "write_store_report",
 ]

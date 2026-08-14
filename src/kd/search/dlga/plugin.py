@@ -112,6 +112,7 @@ class DLGAPlugin:
 
     config_cls: ClassVar[type[DLGAConfig]] = DLGAConfig
     one_shot: ClassVar[bool] = False
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="dlga",
@@ -186,6 +187,8 @@ class DLGAPlugin:
         self._best_lhs_name: str | None = None
         self._recorder: VizRecorder | None = None
         self._restore_pending: bool = False
+        self._last_fitness: list[float] | None = None
+        self._restored_model: nn.Module | None = None
         self._rng = torch.Generator()
         self._prepared = False
 
@@ -218,7 +221,11 @@ class DLGAPlugin:
             max_atomic_order=3,
             lhs_order=self._config.target_lhs_order,
             needs_surrogate=True,
-            surrogate_model=self._provided_model,
+            surrogate_model=(
+                self._provided_model
+                if self._provided_model is not None
+                else self._restored_model
+            ),
             surrogate_arch_kwargs={
                 "hidden_sizes": list(self._config.surrogate_hidden_sizes),
                 "activation": self._config.surrogate_activation,
@@ -275,8 +282,25 @@ class DLGAPlugin:
 
 
         self._model = getattr(provider, "model", None)
+
+
+
+
+
+
+        self._restored_model = None
         self._build_evaluators(dataset)
 
+
+
+
+
+
+
+
+
+        restored_fitness = self._last_fitness
+        self._last_fitness = None
         if self._population is None:
             self._rng.manual_seed(self._config.seed)
             self._population = random_population(
@@ -288,6 +312,8 @@ class DLGAPlugin:
                 partial_prob=self._config.partial_prob,
                 genes_prob=self._config.genes_prob,
             )
+        elif restored_fitness is not None:
+            self._evolve_population(self._population, restored_fitness)
         self._recorder = components.recorder
 
 
@@ -327,16 +353,21 @@ class DLGAPlugin:
             for result, genome in zip(results, genomes, strict=True)
             if result.is_valid
         ]
-        if not valid:
-            return
-        best, best_genome = min(valid, key=lambda item: _fitness(item[0]))
-        score = _fitness(best)
-        if score < self._best_score:
-            self._best_score = score
-            self._best_expression = best.expression
-            self._best_lhs_name = best.lhs_name
-            self._best_result = best
-            self._best_genome = _clone_genome(best_genome)
+        if valid:
+            best, best_genome = min(valid, key=lambda item: _fitness(item[0]))
+            score = _fitness(best)
+            if score < self._best_score:
+                self._best_score = score
+                self._best_expression = best.expression
+                self._best_lhs_name = best.lhs_name
+                self._best_result = best
+                self._best_genome = _clone_genome(best_genome)
+
+
+
+
+
+        self._last_fitness = [_fitness(result) for result in results]
 
     def _log_generation_metrics(self, results: list[EvaluationResult]) -> None:
         recorder = self._recorder
@@ -372,11 +403,17 @@ class DLGAPlugin:
 
     def between_iterations(self) -> None:
         self._require_prepared()
-        if self._population is None or self._last_results is None:
+        if self._population is None or self._last_fitness is None:
             return
-        fitness = [_fitness(result) for result in self._last_results]
+        self._evolve_population(self._population, self._last_fitness)
+
+    def _evolve_population(
+        self,
+        population: list[Genome],
+        fitness: list[float],
+    ) -> None:
         keep = max(1, self._config.pop_size // 2)
-        survivors = select_survivors(self._population, fitness, keep=keep)
+        survivors = select_survivors(population, fitness, keep=keep)
         while len(survivors) < self._config.pop_size:
             survivors.append(self._random_genome())
         crossed = crossover_population(
@@ -388,6 +425,7 @@ class DLGAPlugin:
         self._population = [self._mutate(genome) for genome in crossed]
         self._last_results = None
         self._last_result_genomes = None
+        self._last_fitness = None
 
     @property
     def best_score(self) -> float:
@@ -481,6 +519,10 @@ class DLGAPlugin:
             "best_lhs_name": self._best_lhs_name,
             "best_genome": self._best_genome,
             "rng_state": self._rng.get_state().numpy().tobytes(),
+            "last_fitness": self._last_fitness,
+            "surrogate_model": (
+                self._model if self._model is not None else self._restored_model
+            ),
         }
 
     @state.setter
@@ -491,6 +533,8 @@ class DLGAPlugin:
             return
         self._reset_search_state()
         self._population = value.get("population")
+        self._last_fitness = value.get("last_fitness")
+        self._restored_model = value.get("surrogate_model")
         self._best_score = value.get("best_score", float("inf"))
         self._best_expression = value.get("best_expression", "")
         self._best_lhs_name = value.get("best_lhs_name")
@@ -515,6 +559,12 @@ class DLGAPlugin:
         self._best_score = float("inf")
         self._best_expression = ""
         self._best_lhs_name = None
+
+
+
+
+        self._last_fitness = None
+        self._restored_model = None
 
     def _build_evaluators(self, dataset: PDEDataset) -> None:
         if self._provider is None or self._context is None or self._executor is None:

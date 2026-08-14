@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz.axes import integer_ticks
 from kd.viz.plots._field_panels import (
     _RESIDUAL_SIGN,
     _heatmap_panel,
@@ -453,3 +454,4 @@ def _line_fallback(
     ax.plot(data.ravel())
     ax.set_title(title)
     ax.set_xlabel("Index")
+    integer_ticks(ax)

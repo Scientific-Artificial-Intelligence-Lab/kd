@@ -50,6 +50,7 @@ from kd.search._checkpoint_manifest_verify import (
 from kd.search._checkpoint_manifest_verify import (
     load_checkpoint_manifest as load_checkpoint_manifest,
 )
+from kd.search._record_schema import validate_lineage
 from kd.search.checkpoint_payload import _CHECKPOINT_TMP_SUFFIX as _TMP_SUFFIX
 
 logger = logging.getLogger(__name__)
@@ -167,13 +168,22 @@ def build_manifest_entry(
 class CheckpointManifestWriter:
 
     def __init__(
-        self, directory: Path, entries: list[CheckpointManifestEntry]
+        self,
+        directory: Path,
+        entries: list[CheckpointManifestEntry],
+        lineage: dict[str, Any] | None = None,
     ) -> None:
         self._directory = directory
         self._entries = entries
+        self._lineage = lineage
 
     @classmethod
-    def create(cls, directory: str | Path) -> CheckpointManifestWriter:
+    def create(
+        cls,
+        directory: str | Path,
+        *,
+        lineage: dict[str, Any] | None = None,
+    ) -> CheckpointManifestWriter:
         directory = Path(directory)
         if directory.exists():
             if not directory.is_dir():
@@ -185,8 +195,9 @@ class CheckpointManifestWriter:
                     "checkpoint directory is not empty (reuse is not supported; "
                     f"use a fresh directory per run): {directory}"
                 )
+        validated = validate_lineage(lineage, error_cls=CheckpointManifestError)
         directory.mkdir(parents=True, exist_ok=True)
-        writer = cls(directory, [])
+        writer = cls(directory, [], validated)
         writer._persist()
         return writer
 
@@ -237,6 +248,7 @@ class CheckpointManifestWriter:
             "scheme": CKPTMAN_SCHEME,
             "schema_version": CKPTMAN_SCHEMA_VERSION,
             "entries": [entry.to_dict() for entry in self._entries],
+            "lineage": self._lineage,
         }
         tmp_path = self._directory / f"{MANIFEST_FILENAME}{_TMP_SUFFIX}"
         with tmp_path.open("w", encoding="utf-8") as handle:

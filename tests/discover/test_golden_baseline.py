@@ -15,10 +15,11 @@ from kd.search.discover.golden import (
     load_fixture,
     run_golden,
 )
-from kd.search.discover.golden.constants import PROJECT_ROOT, resolve_project_path
+from kd.search.discover.golden.constants import resolve_project_path
+from kd.search.discover.paths import GOLDEN_BASELINE_DIR, PROJECT_ROOT
 from kd.search.discover.utils.canonicalize import canonicalize_expression
 
-GOLDEN_DIR: Path = PROJECT_ROOT / "refs" / "baseline" / "golden"
+GOLDEN_DIR: Path = GOLDEN_BASELINE_DIR
 
 
 COEF_ABS_TOL: float = 1e-4
@@ -251,6 +252,27 @@ def test_golden_fixture_set_matches_oracle_set() -> None:
     )
 
 
+@pytest.mark.skipif(
+    not GOLDEN_DIR.exists(),
+
+
+
+    reason="requires the private tree (scripts/ and refs/ are not exported)",
+)
+def test_fixture_diff_scope_paths_all_exist() -> None:
+    for pathspec in _FIXTURE_DIFF_SCOPE:
+        bare = pathspec.removeprefix(":(exclude)")
+        matched = subprocess.check_output(
+            ["git", "ls-files", "--", bare],
+            cwd=PROJECT_ROOT,
+            text=True,
+        )
+        assert matched.strip(), (
+            f"_FIXTURE_DIFF_SCOPE entry {pathspec!r} matches no tracked file; "
+            "it contributes nothing to the staleness check"
+        )
+
+
 def _assert_fixture_metadata(
     payload: dict[str, Any],
     expected: ExpectedGolden,
@@ -422,7 +444,28 @@ def _resolve_optional_data_path(value: str | None) -> Path | None:
 
 
 
-_FIXTURE_DIFF_SCOPE: tuple[str, ...] = ("src/", "scripts/", "tests/")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_FIXTURE_DIFF_SCOPE: tuple[str, ...] = (
+    "src/kd/search/discover/",
+    "src/kd/core/",
+    "src/kd/data/",
+    "scripts/discover/generate_golden_baseline.py",
+    ":(exclude)src/kd/search/discover/viz.py",
+)
 
 
 def _fixture_commit_is_current(fixture_commit: str) -> tuple[bool, str]:

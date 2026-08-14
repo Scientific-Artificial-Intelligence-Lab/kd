@@ -64,10 +64,11 @@ def _hash_in_subprocess(hashseed: str) -> subprocess.CompletedProcess[str]:
     env["PYTHONHASHSEED"] = hashseed
     env["MPLBACKEND"] = "Agg"
     code = (
-        "import kd.llm as m; "
-        "req = m.LLMRequest(prompt='hash me', seed=42, "
-        "params=m.LLMParams(temperature=0.3, max_tokens=64)); "
-        "print(m.request_hash(req))"
+        "from kd.llm import LLMParams, LLMRequest; "
+        "from kd.llm.tape import request_hash; "
+        "req = LLMRequest(prompt='hash me', seed=42, "
+        "params=LLMParams(temperature=0.3, max_tokens=64)); "
+        "print(request_hash(req))"
     )
     return subprocess.run(
         [sys.executable, "-c", code],
@@ -294,20 +295,6 @@ class TestCursorSeam:
 
 
 class TestExportSurface:
-    def test_wire_codec_exported_from_kd_llm(self) -> None:
-        import kd.llm
-
-        for name in (
-            "load_tape_entries",
-            "request_from_json",
-            "request_to_json",
-            "response_from_json",
-            "response_to_json",
-            "usage_to_json",
-        ):
-            assert hasattr(kd.llm, name), f"kd.llm.{name} is missing"
-            assert name in kd.llm.__all__, f"kd.llm.__all__ missing '{name}'"
-
     def test_manifest_vocabulary_exported_from_kd(self) -> None:
         import kd
 

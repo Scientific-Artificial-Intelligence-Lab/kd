@@ -9,6 +9,7 @@ import numpy as np
 from kd.core.equation import structure, term_diff
 from kd.search.recorder import BEST_SCORE_KEY
 from kd.search.result import DEFAULT_SCORE_KIND
+from kd.viz.axes import integer_ticks
 from kd.viz.gap_notes import append_subtitle
 from kd.viz.plots._comparison_cells import _expression_cell, _render_term_diff_cell
 from kd.viz.style import style_context
@@ -203,6 +204,7 @@ def render_overlaid_convergence(
 
         ax.set_xlabel("Iteration")
         ax.set_ylabel(_shared_score_ylabel(results))
+        integer_ticks(ax)
         ax.set_title("Convergence Comparison")
         if drawn_mixed:
 

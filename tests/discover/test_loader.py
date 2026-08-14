@@ -11,12 +11,12 @@ import torch
 
 from kd.data.schema import PDEDataset, TaskType
 from kd.search.discover.data.loader import load_burgers_mat
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-BURGERS_MAT = _PROJECT_ROOT / "refs/discover/dso/dso/task/pde/data_new/burgers.mat"
-BURGERS2_MAT = _PROJECT_ROOT / "refs/discover/dso/dso/task/pde/data_new/burgers2.mat"
+BURGERS_MAT = REFERENCE_DATA_DIR / "burgers.mat"
+BURGERS2_MAT = REFERENCE_DATA_DIR / "burgers2.mat"
 
 
 N_X = 256
@@ -218,15 +218,11 @@ class TestLoadBurgers2Unit:
 class TestLoaderInvariants:
 
     @pytest.mark.integration
-    def test_kd_post_init_validation_passes(
-        self, dataset: PDEDataset
-    ) -> None:
+    def test_kd_post_init_validation_passes(self, dataset: PDEDataset) -> None:
         assert dataset.get_shape() == (N_X, N_T)
 
     @pytest.mark.integration
-    def test_get_coords_returns_correct_tensors(
-        self, dataset: PDEDataset
-    ) -> None:
+    def test_get_coords_returns_correct_tensors(self, dataset: PDEDataset) -> None:
         assert dataset.axes is not None
         x_coords = dataset.get_coords("x")
         assert torch.equal(x_coords, dataset.axes["x"].values)

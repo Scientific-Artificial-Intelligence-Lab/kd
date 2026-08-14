@@ -175,9 +175,16 @@ class OpenAICompatProvider:
             raise LLMBackendError(
                 "OpenAI-compatible LLM provider received an empty completion"
             )
+        model = getattr(response, "model", None)
+        if not model:
+            raise LLMBackendError(
+                "OpenAI-compatible LLM provider received a response with no "
+                "model id; the served model is recorded on every response and "
+                "tape entry, so it is never substituted with the configured one"
+            )
         return LLMResponse(
             text=str(content),
-            model=str(getattr(response, "model", None) or self._model),
+            model=str(model),
             usage=self._map_usage(getattr(response, "usage", None)),
         )
 
@@ -187,11 +194,11 @@ class OpenAICompatProvider:
             return None
         prompt_tokens = getattr(usage, "prompt_tokens", None)
         completion_tokens = getattr(usage, "completion_tokens", None)
+        if prompt_tokens is None or completion_tokens is None:
+            return None
         total_tokens = getattr(usage, "total_tokens", None)
         return LLMUsage(
-            prompt_tokens=0 if prompt_tokens is None else int(prompt_tokens),
-            completion_tokens=(
-                0 if completion_tokens is None else int(completion_tokens)
-            ),
+            prompt_tokens=int(prompt_tokens),
+            completion_tokens=int(completion_tokens),
             total_tokens=None if total_tokens is None else int(total_tokens),
         )

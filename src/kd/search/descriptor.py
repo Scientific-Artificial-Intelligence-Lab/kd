@@ -5,7 +5,15 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from kd.core.equation import Form
+from kd.core.equation.sketch import Sketch
+from kd.core.platform.sketch_compile import (
+    SKETCH_CLAUSES,
+    SketchClauseLevels,
+    used_clauses,
+)
 from kd.data.schema import DataTopology
+from kd.search.config_fields import field_specs
+from kd.search.resume_policy import SCIENCE_AXIS_DENYLISTS
 
 if TYPE_CHECKING:
     from kd.search.protocol import FacadeWiringContract
@@ -21,6 +29,7 @@ class InstrumentMode:
     topologies: frozenset[DataTopology]
     provider_kind: Literal["finite_diff", "autograd", "none"]
     description: str = ""
+    sketch: SketchClauseLevels = SketchClauseLevels()
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -75,6 +84,32 @@ class InstrumentDescriptor:
             raise ValueError("descriptor knob names must be distinct")
 
 
+def assert_sketch_supported(
+    descriptor: InstrumentDescriptor,
+    sketch: Sketch,
+    *,
+    algorithm: str,
+) -> None:
+    used = used_clauses(sketch)
+    offending = [
+        (mode.name, clause, mode.sketch.level(clause))
+        for mode in descriptor.modes
+        for clause in SKETCH_CLAUSES
+        if clause in used
+        if mode.sketch.level(clause) == "unsupported"
+    ]
+    if not offending:
+        return
+    details = ", ".join(
+        f"(mode={mode!r}, clause={clause!r}, level={level!r})"
+        for mode, clause, level in offending
+    )
+    raise ValueError(
+        f"algorithm {algorithm!r} cannot accept this sketch: {details}; "
+        "this algorithm declares no sketch support for these clauses"
+    )
+
+
 def _config_cls_ref(plugin_cls: type[FacadeWiringContract]) -> str:
     config_cls = plugin_cls.config_cls
     return f"{config_cls.__module__}.{config_cls.__qualname__}"
@@ -106,9 +141,13 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
             }
             for knob in descriptor.knobs
         ],
+        "fields": field_specs(plugin_cls),
         "score_kind": plugin_cls.score_kind,
         "score_direction": plugin_cls.score_direction,
         "one_shot": plugin_cls.one_shot,
+        "identity_breaking_fields": sorted(
+            SCIENCE_AXIS_DENYLISTS.get(descriptor.algorithm, frozenset())
+        ),
     }
 
 
@@ -117,5 +156,6 @@ __all__ = [
     "InstrumentMode",
     "Knob",
     "ResumeTier",
+    "assert_sketch_supported",
     "tool_schema",
 ]

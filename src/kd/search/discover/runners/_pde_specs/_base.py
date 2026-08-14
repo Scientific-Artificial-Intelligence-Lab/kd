@@ -5,12 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kd.data.schema import PDEDataset
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
-DATA_DIR = (
-    PROJECT_ROOT
-    / "refs" / "discover" / "dso" / "dso" / "task" / "pde" / "data_new"
-)
+DATA_DIR = REFERENCE_DATA_DIR
 
 
 
@@ -20,22 +17,43 @@ DATA_DIR = (
 
 
 _FAST_TEMPLATE: dict[str, float | int] = {
-    "pretrain_epoch": 10_000, "pinn_epoch": 200, "n_iterations": 20,
-    "n_cycles": 2, "batch_size": 500, "n_collocation": 10_000,
-    "epsilon": 0.02, "entropy_weight": 0.03, "entropy_gamma": 0.7,
-    "lr": 0.001, "early_stop_patience": 200,
+    "pretrain_epoch": 10_000,
+    "pinn_epoch": 200,
+    "n_iterations": 20,
+    "n_cycles": 2,
+    "batch_size": 500,
+    "n_collocation": 10_000,
+    "epsilon": 0.02,
+    "entropy_weight": 0.03,
+    "entropy_gamma": 0.7,
+    "lr": 0.001,
+    "early_stop_patience": 200,
 }
 _MEDIUM_TEMPLATE: dict[str, float | int] = {
-    "pretrain_epoch": 50_000, "pinn_epoch": 500, "n_iterations": 100,
-    "n_cycles": 2, "batch_size": 500, "n_collocation": 20_000,
-    "epsilon": 0.02, "entropy_weight": 0.03, "entropy_gamma": 0.7,
-    "lr": 0.001, "early_stop_patience": 300,
+    "pretrain_epoch": 50_000,
+    "pinn_epoch": 500,
+    "n_iterations": 100,
+    "n_cycles": 2,
+    "batch_size": 500,
+    "n_collocation": 20_000,
+    "epsilon": 0.02,
+    "entropy_weight": 0.03,
+    "entropy_gamma": 0.7,
+    "lr": 0.001,
+    "early_stop_patience": 300,
 }
 _FULL_TEMPLATE: dict[str, float | int] = {
-    "pretrain_epoch": 200_000, "pinn_epoch": 1_000, "n_iterations": 200,
-    "n_cycles": 3, "batch_size": 500, "n_collocation": 50_000,
-    "epsilon": 0.02, "entropy_weight": 0.03, "entropy_gamma": 0.7,
-    "lr": 0.001, "early_stop_patience": 500,
+    "pretrain_epoch": 200_000,
+    "pinn_epoch": 1_000,
+    "n_iterations": 200,
+    "n_cycles": 3,
+    "batch_size": 500,
+    "n_collocation": 50_000,
+    "epsilon": 0.02,
+    "entropy_weight": 0.03,
+    "entropy_gamma": 0.7,
+    "lr": 0.001,
+    "early_stop_patience": 500,
 }
 
 
@@ -94,9 +112,7 @@ class PDESpec:
 
     def data_path_for_tier(self, tier: str) -> Path:
         if tier not in self.presets:
-            raise KeyError(
-                f"Unknown tier {tier!r} for PDE {self.pde_name!r}"
-            )
+            raise KeyError(f"Unknown tier {tier!r} for PDE {self.pde_name!r}")
         return self.presets[tier].data_path
 
     def load_data(self, tier: str) -> PDEDataset:
@@ -126,6 +142,4 @@ class PDESpec:
             return load_pde_compound_npy(path)
         if self.pde_name == "pde_divide":
             return load_pde_divide_npy(path)
-        raise ValueError(
-            f"No data loader registered for PDE {self.pde_name!r}"
-        )
+        raise ValueError(f"No data loader registered for PDE {self.pde_name!r}")

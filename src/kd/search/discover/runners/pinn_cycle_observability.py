@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -223,7 +224,11 @@ def write_stage_checkpoint(
 ) -> None:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     path = checkpoint_dir / f"{name}.json"
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp_path, path)
 
 
 def append_jsonl(path: Path, payload: dict[str, Any]) -> None:

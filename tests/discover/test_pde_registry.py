@@ -1,8 +1,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 
@@ -11,22 +9,14 @@ import pytest
 
 
 import kd.search.discover.tokens.prior
+from kd.search.discover.paths import REFERENCE_DATA_DIR
 from kd.search.discover.runners.pde_registry import (
     _RAW_PRESETS,
     PDE_REGISTRY,
 )
 
 
-_REFS_PDE_DATA = (
-    Path(__file__).resolve().parents[2]
-    / "refs"
-    / "discover"
-    / "dso"
-    / "dso"
-    / "task"
-    / "pde"
-    / "data_new"
-)
+_REFS_PDE_DATA = REFERENCE_DATA_DIR
 _requires_refs_data = pytest.mark.skipif(
     not _REFS_PDE_DATA.exists(),
     reason="requires refs/ reference PDE data (not shipped in the public tree)",

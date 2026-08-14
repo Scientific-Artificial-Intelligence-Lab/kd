@@ -153,6 +153,39 @@ class TestFinalizeStatus:
         assert _final_status(tmp_path) == FINAL_STATUS_COMPLETED
 
     @pytest.mark.unit
+    def test_finalize_failure_is_visible_on_the_result(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        raiser = _RaisingEndCallback()
+        later = RecordingCallback()
+        runner = ExperimentRunner(
+            algorithm=StatefulAlgorithm(),
+            max_iterations=1,
+            callbacks=[raiser, later],
+        )
+
+        result = runner.run(mock_components)
+
+        assert "experiment_end" in later.events
+        assert len(result.finalize_failures) == 1
+        failure = result.finalize_failures[0]
+        assert "_RaisingEndCallback" in failure
+        assert "on_experiment_end" in failure
+        assert "finalize boom" in failure
+
+    @pytest.mark.unit
+    def test_clean_run_reports_no_finalize_failures(
+        self, mock_components: PlatformComponents
+    ) -> None:
+        runner = ExperimentRunner(
+            algorithm=StatefulAlgorithm(),
+            max_iterations=1,
+            callbacks=[RecordingCallback()],
+        )
+
+        assert runner.run(mock_components).finalize_failures == ()
+
+    @pytest.mark.unit
     def test_row7_retry_inside_active_except_is_completed(
         self, mock_components: PlatformComponents, tmp_path: Path
     ) -> None:

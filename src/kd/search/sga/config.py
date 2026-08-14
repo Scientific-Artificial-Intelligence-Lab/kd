@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, get_args
+from typing import Literal, get_args
 
-if TYPE_CHECKING:
-    from kd.models.field_model import FieldModel
+
+
+
+
+
+
+from kd.models.field_model import FieldModel
 
 DedupMode = Literal["none", "pre_prune", "post_prune", "dual"]
-"""Allowed values for ``SGAConfig.dedup_mode``"""
+"""Allowed values for ``SGAConfig.dedup_mode``."""
 
 
 
@@ -162,7 +167,7 @@ class SGAConfig:
     use_autograd: bool = False
     """If True, train (or reuse) a FieldModel surrogate and use AutogradProvider
     for Layer 2 terminals (u_x, u_t). Layer 1 (raw u leaf) and Layer 3 (tree
-    d / d^2 operators) are unchanged
+    d / d^2 operators) are unchanged.
 
     Note: enabling this triggers FieldModel training in ``prepare()`` unless a
     pre-trained ``field_model`` is provided, which can take seconds to minutes.

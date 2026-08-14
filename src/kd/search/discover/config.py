@@ -262,53 +262,220 @@ class DiscoverConfig:
 
 
     n_iterations: int = DEFAULT_N_ITERATIONS
+    """Number of search iterations the standalone entry point runs, one controller batch
+    per iteration. Ignored when the search is driven through ``kd.Model``, where
+    ``Model(generations=...)`` sets the loop length.
+    """
     seed: int = DEFAULT_SEED
+    """Random seed of the search: ``torch.manual_seed`` is called with this value when
+    the algorithm is constructed and again before the engine is built, so it governs
+    both the controller's weight initialization and every token sampled from it. It is
+    the only seeding entry and overrides a ``torch.manual_seed`` the caller made
+    beforehand.
+    """
     library: LibraryConfig = field(default_factory=_default_library_config)
+    """Ordered vocabulary of tokens that candidate terms are built from, defaulting to
+    ``["u", "u_x", "u_xx", "u_xxx"]``. Each term is a product of tokens drawn from
+    this list, and the ordering matters: one of the mutation operators shifts a token
+    to an adjacent entry.
+    """
     min_length: int = DEFAULT_MIN_LENGTH
+    """Minimum length of a sampled expression, in tokens. The sampler is forbidden from
+    ending an expression before this many tokens, and any candidate that still comes
+    out shorter is rejected before evaluation.
+    """
     max_length: int = DEFAULT_MAX_LENGTH
+    """Maximum number of tokens in a sampled sentence, counting the pinned
+    ``start_words`` prefix; sampling stops there if no end token is drawn first. It
+    must exceed ``len(start_words)`` and stay below the model's context length, and
+    the default 49 is one below the pretrained context.
+    """
     batch_size: int = DEFAULT_BATCH_SIZE
+    """Number of candidate expressions sampled per search iteration, and the batch the
+    policy-gradient update is computed from. Larger values give a steadier training
+    signal at more compute per iteration.
+    """
 
     num_units: int = DEFAULT_NUM_UNITS
+    """Number of hidden units in each LSTM layer of the controller. It also sets the
+    width of the attention projections when ``attention`` is enabled.
+    """
     num_layers: int = DEFAULT_NUM_LAYERS
+    """Number of stacked LSTM layers in the controller. Layers beyond the first take the
+    previous layer's hidden state as their input.
+    """
     embedding_dim: int = DEFAULT_EMBEDDING_DIM
+    """Width of the learned embedding used for each categorical observation channel. It
+    has no effect unless ``use_embedding`` is True, which replaces the one-hot inputs
+    with embeddings of this size.
+    """
     observe_parent: bool = DEFAULT_OBSERVE_PARENT
+    """When True, the parent token of the position about to be sampled is added to the
+    controller input, as a one-hot vector or as an embedding when ``use_embedding``
+    is set. At least one of the four observation channels must be enabled.
+    """
     observe_sibling: bool = DEFAULT_OBSERVE_SIBLING
+    """When True, the left sibling token of the position about to be sampled is added to
+    the controller input, as a one-hot vector or as an embedding when
+    ``use_embedding`` is set. At least one of the four observation channels must be
+    enabled.
+    """
     observe_action: bool = DEFAULT_OBSERVE_ACTION
+    """When True, the token sampled at the previous step is added to the controller
+    input, as a one-hot vector or as an embedding when ``use_embedding`` is set.
+    """
     observe_dangling: bool = DEFAULT_OBSERVE_DANGLING
+    """When True, the count of unfilled argument slots in the partial expression tree is
+    appended to the controller input as a single numeric value. This channel is
+    always a raw count, so ``use_embedding`` does not apply to it.
+    """
     use_embedding: bool = DEFAULT_USE_EMBEDDING
+    """When True, the categorical observation channels enter the controller as learned
+    embeddings of width ``embedding_dim`` instead of one-hot vectors. The dangling-
+    slot count is unaffected and stays a single numeric input.
+    """
     attention: bool = DEFAULT_ATTENTION
+    """When True, the controller applies additive (Bahdanau) attention over a sliding
+    window of its own recent outputs before producing token logits. The window length
+    is ``attn_length``.
+    """
     attn_length: int = DEFAULT_ATTN_LENGTH
+    """Length of the attention window, in past controller steps. It has no effect when
+    ``attention`` is False.
+    """
     initializer: Literal["xavier", "zeros"] = DEFAULT_INITIALIZER
+    """Parameter initialization scheme, either ``"xavier"`` or ``"zeros"``. ``"xavier"``
+    draws all parameters from a Xavier/uniform baseline; ``"zeros"`` also zeroes the
+    LSTM cell parameters and the output bias, making the initial token distribution
+    uniform.
+    """
 
     epsilon: float = DEFAULT_EPSILON
+    """Complexity penalty in the genetic fitness ``NMSE + epsilon * length``, where
+    ``length`` is the total number of tokens across the candidate's terms. Raise it
+    to push the search toward shorter equations; the useful value is problem-
+    dependent, and the packaged presets span 1e-6 to 1e-3.
+    """
     baseline: str = DEFAULT_BASELINE
+    """Value subtracted from the rewards in the policy-gradient loss. ``"R_e"`` (the
+    default) uses the risk-seeking reward quantile itself, ``"ewma_R"`` a moving
+    average of the mean kept reward, and ``"combined"`` the quantile plus a moving
+    average of the gap between the two.
+    """
     entropy_weight: float = DEFAULT_ENTROPY_WEIGHT
+    """Weight of the entropy bonus added to the policy-gradient loss, which rewards a
+    less peaked sampling distribution. Must be non-negative; raise it when the
+    controller commits to one expression family too early, set 0.0 to drop the bonus.
+    """
     gamma: float = DEFAULT_GAMMA
+    """Decay of the moving-average baseline: the running value keeps weight ``gamma``
+    and the new batch contributes ``1 - gamma``. In the range 0 to 1, and only read
+    when ``baseline`` is ``"ewma_R"`` or ``"combined"``.
+    """
     reward_alpha: float = DEFAULT_REWARD_ALPHA
+    """Weight of the complexity penalty in the reward ``(1 - reward_alpha * complexity)
+    / (1 + sqrt(nmse))``. Larger values push the search toward shorter equations;
+    since the reward is clipped at 0, a large value flattens long candidates to zero
+    reward.
+    """
     learning_rate: float = DEFAULT_LEARNING_RATE
+    """Step size of the Adam optimizer that updates the controller network. A run
+    resumed from a checkpoint adopts this value rather than the one saved with the
+    checkpoint.
+    """
     entropy_gamma: float = DEFAULT_ENTROPY_GAMMA
+    """Per-position decay of the entropy bonus: the entropy at position ``t`` of a
+    sampled sequence is weighted by ``entropy_gamma ** t``. The default 1.0 weights
+    every position equally; values below 1 concentrate the exploration bonus on the
+    first tokens.
+    """
     max_diff_order: int | None = DEFAULT_MAX_DIFF_ORDER
+    """Highest cumulative derivative order allowed in a sampled expression; candidates
+    above it are rejected before evaluation. Orders accumulate along a chain, so
+    ``diff2_x(diff_x(u))`` counts as 3, and ``None`` disables the check.
+    """
     use_repeat_prior: bool = DEFAULT_USE_REPEAT_PRIOR
+    """If True, stop a token from being sampled again once it has already appeared
+    ``repeat_max`` times in the expression being built. The tokens subject to the
+    limit are named in ``repeat_tokens``; with the defaults this caps ``add`` at five
+    and so bounds the number of additive terms.
+    """
     repeat_tokens: list[str] = field(
         default_factory=lambda: list(DEFAULT_REPEAT_TOKENS)
     )
+    """Token names counted by the repeat limit, sharing one budget: their occurrences
+    are pooled and compared against ``repeat_max``. Read only when
+    ``use_repeat_prior`` is true, and every name must exist in the token library.
+    """
     repeat_max: int = DEFAULT_REPEAT_MAX
+    """Maximum combined number of times the ``repeat_tokens`` may appear in one
+    expression; on reaching the count those tokens are removed from the sampling
+    distribution for the rest of that expression. Read only when ``use_repeat_prior``
+    is true.
+    """
     use_trig_prior: bool = DEFAULT_USE_TRIG_PRIOR
+    """If True, forbid trigonometric and derivative tokens anywhere inside the subtree
+    of another trigonometric or derivative token. This rules out compositions such as
+    ``sin(cos(u))`` and, because derivative tokens are included, nested derivatives
+    such as ``diff_x(diff_x(u))``.
+    """
     use_inverse_prior: bool = DEFAULT_USE_INVERSE_PRIOR
+    """If True, forbid a unary token from being the direct child of its own inverse, so
+    cancelling pairs such as ``exp(log(u))`` and ``sqrt(n2(u))`` are never sampled.
+    Only pairs whose two tokens are both in the library are constrained.
+    """
     use_diff_descendant_prior: bool = DEFAULT_USE_DIFF_DESCENDANT_PRIOR
+    """If True, forbid ``add`` and ``sub`` anywhere inside the subtree of a derivative
+    token, so no sampled candidate differentiates a sum.
+    """
     use_diff_child_prior: bool = DEFAULT_USE_DIFF_CHILD_PRIOR
+    """If True, restrict the child of a derivative token to a state variable or another
+    derivative token; coordinate variables and every other operator are forbidden in
+    that position. This keeps constant terms such as ``diff_x(x)`` out of the search.
+    """
     soft_length_loc: float | None = DEFAULT_SOFT_LENGTH_LOC
+    """Target expression length in tokens: past position ``soft_length_loc`` the
+    sampling logits of operator tokens are reduced by ``(t - soft_length_loc)**2 / (2
+    * soft_length_scale)``, so sampling tends to terminate near that length.
+    ``None``, the default, leaves the prior off.
+    """
     soft_length_scale: float = DEFAULT_SOFT_LENGTH_SCALE
+    """Width of the length penalty past ``soft_length_loc``, which is ``(t -
+    soft_length_loc)**2 / (2 * soft_length_scale)``: larger values make the pull
+    toward the target length gentler. Must be positive, and is read only when
+    ``soft_length_loc`` is set.
+    """
     stability_selection: int = DEFAULT_STABILITY_SELECTION
+    """Number of distinct top-reward candidates from the final search cycle that enter
+    bootstrap stability selection, which re-fits each candidate on resampled rows and
+    keeps the one that wins the most resamples. ``0`` (the default) skips the step
+    and keeps the best-reward candidate; only a run driven by the PINN surrogate
+    applies it.
+    """
     stability_queue_capacity: int = DEFAULT_STABILITY_QUEUE_CAPACITY
+    """Maximum number of distinct candidates kept in the reward-ordered per-cycle pool
+    that stability selection draws from. Read only when ``stability_selection`` is
+    greater than 0, and must be at least as large as it.
+    """
 
 
 
 
 
     magnitude_filter: bool = DEFAULT_MAGNITUDE_FILTER
+    """When ``True``, a fit whose active coefficients include any magnitude below
+    ``5e-5`` or above ``1e4`` is marked invalid, so it scores zero reward and is
+    dropped from controller training. Defaults to ``False``, which accepts a fit at
+    any coefficient magnitude.
+    """
 
     diagnostic_scaffold: bool = DEFAULT_DIAGNOSTIC_SCAFFOLD
+    """Attach the diagnostic scaffold prior, which restricts sampling in the first
+    search cycle to a root token from ``diagnostic_scaffold_root_tokens`` whose two
+    branches draw on disjoint token sets. Off by default; ``True`` also requires
+    ``DISCOVER_ENABLE_DIAGNOSTICS=1`` in the environment, because the scaffold builds
+    an assumed equation shape into the search.
+    """
 
 
 
@@ -318,19 +485,52 @@ class DiscoverConfig:
     diagnostic_scaffold_diffusion_tokens: tuple[str, ...] = (
         DEFAULT_DIAGNOSTIC_SCAFFOLD_DIFFUSION_TOKENS
     )
+    """Token names the scaffold keeps to the left branch of the root: each one is
+    excluded from sampling while the right branch is filled. Read only when
+    ``diagnostic_scaffold`` is ``True``, and a name also listed as neutral is exempt.
+    """
     diagnostic_scaffold_reaction_tokens: tuple[str, ...] = (
         DEFAULT_DIAGNOSTIC_SCAFFOLD_REACTION_TOKENS
     )
+    """Token names the scaffold keeps to the right branch of the root: each one is
+    excluded from sampling while the left branch is filled. Read only when
+    ``diagnostic_scaffold`` is ``True``, and a name also listed as neutral is exempt.
+    """
     diagnostic_scaffold_root_tokens: tuple[str, ...] = (
         DEFAULT_DIAGNOSTIC_SCAFFOLD_ROOT_TOKENS
     )
+    """Token names the scaffold allows at the root of a sampled expression; at the first
+    sampling step every other token is excluded, so the tree starts from one of
+    these. Defaults to ``("add", "sub")`` and is read only when
+    ``diagnostic_scaffold`` is ``True``; a set in which no name exists in the token
+    library fails when the search is built.
+    """
     diagnostic_scaffold_neutral_tokens: tuple[str, ...] = (
         DEFAULT_DIAGNOSTIC_SCAFFOLD_NEUTRAL_TOKENS
     )
+    """Token names the scaffold never excludes, so they stay samplable in both branches
+    even when they also appear in the diffusion or reaction list. Read only when
+    ``diagnostic_scaffold`` is ``True``; a name shared with
+    ``diagnostic_scaffold_root_tokens`` is rejected.
+    """
     token_bias_tokens: tuple[str, ...] = DEFAULT_TOKEN_BIAS_TOKENS
+    """Token names whose sampling probability is shifted by ``token_bias_weight``,
+    identically at every step of every sampled expression. The bias applies only when
+    this list is non-empty and ``token_bias_weight`` is not ``0.0``; a name absent
+    from the token library is skipped.
+    """
     token_bias_weight: float = DEFAULT_TOKEN_BIAS_WEIGHT
+    """Amount added to the log-probability of every token in ``token_bias_tokens``, the
+    same at each sampling step. Positive values make those tokens more likely and
+    negative values less likely; ``0.0`` (the default) leaves the bias off.
+    """
 
     pinn: PINNConfig | None = None
+    """Settings for the optional PINN surrogate, which alternates symbolic search with
+    training a network on the data and takes derivatives from that trained network.
+    ``None`` (the default) searches on finite-difference derivatives; ``kd.Model``
+    rejects a non-``None`` value because it never runs the PINN cycle.
+    """
 
     def __post_init__(self) -> None:
         if self.seed < 0:

@@ -204,3 +204,22 @@ class TestPySRConfigValidation:
         assert cfg.niterations == 1
         assert cfg.maxsize == 1
         assert cfg.population_size == 1
+
+
+class TestExtraPySRKwargsShadowGuard:
+
+    @pytest.mark.parametrize(
+        "shadowed",
+        ["niterations", "random_state", "maxsize", "binary_operators"],
+    )
+    def test_shadowing_a_typed_field_is_rejected(self, shadowed: str) -> None:
+        with pytest.raises(ValueError, match="extra_pysr_kwargs"):
+            PySRConfig(extra_pysr_kwargs={shadowed: 1})
+
+    def test_the_rejection_names_the_offending_key(self) -> None:
+        with pytest.raises(ValueError, match="niterations"):
+            PySRConfig(extra_pysr_kwargs={"alpha": 0.1, "niterations": 1})
+
+    def test_a_genuine_passthrough_kwarg_is_still_accepted(self) -> None:
+        extra = {"alpha": 0.1, "ncycles_per_iteration": 550}
+        assert PySRConfig(extra_pysr_kwargs=extra).extra_pysr_kwargs == extra

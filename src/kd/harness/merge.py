@@ -168,6 +168,11 @@ def merge_shards(
         len(expected_hash),
         merged_root,
     )
+
+
+    from kd.harness.report import write_store_report
+
+    write_store_report(reloaded)
     return reloaded
 
 

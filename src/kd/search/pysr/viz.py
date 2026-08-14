@@ -5,6 +5,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -164,6 +165,10 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
 
     ax.set_xlabel(spec.xlabel)
     ax.set_ylabel(spec.ylabel)
+    if spec.xlabel == _COMPLEXITY_LABEL:
+
+
+        integer_ticks(ax)
     ax.set_title(spec.title)
 
     if not x_values or not y_values:

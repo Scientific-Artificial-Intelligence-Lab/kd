@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+from kd.core.strict_keys import strict_keys as _strict_keys_core
 from kd.harness._consensus_serialize import (
     _V1_ABSENT_KEYS,
     _V1_ADJACENCY_KEYS,
@@ -77,22 +79,25 @@ def write_consensus_artifact(report: ConsensusReport, *, path: str | Path) -> Pa
         "report": consensus_to_dict(report),
     }
     target = Path(path)
-    target.write_text(
+
+
+    tmp_path = target.with_name(f"{target.name}.tmp")
+    tmp_path.write_text(
         json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8"
     )
+    os.replace(tmp_path, target)
     return target
 
 
 def _check_keys(node: Any, table: frozenset[str], name: str) -> dict[str, Any]:
     if not isinstance(node, dict):
         raise ConsensusArtifactError(f"{name} must be a JSON object")
-    actual = frozenset(node)
-    if actual != table:
-        unknown = sorted(actual - table)
-        missing = sorted(table - actual)
-        raise ConsensusArtifactError(
-            f"{name} key face mismatch: unknown={unknown!r}, missing={missing!r}"
-        )
+    _strict_keys_core(
+        node,
+        object_name=name,
+        required=table,
+        error_cls=ConsensusArtifactError,
+    )
     return node
 
 

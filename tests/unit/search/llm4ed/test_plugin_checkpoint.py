@@ -5,7 +5,6 @@ import pytest
 
 import kd.search.llm4ed.plugin as plugin_mod
 from kd.llm import BudgetedProvider, LLMProvider
-from kd.search.llm4ed import FakeLlm4edBackend
 from kd.search.llm4ed.config import Llm4edConfig
 from kd.search.llm4ed.plugin import Llm4edPlugin
 from tests.unit.search.llm4ed._checkpoint_helpers import (
@@ -14,6 +13,7 @@ from tests.unit.search.llm4ed._checkpoint_helpers import (
     canonical_state,
     pickle_roundtrip,
 )
+from tests.unit.search.llm4ed._fake_backend import FakeLlm4edBackend
 from tests.unit.search.llm4ed._plugin_helpers import (
     components_for,
     make_config,

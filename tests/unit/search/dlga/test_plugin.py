@@ -326,7 +326,12 @@ class TestDLGAPluginLifecycle:
         first.prepare(components)
         results = first.evaluate(["div(u, u)"])
         first.update(results)
-        saved_state = first.state
+
+
+
+
+
+        saved_state = {**first.state, "last_fitness": None}
 
         restored = DLGAPlugin(config, surrogate_model=_ExactQuadraticModel())
         restored.state = saved_state

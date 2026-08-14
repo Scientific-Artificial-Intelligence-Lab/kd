@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
@@ -429,13 +430,17 @@ class RunRecord:
         _require_valid_record_hash(self)
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", encoding="utf-8") as handle:
+
+
+        tmp_path = output_path.with_name(f"{output_path.name}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
             json.dump(
                 self.to_dict(),
                 handle,
                 indent=JSON_INDENT_SPACES,
                 allow_nan=False,
             )
+        os.replace(tmp_path, output_path)
 
     @classmethod
     def load(cls, path: Path | str) -> RunRecord:

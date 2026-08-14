@@ -91,6 +91,15 @@ cross-checking: the PySR symbolic regressor (`algorithm="pysr"`, needs
 over the KD term library (`algorithm="pysindy"`, needs
 `uv sync --extra pysindy`).
 
+Each engine's own settings go through the same call: any field of its config
+carries as a keyword argument, so `kd.Model(algorithm="pysindy", threshold=0.2,
+normalize_columns=True)` and `kd.Model(algorithm="dlga", pop_size=200,
+epsilon=1e-4)` need no per-engine call form. An unknown name is rejected with
+the accepted ones listed. `kd.instrument_schemas()` returns one row per engine —
+its config fields with types and defaults, plus the facade parameters
+(`generations`, `population`, `seed`, …) that are not config fields — so a
+caller holding only JSON can configure any engine without hardcoding names.
+
 ## Datasets
 
 ### Simulated PDE datasets
@@ -207,6 +216,72 @@ for v in report.rejected:
     print(v.term, "->", v.reason)    # "u + u_x" is not canonical funcall IR
 ```
 
+## Discovery with a Sketch
+
+A blind search starts from "any equation could be here". When part of the law is
+already settled physics, `fit(dataset, sketch=...)` states that part and searches
+only the rest:
+
+```python
+import kd
+from kd.core.equation import (
+    LhsSpec,
+    PinnedTerm,
+    Sketch,
+    SketchMatchPolicy,
+    TermConstraint,
+    TermHole,
+)
+from kd.core.expr import TermVocabulary
+
+sketch = Sketch(
+    lhs_spec=LhsSpec("u", "t", 1),
+    vocabulary=TermVocabulary(
+        fields=frozenset({"u"}), coordinates=frozenset({"x", "t"})
+    ),
+    pinned=(PinnedTerm("mul(u,u_x)", -1.0),),   # known term WITH its coefficient
+    anchored=(),                                # known structure, coefficient free
+    holes=(                                     # the unknown remainder
+        TermHole(
+            id="diffusion",
+            min_count=1,
+            max_count=2,
+            constraint=TermConstraint(max_deriv_order=2),
+        ),
+    ),
+    match_policy=SketchMatchPolicy(
+        coeff_atol=1e-9, coeff_rtol=1e-9, support_threshold=0.0
+    ),
+)
+
+model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
+model.fit(dataset, sketch=sketch)
+
+outcome = model.result_.sketch_outcome
+print(outcome.verdict.overall)    # True when every clause of the sketch holds
+print(outcome.solution)           # published only when overall is True
+```
+
+A pinned term is subtracted from the regression target before the search and
+restored exactly in the solution, so the search cannot spend budget
+rediscovering it. A hole declares how many terms may fill it and what shapes
+they may take (derivative-order cap, allowed operators, fields, axes). The exit
+is certified: `outcome.solution` is published only when the discovered law
+satisfies every clause, and otherwise the run reports `outcome.best_candidate`
+plus the clause that failed. On the bundled 64×51 Burgers field the run above
+restores the pinned coefficient at exactly `-1.0` and fills the hole with a
+second-order term whose coefficient comes out `0.1000` against a ground truth of
+`0.1`.
+
+`"sga"` and `"pysindy"` accept sketches today. SGA compiles the sketch natively,
+narrowing the search's variable and operator pools at the source; an engine that
+cannot honor a clause refuses the fit with a `ValueError` naming that clause
+instead of searching wider than declared.
+
+The full walkthrough, including how the two backends differ, is
+[`examples/21_sketch_discovery.py`](examples/21_sketch_discovery.py)
+(about 30 seconds).
+
 ## Long Runs: Checkpoint & Resume
 
 ```python
@@ -267,6 +342,14 @@ fingerprint; `build_consensus` aggregates a sealed store across runs, and both
 dispatch and consensus results render to markdown or to versioned JSON
 artifacts. Execution is serial: the package composes the existing `Model`
 surface and adds no routing or budget logic.
+
+Passing `recording=RecordingOptions(...)` runs each entry inside a standard run
+directory (`runs/entry-NNNN/`, numbered to match its record) carrying that
+entry's iteration events, search phases and optional checkpoints; adding
+`catalog_path=` appends one row per run to a cross-run ledger whose rows point
+at those run directories. `run_plan` also renders a human-readable `report.md`
+into the store root; it is derived and regenerable, while the sealed index and
+records stay the authority.
 
 The full chain (plan, run, re-open the sealed store, consensus, Markdown +
 JSON) runs in about five seconds in

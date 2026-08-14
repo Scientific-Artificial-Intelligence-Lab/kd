@@ -5,6 +5,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -119,6 +120,7 @@ def render(name: str, ax: Axes, recorder: VizRecorder | None) -> list[str]:
 
     ax.set_xlabel(_X_LABEL)
     ax.set_ylabel(metric)
+    integer_ticks(ax)
     ax.set_title(title)
 
     if not series:

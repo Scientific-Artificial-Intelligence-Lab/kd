@@ -44,6 +44,11 @@ DECIDED: dict[str, frozenset[str]] = {
 
 
 
+
+
+
+
+
     "kd.search": frozenset(
         {
             "RunRecord",
@@ -53,6 +58,10 @@ DECIDED: dict[str, frozenset[str]] = {
             "tool_schema",
             "build_mini_table",
             "BEST_SCORE_KEY",
+            "DiscoveryTask",
+            "SketchOutcome",
+            "SketchClauseLevels",
+            "write_sketch_artifact",
         }
     ),
 
@@ -207,6 +216,10 @@ def test_kd_all_full_set_equality() -> None:
         "PySINDyConfig",
         "PySRConfig",
         "SGAConfig",
+
+
+
+        "Sketch",
         "TabularDataset",
         "TaskType",
         "TermRejection",
