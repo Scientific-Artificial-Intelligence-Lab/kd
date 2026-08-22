@@ -5,6 +5,16 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+from kd.search.series_keys import (
+    PARETO_COMPLEXITY_KEY,
+    PARETO_EXPRESSIONS_KEY,
+    PARETO_LOSS_KEY,
+    PARETO_NMSE_KEY,
+    PARETO_SCALE_KEY,
+    SELECTED_COMPLEXITY_KEY,
+    SELECTED_LOSS_KEY,
+    SELECTED_NMSE_KEY,
+)
 from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 
@@ -20,16 +30,22 @@ logger = logging.getLogger(__name__)
 
 
 
-PARETO_COMPLEXITY_KEY = "pareto_complexity"
-PARETO_LOSS_KEY = "pareto_loss"
-PARETO_NMSE_KEY = "pareto_nmse"
-SELECTED_COMPLEXITY_KEY = "selected_complexity"
-SELECTED_LOSS_KEY = "selected_loss"
-SELECTED_NMSE_KEY = "selected_nmse"
+
+
+
+
+
+
+
+
+
+
 LOGGED_METRICS: tuple[str, ...] = (
     PARETO_COMPLEXITY_KEY,
     PARETO_LOSS_KEY,
     PARETO_NMSE_KEY,
+    PARETO_EXPRESSIONS_KEY,
+    PARETO_SCALE_KEY,
     SELECTED_COMPLEXITY_KEY,
     SELECTED_LOSS_KEY,
     SELECTED_NMSE_KEY,
@@ -314,8 +330,10 @@ def _no_data_reason(recorder: VizRecorder | None) -> str:
 __all__ = [
     "LOGGED_METRICS",
     "PARETO_COMPLEXITY_KEY",
+    "PARETO_EXPRESSIONS_KEY",
     "PARETO_LOSS_KEY",
     "PARETO_NMSE_KEY",
+    "PARETO_SCALE_KEY",
     "SELECTED_COMPLEXITY_KEY",
     "SELECTED_LOSS_KEY",
     "SELECTED_NMSE_KEY",

@@ -117,8 +117,11 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
         )
 
 
-    if dataset.lhs_field and dataset.lhs_axis:
-        lhs_label: str | None = _build_lhs_label(
+    lhs_label: str | None
+    if dataset.topology is DataTopology.TABULAR:
+        lhs_label = dataset.lhs_field
+    elif dataset.lhs_field and dataset.lhs_axis:
+        lhs_label = _build_lhs_label(
             dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order
         )
     else:
@@ -340,7 +343,12 @@ def _render_report(report: DatasetReport) -> str:
     else:
         lines.extend(_format_field_line(field) for field in report.fields)
 
-    if report.lhs_field is not None and report.lhs_axis is not None:
+    if report.topology == DataTopology.TABULAR.value:
+
+
+
+        lines.append(f"LHS: {report.lhs_label} (target column)")
+    elif report.lhs_field is not None and report.lhs_axis is not None:
 
 
 

@@ -9,6 +9,7 @@ from kd.core.equation.types import (
     Evolution,
     Homogeneous,
     LhsSpec,
+    Regression,
     Term,
     fold_terms,
 )
@@ -42,6 +43,11 @@ def lower_to_regression(eq: Equation) -> RegressionForm | PivotRegressionForm:
             return PivotRegressionForm(
                 pivot_ir=pivot_ir,
                 rhs_irs=tuple(term_ir for term_ir, _coefficient in eq.terms[1:]),
+            )
+        case Regression():
+            return RegressionForm(
+                lhs_spec=eq.lhs_spec,
+                term_irs=tuple(term_ir for term_ir, _coefficient in eq.terms),
             )
     assert_never(eq)
 

@@ -10,8 +10,7 @@ Burgers: u_t + u * u_x - 0.1 * u_xx = 0 (i.e., u_t = -u * u_x + 0.1 * u_xx)
 
 DISCOVER converges more slowly than SGA on short runs; for a serious
 attempt at recovering Burgers, bump ``generations`` to 200+ (the value
-below is enough to see the search work but not enough to converge). For
-full benchmark numbers see ``tests/discover/test_phase3_e2e.py``.
+below is enough to see the search work but not enough to converge).
 
 Run: python examples/07_discover.py
 """

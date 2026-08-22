@@ -1,10 +1,12 @@
 
-from kd.core.equation.canonical import canonicalize_expression
+from kd.core.equation.canonical import canonicalize_expression, skeletonize_constants
 from kd.core.equation.construct import (
     build_equation,
     build_homogeneous,
+    build_regression,
     make_evolution,
     make_homogeneous,
+    make_regression,
 )
 from kd.core.equation.library import (
     CATALOG_FINGERPRINT_DOMAIN,
@@ -50,6 +52,7 @@ from kd.core.equation.sketch import (
     TermHole,
     UnassignedTerm,
     constraint_admits,
+    pinned_fingerprints,
     sketch_from_dict,
     sketch_to_dict,
 )
@@ -66,6 +69,7 @@ from kd.core.equation.types import (
     Form,
     Homogeneous,
     LhsSpec,
+    Regression,
     Scalar,
 )
 
@@ -88,6 +92,7 @@ __all__ = [
     "PinnedTerm",
     "PinnedVerdict",
     "PivotRegressionForm",
+    "Regression",
     "RegressionForm",
     "Scalar",
     "Sketch",
@@ -104,7 +109,9 @@ __all__ = [
     "active_law",
     "build_equation",
     "build_homogeneous",
+    "build_regression",
     "canonicalize_expression",
+    "skeletonize_constants",
     "compare_laws",
     "constraint_admits",
     "from_dict",
@@ -115,6 +122,8 @@ __all__ = [
     "lower_to_regression",
     "make_evolution",
     "make_homogeneous",
+    "make_regression",
+    "pinned_fingerprints",
     "render_homogeneous_label",
     "render_lhs_label",
     "residual_program",

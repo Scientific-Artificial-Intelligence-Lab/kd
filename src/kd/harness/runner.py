@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 import kd
 from kd.api import Model
+from kd.data.regression import TabularDataset
+from kd.data.tabular_bridge import dataset_from_tabular
 from kd.harness._verify import record_relpath
 from kd.harness.episode import EpisodeOutcome, run_episode
 from kd.harness.plan import ExperimentPlan
@@ -113,7 +115,7 @@ def _catalog_row_for_outcome(
 def run_plan(
     plan: ExperimentPlan,
     *,
-    datasets: Mapping[str, PDEDataset],
+    datasets: Mapping[str, PDEDataset | TabularDataset],
     store_root: Path,
     model_factory: Callable[..., Any] = Model,
     device: str | None = None,
@@ -123,7 +125,18 @@ def run_plan(
     resume_from: Mapping[int, Path | str] | None = None,
     plan_hash: str | None = None,
 ) -> PlanRunResult:
-    _preflight(plan, datasets)
+
+
+
+
+
+
+
+    normalized: dict[str, PDEDataset] = {
+        ref: dataset_from_tabular(ds) if isinstance(ds, TabularDataset) else ds
+        for ref, ds in datasets.items()
+    }
+    _preflight(plan, normalized)
     if catalog_path is not None and recording is None:
         raise ValueError(
             "catalog_path requires recording (rows point at episode run dirs)"
@@ -171,7 +184,7 @@ def run_plan(
         outcome = run_episode(
             entry=entry,
             entry_index=entry_index,
-            dataset=datasets[entry.dataset_ref],
+            dataset=normalized[entry.dataset_ref],
             model_factory=model_factory,
             device=device,
             resume_from=resume_path,
@@ -191,7 +204,7 @@ def run_plan(
                 catalog_path,
                 _catalog_row_for_outcome(
                     outcome,
-                    dataset=datasets[entry.dataset_ref],
+                    dataset=normalized[entry.dataset_ref],
                     catalog_path=catalog_path,
                     run_dir=outcome.run_dir,
                     run_id=outcome.run_id,

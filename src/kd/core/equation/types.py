@@ -13,6 +13,7 @@ class Form(Enum):
     HOMOGENEOUS = "HOMOGENEOUS"
     PARAMETRIC = "PARAMETRIC"
     WEAK = "WEAK"
+    REGRESSION = "REGRESSION"
 
 
 @dataclass(frozen=True)
@@ -119,13 +120,38 @@ class Homogeneous:
             assert isinstance(coefficient, (Scalar, Field, Hole, Posterior))
 
 
+@dataclass(frozen=True)
+class Regression:
+
+    lhs_spec: LhsSpec
+    terms: tuple[Term, ...]
+    attrs: EquationAttrs
+    active_indices: tuple[int, ...] | None = None
+
+    @property
+    def form(self) -> Form:
+        return Form.REGRESSION
+
+    def __post_init__(self) -> None:
+        assert isinstance(self.lhs_spec, LhsSpec)
+        assert isinstance(self.terms, tuple)
+        assert isinstance(self.attrs, EquationAttrs)
+        assert self.active_indices is None or isinstance(self.active_indices, tuple)
+        for term in self.terms:
+            assert isinstance(term, tuple)
+            assert len(term) == 2
+            term_ir, coefficient = term
+            assert isinstance(term_ir, str)
+            assert isinstance(coefficient, (Scalar, Field, Hole, Posterior))
 
 
 
 
 
 
-Equation: TypeAlias = Evolution | Homogeneous
+
+
+Equation: TypeAlias = Evolution | Homogeneous | Regression
 
 
 def fold_terms(

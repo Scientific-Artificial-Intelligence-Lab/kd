@@ -17,12 +17,23 @@ from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.engine import DiscoverEngine, EngineState
+from kd.search.discover.tabular import (
+    ParetoTracker,
+    TabularCandidateScorer,
+    TabularDeduplicator,
+)
 from kd.search.discover.training.strategy import BaselineState
 from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
 )
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
+from kd.search.series_keys import (
+    PARETO_COMPLEXITY_KEY,
+    PARETO_EXPRESSIONS_KEY,
+    PARETO_LOSS_KEY,
+    PARETO_SCALE_KEY,
+)
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -44,6 +55,8 @@ BEST_RESULT_COEFFICIENTS_KEY = "best_result_coefficients"
 BEST_RESULT_IS_VALID_KEY = "best_result_is_valid"
 EWMA_REWARD_KEY = "ewma_reward"
 N_UPDATES_KEY = "n_updates"
+_STATE_MODE = "mode"
+_TABULAR_FRONT = "tabular_front"
 
 
 
@@ -93,6 +106,25 @@ class _ExpressionEvaluator(Protocol):
         pass
 
     def evaluate_expression(self, expr: str) -> EvaluationResult:
+        pass
+
+
+class _TabularEvaluator(Protocol):
+    @property
+    def lhs_target(self) -> Tensor:
+        pass
+
+    def build_theta_matrix(
+        self, terms: list[str], *, skip_invalid: bool = False
+    ) -> tuple[Tensor, list[str]]:
+        pass
+
+    def evaluate_terms(
+        self, terms: list[str], *, skip_invalid: bool = False
+    ) -> EvaluationResult:
+        pass
+
+    def invalidate_term_cache(self) -> None:
         pass
 
 
@@ -180,6 +212,13 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 provider_kind="finite_diff",
                 description="Facade-reachable finite-difference search mode.",
             ),
+            InstrumentMode(
+                name="tabular",
+                forms=frozenset({Form.REGRESSION}),
+                topologies=frozenset({DataTopology.TABULAR}),
+                provider_kind="none",
+                description="Facade-reachable tabular regression mode.",
+            ),
         ),
         knobs=(
             Knob(
@@ -218,13 +257,23 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         ),
     )
 
-    def __init__(self, config: DiscoverConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: DiscoverConfig | None = None,
+        *,
+        mode: Literal["default", "tabular"] = "default",
+    ) -> None:
+        if mode not in {"default", "tabular"}:
+            raise ValueError(f"Unknown DISCOVER mode: {mode!r}.")
         self._config = config or DiscoverConfig()
+        self._mode = mode
         self._evaluator: _ExpressionEvaluator | None = None
         self._engine: DiscoverEngine | None = None
         self._recorder: VizRecorder | None = None
         self._restore_pending: bool = False
         self._pending_state: EngineState | None = None
+        self._front = ParetoTracker()
+        self._tabular_deduplicator: TabularDeduplicator | None = None
         torch.manual_seed(self._config.seed)
 
     def prepare(self, components: PlatformComponents) -> None:
@@ -232,11 +281,46 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if self._restore_pending and self._engine is not None:
             restore_state = self._engine.state
         torch.manual_seed(self._config.seed)
-        self._evaluator = self._coerce_evaluator(components.evaluator)
-        self._engine = build_engine(self._config)
+        platform_evaluator = self._coerce_evaluator(components.evaluator)
+        self._engine = build_engine(self._config, mode=self._mode)
+        self._evaluator = platform_evaluator
+        if not self._restore_pending:
+
+
+
+
+
+            self._front = ParetoTracker()
+        if self._mode == "tabular":
+            tabular_evaluator = self._coerce_tabular_evaluator(components.evaluator)
+            feature_names = list(self._config.library.state_vars)
+            theta, _ = tabular_evaluator.build_theta_matrix(
+                feature_names,
+                skip_invalid=False,
+            )
+            columns = {
+                name: theta[:, index].detach().cpu().numpy().copy()
+                for index, name in enumerate(feature_names)
+            }
+            target = tabular_evaluator.lhs_target.detach().cpu().numpy().copy()
+            self._tabular_deduplicator = TabularDeduplicator(
+                self._engine.library,
+                columns,
+                target,
+            )
+            self._engine.set_deduplicator(self._tabular_deduplicator)
+            self._evaluator = TabularCandidateScorer(
+                tabular_evaluator,
+                lhs_name=components.dataset.lhs_field,
+            )
         self._recorder = components.recorder
         if self._restore_pending and restore_state is not None:
             self._engine.state = restore_state
+            if self._mode == "tabular":
+
+
+
+                self._log_front()
 
 
             self._engine.rebase_best(self._evaluator)
@@ -258,12 +342,24 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         engine = self._require_engine()
         engine.receive_results(results)
         engine.update()
+        if self._mode == "tabular":
+            result_filter = _make_magnitude_filter(
+                enabled=self._config.magnitude_filter
+            )
+            front_results = (
+                [result_filter(result) for result in results]
+                if result_filter is not None
+                else results
+            )
+            self._update_front(front_results)
         log_whitelisted_metrics(
             self._recorder,
             _LOGGED_METRICS,
             engine.last_metrics,
             skip_missing=True,
         )
+        if self._mode == "tabular":
+            self._log_front()
 
     def between_iterations(self) -> None:
         pass
@@ -295,6 +391,13 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
+        if self._mode == "tabular":
+            return DerivativeReqs(
+                provider_kind="none",
+                lhs_order=0,
+                lhs_source="field",
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=2,
@@ -333,11 +436,15 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             BASELINE_STATE_KEY: _serialize_baseline_state(engine_state.baseline_state),
             BEST_REWARD_KEY: float(engine_state.best_reward),
             BEST_EXPRESSION_KEY: engine_state.best_expression,
+            _STATE_MODE: self._mode,
         }
         if engine_state.optimizer_state is not None:
             payload[OPTIMIZER_STATE_KEY] = engine_state.optimizer_state
-        if engine_state.extras is not None:
-            payload[EXTRAS_KEY] = engine_state.extras
+        extras = dict(engine_state.extras or {})
+        if self._mode == "tabular":
+            extras[_TABULAR_FRONT] = self._front.state()
+        if extras:
+            payload[EXTRAS_KEY] = extras
         if engine_state.best_result_terms is not None:
             payload[BEST_RESULT_TERMS_KEY] = list(engine_state.best_result_terms)
 
@@ -358,11 +465,25 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if not value:
             self._pending_state = None
             self._restore_pending = False
+            self._front = ParetoTracker()
             if self._engine is not None:
                 torch.manual_seed(self._config.seed)
-                self._engine = build_engine(self._config)
+                self._engine = build_engine(self._config, mode=self._mode)
+                if self._tabular_deduplicator is not None:
+                    self._engine.set_deduplicator(self._tabular_deduplicator)
             return
+        raw_engine_state = value.get(ENGINE_STATE_KEY)
+        if not isinstance(raw_engine_state, Mapping):
+            raise TypeError("state must contain an engine_state mapping.")
+        stored_mode = raw_engine_state.get(_STATE_MODE, "default")
+        if stored_mode != self._mode:
+            raise ValueError(
+                f"DISCOVER checkpoint mode {stored_mode!r} does not match "
+                f"plugin mode {self._mode!r}."
+            )
         parsed = _parse_state_payload(value)
+        if self._mode == "tabular":
+            self._front = self._front_from_extras(parsed.extras)
         self._pending_state = parsed
         self._restore_pending = True
         if self._engine is not None:
@@ -395,6 +516,55 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 "default) to run DISCOVER."
             )
         return cast(_ExpressionEvaluator, evaluator)
+
+    def _coerce_tabular_evaluator(self, evaluator: object) -> _TabularEvaluator:
+        if not hasattr(evaluator, "build_theta_matrix") or not hasattr(
+            evaluator, "evaluate_terms"
+        ):
+            raise TypeError(
+                "DISCOVERPlugin tabular mode requires components.evaluator "
+                "exposing build_theta_matrix() and evaluate_terms()."
+            )
+        return cast(_TabularEvaluator, evaluator)
+
+    def _update_front(self, results: list[EvaluationResult]) -> None:
+        for result in results:
+            coefficients = result.coefficients
+            if not result.is_valid or coefficients is None or coefficients.numel() != 1:
+                continue
+            terms = result.terms or []
+            if len(terms) != 1:
+                continue
+            self._front.offer(
+                terms[0],
+                result.complexity,
+                result.nmse,
+                float(coefficients.detach().reshape(-1)[0].item()),
+            )
+
+    def _log_front(self) -> None:
+        if self._recorder is None:
+            return
+        entries = self._front.entries()
+        self._recorder.log(
+            PARETO_EXPRESSIONS_KEY,
+            [entry.expression for entry in entries],
+        )
+        self._recorder.log(
+            PARETO_COMPLEXITY_KEY,
+            [entry.complexity for entry in entries],
+        )
+        self._recorder.log(PARETO_LOSS_KEY, [entry.loss for entry in entries])
+        self._recorder.log(PARETO_SCALE_KEY, [entry.scale for entry in entries])
+
+    @staticmethod
+    def _front_from_extras(extras: dict[str, Any] | None) -> ParetoTracker:
+        if extras is None:
+            return ParetoTracker()
+        raw = extras.get(_TABULAR_FRONT, [])
+        if not isinstance(raw, list):
+            raise TypeError("tabular_front checkpoint extra must be a list.")
+        return ParetoTracker.from_state(raw)
 
     def _require_engine(self) -> DiscoverEngine:
         if self._engine is None:

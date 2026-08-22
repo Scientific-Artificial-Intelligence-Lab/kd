@@ -43,6 +43,13 @@ class TermVocabulary:
 
 DerivativeMultiindex = tuple[str, tuple[tuple[str, int], ...]]
 
+ColumnFingerprint = tuple[
+    frozenset[str],
+    frozenset[str],
+    frozenset[DerivativeMultiindex],
+    frozenset[str],
+]
+
 
 @dataclass(frozen=True)
 class TermFeatures:
@@ -171,4 +178,19 @@ def analyze_term(term_ir: str, vocabulary: TermVocabulary) -> TermFeatures:
     return collector.features()
 
 
-__all__ = ["TermFeatures", "TermVocabulary", "analyze_term"]
+def column_fingerprint(features: TermFeatures) -> ColumnFingerprint:
+    return (
+        features.base_fields,
+        features.coordinate_dependencies,
+        features.derivative_multiindices,
+        features.operators,
+    )
+
+
+__all__ = [
+    "TermFeatures",
+    "ColumnFingerprint",
+    "TermVocabulary",
+    "analyze_term",
+    "column_fingerprint",
+]

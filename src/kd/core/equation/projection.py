@@ -4,7 +4,13 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import assert_never
 
-from kd.core.equation.types import Equation, EquationAttrs, Evolution, Homogeneous
+from kd.core.equation.types import (
+    Equation,
+    EquationAttrs,
+    Evolution,
+    Homogeneous,
+    Regression,
+)
 
 _PROVENANCE_NOTE = "active_law"
 
@@ -48,6 +54,10 @@ def active_law(eq: Equation) -> Equation:
                 raise ValueError(
                     "homogeneous active_indices must include the pivot (index 0)"
                 )
+            return replace(
+                eq, terms=terms, active_indices=None, attrs=_projected_attrs(eq.attrs)
+            )
+        case Regression():
             return replace(
                 eq, terms=terms, active_indices=None, attrs=_projected_attrs(eq.attrs)
             )

@@ -28,6 +28,9 @@ import torch
 from kd.core.equation.sketch import Sketch
 from kd.core.equation.types import LhsSpec
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
+from kd.data.regression import TabularDataset
+from kd.data.schema import DataTopology
+from kd.data.tabular_bridge import dataset_from_tabular
 from kd.search import tool_schema
 from kd.search.callbacks import (
     CheckpointCallback,
@@ -50,6 +53,7 @@ from kd.search.discover.config import (
     DEFAULT_STABILITY_QUEUE_CAPACITY,
     DEFAULT_STABILITY_SELECTION,
 )
+from kd.search.discover.tokens.library import LibraryConfig
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt.config import EqGPTConfig
 from kd.search.eqgpt.plugin import EqGPTPlugin
@@ -771,6 +775,10 @@ class Model:
 
 
 
+        self._tabular_feature_names: tuple[str, ...] | None = None
+
+
+
     @staticmethod
     def _validate_checkpoint_params(
         checkpoint_dir: str | Path | None,
@@ -1262,7 +1270,7 @@ class Model:
 
     def fit(
         self,
-        dataset: PDEDataset,
+        dataset: PDEDataset | TabularDataset,
         resume_from: str | Path | None = None,
         *,
         sketch: Sketch | None = None,
@@ -1270,7 +1278,7 @@ class Model:
         """Run the search and populate post-fit attributes.
 
         Args:
-            dataset: The PDE dataset to discover an equation for.
+            dataset: A PDE dataset or public ``X -> y`` regression table.
             resume_from: Optional path to a checkpoint file written by a
                 previous run (``checkpoint_*.pt``). The checkpoint restores
                 **search state** (population / controller weights / best);
@@ -1392,6 +1400,15 @@ class Model:
         self._fitted = False
         self._result = None
         self._algorithm = None
+        self._tabular_feature_names = None
+
+        if isinstance(dataset, TabularDataset):
+            dataset = dataset_from_tabular(dataset)
+        if dataset.topology is DataTopology.TABULAR:
+            fields = dataset.fields or {}
+            self._tabular_feature_names = tuple(
+                name for name in fields if name != dataset.lhs_field
+            )
 
         if self.algorithm not in _SUPPORTED_ALGORITHMS:
             raise NotImplementedError(
@@ -1616,6 +1633,13 @@ class Model:
         plugin_factory = cast("Callable[..., FacadeWiringContract]", plugin_cls)
         if self.algorithm == "pysindy":
             plugin = plugin_factory(cfg, task=task)
+        elif self.algorithm in {"discover", "pysr"}:
+            mode = (
+                "tabular"
+                if self._tabular_feature_names is not None
+                else "default"
+            )
+            plugin = plugin_factory(cfg, mode=mode)
         elif self.algorithm == "dlga":
 
 
@@ -1693,6 +1717,21 @@ class Model:
         )
         if self._config_override is None:
             self._warn_discover_config_facade_compat(config)
+        feature_names = self._tabular_feature_names
+        if feature_names is not None:
+            if config.library != DiscoverConfig().library:
+                raise ValueError(
+                    "DISCOVER tabular mode owns the library; remove the "
+                    "explicit library configuration."
+                )
+            config = dataclasses.replace(
+                config,
+                library=LibraryConfig(
+                    operators=["add", "sub", "mul", "div"],
+                    state_vars=list(feature_names),
+                    coord_vars=[],
+                ),
+            )
         return config
 
     def _build_pysr_config(self) -> PySRConfig:
@@ -1712,13 +1751,34 @@ class Model:
         because ``generations`` owns this field. Other normalized kwargs are
         forwarded unchanged. See ``_resolve_config`` for the shared mechanics.
         """
-        return self._resolve_config(
-            PySRConfig,
-            lambda: PySRConfig(
-                niterations=self.generations,
-                seed=self.seed,
-                **self._extra_kwargs,
-            ),
+        feature_names = self._tabular_feature_names
+        if feature_names is None:
+            return self._resolve_config(
+                PySRConfig,
+                lambda: PySRConfig(
+                    niterations=self.generations,
+                    seed=self.seed,
+                    **self._extra_kwargs,
+                ),
+            )
+
+        if "terms" in self._extra_kwargs:
+            raise ValueError(
+                "terms are derived from the tabular dataset; do not pass terms"
+            )
+        if self._config_override is not None:
+            config = self._resolve_config(PySRConfig, PySRConfig)
+            if config.terms != PySRConfig().terms:
+                raise ValueError(
+                    "PySRConfig.terms must stay at its default for tabular data; "
+                    "terms are derived from the dataset"
+                )
+            return dataclasses.replace(config, terms=feature_names)
+        return PySRConfig(
+            terms=feature_names,
+            niterations=self.generations,
+            seed=self.seed,
+            **self._extra_kwargs,
         )
 
     def _build_pysindy_config(self) -> PySINDyConfig:

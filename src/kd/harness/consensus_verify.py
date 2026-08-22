@@ -13,7 +13,7 @@ from kd.core.platform.builder import PlatformBuilder
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.verify import VerificationReport, VerifyPolicy, verify_equation
 from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
-from kd.data.schema import PDEDataset
+from kd.data.schema import DataTopology, PDEDataset
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,30 @@ class _DefaultVerifyContextFactory:
     provider_kind: str = _DEFAULT_PROVIDER_KIND
 
     def __call__(self, dataset: PDEDataset) -> VerifyExecution:
+        if dataset.topology is DataTopology.TABULAR:
+
+
+
+
+
+            reqs = DerivativeReqs(
+                provider_kind="none",
+                lhs_order=0,
+                lhs_source="field",
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
+            components = PlatformBuilder(dataset, reqs).build()
+            context = components.context
+            if context is None:
+                raise ValueError(
+                    "default verify context factory expected a non-None "
+                    "execution context for the tabular field-target bundle"
+                )
+            return VerifyExecution(
+                executor=components.executor,
+                context=context,
+                provider_kind="none",
+            )
         components = PlatformBuilder(
             dataset, DerivativeReqs(max_atomic_order=_DEFAULT_MAX_ATOMIC_ORDER)
         ).build()

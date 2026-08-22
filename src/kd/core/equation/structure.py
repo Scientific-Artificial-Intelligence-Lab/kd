@@ -4,13 +4,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import assert_never
 
-from kd.core.equation.canonical import canonicalize_expression
+from kd.core.equation.canonical import (
+    canonicalize_expression,
+    skeletonize_constants,
+)
 from kd.core.equation.types import (
     Equation,
     Evolution,
     Form,
     Homogeneous,
     LhsSpec,
+    Regression,
     Term,
     fold_terms,
 )
@@ -60,6 +64,18 @@ def structure(eq: Equation) -> StructureFingerprint:
                 lhs_spec=None,
                 terms=terms,
             )
+        case Regression():
+            initial = (0, frozenset())
+            _index, terms = fold_terms(
+                eq.terms,
+                initial,
+                _collect_skeletonized_term,
+            )
+            return StructureFingerprint(
+                form=eq.form,
+                lhs_spec=eq.lhs_spec,
+                terms=terms,
+            )
     assert_never(eq)
 
 
@@ -83,6 +99,20 @@ def _collect_canonical_term(
     term_ir, _coefficient = term
     try:
         canonical_term = canonicalize_expression(term_ir)
+    except ValueError as err:
+        raise ValueError(
+            f"Cannot canonicalize term at index {index}: {term_ir}"
+        ) from err
+    return index + 1, terms | {canonical_term}
+
+
+def _collect_skeletonized_term(
+    state: tuple[int, frozenset[str]], term: Term
+) -> tuple[int, frozenset[str]]:
+    index, terms = state
+    term_ir, _coefficient = term
+    try:
+        canonical_term = canonicalize_expression(skeletonize_constants(term_ir))
     except ValueError as err:
         raise ValueError(
             f"Cannot canonicalize term at index {index}: {term_ir}"

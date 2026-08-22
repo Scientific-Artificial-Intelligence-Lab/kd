@@ -101,3 +101,24 @@ def pysr_sympy_to_kd_terms(
         seen.add(key)
         result.append(ir)
     return result
+
+
+def pysr_sympy_to_tabular_term(
+    pysr_expr: sympy.Expr,
+    terms: list[str],
+    feature_names: list[str],
+) -> str:
+    if len(feature_names) != len(terms):
+        raise ValueError(
+            "feature_names and terms must have the same length: "
+            f"{len(feature_names)} != {len(terms)}"
+        )
+    _check_undeclared_features(pysr_expr, feature_names, terms)
+    declared = {sympy.Symbol(name) for name in feature_names}
+    if not (pysr_expr.free_symbols & declared):
+        raise ValueError(
+            "PySR tabular expression is a constant model with no feature "
+            "symbols; kd has no intercept-only semantics"
+        )
+    subs_map = _build_substitution(terms, feature_names)
+    return from_sympy(pysr_expr.subs(subs_map, simultaneous=True))

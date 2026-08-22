@@ -17,6 +17,8 @@ from kd.core.linear_solve.least_squares import LeastSquaresSolver
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import FiniteDiffProvider
+from kd.data.derivatives.null import NullDerivativeProvider
+from kd.data.schema import DataTopology
 from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer
 from kd.search.protocol import DiscoveryTask, PlatformComponents
@@ -134,6 +136,8 @@ class PlatformBuilder:
 
 
         self._surrogate_training = None
+        if self._reqs.lhs_source == "field":
+            return self._build_field_lhs_components()
         if self._reqs.provider_kind == "none":
             if self._task is not None and self._sketch_lower_owner == "platform":
                 raise NotImplementedError(
@@ -162,6 +166,49 @@ class PlatformBuilder:
         registry = FunctionRegistry.create_default()
         executor = PythonExecutor(registry)
         evaluator = self._build_evaluator(dataset, provider, executor, context)
+        return PlatformComponents(
+            dataset=dataset,
+            executor=executor,
+            evaluator=evaluator,
+            context=context,
+            registry=registry,
+            task=self._task,
+        )
+
+    def _build_field_lhs_components(self) -> PlatformComponents:
+        dataset = self._dataset
+        if dataset.topology is not DataTopology.TABULAR:
+            raise NotImplementedError(
+                "lhs_source='field' requires DataTopology.TABULAR, got "
+                f"{dataset.topology.value}"
+            )
+
+
+
+
+        if self._task is not None and self._sketch_lower_owner == "platform":
+            raise NotImplementedError(
+                "platform sketch lowering is not supported on the tabular "
+                "field-target path; tabular datasets do not take sketches"
+            )
+        provider = NullDerivativeProvider()
+        if self._device is None:
+            context = ExecutionContext(dataset, provider)
+        else:
+            context = ExecutionContext(dataset, provider, device=self._device)
+        registry = FunctionRegistry.create_default()
+        executor = PythonExecutor(registry)
+        solver = LeastSquaresSolver(
+            compute_condition_number=self._compute_condition_number
+        )
+        lhs = dataset.get_field(dataset.lhs_field).flatten().detach().to(context.device)
+        evaluator = Evaluator(
+            executor=executor,
+            solver=solver,
+            context=context,
+            lhs=lhs,
+            report_condition_number=self._compute_condition_number,
+        )
         return PlatformComponents(
             dataset=dataset,
             executor=executor,

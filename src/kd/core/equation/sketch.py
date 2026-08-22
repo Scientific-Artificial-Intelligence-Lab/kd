@@ -19,7 +19,13 @@ from kd.core.equation.signature import (
     law_term_key,
 )
 from kd.core.equation.types import Equation, Evolution, LhsSpec
-from kd.core.expr.term_features import TermFeatures, TermVocabulary, analyze_term
+from kd.core.expr.term_features import (
+    ColumnFingerprint,
+    TermFeatures,
+    TermVocabulary,
+    analyze_term,
+    column_fingerprint,
+)
 
 SKETCH_SCHEMA_TAG = "kd-sketch-v1"
 
@@ -262,6 +268,27 @@ class Sketch:
         return _match_sketch(self, eq)
 
 
+def pinned_fingerprints(sketch: Sketch) -> frozenset[ColumnFingerprint]:
+    seen: dict[ColumnFingerprint, str] = {}
+    for pin in sketch.pinned:
+        fp = column_fingerprint(analyze_term(pin.term_ir, sketch.vocabulary))
+        if fp in seen:
+            raise ValueError(
+                f"pinned terms {seen[fp]!r} and {pin.term_ir!r} are alias "
+                "spellings of one physical column; pin it once"
+            )
+        seen[fp] = pin.term_ir
+    for anchor in sketch.anchored:
+        fp = column_fingerprint(analyze_term(anchor.term_ir, sketch.vocabulary))
+        if fp in seen:
+            raise ValueError(
+                f"anchored term {anchor.term_ir!r} is an alias spelling of the "
+                f"pinned column {seen[fp]!r}; a pinned column is never "
+                "refit"
+            )
+    return frozenset(seen)
+
+
 def constraint_admits(constraint: TermConstraint, features: TermFeatures) -> bool:
     if (
         constraint.max_deriv_order is not None
@@ -292,9 +319,7 @@ def _aggregate_law(eq: Evolution, support_threshold: float) -> dict[str, float]:
 
 
         if not math.isfinite(scalar):
-            raise ValueError(
-                f"law coefficient for term {term_ir!r} must be finite"
-            )
+            raise ValueError(f"law coefficient for term {term_ir!r} must be finite")
         key, value = law_term_entry(term_ir, scalar)
         grouped.setdefault(key, []).append(value)
     aggregated = {key: math.fsum(values) for key, values in grouped.items()}
@@ -439,6 +464,7 @@ __all__ = [
     "TermHole",
     "UnassignedTerm",
     "constraint_admits",
+    "pinned_fingerprints",
     "sketch_from_dict",
     "sketch_to_dict",
 ]

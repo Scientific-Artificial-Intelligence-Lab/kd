@@ -80,6 +80,7 @@ from kd.search.recorder import BEST_SCORE_KEY, VizRecorder
 from kd.search.records import RunRecord
 from kd.search.result import (
     ExperimentResult,
+    ParetoEntry,
     RunResult,
     default_final_result,
 )
@@ -138,6 +139,7 @@ __all__ = [
     "PHASE_SCHEMA_VERSION",
     "PHASE_SCHEME",
     "PHASE_VOCABULARY",
+    "ParetoEntry",
     "PhaseEvent",
     "PhaseWriter",
     "PlatformComponents",

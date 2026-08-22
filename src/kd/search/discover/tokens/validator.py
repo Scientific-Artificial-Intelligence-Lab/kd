@@ -61,6 +61,15 @@ class CandidateValidator:
             expr_tokens = token_row[:nat_len]
             if max_diff_order(expr_tokens, self.library) > self._max_diff_order:
                 return False
+        if self.library.const_index is not None:
+            expression = token_row[:nat_len]
+            feature_terminal = any(
+                self.library.arities[index] == 0
+                and index != self.library.const_index
+                for index in expression
+            )
+            if not feature_terminal:
+                return False
         return nat_len > _TRIVIAL_LENGTH
 
     def _strip_right_padding(

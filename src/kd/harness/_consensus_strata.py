@@ -89,7 +89,9 @@ def _classify_instrument(
             e1 = "fail"
 
         forms = mode["forms"]
-        if "HOMOGENEOUS" in forms:
+        if "HOMOGENEOUS" in forms or (
+            "REGRESSION" in forms and topology is DataTopology.TABULAR
+        ):
             e2 = "pass"
         elif lhs_term is None:
             e2 = "unknown"
@@ -170,19 +172,28 @@ def _resolve_lhs_term(
     signables_for_ref: Sequence[_SignableRecord],
     dataset: PDEDataset | None,
 ) -> str | None:
-    evo_lhs = [
+    observed_lhs = [
         s.signature.native_lhs
         for s in signables_for_ref
-        if s.signature.native_form is Form.EVOLUTION
+        if s.signature.native_form in {Form.EVOLUTION, Form.REGRESSION}
     ]
     observed: str | None = None
-    if evo_lhs:
-        first = evo_lhs[0]
-        if first is not None and all(lhs == first for lhs in evo_lhs):
-            observed = canonicalize_expression(render_lhs_label(first))
+    if observed_lhs:
+        first = observed_lhs[0]
+        if first is not None and all(lhs == first for lhs in observed_lhs):
+            observed = (
+                canonicalize_expression(first.field)
+                if first.order == 0
+                else canonicalize_expression(render_lhs_label(first))
+            )
     data: str | None = None
     if dataset is not None:
-        if dataset.lhs_order == 0:
+        if (
+            dataset.topology is DataTopology.TABULAR
+            and dataset.lhs_order == 0
+        ):
+            data = canonicalize_expression(dataset.lhs_field)
+        elif dataset.lhs_order == 0:
             data = ""
         elif dataset.lhs_order >= 1 and len(dataset.lhs_axis) == 1:
             data = canonicalize_expression(

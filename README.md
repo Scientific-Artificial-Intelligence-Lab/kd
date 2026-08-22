@@ -1,27 +1,49 @@
 <div align="center">
 
-# Knowledge Discovery (KD)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/kd-mark-dark.svg">
+  <img src="docs/images/kd-mark.svg" alt="" width="92">
+</picture>
 
-**Symbolic PDE discovery from data**
+<h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/kd-title-dark.svg">
+  <img src="docs/images/kd-title.svg" alt="Knowledge Discovery" height="42">
+</picture>
+</h1>
+
+Discovering governing equations from data
+
+[![Documentation](https://img.shields.io/badge/documentation-online-21918c?style=flat-square)](https://scientific-artificial-intelligence-lab.github.io/kd/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-46256b?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-46256b?style=flat-square)](pyproject.toml)
+[![PyTorch](https://img.shields.io/badge/pytorch-2.0%2B-46256b?style=flat-square)](pyproject.toml)
+
+[Documentation](https://scientific-artificial-intelligence-lab.github.io/kd/) ·
+[Examples](https://scientific-artificial-intelligence-lab.github.io/kd/examples/) ·
+[Algorithms](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/) ·
+[API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/)
+
+<br>
+
+<img src="docs/images/burgers2d_animation.gif" width="740" alt="2D Burgers field over time: true evolution beside the ground-truth PDE integrated forward">
+
+<sub>2D Burgers (<code>u_t = -u·u_x - u·u_y + 0.01·∇²u</code>): the field's true evolution beside the PDE integrated forward through the platform.<br>Regenerate with <a href="examples/14_field_animation_2d.py"><code>examples/14_field_animation_2d.py</code></a>.</sub>
 
 </div>
 
----
+<br>
 
 KD discovers the governing partial differential equation from data: give it a
-field sampled on a spatiotemporal grid, get back a symbolic PDE. Five
-in-house discovery engines (**SGA**, **DLGA**, **DISCOVER**, **EqGPT**,
-**LLM4ED**) run behind one `kd.Model` API, sharing a single dataset
-interface, term evaluator, and HTML-report visualization.
-
-<div align="center">
-<img src="docs/images/burgers2d_animation.gif" width="760" alt="2D Burgers field over time: true evolution vs the ground-truth PDE integrated forward"><br>
-<em>2D Burgers (<code>u_t = -u·u_x - u·u_y + 0.01·∇²u</code>): the field's true evolution beside the PDE integrated forward through the platform. Regenerate with <code>examples/14_field_animation_2d.py</code>.</em>
-</div>
+field sampled on a spatiotemporal grid, get back a symbolic PDE. The same
+`Model.fit` also takes a plain feature table and returns a scalar expression
+`y = f(X)`. Five in-house algorithms (SGA, DLGA, DISCOVER, EqGPT, LLM4ED) and
+two external baselines (PySR, PySINDy) run behind one `kd.Model` API, sharing a
+single dataset interface, term evaluator, and HTML report.
 
 ## Install
 
-Requires **Python >= 3.11** and **PyTorch >= 2.0**.
+Requires Python >= 3.11 and PyTorch >= 2.0.
 
 ```bash
 git clone -b trunk https://github.com/Scientific-Artificial-Intelligence-Lab/kd.git
@@ -34,392 +56,212 @@ uv sync
 ```python
 import kd
 
-# Generate a synthetic Burgers dataset.
-dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
+# The bundled Burgers benchmark: a 256 × 201 field on an (x, t) grid.
+dataset = kd.load_burgers()
 
-model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
+model = kd.Model(algorithm="sga", generations=5, seed=0)
 model.fit(dataset)
 
-print(model.best_expr_)    # u_t = -0.9863*mul(u_x, u) + 0.09955*diff_x(u_x)
-print(model.best_score_)   # -11.38 (AIC, lower is better)
+print(model.best_expr_)    # u_t = -1*mul(u_x, u) + 0.1002*diff2_x(u)
+print(model.best_score_)   # -28.78 (AIC, lower is better)
 ```
 
-The printed expression is KD's canonical function-call notation (funcall IR): `mul(u_x, u)` is
-`u*u_x` and `diff_x(u_x)` is `u_xx`, so the discovered equation reads
-`u_t = -0.99*u*u_x + 0.0996*u_xx` — the Burgers equation recovered from data
-with fitted coefficients (ground truth: `u_t = -1*u*u_x + 0.1*u_xx`).
-The HTML report renders it in standard notation:
+The printed expression is KD's canonical function-call notation (funcall IR):
+`mul(u_x, u)` is $u\,u_x$ and `diff2_x(u)` is $u_{xx}$, so five generations of
+search recover
 
-<div align="center">
-<img src="docs/images/burgers_equation.png" width="480" alt="Discovered Burgers equation rendered in the HTML report"><br>
-<em>The discovered equation as rendered in the report (longer run on the
-bundled 256×201 Burgers benchmark).</em>
-</div>
+$$u_t = -u\,u_x + 0.1002\,u_{xx}$$
 
-<div align="center">
-<img src="docs/images/burgers_field_comparison.png" width="760" alt="True vs predicted Burgers field"><br>
-<em>True vs predicted solution (Burgers equation).</em>
-</div>
+against a ground truth of $u_t = -u\,u_x + 0.1\,u_{xx}$. The same run narrated
+step by step, with the figures it produces, is
+[Getting started](https://scientific-artificial-intelligence-lab.github.io/kd/examples/getting_started/).
 
-See [`examples/`](examples/) for runnable scripts covering every engine,
-including [`09_compare_algorithms.py`](examples/09_compare_algorithms.py),
-which runs the engines on the same dataset and ranks the discovered
-equations on one unified NMSE ruler.
+## Tabular data
 
-## Engines
+`Model.fit` also accepts a `TabularDataset`: a plain feature table, searched for
+`y = f(X)` with no fields, no derivatives, and no term library. The example below
+uses the bundled TLC-CC measurements, 74 chromatography conditions.
 
-All five engines are re-implementations of algorithms developed in this
-lab, refactored onto KD's shared platform. Swap the `algorithm=` string to
-switch:
+```python
+import kd
+
+dataset = kd.load_tlc_cc(target="start")     # X = (R_F, r), y = V_S
+
+model = kd.Model("discover", generations=100, seed=0,
+                 batch_size=500, reward_alpha=0.005, max_length=15).fit(dataset)
+
+for entry in model.result_.pareto_front():
+    print(entry.complexity, entry.loss, entry.scale, entry.expression)
+```
+
+Tabular scoring is scale-free: a Pareto entry holds the raw candidate in
+`entry.expression` and its fitted outer coefficient in `entry.scale`. At this
+budget and seed the complexity-5 entry `div(r, add(0.0737, R_F))` with scale
+6.634 normalizes to $r/(0.151\,R_F + 0.0111)$, against the published
+$r/(0.147\,R_F + 0.0114)$.
+
+`"discover"` and `"pysr"` run in tabular mode. Both on the same table:
+[`examples/12_symbolic_regression.py`](examples/12_symbolic_regression.py); the
+worked comparison, with the Pareto fronts side by side, is
+[Column chromatography](https://scientific-artificial-intelligence-lab.github.io/kd/examples/two_engines/).
+
+## Algorithms
+
+The five in-house algorithms are refactored re-implementations of methods
+developed in this lab. Swap the `algorithm=` string to switch; all seven share
+one dataset interface and one result object.
 
 | Algorithm | `algorithm=` | Origin | Approach |
 |-----------|--------------|--------|----------|
-| **SGA** | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic expression trees |
-| **DLGA** | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + genetic algorithm |
-| **DISCOVER** | `"discover"` | Du et al. 2024 | LSTM controller + policy gradient |
-| **EqGPT** | `"eqgpt"` | Xu et al. 2025 (EqGPT) | Pretrained generative GPT proposes candidate PDEs, then reward-guided fine-tuning |
-| **LLM4ED** | `"llm4ed"` | Du et al. 2024 (LLM4ED) | An LLM proposes candidate equations as text, scored by a sparse-regression reward |
+| [**SGA**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/sga/) | `"sga"` | Chen et al. 2022 (SGA-PDE) | Genetic algorithm over symbolic expression trees |
+| [**DLGA**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/dlga/) | `"dlga"` | Xu et al. 2020 | Neural-network surrogate + genetic algorithm |
+| [**DISCOVER**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/discover/) | `"discover"` | Du et al. 2024 | LSTM controller + policy gradient |
+| [**EqGPT**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/eqgpt/) | `"eqgpt"` | Xu et al. 2025 (EqGPT) | Pretrained generative GPT proposes candidate PDEs, then reward-guided fine-tuning |
+| [**LLM4ED**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/llm4ed/) | `"llm4ed"` | Du et al. 2024 (LLM4ED) | An LLM proposes candidate equations as text, scored by a sparse-regression reward |
+| [**PySR**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysr/) | `"pysr"` | external, Cranmer 2023 | Genetic programming over expression trees (`uv sync --extra pysr`) |
+| [**PySINDy**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysindy/) | `"pysindy"` | external, de Silva et al. 2020 | Native STLSQ sparse regression over the KD term library (`uv sync --extra pysindy`) |
+
+Beyond field data, `"discover"` and `"pysr"` also run on a feature table (above),
+and `"sga"` and `"pysindy"` also accept a sketch (below).
 
 EqGPT needs its pretrained GPT weights, which are not vendored; see
-[`examples/16_eqgpt.py`](examples/16_eqgpt.py) for where to place them.
-LLM4ED runs fully offline with an injected provider, or against any
-OpenAI-compatible API (see [`examples/17_llm4ed.py`](examples/17_llm4ed.py)).
+[`examples/16_eqgpt.py`](examples/16_eqgpt.py) for where to place them. LLM4ED
+runs fully offline with an injected provider, or against any OpenAI-compatible
+API (see [`examples/17_llm4ed.py`](examples/17_llm4ed.py)).
 
-Two external baselines can also be driven through the same facade for
-cross-checking: the PySR symbolic regressor (`algorithm="pysr"`, needs
-`uv sync --extra pysr`) and PySINDy's native STLSQ sparse-regression optimizer
-over the KD term library (`algorithm="pysindy"`, needs
-`uv sync --extra pysindy`).
-
-Each engine's own settings go through the same call: any field of its config
+Each algorithm's own settings go through the same call: any field of its config
 carries as a keyword argument, so `kd.Model(algorithm="pysindy", threshold=0.2,
 normalize_columns=True)` and `kd.Model(algorithm="dlga", pop_size=200,
-epsilon=1e-4)` need no per-engine call form. An unknown name is rejected with
-the accepted ones listed. `kd.instrument_schemas()` returns one row per engine —
-its config fields with types and defaults, plus the facade parameters
-(`generations`, `population`, `seed`, …) that are not config fields — so a
-caller holding only JSON can configure any engine without hardcoding names.
+epsilon=1e-4)` need no per-algorithm call form. An unknown name is rejected with
+the accepted ones listed. `kd.instrument_schemas()` returns one row per
+algorithm, its config fields with types and defaults plus the facade parameters
+(`generations`, `population`, `seed`, ...), so a caller holding only JSON can
+configure any algorithm without hardcoding names.
 
 ## Datasets
 
 ### Simulated PDE datasets
 
-The simulated datasets come from this lab's PDE-discovery papers —
+The simulated datasets come from this lab's PDE-discovery papers:
 **SGA-PDE** (Chen et al., *Phys. Rev. Research* **4**, 023174, 2022),
 **EqGPT** (Xu et al., *Nat Commun* **16**, 10255, 2025) and **LLM4ED**
-(Du et al., *Phys. Fluids* **36**, 097121, 2024):
+(Du et al., *Phys. Fluids* **36**, 097121, 2024).
 
 <div align="center">
 <img src="docs/images/dataset_gallery.png" width="820" alt="Field snapshots of the bundled simulated PDE datasets">
 </div>
 
-| Dataset | Governing PDE | Grid | What it models |
-|---------|---------------|------|----------------|
-| `allen-cahn` | `u_t = 0.003·u_xx + u - u³` | `(256, 201)` | phase separation (reaction–diffusion) |
-| `burgers` | `u_t = -u·u_x + 0.1·u_xx` | `(256, 201)` | shock waves in fluids |
-| `burgers-2d` | `u_t = -u·u_x - u·u_y + 0.01·∇²u` | `(101, 51, 100)` | 2D Burgers flow |
-| `chafee-infante` | `u_t = u_xx - u + u³` | `(301, 200)` | reaction–diffusion |
-| `convection-diffusion` | `u_t = -u_x + 0.25·u_xx` | `(256, 100)` | advection plus diffusion |
-| `eq-6-2-12` | `u_t = -0.1·u_x_t - 0.1·u_x` | `(501, 501)` | handbook equation with a mixed space–time derivative |
-| `kdv` | `u_t = -u·u_x - 0.0025·u_xxx` | `(256, 201)` | shallow-water solitons |
-| `klein-gordon` | `u_tt = 0.5·u_xx - 5·u` | `(201, 201)` | relativistic wave equation |
-| `llm4ed-fisher` | `u_t = 0.02·u_xx + 10·u·(1-u)` | `(x, t)` | population growth with spatial spread |
-| `llm4ed-fisher-nonlinear` | `u_t = 0.02·(u·u_xx + u_x²) + 10·u·(1-u)` | `(x, t)` | Fisher growth with nonlinear diffusion |
-| `llm4ed-heat` | `u_t = 0.05·u_xx` | `(x, t)` | heat conduction |
-| `pde-compound` | `u_t = u·u_xx + u_x²` | `(100, 251)` | constructed compound-structure case |
-| `pde-divide` | `u_t = -u_x/x + 0.25·u_xx` | `(100, 251)` | constructed case with a division term |
-| `wave` | `u_tt = u_xx` | `(161, 321)` | vibrating string |
+The catalog runs from Burgers and KdV to 2D Burgers, Klein-Gordon and the
+Fisher family. Load any bundled dataset with `kd.load_burgers()`, or browse the
+catalog programmatically with `kd.list_datasets()` / `kd.get_dataset(id)`; each
+entry carries its `.source` and `.license` (see [`NOTICE`](NOTICE)).
+`kd.generate_burgers_data()`, `kd.generate_diffusion_data()`, ... build
+synthetic datasets on demand, and remote entries are fetched with
+`kd.load_from_hub(id)` after installing the hub extra (`uv sync --extra hub`).
 
-Load any bundled dataset with `kd.load_burgers()`, or browse the catalog
-programmatically with `kd.list_datasets()` / `kd.get_dataset(id)`; each entry
-carries its `.source` and `.license` (see [`NOTICE`](NOTICE)).
-`kd.generate_burgers_data()`, `kd.generate_diffusion_data()`, … build
-synthetic datasets on demand. Remote (HF) entries
-are fetched with `kd.load_from_hub(id)` after installing the hub extra
-(`uv sync --extra hub`) and are cached locally, checksum-verified, and
-revision-pinned; browse them with `kd.list_remote_datasets()`.
+Governing equation, grid and source for every entry:
+[Bundled datasets](https://scientific-artificial-intelligence-lab.github.io/kd/data/datasets/).
 
 ### Real-world experimental data
 
-KD also bundles **real-world experimental data** — measured, not simulated:
+KD also bundles measured data, not only simulation:
 
 | Dataset | Type | Measured quantity | Size | Reference |
 |---------|------|-------------------|------|-----------|
 | `wave-breaking` | wave-tank experiment (Imperial College London) | surface elevation `η(t, x)` of wave groups approaching breaking | 314,478 points (one of the paper's 12 experiments) | Xu et al., *Nat Commun* **16**, 10255 (2025) |
 | `tlc-cc` | automated chromatography experiment | column retention volumes `V_S`, `V_E` vs `(R_F, r)` | 2 tables × 74 conditions | Xu et al., *Nat Commun* **16**, 832 (2025) |
 
-**Wave breaking** — surface elevation of focused wave groups approaching
-breaking, reconstructed frame by frame from camera images in the wave-tank
-experiments of the EqGPT paper. KD bundles one of the paper's 12 experiments
-(case `N_G2Tp12A100_broad`) as scattered `(t, x, η)` points — a table rather
-than a gridded `PDEDataset`.
-
-**TLC-CC** — column-chromatography retention volumes measured on an
-automated platform (192 compounds, 4 g silica columns), aggregated to mean
-start/end retention volumes over 74 `(R_F, r)` conditions — ready for KD's
-scalar symbolic-regression entries
-([`examples/12`](examples/12_symbolic_regression.py),
-[`examples/13`](examples/13_sindy_basis_sr.py)).
-
 ```python
 wb = kd.load_wave_breaking()          # η(t, x): scattered wave-tank points
 cc = kd.load_tlc_cc(target="start")   # X = (R_F, r), y = V_S
 ```
 
-Experimental background, protocols, and references for both datasets are in
-the papers and their Supplementary Information
+Wave breaking is surface elevation of focused wave groups approaching breaking,
+reconstructed frame by frame from camera images in the wave-tank experiments of
+the EqGPT paper, bundled as scattered `(t, x, η)` points. TLC-CC is
+column-chromatography retention volumes measured on an automated platform (192
+compounds, 4 g silica columns), aggregated to mean start and end retention
+volumes over 74 `(R_F, r)` conditions, ready for KD's scalar
+symbolic-regression entries. Experimental background, protocols and references
+for both are in the papers and their Supplementary Information
 ([wave breaking](https://doi.org/10.1038/s41467-025-65114-2),
 [TLC-CC](https://doi.org/10.1038/s41467-025-56136-x)).
 
-## Bring Your Own Data
+## Examples
 
-Wrap your own arrays (any field on a regular grid) into a `PDEDataset`:
+<table>
+<tr>
+<td width="50%">
+<a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/getting_started/"><img src="docs/images/card-getting-started.png" alt=""></a>
+<b><a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/getting_started/">Getting started</a></b><br>
+<sub>Load a bundled benchmark, fit in one call, read the result.</sub>
+</td>
+<td width="50%">
+<a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/your_own_data/"><img src="docs/images/card-your-own-data.png" alt=""></a>
+<b><a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/your_own_data/">Use your own data</a></b><br>
+<sub>Two coordinate arrays and one field array, from NumPy to a fitted equation.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/wave_breaking/"><img src="docs/images/card-wave-breaking.png" alt=""></a>
+<b><a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/wave_breaking/">Breaking waves</a></b><br>
+<sub>The published EqGPT equation, reproduced on 12 wave-tank experiments.</sub>
+</td>
+<td width="50%">
+<a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/two_engines/"><img src="docs/images/card-two-engines.png" alt=""></a>
+<b><a href="https://scientific-artificial-intelligence-lab.github.io/kd/examples/two_engines/">Column chromatography</a></b><br>
+<sub>Two algorithms on one 74-row table, both recovering the published formula.</sub>
+</td>
+</tr>
+</table>
 
-```python
-import torch
+Nineteen runnable scripts covering every algorithm are in
+[`examples/`](examples/), including
+[`09_compare_algorithms.py`](examples/09_compare_algorithms.py), which runs the
+algorithms on one dataset and ranks the discovered equations on a single NMSE
+ruler.
 
-import kd
-
-x = torch.linspace(0.0, 1.0, 64)   # spatial grid
-t = torch.linspace(0.0, 1.0, 32)   # time grid
-u = torch.rand(64, 32)             # your measured field on the (x, t) grid
-
-dataset = kd.PDEDataset.from_arrays(
-    coords={"x": x, "t": t},        # one 1D array per axis; insertion order sets the axis order
-    fields={"u": u},                # field shaped (len(x), len(t))
-    lhs="u_t",                      # left-hand side of the equation to discover
-    periodic={"x"},                 # optional: periodic axes improve fits
-    name="my_pde",
-    ground_truth="u_t = 0.1 * u_xx",
-)
-```
-
-The same call handles 2D spatial fields: add a `y` axis and pass an nD field,
-e.g. `coords={"x": x, "y": y, "t": t}` with `u` shaped `(len(x), len(y),
-len(t))`.
-
-## Score Your Own Candidate Terms
-
-You don't have to run a search to use KD's evaluator. `evaluate_terms` fits
-a candidate term set directly; `validate_terms` classifies terms without
-fitting. Both fail loud with a complete per-term rejection report (reason +
-hint), so a caller (human or LLM agent) can repair and resubmit:
-
-```python
-import kd
-
-result = kd.evaluate_terms(dataset, ["diff2_x(u)", "mul(u, diff_x(u))"])
-print(result.coefficients, result.nmse)
-
-report = kd.validate_terms(dataset, ["u_xx", "u + u_x"])  # no fit performed
-for v in report.rejected:
-    print(v.term, "->", v.reason)    # "u + u_x" is not canonical funcall IR
-```
-
-## Discovery with a Sketch
+## Discovery with a sketch
 
 A blind search starts from "any equation could be here". When part of the law is
 already settled physics, `fit(dataset, sketch=...)` states that part and searches
-only the rest:
+only the rest. A pinned term is subtracted from the regression target before the
+search and restored exactly in the solution, so the search cannot spend budget
+rediscovering it. A hole declares how many terms may fill it and what shapes they
+may take (derivative-order cap, allowed operators, fields, axes).
 
-```python
-import kd
-from kd.core.equation import (
-    LhsSpec,
-    PinnedTerm,
-    Sketch,
-    SketchMatchPolicy,
-    TermConstraint,
-    TermHole,
-)
-from kd.core.expr import TermVocabulary
-
-sketch = Sketch(
-    lhs_spec=LhsSpec("u", "t", 1),
-    vocabulary=TermVocabulary(
-        fields=frozenset({"u"}), coordinates=frozenset({"x", "t"})
-    ),
-    pinned=(PinnedTerm("mul(u,u_x)", -1.0),),   # known term WITH its coefficient
-    anchored=(),                                # known structure, coefficient free
-    holes=(                                     # the unknown remainder
-        TermHole(
-            id="diffusion",
-            min_count=1,
-            max_count=2,
-            constraint=TermConstraint(max_deriv_order=2),
-        ),
-    ),
-    match_policy=SketchMatchPolicy(
-        coeff_atol=1e-9, coeff_rtol=1e-9, support_threshold=0.0
-    ),
-)
-
-model = kd.Model(algorithm="sga", generations=30, population=15, seed=0)
-model.fit(dataset, sketch=sketch)
-
-outcome = model.result_.sketch_outcome
-print(outcome.verdict.overall)    # True when every clause of the sketch holds
-print(outcome.solution)           # published only when overall is True
-```
-
-A pinned term is subtracted from the regression target before the search and
-restored exactly in the solution, so the search cannot spend budget
-rediscovering it. A hole declares how many terms may fill it and what shapes
-they may take (derivative-order cap, allowed operators, fields, axes). The exit
-is certified: `outcome.solution` is published only when the discovered law
-satisfies every clause, and otherwise the run reports `outcome.best_candidate`
-plus the clause that failed. On the bundled 64×51 Burgers field the run above
-restores the pinned coefficient at exactly `-1.0` and fills the hole with a
-second-order term whose coefficient comes out `0.1000` against a ground truth of
-`0.1`.
-
-`"sga"` and `"pysindy"` accept sketches today. SGA compiles the sketch natively,
-narrowing the search's variable and operator pools at the source; an engine that
-cannot honor a clause refuses the fit with a `ValueError` naming that clause
-instead of searching wider than declared.
+The exit is certified: `outcome.solution` is published only when the discovered
+law satisfies every clause, and otherwise the run reports
+`outcome.best_candidate` plus the clause that failed. `"sga"` and `"pysindy"`
+accept sketches today; an algorithm that cannot honor a clause refuses the fit
+with a `ValueError` naming that clause instead of searching wider than declared.
 
 The full walkthrough, including how the two backends differ, is
-[`examples/21_sketch_discovery.py`](examples/21_sketch_discovery.py)
-(about 30 seconds).
+[`examples/21_sketch_discovery.py`](examples/21_sketch_discovery.py) (about 30
+seconds).
 
-## Long Runs: Checkpoint & Resume
+## More in KD
 
-```python
-model = kd.Model(algorithm="discover", generations=500, checkpoint_dir="ckpts")
-model.fit(dataset)                   # writes ckpts/checkpoint_*.pt as it goes
-
-# Later (or after a crash), continue from the saved search state:
-model = kd.Model(algorithm="discover", generations=200)
-model.fit(dataset, resume_from="ckpts/checkpoint_final.pt")
-```
-
-The checkpoint restores search state (population / controller weights /
-best); generations and other settings come from the new `Model`.
-
-The checkpoint directory also carries a `manifest.json` ledger: one entry per
-checkpoint recording filename, iteration, best score and expression, algorithm,
-seed, config hash and write time. Read it instead of globbing filenames:
-
-```python
-for entry in kd.load_checkpoint_manifest("ckpts"):
-    print(entry.filename, entry.iteration, entry.best_score)
-```
-
-The reader is read-only and fail-loud, and verifies the whole directory
-contract. Call it on a directory whose run has terminated: during a live run a
-checkpoint file can briefly exist before its ledger entry is appended.
-
-## Batch Experiments
-
-`kd.harness` runs a declarative experiment matrix and stores sealed evidence:
-
-```python
-from pathlib import Path
-
-from kd.harness import ExperimentPlan, PlanEntry, run_plan
-
-plan = ExperimentPlan(
-    name="burgers-sweep",
-    entries=tuple(
-        PlanEntry(
-            instrument=engine,
-            dataset_ref="burgers",
-            seed=seed,
-            model_kwargs={"generations": 50},
-        )
-        for engine in ("sga", "dlga")
-        for seed in (0, 1, 2)
-    ),
-)
-result = run_plan(
-    plan, datasets={"burgers": dataset}, store_root=Path("evidence")
-)
-```
-
-Entry order is part of the plan's identity, so a plan hash pins the exact
-execution matrix. Each run's evidence is stored with an environment
-fingerprint; `build_consensus` aggregates a sealed store across runs, and both
-dispatch and consensus results render to markdown or to versioned JSON
-artifacts. Execution is serial: the package composes the existing `Model`
-surface and adds no routing or budget logic.
-
-Passing `recording=RecordingOptions(...)` runs each entry inside a standard run
-directory (`runs/entry-NNNN/`, numbered to match its record) carrying that
-entry's iteration events, search phases and optional checkpoints; adding
-`catalog_path=` appends one row per run to a cross-run ledger whose rows point
-at those run directories. `run_plan` also renders a human-readable `report.md`
-into the store root; it is derived and regenerable, while the sealed index and
-records stay the authority.
-
-The full chain (plan, run, re-open the sealed store, consensus, Markdown +
-JSON) runs in about five seconds in
-[`examples/19_batch_harness.py`](examples/19_batch_harness.py).
-
-## Visualization
-
-After a fit, render a full HTML report (universal figures plus the fitted
-engine's own search diagnostics):
-
-```python
-import kd
-
-viz = kd.VizEngine(output_dir="out/my_run")
-report = viz.render_all(model.result_, algorithm=model.algorithm_, dataset=dataset)
-print(report.report)         # path to report.html
-print(len(report.figures))   # number of figure files
-```
-
-The report bundles universal figures — the discovered equation rendered in
-LaTeX, search convergence, a parity plot, residual maps, True/Predicted field
-comparisons — plus the fitted engine's own diagnostics:
+| | | |
+|---|---|---|
+| **Score candidate terms** | Fit and score a term set directly, or classify one without fitting, with a per-term rejection report | [`examples/11`](examples/11_evaluate_terms.py) · [API](https://scientific-artificial-intelligence-lab.github.io/kd/api/terms/) |
+| **Checkpoint and resume** | Atomic search-state checkpoints during `fit`, plus a `manifest.json` ledger to pick a resume point from | [`examples/10`](examples/10_checkpoint_resume.py) · [Guide](https://scientific-artificial-intelligence-lab.github.io/kd/design/resume/) |
+| **Batch experiments** | A declarative algorithm × dataset plan, run into a sealed evidence store with environment fingerprints and consensus reports | [`examples/19`](examples/19_batch_harness.py) · [Guide](https://scientific-artificial-intelligence-lab.github.io/kd/design/batch/) |
+| **HTML reports** | Convergence, parity, residual maps, field comparisons, the equation in LaTeX, and each algorithm's own search diagnostics | [`examples/03`](examples/03_visualize.py) · [Guide](https://scientific-artificial-intelligence-lab.github.io/kd/viz/) |
+| **Dataset preview** | `kd.preview(dataset)` audits axes, spacing, field statistics and the left-hand side before a search | [Data requirements](https://scientific-artificial-intelligence-lab.github.io/kd/data/shape/) |
 
 <div align="center">
-<img src="docs/images/burgers_parity.png" width="560" alt="Parity plot: predicted vs actual u_t"><br>
-<em>Parity plot from the report: predicted vs actual <code>u_t</code> for the
-discovered Burgers equation (R² = 1.0000).</em>
+<img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree beside the discovered expression tree">
+<br>
+<sub>From the report, SGA on the bundled Chafee-Infante dataset. Left: the raw genome of the best evolved individual, still carrying redundant branches. Right: the discovered equation after sparse selection, operators and derivatives only.</sub>
 </div>
 
-<div align="center">
-<img src="docs/images/chafee_field_comparison.png" width="820" alt="Chafee-Infante true, predicted, and residual fields"><br>
-<em>True / Predicted / Residual panels from a Chafee-Infante fit
-(<code>u_t = u_xx - u + u^3</code> recovered by SGA).</em>
-</div>
+## Origins and acknowledgements
 
-The report also renders the discovered equation as a structure-only **expression
-tree**, and (for the SGA engine) the raw **genome tree** of the best evolved
-individual, so you can see what the search actually produced versus the sparse
-equation it was distilled into:
-
-<div align="center">
-<img src="docs/images/sga_genome_vs_equation_tree.png" width="820" alt="SGA genome tree vs discovered expression tree"><br>
-<em>Example: SGA on the built-in Chafee-Infante dataset (recovers
-<code>u_t = u_xx - u + u^3</code>). Left: the raw GP genome of the best
-individual, still carrying evolved bloat (redundant / zeroed terms). Right: the
-discovered equation after sparse selection, operators and derivatives only,
-coefficients dropped (they stay in the LaTeX equation figure).</em>
-</div>
-
-Every result also carries a `manifest` (dataset fingerprint, seed, KD
-version) so a run can be identified and reproduced later.
-
-## Package Layout
-
-```
-src/kd/
-├── api.py        # Model facade: one-line fit() for every engine
-├── evaluate.py   # evaluate_terms / validate_terms: score terms directly
-├── data/         # PDEDataset, synthetic generators, dataset loaders
-├── search/       # sga / dlga / discover / eqgpt / llm4ed / pysr / pysindy
-├── harness/      # batch experiment plans, evidence store, consensus reports
-├── viz/          # VizEngine: HTML reports & figures
-└── inspect.py    # preview() dataset sanity checks
-```
-
-## Origins & Acknowledgements
-
-The SGA, DLGA, DISCOVER, EqGPT, and LLM4ED engines are refactored
-re-implementations of algorithms developed in this lab; credit for the
-methods belongs to the original works:
+The SGA, DLGA, DISCOVER, EqGPT, and LLM4ED algorithms are refactored
+re-implementations of methods developed in this lab; credit for the methods
+belongs to the original works:
 
 - **SGA-PDE**: Chen et al., [SGA-PDE](https://github.com/YuntianChen/SGA-PDE);
   also the source of several bundled datasets (see [`NOTICE`](NOTICE))

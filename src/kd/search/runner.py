@@ -22,6 +22,7 @@ from kd.core.equation import (
     LhsSpec,
     build_equation,
     build_homogeneous,
+    build_regression,
     render_lhs_label,
 )
 from kd.core.evaluator import EvaluationResult
@@ -29,7 +30,7 @@ from kd.core.expr.naming import parse_derivative_name
 from kd.core.platform.requirements import DerivativeReqs, assert_dataset_supported
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY, CompileReport
 from kd.core.verify import verify_equation
-from kd.data.schema import PDEDataset, compute_dataset_fingerprint
+from kd.data.schema import DataTopology, PDEDataset, compute_dataset_fingerprint
 from kd.search.callbacks import RunnerCallback, VizDataCollector
 from kd.search.checkpoint_payload import (
     CHECKPOINT_VERSION,
@@ -37,7 +38,11 @@ from kd.search.checkpoint_payload import (
     atomic_torch_save,
     build_checkpoint_payload,
 )
-from kd.search.descriptor import InstrumentDescriptor, assert_sketch_supported
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    assert_sketch_supported,
+    mode_for_topology,
+)
 from kd.search.lifecycle import SearchLifecycle
 from kd.search.protocol import (
     DiscoveryTask,
@@ -662,6 +667,21 @@ class ExperimentRunner:
         components: PlatformComponents,
         final_eval: EvaluationResult,
     ) -> Equation | None:
+        if components.dataset.topology is DataTopology.TABULAR:
+            descriptor = getattr(self._algorithm, "descriptor", None)
+            if not isinstance(descriptor, InstrumentDescriptor):
+                return None
+            mode = mode_for_topology(descriptor, DataTopology.TABULAR)
+            if mode is None or Form.REGRESSION not in mode.forms:
+                return None
+            target = final_eval.lhs_name or components.dataset.lhs_field
+            return build_regression(
+                final_eval.terms,
+                final_eval.coefficients,
+                LhsSpec(field=target, axis="", order=0),
+                active_indices=final_eval.selected_indices,
+                is_valid=final_eval.is_valid,
+            )
         if final_eval.form is Form.HOMOGENEOUS:
             return build_homogeneous(
                 final_eval.terms,
@@ -818,6 +838,8 @@ class ExperimentRunner:
         if isinstance(final_eval.lhs_name, str) and final_eval.lhs_name:
             return final_eval.lhs_name
         dataset = components.dataset
+        if getattr(dataset, "topology", None) is DataTopology.TABULAR:
+            return dataset.lhs_field
         lhs_field = getattr(dataset, "lhs_field", None)
         lhs_axis = getattr(dataset, "lhs_axis", None)
 

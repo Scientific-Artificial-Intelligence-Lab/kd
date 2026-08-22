@@ -5,7 +5,14 @@ import math
 from typing import assert_never
 
 from kd.core.equation.rendering import render_lhs_label
-from kd.core.equation.types import Equation, Evolution, Homogeneous, Scalar, Term
+from kd.core.equation.types import (
+    Equation,
+    Evolution,
+    Homogeneous,
+    Regression,
+    Scalar,
+    Term,
+)
 
 
 def _rendered_scaled_terms(terms: tuple[Term, ...]) -> list[str]:
@@ -48,4 +55,7 @@ def residual_program(eq: Equation) -> str:
             return f"sub({rhs}, {render_lhs_label(eq.lhs_spec)})"
         case Homogeneous():
             return _folded_sum(_rendered_scaled_terms(eq.terms))
+        case Regression():
+            rhs = _folded_sum(_rendered_scaled_terms(eq.terms))
+            return f"sub({rhs}, {eq.lhs_spec.field})"
     assert_never(eq)

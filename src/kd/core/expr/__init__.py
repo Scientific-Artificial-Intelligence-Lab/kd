@@ -11,7 +11,13 @@ from kd.core.expr.sympy_bridge import (
     to_sympy,
     to_unicode,
 )
-from kd.core.expr.term_features import TermFeatures, TermVocabulary, analyze_term
+from kd.core.expr.term_features import (
+    ColumnFingerprint,
+    TermFeatures,
+    TermVocabulary,
+    analyze_term,
+    column_fingerprint,
+)
 from kd.core.expr.term_key import structure_term_key
 from kd.core.expr.terms import split_terms
 from kd.core.expr.validator import (
@@ -38,6 +44,8 @@ __all__ = [
     "TermFeatures",
     "TermVocabulary",
     "analyze_term",
+    "ColumnFingerprint",
+    "column_fingerprint",
 
     "FormattedEquation",
     "are_equivalent",

@@ -11,10 +11,10 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import Form
-from kd.core.equation.signature import law_term_key
+from kd.core.equation.signature import law_term_entry, law_term_key
 from kd.core.equation.sketch import Sketch, constraint_admits
 from kd.core.evaluator import EvaluationResult
-from kd.core.expr.term_features import analyze_term
+from kd.core.expr.term_features import TermFeatures, analyze_term, column_fingerprint
 from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
 from kd.core.platform.requirements import DerivativeReqs
@@ -36,15 +36,7 @@ from kd.search.sga.config import DEDUP_MODES, OP1, OP2, OPS, ROOT, SGAConfig, bu
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
 from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde, execute_tree
 from kd.search.sga.pde import PDE
-
-
-
-
-from kd.search.sga.sketch_backend import (
-    SGACompiled,
-    _fingerprint,
-    compile_for_sga,
-)
+from kd.search.sga.sketch_backend import SGACompiled, compile_for_sga
 from kd.search.sga.train import CandidateResult, TrainResult, evaluate_candidate
 from kd.viz.extension import PlotInfo
 
@@ -289,6 +281,14 @@ class SGAPlugin:
         self._repeat_cross: int = 0
 
         self._repeat_change: int = 0
+
+        self._sketch_predicate_checked: int = 0
+
+        self._sketch_predicate_rejected: int = 0
+
+        self._sketch_capacity_checked: int = 0
+
+        self._sketch_capacity_rejected: int = 0
 
     @property
     def _delta(self) -> dict[str, float]:
@@ -725,6 +725,10 @@ class SGAPlugin:
             "pde_lib": list(self._pde_lib),
             "repeat_cross": self._repeat_cross,
             "repeat_change": self._repeat_change,
+            "sketch_predicate_checked": self._sketch_predicate_checked,
+            "sketch_predicate_rejected": self._sketch_predicate_rejected,
+            "sketch_capacity_checked": self._sketch_capacity_checked,
+            "sketch_capacity_rejected": self._sketch_capacity_rejected,
         }
 
     @state.setter
@@ -758,6 +762,10 @@ class SGAPlugin:
         self._pde_lib = set(value.get("pde_lib", []))
         self._repeat_cross = int(value.get("repeat_cross", 0))
         self._repeat_change = int(value.get("repeat_change", 0))
+        self._sketch_predicate_checked = int(value.get("sketch_predicate_checked", 0))
+        self._sketch_predicate_rejected = int(value.get("sketch_predicate_rejected", 0))
+        self._sketch_capacity_checked = int(value.get("sketch_capacity_checked", 0))
+        self._sketch_capacity_rejected = int(value.get("sketch_capacity_rejected", 0))
         self._clear_pending_generation()
         self._restore_pending = True
 
@@ -772,6 +780,10 @@ class SGAPlugin:
         self._pde_lib = set()
         self._repeat_cross = 0
         self._repeat_change = 0
+        self._sketch_predicate_checked = 0
+        self._sketch_predicate_rejected = 0
+        self._sketch_capacity_checked = 0
+        self._sketch_capacity_rejected = 0
 
     def _clear_pending_generation(self) -> None:
         self._offspring = None
@@ -835,6 +847,7 @@ class SGAPlugin:
         compiled = self._sketch_compiled
 
         assert sketch is not None and compiled is not None
+        self._sketch_predicate_checked += 1
         if not sketch.holes and not sketch.anchored:
             return True
         for tree in pde.terms:
@@ -842,16 +855,20 @@ class SGAPlugin:
                 key = law_term_key(tree_to_kd_expr(tree))
                 features = analyze_term(key, sketch.vocabulary)
             except ValueError:
+                self._sketch_predicate_rejected += 1
                 return False
             if key in compiled.pinned_keys:
+                self._sketch_predicate_rejected += 1
                 return False
-            if _fingerprint(features) in compiled.pinned_fingerprints:
+            if column_fingerprint(features) in compiled.pinned_fingerprints:
+                self._sketch_predicate_rejected += 1
                 return False
             if key in compiled.anchored_keys:
                 continue
             if not any(
                 constraint_admits(hole.constraint, features) for hole in sketch.holes
             ):
+                self._sketch_predicate_rejected += 1
                 return False
         return True
 
@@ -861,29 +878,50 @@ class SGAPlugin:
         sketch = self._sketch
         compiled = self._sketch_compiled
         assert sketch is not None and compiled is not None
+        self._sketch_capacity_checked += 1
         if not sketch.holes:
             return True
         selected = result.selected_indices
         if selected is None:
             return True
-        seats: dict[str, set[str]] = {hole.id: set() for hole in sketch.holes}
+        coefficients = result.coefficients
+
+
+        assert coefficients is not None
+        grouped: dict[str, list[float]] = {}
+        features_by_key: dict[str, TermFeatures] = {}
         for index in selected:
             if not 0 <= index < len(terms):
                 return True
+            coefficient = float(coefficients[index].item())
             try:
-                key = law_term_key(terms[index])
+                key, signed_value = law_term_entry(terms[index], coefficient)
                 features = analyze_term(key, sketch.vocabulary)
             except ValueError:
 
 
                 continue
+            grouped.setdefault(key, []).append(signed_value)
+            features_by_key[key] = features
+        aggregated = {key: math.fsum(values) for key, values in grouped.items()}
+        threshold = sketch.match_policy.support_threshold
+        active = [
+            key
+            for key, value in aggregated.items()
+            if value != 0.0 and abs(value) >= threshold
+        ]
+        seats: dict[str, set[str]] = {hole.id: set() for hole in sketch.holes}
+        for key in active:
             if key in compiled.anchored_keys:
                 continue
             for hole in sketch.holes:
-                if constraint_admits(hole.constraint, features):
+                if constraint_admits(hole.constraint, features_by_key[key]):
                     seats[hole.id].add(key)
                     break
-        return all(len(seats[hole.id]) <= hole.max_count for hole in sketch.holes)
+        within = all(len(seats[hole.id]) <= hole.max_count for hole in sketch.holes)
+        if not within:
+            self._sketch_capacity_rejected += 1
+        return within
 
     def _format_best_expression(self) -> str:
         res = self.build_final_result()

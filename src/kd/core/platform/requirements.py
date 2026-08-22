@@ -15,6 +15,7 @@ class DerivativeReqs:
     provider_kind: Literal["finite_diff", "autograd", "none"] = "finite_diff"
     max_atomic_order: int = 2
     lhs_order: int = 1
+    lhs_source: Literal["derivative", "field"] = "derivative"
     needs_surrogate: bool = False
     surrogate_model: torch.nn.Module | None = None
     surrogate_train_kwargs: dict[str, Any] | None = None
@@ -24,13 +25,23 @@ class DerivativeReqs:
     )
 
     def __post_init__(self) -> None:
+        if self.lhs_source == "field":
+            if self.lhs_order != 0:
+                raise ValueError(
+                    "lhs_source='field' requires lhs_order=0, got "
+                    f"{self.lhs_order}"
+                )
+            if self.provider_kind != "none":
+                raise ValueError(
+                    "lhs_source='field' requires provider_kind='none', got "
+                    f"{self.provider_kind!r}"
+                )
         if self.needs_surrogate and self.provider_kind != "autograd":
             raise ValueError(
                 "needs_surrogate=True requires provider_kind='autograd' "
                 f"(got '{self.provider_kind}'); SurrogateContext relies on "
                 "AutogradProvider.get_field()"
             )
-
 
 
         if self.provider_kind == "none":

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from kd.core.equation.canonical import canonicalize_expression
+from kd.core.equation.gauge import regression_term_gauge
 from kd.core.equation.projection import active_law
 from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.serialize import from_dict
@@ -17,13 +18,19 @@ from kd.core.equation.types import (
     Form,
     Homogeneous,
     LhsSpec,
+    Regression,
     Scalar,
 )
 
 if TYPE_CHECKING:
     from kd.search.records import EvidenceRecord
 
-LAWSIG_DOMAIN = "kd-lawsig-v1"
+
+
+
+
+
+LAWSIG_DOMAIN = "kd-lawsig-v2"
 
 
 @dataclass(frozen=True)
@@ -141,7 +148,22 @@ def _scalar_value(coefficient: object) -> float:
     return float(coefficient.value)
 
 
+def _regression_entry(term_ir: str, coefficient: float) -> tuple[str, float]:
+    skeleton, factor = regression_term_gauge(term_ir)
+    return law_term_entry(skeleton, coefficient * factor)
+
+
 def _f0_entries(eq: Equation) -> tuple[list[tuple[str, float]], Form, LhsSpec | None]:
+    if isinstance(eq, Regression):
+        entries = [
+            _regression_entry(term_ir, _scalar_value(coefficient))
+            for term_ir, coefficient in eq.terms
+        ]
+        lhs_term = canonicalize_expression(eq.lhs_spec.field)
+        entries = [(lhs_term, 1.0)] + [
+            (term_ir, -coefficient) for term_ir, coefficient in entries
+        ]
+        return entries, Form.REGRESSION, eq.lhs_spec
     entries = [
         law_term_entry(term_ir, _scalar_value(coefficient))
         for term_ir, coefficient in eq.terms

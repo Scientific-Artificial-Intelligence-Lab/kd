@@ -4,13 +4,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import sympy
+
 from kd.core.expr.sympy_bridge import are_equivalent
 from kd.search.pysr.backend import HOFEntry, PySRBackend
-from kd.search.pysr.convert import pysr_sympy_to_kd_terms
+from kd.search.pysr.convert import (
+    pysr_sympy_to_kd_terms,
+    pysr_sympy_to_tabular_term,
+)
 from kd.search.term_utils import fold_add as fold_add
 from kd.search.term_utils import infer_max_atomic_order as infer_max_atomic_order
 
 logger = logging.getLogger(__name__)
+
 
 def convert_best(
     backend: PySRBackend,
@@ -66,6 +72,50 @@ def convert_hall_of_fame(
         meta.append((int(entry.complexity), float(entry.loss)))
     if skipped:
         logger.debug("Skipped %d unconvertible hall-of-fame entries", skipped)
+    return candidates, meta
+
+
+def convert_best_tabular(
+    backend: PySRBackend,
+    valid_terms: list[str],
+    feature_names: list[str],
+) -> str:
+    best = backend.best_sympy()
+    feature_symbols = {sympy.Symbol(name) for name in feature_names}
+    if not (best.free_symbols & feature_symbols):
+        raise RuntimeError(
+            "PySR tabular best is a constant model with no feature symbols; "
+            "kd has no intercept-only semantics for a tabular target"
+        )
+    try:
+        return pysr_sympy_to_tabular_term(best, valid_terms, feature_names)
+    except ValueError as exc:
+        raise RuntimeError(
+            "PySR tabular best is not convertible to kd IR (outside the "
+            f"supported subset): {exc}"
+        ) from exc
+
+
+def convert_hall_of_fame_tabular(
+    backend: PySRBackend,
+    valid_terms: list[str],
+    feature_names: list[str],
+) -> tuple[list[str], list[tuple[int, float]]]:
+    candidates: list[str] = []
+    meta: list[tuple[int, float]] = []
+    skipped = 0
+    for entry in backend.hall_of_fame():
+        try:
+            converted = pysr_sympy_to_tabular_term(
+                entry.sympy_expr, valid_terms, feature_names
+            )
+        except ValueError:
+            skipped += 1
+            continue
+        candidates.append(converted)
+        meta.append((int(entry.complexity), float(entry.loss)))
+    if skipped:
+        logger.debug("Skipped %d unconvertible tabular HOF entries", skipped)
     return candidates, meta
 
 

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import ast
+import math
 
-__all__ = ["structure_term_key"]
+__all__ = ["numeric_scalar_value", "split_scalar_factor", "structure_term_key"]
 
 
 def structure_term_key(term: str) -> str:
@@ -16,7 +17,8 @@ def structure_term_key(term: str) -> str:
         tree = ast.parse(term.strip(), mode="eval")
     except (SyntaxError, ValueError):
         return "".join(term.split())
-    unparsed = ast.unparse(_strip_sign_and_scalar(tree.body))
+    unparsed = ast.unparse(split_scalar_factor(tree.body)[1])
+
 
 
 
@@ -36,27 +38,36 @@ def structure_term_key(term: str) -> str:
         return "".join(unparsed.split())
 
 
-def _strip_sign_and_scalar(node: ast.expr) -> ast.expr:
+def split_scalar_factor(node: ast.expr) -> tuple[float, ast.expr]:
     if isinstance(node, ast.Call) and _is_call(node, "neg", 1):
-        return _strip_sign_and_scalar(node.args[0])
+        factor, residual = split_scalar_factor(node.args[0])
+        return -factor, residual
     if isinstance(node, ast.Call) and _is_call(node, "mul", 2):
-        return _strip_mul_scalar(node)
-    if (
-        isinstance(node, ast.Call)
-        and _is_call(node, "div", 2)
-        and _is_numeric_scalar(node.args[1])
-    ):
-        return _strip_sign_and_scalar(node.args[0])
-    return node
+        return _split_mul_scalar(node)
+    if isinstance(node, ast.Call) and _is_call(node, "div", 2):
+        divisor = numeric_scalar_value(node.args[1])
+        if divisor is not None:
+            factor, residual = split_scalar_factor(node.args[0])
 
 
-def _strip_mul_scalar(node: ast.Call) -> ast.expr:
+
+
+
+            return (factor * math.inf if divisor == 0.0 else factor / divisor), residual
+    return 1.0, node
+
+
+def _split_mul_scalar(node: ast.Call) -> tuple[float, ast.expr]:
     left, right = node.args
-    if _is_numeric_scalar(left):
-        return _strip_sign_and_scalar(right)
-    if _is_numeric_scalar(right):
-        return _strip_sign_and_scalar(left)
-    return node
+    left_value = numeric_scalar_value(left)
+    if left_value is not None:
+        factor, residual = split_scalar_factor(right)
+        return left_value * factor, residual
+    right_value = numeric_scalar_value(right)
+    if right_value is not None:
+        factor, residual = split_scalar_factor(left)
+        return right_value * factor, residual
+    return 1.0, node
 
 
 def _is_call(node: ast.expr, name: str, arity: int) -> bool:
@@ -68,9 +79,22 @@ def _is_call(node: ast.expr, name: str, arity: int) -> bool:
     )
 
 
-def _is_numeric_scalar(node: ast.expr) -> bool:
+def numeric_scalar_value(node: ast.expr) -> float | None:
     if isinstance(node, ast.Constant):
-        return isinstance(node.value, int | float) and not isinstance(node.value, bool)
+        if isinstance(node.value, int | float) and not isinstance(node.value, bool):
+            try:
+                return float(node.value)
+            except OverflowError:
+
+
+
+
+
+                return math.inf if node.value > 0 else -math.inf
+        return None
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
-        return _is_numeric_scalar(node.operand)
-    return False
+        value = numeric_scalar_value(node.operand)
+        if value is None:
+            return None
+        return -value if isinstance(node.op, ast.USub) else value
+    return None

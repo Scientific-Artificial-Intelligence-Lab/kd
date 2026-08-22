@@ -18,7 +18,14 @@ from kd.core.equation.signature import (
     compare_laws,
     law_signature,
 )
-from kd.core.equation.types import Equation, Evolution, Form, Homogeneous, Scalar
+from kd.core.equation.types import (
+    Equation,
+    Evolution,
+    Form,
+    Homogeneous,
+    Regression,
+    Scalar,
+)
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr.executor import PythonExecutor
 from kd.data.schema import compute_dataset_fingerprint
@@ -214,13 +221,24 @@ def verify_equation(
         variance = _normalizer_variance(
             coefficients[0] * columns[0], term=normalizer_term
         )
+    elif isinstance(projected, Regression):
+        normalizer_term = projected.lhs_spec.field
+        target = _execute_column(
+            normalizer_term, executor=executor, context=context
+        )
+        residual = _weighted_sum(coefficients, columns) - target
+        variance = _normalizer_variance(target, term=normalizer_term)
     else:
         raise TypeError(f"unsupported equation type: {type(projected).__name__}")
 
     mse, nmse, residual_mean, residual_std, residual_max_abs = _measure(
         residual, variance
     )
-    r2 = 1.0 - nmse if isinstance(projected, Evolution) else None
+    r2 = (
+        1.0 - nmse
+        if isinstance(projected, (Evolution, Regression))
+        else None
+    )
     passed = None if policy.nmse_max is None else nmse <= policy.nmse_max
     return VerificationReport(
         signature=signature,

@@ -1,12 +1,23 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import pickle
+import subprocess
+import sys
+import tempfile
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import numpy as np
+import sympy
 
 from kd.search.pysr.config import PySRConfig
+
+logger = logging.getLogger(__name__)
+
+
+_WORKER_MODULE = "kd.search.pysr._worker"
 
 
 
@@ -102,5 +113,57 @@ class _PySRRegressorBackend:
         ]
 
 
+class _SubprocessBackend:
+
+    def __init__(self, config: PySRConfig) -> None:
+        self._config = config
+        self._best: Any = None
+        self._hof: list[HOFEntry] | None = None
+
+    def fit(self, X: np.ndarray, y: np.ndarray, variable_names: list[str]) -> None:
+        request = {
+            "X": X,
+            "y": y,
+            "variable_names": list(variable_names),
+            "config": self._config,
+        }
+        with tempfile.TemporaryDirectory(prefix="kd-pysr-") as tmp:
+            request_path = os.path.join(tmp, "request.pkl")
+            result_path = os.path.join(tmp, "result.pkl")
+            with open(request_path, "wb") as f:
+                pickle.dump(request, f)
+            cmd = [sys.executable, "-m", _WORKER_MODULE, request_path, result_path]
+            logger.debug("launching PySR worker: %s", cmd)
+            proc = subprocess.run(cmd, stdin=subprocess.DEVNULL)
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "PySR worker process exited with return code "
+                    f"{proc.returncode} without producing a result"
+                )
+            with open(result_path, "rb") as f:
+                result = pickle.load(f)
+        if "error" in result:
+            raise RuntimeError(
+                f"PySR fit failed in the worker process:\n{result['error']}"
+            )
+        self._best = sympy.sympify(result["best"])
+        self._hof = [
+            HOFEntry(complexity=complexity, loss=loss, sympy_expr=sympy.sympify(srepr))
+            for complexity, loss, srepr in result["hof"]
+        ]
+
+    def best_sympy(self) -> Any:
+        if self._best is None:
+            raise RuntimeError("best_sympy() called before fit(); call fit(...) first")
+        return self._best
+
+    def hall_of_fame(self) -> list[HOFEntry]:
+        if self._hof is None:
+            raise RuntimeError(
+                "hall_of_fame() called before fit(); call fit(...) first"
+            )
+        return list(self._hof)
+
+
 def default_backend_factory(config: PySRConfig) -> PySRBackend:
-    return _PySRRegressorBackend(config)
+    return _SubprocessBackend(config)

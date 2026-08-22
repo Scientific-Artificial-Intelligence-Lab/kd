@@ -18,7 +18,9 @@ from kd.search.resume_policy import SCIENCE_AXIS_DENYLISTS
 if TYPE_CHECKING:
     from kd.search.protocol import FacadeWiringContract
 
-_CLAIMABLE_FORMS = frozenset({Form.EVOLUTION, Form.HOMOGENEOUS})
+_CLAIMABLE_FORMS = frozenset(
+    {Form.EVOLUTION, Form.HOMOGENEOUS, Form.REGRESSION}
+)
 
 
 @dataclass(frozen=True)
@@ -34,8 +36,6 @@ class InstrumentMode:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("mode name must be non-empty")
-        if not self.forms:
-            raise ValueError("mode forms must be non-empty")
         reserved = self.forms - _CLAIMABLE_FORMS
         if reserved:
             names = ", ".join(sorted(form.value for form in reserved))
@@ -82,6 +82,22 @@ class InstrumentDescriptor:
         knob_names = [knob.name for knob in self.knobs]
         if len(knob_names) != len(set(knob_names)):
             raise ValueError("descriptor knob names must be distinct")
+
+
+def mode_for_topology(
+    descriptor: InstrumentDescriptor,
+    topology: DataTopology,
+) -> InstrumentMode | None:
+    matches = [
+        mode for mode in descriptor.modes if topology in mode.topologies
+    ]
+    if len(matches) > 1:
+        names = ", ".join(mode.name for mode in matches)
+        raise ValueError(
+            f"descriptor {descriptor.algorithm!r} has multiple modes for "
+            f"topology {topology.value!r}: {names}"
+        )
+    return matches[0] if matches else None
 
 
 def assert_sketch_supported(
@@ -157,5 +173,6 @@ __all__ = [
     "Knob",
     "ResumeTier",
     "assert_sketch_supported",
+    "mode_for_topology",
     "tool_schema",
 ]

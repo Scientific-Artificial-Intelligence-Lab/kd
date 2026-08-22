@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from torch import Tensor
@@ -44,6 +44,8 @@ _LHS_ORDER = 1
 _PARETO_COMPLEXITY_KEY = _viz_helpers.PARETO_COMPLEXITY_KEY
 _PARETO_LOSS_KEY = _viz_helpers.PARETO_LOSS_KEY
 _PARETO_NMSE_KEY = _viz_helpers.PARETO_NMSE_KEY
+_PARETO_EXPRESSIONS_KEY = _viz_helpers.PARETO_EXPRESSIONS_KEY
+_PARETO_SCALE_KEY = _viz_helpers.PARETO_SCALE_KEY
 _SELECTED_COMPLEXITY_KEY = _viz_helpers.SELECTED_COMPLEXITY_KEY
 _SELECTED_LOSS_KEY = _viz_helpers.SELECTED_LOSS_KEY
 _SELECTED_NMSE_KEY = _viz_helpers.SELECTED_NMSE_KEY
@@ -58,6 +60,7 @@ _STATE_FITTED = "fitted"
 _STATE_TERMS = "terms"
 _STATE_HOF_CANDIDATES = "hof_candidates"
 _STATE_HOF_META = "hof_meta"
+_STATE_MODE = "mode"
 
 
 class PySRPlugin:
@@ -80,7 +83,10 @@ class PySRPlugin:
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="pysr",
-        summary="One-shot PySR search over a configured kd term library.",
+        summary=(
+            "One-shot PySR search over a configured kd term library (PDE "
+            "mode) or dataset-derived feature columns (tabular mode)."
+        ),
         cost_class="medium",
         modes=(
             InstrumentMode(
@@ -88,6 +94,13 @@ class PySRPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+            ),
+            InstrumentMode(
+                name="tabular",
+                forms=frozenset({Form.REGRESSION}),
+                topologies=frozenset({DataTopology.TABULAR}),
+                provider_kind="none",
+                description="Scalar symbolic regression on tabular X -> y data.",
             ),
         ),
         knobs=(
@@ -117,7 +130,11 @@ class PySRPlugin:
         config: PySRConfig | None = None,
         *,
         backend_factory: Callable[[PySRConfig], PySRBackend] | None = None,
+        mode: Literal["default", "tabular"] = "default",
     ) -> None:
+        if mode not in ("default", "tabular"):
+            raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
+        self._mode = mode
         self._config = config or PySRConfig()
         self._library: TermLibrarySpec = TermLibrarySpec.from_terms(self._config.terms)
         self._backend_factory = backend_factory or default_backend_factory
@@ -146,6 +163,19 @@ class PySRPlugin:
                 "re-scoring); got None. Assemble the platform with an "
                 "evaluator (PlatformBuilder default) to run PySR."
             )
+        if self._mode == "tabular":
+
+
+
+
+
+            target = getattr(components.dataset, "lhs_field", None)
+            if target is not None and target in self._library.terms:
+                raise ValueError(
+                    f"tabular term catalog contains the target column "
+                    f"{target!r}; the target must not appear among the "
+                    "feature terms (self-regression tautology)"
+                )
         if not self._restore_pending:
             self._reset_fit_state()
         self._restore_pending = False
@@ -163,7 +193,10 @@ class PySRPlugin:
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
         evaluator = self._require_evaluator()
-        return [evaluator.evaluate_expression(candidate) for candidate in candidates]
+        return [
+            self._evaluate_candidate(evaluator, candidate)
+            for candidate in candidates
+        ]
 
     def update(self, results: list[EvaluationResult]) -> None:
         if not results:
@@ -179,11 +212,34 @@ class PySRPlugin:
             _PARETO_NMSE_KEY: [
                 result.nmse if result.is_valid else None for result in results
             ],
+            _PARETO_EXPRESSIONS_KEY: list(self._hof_candidates or []),
+
+
+
+            **(
+                {
+                    _PARETO_SCALE_KEY: [
+                        float(result.coefficients.flatten()[0])
+                        if result.is_valid
+                        and result.coefficients is not None
+                        and result.coefficients.numel()
+                        else None
+                        for result in results
+                    ]
+                }
+                if self._mode == "tabular"
+                else {}
+            ),
             _SELECTED_COMPLEXITY_KEY: self._selected_complexity,
             _SELECTED_LOSS_KEY: self._selected_loss,
             _SELECTED_NMSE_KEY: self._selected_nmse,
         }
-        log_whitelisted_metrics(self._recorder, _LOGGED_METRICS, metrics)
+
+
+
+        log_whitelisted_metrics(
+            self._recorder, _LOGGED_METRICS, metrics, skip_missing=True
+        )
         self._pareto_logged = True
 
 
@@ -195,6 +251,10 @@ class PySRPlugin:
     @property
     def best_expression(self) -> str:
         return self._best_expression
+
+    @property
+    def mode(self) -> Literal["default", "tabular"]:
+        return self._mode
 
     @property
     def config(self) -> dict[str, Any]:
@@ -216,6 +276,13 @@ class PySRPlugin:
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
+        if self._mode == "tabular":
+            return DerivativeReqs(
+                provider_kind="none",
+                lhs_order=0,
+                lhs_source="field",
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
         max_order = assembly.infer_max_atomic_order(list(self._library.terms))
         return DerivativeReqs(
             provider_kind="finite_diff",
@@ -228,6 +295,7 @@ class PySRPlugin:
     def state(self) -> dict[str, Any]:
         return {
             _STATE_ALGORITHM: ALGORITHM_NAME,
+            _STATE_MODE: self._mode,
 
 
 
@@ -253,6 +321,19 @@ class PySRPlugin:
             self._reset_fit_state()
             self._restore_pending = False
             return
+
+
+
+
+
+
+
+        stored_mode = value.get(_STATE_MODE, "default")
+        if stored_mode != self._mode:
+            raise ValueError(
+                f"PySR checkpoint mode {stored_mode!r} does not match "
+                f"plugin mode {self._mode!r}"
+            )
 
 
 
@@ -293,7 +374,8 @@ class PySRPlugin:
     def build_final_result(self) -> EvaluationResult:
         if self._best_eval is not None:
             return self._best_eval
-        return self._require_evaluator().evaluate_expression(self._best_expression)
+        evaluator = self._require_evaluator()
+        return self._evaluate_candidate(evaluator, self._best_expression)
 
     def build_result_target(self) -> Tensor:
         target = self._require_evaluator().lhs_target
@@ -329,22 +411,45 @@ class PySRPlugin:
         backend = self._backend_factory(self._config)
         backend.fit(x_matrix, y_vector, feature_names)
 
-        self._best_expression = assembly.convert_best(
-            backend, valid_terms, feature_names
-        )
-        candidates, meta = assembly.convert_hall_of_fame(
-            backend, valid_terms, feature_names
-        )
+        if self._mode == "tabular":
+            self._best_expression = assembly.convert_best_tabular(
+                backend, valid_terms, feature_names
+            )
+            candidates, meta = assembly.convert_hall_of_fame_tabular(
+                backend, valid_terms, feature_names
+            )
+        else:
+            self._best_expression = assembly.convert_best(
+                backend, valid_terms, feature_names
+            )
+            candidates, meta = assembly.convert_hall_of_fame(
+                backend, valid_terms, feature_names
+            )
         self._hof_candidates = candidates
         self._hof_meta = meta
         self._selected_complexity, self._selected_loss = assembly.match_selected_entry(
             self._best_expression, candidates, meta
         )
-        self._best_eval = evaluator.evaluate_expression(self._best_expression)
+        self._best_eval = self._evaluate_candidate(evaluator, self._best_expression)
         self._best_score = (
             self._best_eval.nmse if self._best_eval.is_valid else INITIAL_BEST_SCORE
         )
         self._selected_nmse = self._resolve_selected_nmse()
+
+    def _evaluate_candidate(
+        self,
+        evaluator: Evaluator,
+        expression: str,
+    ) -> EvaluationResult:
+        if self._mode == "tabular":
+
+
+
+
+
+            result = evaluator.evaluate_terms([expression], skip_invalid=False)
+            return replace(result, lhs_name=self._dataset.lhs_field)
+        return evaluator.evaluate_expression(expression)
 
     def _resolve_selected_nmse(self) -> float | None:
         if self._selected_complexity is None:

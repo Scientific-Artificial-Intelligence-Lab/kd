@@ -143,7 +143,9 @@ class LibraryConfig:
 
 class Library:
 
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(
+        self, tokens: list[Token], *, const_index: int | None = None
+    ) -> None:
         self.tokens = tokens
         n_tokens = len(tokens)
 
@@ -155,6 +157,7 @@ class Library:
         self._name_to_idx: dict[str, int] = {
             name: i for i, name in enumerate(self.names)
         }
+        self.const_index = const_index
 
         self.arities = np.array(
             [t.arity for t in tokens], dtype=np.int32
@@ -255,7 +258,9 @@ class Library:
         return self.names[index]
 
     @classmethod
-    def from_config(cls, config: LibraryConfig) -> Library:
+    def from_config(
+        cls, config: LibraryConfig, *, include_const: bool = False
+    ) -> Library:
         tokens: list[Token] = []
 
 
@@ -285,4 +290,17 @@ class Library:
                 )
             )
 
-        return cls(tokens)
+        if include_const:
+            tokens.append(
+                Token(
+                    name="const",
+                    arity=0,
+                    token_type=TokenType.TERMINAL,
+                    complexity=1,
+                )
+            )
+
+        return cls(
+            tokens,
+            const_index=len(tokens) - 1 if include_const else None,
+        )

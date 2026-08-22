@@ -79,11 +79,15 @@ def equation_to_sympy(equation: str, operands: Sequence[str]) -> sympy.Expr:
     )
     try:
         expr = parse_expr(equation, transformations=transformations)
+
+
+
+
+        return sympy.expand(expr)
     except Exception as exc:
         raise Llm4edParseError(
             f"cannot parse equation {equation!r}: {type(exc).__name__}: {exc}"
         ) from exc
-    return sympy.expand(expr)
 
 
 def _check_power_orders(equation: str) -> None:

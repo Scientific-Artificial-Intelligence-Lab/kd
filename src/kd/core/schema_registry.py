@@ -19,7 +19,7 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
     "kd-term-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-termlib-v1": SchemaEntry(1, "kd.core.equation.library"),
-    "kd-lawsig-v1": SchemaEntry(1, "kd.core.equation.signature"),
+    "kd-lawsig-v2": SchemaEntry(2, "kd.core.equation.signature"),
     "kd-sketch-v1": SchemaEntry(1, "kd.core.equation.sketch"),
     "kd-verification-v1": SchemaEntry(1, "kd.core.verify"),
 

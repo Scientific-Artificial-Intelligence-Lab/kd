@@ -4,7 +4,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TypeAlias, assert_never, cast
 
-from kd.core.equation.construct import make_evolution, make_homogeneous
+from kd.core.equation.construct import (
+    make_evolution,
+    make_homogeneous,
+    make_regression,
+)
 from kd.core.equation.types import (
     Coefficient,
     Equation,
@@ -13,6 +17,7 @@ from kd.core.equation.types import (
     Form,
     Homogeneous,
     LhsSpec,
+    Regression,
     Scalar,
     Term,
     fold_terms,
@@ -41,6 +46,14 @@ def to_dict(eq: Equation) -> JsonObject:
                 "attrs": None,
                 "active_indices": _active_indices_to_list(eq.active_indices),
             }
+        case Regression():
+            return {
+                "form": Form.REGRESSION.name,
+                "lhs_spec": _lhs_spec_to_dict(eq.lhs_spec),
+                "terms": _terms_to_list(eq.terms),
+                "attrs": _attrs_to_dict(eq.attrs),
+                "active_indices": _active_indices_to_list(eq.active_indices),
+            }
     assert_never(eq)
 
 
@@ -65,6 +78,13 @@ def from_dict(payload: Mapping[str, object]) -> Equation:
         if payload.get("lhs_spec") is not None:
             raise ValueError("HOMOGENEOUS equations must not carry a lhs_spec")
         return make_homogeneous(terms, active_indices=active_indices)
+    if form is Form.REGRESSION:
+        lhs_spec = _lhs_spec_from_dict(
+            payload.get("lhs_spec"), allow_empty_axis=True
+        )
+        if lhs_spec is None:
+            raise ValueError("REGRESSION equations require lhs_spec")
+        return make_regression(lhs_spec, terms, active_indices=active_indices)
     raise NotImplementedError(f"{form.name} equations are reserved")
 
 
@@ -119,7 +139,9 @@ def _form_from_dict(payload: Mapping[str, object]) -> Form:
         raise ValueError(f"unknown equation form: {form_name}") from exc
 
 
-def _lhs_spec_from_dict(value: object) -> LhsSpec | None:
+def _lhs_spec_from_dict(
+    value: object, *, allow_empty_axis: bool = False
+) -> LhsSpec | None:
     if value is None:
         return None
     payload = _as_mapping(value, field="lhs_spec")
@@ -127,7 +149,7 @@ def _lhs_spec_from_dict(value: object) -> LhsSpec | None:
     axis = _required_str(payload, "axis")
     if not field:
         raise ValueError("lhs_spec.field must be non-empty")
-    if not axis:
+    if not axis and not allow_empty_axis:
         raise ValueError("lhs_spec.axis must be non-empty")
     return LhsSpec(
         field=field,

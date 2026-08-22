@@ -32,6 +32,7 @@ from kd.search.discover.engine_types import (
 )
 from kd.search.discover.evaluation.dedup import Deduplicator
 from kd.search.discover.ir.conversion import tokens_to_ir
+from kd.search.discover.tokens.library import Library
 from kd.search.discover.tokens.validator import CandidateValidator
 from kd.search.discover.training.strategy import BaselineState, RSPGStrategy
 
@@ -105,6 +106,14 @@ class DiscoverEngine:
         if value <= 0:
             raise ValueError("batch_size must be positive.")
         self._batch_size = value
+
+    @property
+    def library(self) -> Library:
+        return self._generator.library
+
+    def set_deduplicator(self, deduplicator: Deduplicator) -> None:
+        self._require_idle()
+        self._deduplicator = deduplicator
 
     def propose(self) -> list[str]:
         self._require_idle()

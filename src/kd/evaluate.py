@@ -100,6 +100,7 @@ from kd._evaluate_classify import (
 )
 from kd.core.platform.builder import PlatformBuilder
 from kd.core.platform.requirements import DerivativeReqs
+from kd.data.schema import DataTopology
 
 if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
@@ -345,6 +346,11 @@ def _resolve_lhs_order(dataset: PDEDataset, lhs_order: int | None) -> int:
     """
     resolved = dataset.lhs_order if lhs_order is None else lhs_order
     if resolved == 0:
+        if dataset.topology is DataTopology.TABULAR:
+            raise NotImplementedError(
+                "tabular datasets are not supported by "
+                "evaluate_terms/validate_terms"
+            )
         raise NotImplementedError(
             "homogeneous (lhs_order=0) datasets are not supported by "
             "evaluate_terms/validate_terms; the homogeneous path is "

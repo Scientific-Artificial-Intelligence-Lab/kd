@@ -4,16 +4,18 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterable, Sequence
-from typing import Final
+from typing import Final, cast
 
 from torch import Tensor
 
+from kd.core.equation.gauge import regression_term_gauge
 from kd.core.equation.types import (
     Equation,
     EquationAttrs,
     Evolution,
     Homogeneous,
     LhsSpec,
+    Regression,
     Scalar,
     Term,
 )
@@ -167,6 +169,36 @@ def build_homogeneous(
     )
 
 
+def build_regression(
+    term_irs: Sequence[str] | None,
+    coefficients: Tensor | Sequence[float] | None,
+    lhs_spec: LhsSpec | None,
+    *,
+    active_indices: Sequence[int] | None = None,
+    is_valid: bool = True,
+) -> Equation | None:
+    if lhs_spec is not None and (
+        not lhs_spec.field or lhs_spec.axis != "" or lhs_spec.order != 0
+    ):
+        logger.debug("Skipping regression equation derivation: invalid lhs_spec")
+        return None
+    equation = build_equation(
+        term_irs,
+        coefficients,
+        lhs_spec,
+        active_indices=active_indices,
+        is_valid=is_valid,
+    )
+    if equation is None:
+        return None
+    evolution = cast(Evolution, equation)
+    return make_regression(
+        evolution.lhs_spec,
+        evolution.terms,
+        active_indices=evolution.active_indices,
+    )
+
+
 def make_evolution(
     lhs_spec: LhsSpec | None,
     terms: Iterable[Term],
@@ -207,4 +239,55 @@ def make_homogeneous(
         terms=term_tuple,
         attrs=EquationAttrs(),
         active_indices=_validate_active_indices(active_indices, len(term_tuple)),
+    )
+
+
+def make_regression(
+    lhs_spec: LhsSpec,
+    terms: Iterable[Term],
+    *,
+    active_indices: Sequence[int] | None = None,
+) -> Regression:
+    if not lhs_spec.field:
+        raise ValueError("REGRESSION equations require a non-empty target field")
+    if lhs_spec.axis != "" or lhs_spec.order != 0:
+        raise ValueError("REGRESSION lhs_spec must have axis='' and order=0")
+
+    term_tuple = tuple(terms)
+    if not term_tuple:
+        raise ValueError("REGRESSION equations require at least one term")
+    if any(term_ir == "" for term_ir, _coefficient in term_tuple):
+        raise ValueError("REGRESSION equation term IR strings must be non-empty")
+    indices = _validate_active_indices(active_indices, len(term_tuple))
+
+
+
+
+
+
+
+
+
+
+
+
+
+    active_terms = (
+        term_tuple
+        if indices is None
+        else [term_tuple[index] for index in sorted(set(indices))]
+    )
+    skeletons = [
+        regression_term_gauge(term_ir)[0] for term_ir, _coefficient in active_terms
+    ]
+    if len(set(skeletons)) != len(skeletons):
+        raise ValueError(
+            "REGRESSION equation terms must have distinct constant skeletons"
+        )
+
+    return Regression(
+        lhs_spec=lhs_spec,
+        terms=term_tuple,
+        attrs=EquationAttrs(),
+        active_indices=indices,
     )

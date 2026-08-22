@@ -29,6 +29,12 @@ from kd.core.expr.naming import parse_derivative_name
 from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
 from kd.search.records import RunRecord, validate_invalid_reason
+from kd.search.series_keys import (
+    PARETO_COMPLEXITY_KEY,
+    PARETO_EXPRESSIONS_KEY,
+    PARETO_LOSS_KEY,
+    PARETO_SCALE_KEY,
+)
 
 if TYPE_CHECKING:
     from kd.search.sketch_outcome import SketchOutcome
@@ -140,6 +146,31 @@ def _derive_lhs_spec_from_name(name: object) -> LhsSpec | None:
         return None
     field, axis, order = parsed
     return LhsSpec(field=field, axis=axis, order=order)
+
+
+def _last_list(series: list[Any], key: str) -> list[Any]:
+    if not series or not isinstance(series[-1], list):
+        raise ValueError(f"Pareto recorder series {key!r} must end in a list")
+    return series[-1]
+
+
+def _pareto_entries(
+    rows: dict[str, list[Any]], scales: list[Any]
+) -> list[ParetoEntry]:
+    expressions = rows[PARETO_EXPRESSIONS_KEY]
+    complexities = rows[PARETO_COMPLEXITY_KEY]
+    losses = rows[PARETO_LOSS_KEY]
+    return [
+        ParetoEntry(
+            expression=str(expression),
+            complexity=int(complexity),
+            loss=float(loss),
+            scale=None if scale is None else float(scale),
+        )
+        for expression, complexity, loss, scale in zip(
+            expressions, complexities, losses, scales, strict=True
+        )
+    ]
 
 
 def _derive_equation_from_final_eval(
@@ -333,6 +364,16 @@ class RunResult:
     early_stopped: bool
 
 
+@dataclass(frozen=True)
+class ParetoEntry:
+    """One typed row from a recorder-backed Pareto front."""
+
+    expression: str
+    complexity: int
+    loss: float
+    scale: float | None
+
+
 @dataclass
 class ExperimentResult(RunResult):
     """Serializable value object for a completed experiment.
@@ -377,6 +418,40 @@ class ExperimentResult(RunResult):
 
 
     sketch_outcome: SketchOutcome | None = None
+
+    def pareto_front(self) -> list[ParetoEntry]:
+        """Return the last complete recorder-backed Pareto front."""
+        recorder_keys = self.recorder.keys()
+        required_keys = {
+            PARETO_EXPRESSIONS_KEY,
+            PARETO_COMPLEXITY_KEY,
+            PARETO_LOSS_KEY,
+        }
+        present_required = required_keys & recorder_keys
+        if not present_required:
+            return []
+        required = {
+            PARETO_EXPRESSIONS_KEY: self.recorder.get(PARETO_EXPRESSIONS_KEY),
+            PARETO_COMPLEXITY_KEY: self.recorder.get(PARETO_COMPLEXITY_KEY),
+            PARETO_LOSS_KEY: self.recorder.get(PARETO_LOSS_KEY),
+        }
+        rows = {key: _last_list(series, key) for key, series in required.items()}
+        scales = (
+            _last_list(
+                self.recorder.get(PARETO_SCALE_KEY), PARETO_SCALE_KEY
+            )
+            if PARETO_SCALE_KEY in recorder_keys
+            else [None] * len(rows[PARETO_EXPRESSIONS_KEY])
+        )
+        lengths = {len(values) for values in (*rows.values(), scales)}
+        if len(lengths) != 1:
+            raise ValueError("Pareto recorder series must have equal lengths")
+        return _pareto_entries(rows, scales)
+
+    def has_pareto_front(self) -> bool:
+        """Return whether the recorder contains a Pareto expression series."""
+
+        return PARETO_EXPRESSIONS_KEY in self.recorder.keys()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe (RFC 8259) representation of the result."""

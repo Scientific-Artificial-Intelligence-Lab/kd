@@ -98,9 +98,7 @@ class PySRConfig:
         if self.population_size <= 0:
             raise ValueError(f"population_size must be > 0, got {self.population_size}")
         if self.extra_pysr_kwargs:
-            collisions = sorted(
-                set(self.extra_pysr_kwargs) & set(_TYPED_PYSR_FIELDS)
-            )
+            collisions = sorted(set(self.extra_pysr_kwargs) & set(_TYPED_PYSR_FIELDS))
             if collisions:
                 raise ValueError(
                     "extra_pysr_kwargs must not override typed fields "

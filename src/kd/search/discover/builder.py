@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 
@@ -31,8 +32,10 @@ from kd.search.discover.tokens.validator import CandidateValidator
 from kd.search.discover.training.strategy import RSPGStrategy
 
 
-def build_library(config: DiscoverConfig) -> Library:
-    return Library.from_config(config.library)
+def build_library(
+    config: DiscoverConfig, *, mode: Literal["default", "tabular"] = "default"
+) -> Library:
+    return Library.from_config(config.library, include_const=mode == "tabular")
 
 
 def build_prior_system(library: Library, config: DiscoverConfig) -> PriorSystem:
@@ -145,8 +148,10 @@ def _make_magnitude_filter(*, enabled: bool) -> ResultFilter | None:
     return apply_magnitude_filter
 
 
-def build_engine(config: DiscoverConfig) -> DiscoverEngine:
-    library = build_library(config)
+def build_engine(
+    config: DiscoverConfig, *, mode: Literal["default", "tabular"] = "default"
+) -> DiscoverEngine:
+    library = build_library(config, mode=mode)
     prior_system = build_prior_system(library, config)
     controller = build_controller(library, prior_system, config)
     strategy = build_strategy(config)

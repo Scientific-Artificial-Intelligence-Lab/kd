@@ -5,14 +5,19 @@ import ast
 from dataclasses import dataclass
 
 from kd.core.equation.signature import law_term_entry, law_term_key
-from kd.core.equation.sketch import Sketch, TermConstraint, constraint_admits
+from kd.core.equation.sketch import (
+    Sketch,
+    TermConstraint,
+    constraint_admits,
+    pinned_fingerprints,
+)
 
 
 
 
 from kd.core.expr.executor import _DIFF_PATTERN
 from kd.core.expr.naming import parse_compound_derivative
-from kd.core.expr.term_features import TermFeatures, analyze_term
+from kd.core.expr.term_features import ColumnFingerprint, TermFeatures, analyze_term
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.search.sga.config import OperatorPool, SGAConfig
 from kd.search.sga.convert import tree_to_kd_expr
@@ -50,14 +55,6 @@ _CONSTRAINT_FILTERED = "constraint-filtered"
 _PINNED = "pinned"
 
 
-PinFingerprint = tuple[
-    frozenset[str],
-    frozenset[str],
-    frozenset[tuple[str, tuple[tuple[str, int], ...]]],
-    frozenset[str],
-]
-
-
 @dataclass(frozen=True, kw_only=True)
 class SGACompiled:
 
@@ -69,7 +66,7 @@ class SGACompiled:
     op2: OperatorPool
     pinned: tuple[tuple[str, float, Tree], ...]
     pinned_keys: frozenset[str]
-    pinned_fingerprints: frozenset[PinFingerprint]
+    pinned_fingerprints: frozenset[ColumnFingerprint]
     anchored_keys: frozenset[str]
     default_kept: bool
     default_law_key: str | None
@@ -199,36 +196,6 @@ def _parse_pins(
             (key, signed_value, _parse_term_tree(pin.term_ir, variables, sketch))
         )
     return tuple(pinned), frozenset(key for key, _value, _tree in pinned)
-
-
-def _fingerprint(features: TermFeatures) -> PinFingerprint:
-    return (
-        features.base_fields,
-        features.coordinate_dependencies,
-        features.derivative_multiindices,
-        features.operators,
-    )
-
-
-def _pinned_fingerprints(sketch: Sketch) -> frozenset[PinFingerprint]:
-    seen: dict[PinFingerprint, str] = {}
-    for pin in sketch.pinned:
-        fp = _fingerprint(analyze_term(pin.term_ir, sketch.vocabulary))
-        if fp in seen:
-            raise ValueError(
-                f"pinned terms {seen[fp]!r} and {pin.term_ir!r} are alias "
-                "spellings of one physical column; pin it once"
-            )
-        seen[fp] = pin.term_ir
-    for anchor in sketch.anchored:
-        fp = _fingerprint(analyze_term(anchor.term_ir, sketch.vocabulary))
-        if fp in seen:
-            raise ValueError(
-                f"anchored term {anchor.term_ir!r} is an alias spelling of the "
-                f"pinned column {seen[fp]!r}; a pinned column is never "
-                "refit"
-            )
-    return frozenset(seen)
 
 
 def _operator_rooted_hint(term_ir: str, tree: Tree, sketch: Sketch) -> str:
@@ -492,7 +459,7 @@ def compile_for_sga(
         )
 
     pinned, pinned_keys = _parse_pins(sketch, variables)
-    pinned_fingerprints = _pinned_fingerprints(sketch)
+    pin_fingerprints = pinned_fingerprints(sketch)
     default_kept, default_key, default_hole_id, default_drop = _default_decision(
         sketch, default_term_name, pinned_keys
     )
@@ -531,7 +498,7 @@ def compile_for_sga(
         op2=narrowed_op2,
         pinned=pinned,
         pinned_keys=pinned_keys,
-        pinned_fingerprints=pinned_fingerprints,
+        pinned_fingerprints=pin_fingerprints,
         anchored_keys=anchored_keys,
         default_kept=default_kept,
         default_law_key=default_key,

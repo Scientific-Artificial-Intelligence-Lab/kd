@@ -4,8 +4,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from kd.core.equation.signature import law_term_key
-from kd.core.equation.sketch import Sketch, constraint_admits
-from kd.core.expr.term_features import analyze_term
+from kd.core.equation.sketch import Sketch, constraint_admits, pinned_fingerprints
+from kd.core.expr.term_features import (
+    ColumnFingerprint,
+    analyze_term,
+    column_fingerprint,
+)
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 
 _LEVELS = SketchClauseLevels(
@@ -18,6 +22,7 @@ _LEVELS = SketchClauseLevels(
 )
 
 _PINNED = "pinned"
+_PINNED_ALIAS = "pinned-alias"
 _OUTSIDE_VOCABULARY = "outside-vocabulary"
 _HOLE_FILTERED = "hole-filtered"
 
@@ -78,6 +83,7 @@ def _exclude_pinned(
     sketch: Sketch,
     config_terms: tuple[str, ...],
     config_keys: tuple[str | None, ...],
+    pin_fingerprints: frozenset[ColumnFingerprint],
 ) -> tuple[list[tuple[str, str | None]], list[tuple[str, str]]]:
     pinned_keys = {law_term_key(pin.term_ir) for pin in sketch.pinned}
     remaining: list[tuple[str, str | None]] = []
@@ -85,8 +91,17 @@ def _exclude_pinned(
     for term, key in zip(config_terms, config_keys, strict=True):
         if key in pinned_keys:
             dropped.append((term, _PINNED))
-        else:
-            remaining.append((term, key))
+            continue
+        if pin_fingerprints:
+            try:
+                features = analyze_term(term, sketch.vocabulary)
+            except ValueError:
+                remaining.append((term, key))
+                continue
+            if column_fingerprint(features) in pin_fingerprints:
+                dropped.append((term, _PINNED_ALIAS))
+                continue
+        remaining.append((term, key))
     return remaining, dropped
 
 
@@ -106,18 +121,14 @@ def _filter_for_holes(
         except ValueError:
             dropped.append((term, _OUTSIDE_VOCABULARY))
             continue
-        if any(
-            constraint_admits(hole.constraint, features) for hole in sketch.holes
-        ):
+        if any(constraint_admits(hole.constraint, features) for hole in sketch.holes):
             effective.append(term)
         else:
             dropped.append((term, _HOLE_FILTERED))
     return tuple(effective)
 
 
-def _assert_non_empty(
-    sketch: Sketch, effective_terms: tuple[str, ...]
-) -> None:
+def _assert_non_empty(sketch: Sketch, effective_terms: tuple[str, ...]) -> None:
     if effective_terms:
         return
     pinned = tuple(pin.term_ir for pin in sketch.pinned)
@@ -139,9 +150,7 @@ def _assert_hole_feasibility(
 
     assignable = {
         key: analyze_term(term, sketch.vocabulary)
-        for term, key in (
-            (term, law_term_key(term)) for term in effective_terms
-        )
+        for term, key in ((term, law_term_key(term)) for term in effective_terms)
         if key not in anchor_keys
     }
     for hole in sketch.holes:
@@ -179,12 +188,13 @@ def compile_for_pysindy(
     if not sketch.anchored and not sketch.holes:
         return _closed_compilation(sketch, config_terms)
 
+    pin_fingerprints = pinned_fingerprints(sketch)
     config_keys = _config_law_keys(config_terms)
     anchor_keys = _assert_anchors_representable(sketch, config_keys)
-    remaining, dropped = _exclude_pinned(sketch, config_terms, config_keys)
-    effective_terms = _filter_for_holes(
-        sketch, remaining, anchor_keys, dropped
+    remaining, dropped = _exclude_pinned(
+        sketch, config_terms, config_keys, pin_fingerprints
     )
+    effective_terms = _filter_for_holes(sketch, remaining, anchor_keys, dropped)
     _assert_non_empty(sketch, effective_terms)
     _assert_hole_feasibility(sketch, effective_terms, anchor_keys)
     frozen_dropped = tuple(dropped)

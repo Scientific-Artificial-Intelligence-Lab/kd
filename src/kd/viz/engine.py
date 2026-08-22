@@ -25,6 +25,7 @@ from kd.viz.plots.equation import plot_equation
 from kd.viz.plots.equation_tree import plot_equation_tree
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 from kd.viz.plots.field import plot_field_comparison
+from kd.viz.plots.pareto_table import plot_pareto_table
 from kd.viz.plots.parity import plot_parity
 from kd.viz.plots.pde_residual import plot_pde_residual_field
 from kd.viz.plots.residual import plot_residual
@@ -86,7 +87,9 @@ _INTEGRATION_DEGRADED_NOTE = (
 
 _NO_DATASET_NOTE = (
     "no dataset provided: dataset-dependent plots skipped (coefficient bar, "
-    "field comparison, PDE residual field, time slices, error heatmap)"
+    "field comparison, PDE residual field, time slices, error heatmap) and "
+    "the residual panel has no spatial layout (1-D panels only, no grid "
+    "inference)"
 )
 _NO_ALGORITHM_NOTE = "no algorithm provided: plugin and form-specific plots skipped"
 
@@ -101,26 +104,25 @@ _ANIMATION_TOPOLOGY_NOTE = (
 def _scatter_aware_field_shape(
     dataset: Any,
 ) -> tuple[tuple[int, ...] | None, bool]:
-    """Resolve ``(field_shape, is_scatter)`` for the residual-panel plots.
+    """Resolve ``(field_shape, no_grid)`` for the residual-panel plots.
 
     Single source for ``render_all``'s residual path and
     ``_render_pde_residual``:
-    a SCATTERED dataset has no grid, so ``get_shape()`` is a 1-D ``(N,)``
-    point count that never matches the (primary coeff-grid) residual length --
-    passing it makes the spatial-residual panel emit a spurious "does not
-    match data size" warning. Treat SCATTERED (and a missing dataset) as
-    shapeless (``field_shape=None``) AND forbid the square-shape guess
-    (callers pass ``infer_grid=not is_scatter``) so the panels degrade to a
+    Anything whose topology is not explicitly GRID has no grid. In particular,
+    SCATTERED carries point coordinates, TABULAR carries row columns, and a
+    missing dataset proves no spatial shape. Treat every non-GRID input as
+    shapeless (``field_shape=None``) and forbid the square-shape guess
+    (callers pass ``infer_grid=not no_grid``) so the panels degrade to a
     DISCLOSED fallback ("No spatial data" / 1D line panels) rather than
     fabricating a square heatmap from a coincidentally-square residual count.
     """
 
-    is_scatter = getattr(dataset, "topology", None) == DataTopology.SCATTERED
+    no_grid = getattr(dataset, "topology", None) is not DataTopology.GRID
     try:
-        field_shape = None if (dataset is None or is_scatter) else dataset.get_shape()
+        field_shape = None if no_grid else dataset.get_shape()
     except (ValueError, AttributeError):
         field_shape = None
-    return field_shape, is_scatter
+    return field_shape, no_grid
 
 
 class VizEngine:
@@ -187,14 +189,32 @@ class VizEngine:
         """
 
 
-        field_shape, is_scatter = _scatter_aware_field_shape(dataset)
+        field_shape, no_grid = _scatter_aware_field_shape(dataset)
 
         report = self.render_universal(
-            result, field_shape=field_shape, infer_grid=not is_scatter
+            result, field_shape=field_shape, infer_grid=not no_grid
         )
 
 
-        if dataset is not None:
+
+
+
+        if getattr(dataset, "topology", None) is DataTopology.TABULAR:
+            notes = ["tabular data: field-grid plots skipped (no grid topology)"]
+            if result.equation is not None:
+                path, warnings = self._render_one(
+                    "coefficient_bar",
+                    plot_coefficient_bar,
+                    result,
+                    figsize=_UNIVERSAL_FIGSIZE,
+                )
+                if path is not None:
+                    report.figures.append(path)
+                self._merge_warnings(report, warnings)
+            if animate:
+                notes.append(_ANIMATION_TOPOLOGY_NOTE)
+            self._merge_warnings(report, notes)
+        elif dataset is not None:
             self._render_field_comparison(result, dataset, report, animate=animate)
         else:
             notes = [_NO_DATASET_NOTE]
@@ -266,6 +286,10 @@ class VizEngine:
             ("equation", plot_equation, _UNIVERSAL_FIGSIZE),
             ("equation_tree", plot_equation_tree, _UNIVERSAL_FIGSIZE),
         ]
+        if result.has_pareto_front():
+            tier1_specs.append(
+                ("pareto_front_table", plot_pareto_table, _COMPARISON_FIGSIZE)
+            )
 
         for name, plot_fn, figsize in tier1_specs:
             path, warnings = self._render_one(
@@ -726,7 +750,7 @@ class VizEngine:
 
 
 
-        field_shape, is_scatter = _scatter_aware_field_shape(dataset)
+        field_shape, no_grid = _scatter_aware_field_shape(dataset)
 
         path, warnings = self._render_tier2(
             "pde_residual_field",
@@ -734,7 +758,7 @@ class VizEngine:
             result=result,
             field_shape=field_shape,
             dataset=dataset,
-            infer_grid=not is_scatter,
+            infer_grid=not no_grid,
         )
         if path is not None:
             report.figures.append(path)

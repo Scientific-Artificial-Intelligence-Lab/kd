@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from kd.api import Model
+from kd.data.regression import TabularDataset
+from kd.data.tabular_bridge import dataset_from_tabular
 from kd.harness.plan import PlanEntry
 from kd.harness.recording import RecordingOptions
 from kd.search.iteration_events import IterationEventEmitter
@@ -126,7 +128,7 @@ def run_episode(
     *,
     entry: PlanEntry,
     entry_index: int,
-    dataset: PDEDataset,
+    dataset: PDEDataset | TabularDataset,
     model_factory: Callable[..., Any] = Model,
     device: str | None = None,
     run_dir: Path | None = None,
@@ -144,6 +146,8 @@ def run_episode(
     paths: RunDirPaths | None = None
     run_id: str | None = None
     try:
+        if isinstance(dataset, TabularDataset):
+            dataset = dataset_from_tabular(dataset)
         options = recording if recording is not None else RecordingOptions()
 
 

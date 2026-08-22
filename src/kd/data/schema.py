@@ -1,8 +1,8 @@
-"""PDE dataset schema: data structures for PDE discovery.
+"""Dataset schema: data structures for equation and scalar regression discovery.
 
 This module defines the core data structures:
 - TaskType: type of problem (PDE, ODE, regression)
-- DataTopology: data layout (grid, scattered)
+- DataTopology: data layout (grid, scattered, tabular)
 - AxisInfo: coordinate axis metadata
 - FieldData: field values container
 - PDEDataset: complete dataset specification
@@ -10,9 +10,10 @@ This module defines the core data structures:
 Design principles:
 - n-dimensional support: no hardcoded axis names ("x", "t")
 - torch.Tensor throughout, device-aware
-- Grid topology (dense tensor) + Scattered topology (per-point, via
+- Grid topology (dense tensor), Scattered topology (per-point, via
   ``PDEDataset.from_scatter``); see ``topology`` / ``axes`` docs for the
-  per-topology meaning of ``axes`` and ``fields`` (Option A storage)
+  per-topology meaning of ``axes`` and ``fields`` (Option A storage), and
+  Tabular topology (same-length 1-D feature and target columns, no axes)
 
 Note on axis naming:
 - Axis names can be arbitrary strings (e.g., "x", "time", "spatial")
@@ -61,6 +62,7 @@ class DataTopology(Enum):
 
     GRID = "grid"
     SCATTERED = "scattered"
+    TABULAR = "tabular"
 
 
 @dataclass
@@ -131,15 +133,17 @@ class PDEDataset:
     Attributes:
         name: Dataset identifier
         task_type: Type of problem (PDE, ODE, regression)
-        topology: Data layout (grid or scattered)
+        topology: Data layout (grid, scattered, or tabular)
         axes: Mapping from axis name to AxisInfo. GRID: each ``AxisInfo.values``
             is that axis's coordinate vector (length = grid dimension size).
             SCATTERED (Option A, build via :meth:`from_scatter`): each holds the
             per-point coordinate along that axis (length = point count N, shared
-            by every axis + field). ``None`` for metadata-only SCATTERED (PINN).
+            by every axis + field). ``None`` for metadata-only SCATTERED (PINN)
+            and for TABULAR.
         axis_order: Ordered list of axis names defining tensor dimensions
         fields: Mapping from field name to FieldData. GRID: nD tensor shaped by
             ``axis_order``. SCATTERED: 1-D per-point vector (length N).
+            TABULAR: same-length 1-D feature and target columns.
         lhs_field: Field for LHS of equation (e.g., "u")
         lhs_axis: Axis for time derivative on LHS (e.g., "t" for u_t = RHS)
         lhs_order: Order of the LHS derivative along ``lhs_axis`` (``0`` ->
@@ -147,6 +151,8 @@ class PDEDataset:
             ``1`` -> u_t, ``2`` -> u_tt for the wave/telegraph case). Default
             ``1``. This is the single source of truth for the LHS order across the
             whole pipeline (parser, fingerprint, platform builder, plugins).
+            TABULAR is the exception: it uses order zero with a non-empty target
+            ``lhs_field`` and an empty ``lhs_axis``.
         noise_level: Amount of noise added to data
         ground_truth: Optional ground truth equation string
 
@@ -183,6 +189,7 @@ class PDEDataset:
 
     def __post_init__(self) -> None:
         """Validate dataset consistency."""
+        self._validate_lhs_order_value()
         self._validate_axis_consistency()
         self._validate_field_shapes()
         self._validate_lhs()
@@ -223,6 +230,9 @@ class PDEDataset:
 
     def _validate_field_shapes(self) -> None:
         """Validate that field shapes match axes."""
+        if self.topology is DataTopology.TABULAR:
+            self._validate_tabular_field_shapes()
+            return
         if self.fields is None or self.axis_order is None or self.axes is None:
             return
 
@@ -264,6 +274,28 @@ class PDEDataset:
                     f"expected {expected_shape}, got {tuple(field_data.values.shape)}"
                 )
 
+    def _validate_tabular_field_shapes(self) -> None:
+        """Require every tabular field to be a same-length one-dimensional column."""
+        if self.fields is None:
+            raise ValueError("TABULAR fields must be a non-empty mapping")
+        lengths: dict[str, int] = {}
+        for key, field in self.fields.items():
+            if key != field.name:
+                raise ValueError(
+                    f"Field key '{key}' does not match field.name '{field.name}'"
+                )
+            if field.values.dim() != 1:
+                raise ValueError(
+                    f"TABULAR field '{key}' must be 1-D, got "
+                    f"{field.values.dim()}D"
+                )
+            lengths[key] = field.values.numel()
+        if len(set(lengths.values())) > 1:
+            details = ", ".join(f"{name}={length}" for name, length in lengths.items())
+            raise ValueError(
+                "TABULAR fields must all have the same length; got " + details
+            )
+
     def _validate_lhs(self) -> None:
         """Validate that lhs_field and lhs_axis reference existing entries."""
         if (
@@ -284,17 +316,8 @@ class PDEDataset:
                 f"lhs_axis '{self.lhs_axis}' not found in axis_order: {self.axis_order}"
             )
 
-    def _validate_lhs_order(self) -> None:
-        """Reject a negative/non-integer LHS order or a contradictory zeroth order.
-
-        ``lhs_order`` is the integer order of the LHS time/axis derivative
-        (``1`` -> u_t, ``2`` -> u_tt). ``0`` is the honest homogeneous case (no
-        evolution LHS, ``Σ term = 0``) and is legal, but
-        ONLY with an empty ``lhs_axis`` AND an empty ``lhs_field``: a homogeneous
-        equation singles out no distinguished LHS derivative, axis, or field, so
-        naming any is a contradiction. A negative or non-integer (incl. bool /
-        float) order is always meaningless.
-        """
+    def _validate_lhs_order_value(self) -> None:
+        """Reject a negative or non-integer LHS order before topology checks."""
         if not isinstance(self.lhs_order, int) or isinstance(self.lhs_order, bool):
             raise ValueError(
                 f"lhs_order must be a non-negative int, got {self.lhs_order!r} "
@@ -305,12 +328,54 @@ class PDEDataset:
                 f"lhs_order must be >= 0 (0 -> homogeneous/no evolution LHS, "
                 f"1 -> u_t, 2 -> u_tt), got {self.lhs_order}."
             )
+
+    def _validate_lhs_order(self) -> None:
+        """Reject topology-specific contradictions in the LHS declaration.
+
+        For GRID and SCATTERED, ``lhs_order`` is the LHS derivative order and
+        zero denotes a homogeneous equation with no distinguished LHS. TABULAR
+        instead requires order zero, an empty ``lhs_axis``, and a non-empty
+        target ``lhs_field``.
+        """
+        if self.topology is DataTopology.TABULAR:
+            self._validate_tabular_lhs()
+            return
         if self.lhs_order == 0 and (self.lhs_axis or self.lhs_field):
             raise ValueError(
                 f"lhs_order=0 (homogeneous, no evolution LHS) requires an empty "
                 f"lhs_axis and lhs_field, got lhs_axis={self.lhs_axis!r}, "
                 f"lhs_field={self.lhs_field!r}: a homogeneous equation names no "
                 f"distinguished LHS axis or field."
+            )
+
+    def _validate_tabular_lhs(self) -> None:
+        """Validate the fields-only scalar-regression dataset contract."""
+        if self.lhs_order != 0:
+            raise ValueError(
+                f"TABULAR lhs_order must be 0, got {self.lhs_order}"
+            )
+        if self.lhs_axis != "":
+            raise ValueError(
+                f"TABULAR lhs_axis must be empty, got {self.lhs_axis!r}"
+            )
+        if not self.lhs_field:
+            raise ValueError("TABULAR lhs_field must be non-empty")
+        if self.fields is None or self.lhs_field not in self.fields:
+            raise ValueError(
+                f"TABULAR lhs_field {self.lhs_field!r} must be present in fields"
+            )
+        if self.axes is not None:
+            raise ValueError("TABULAR axes must be None")
+
+
+
+
+        if self.axis_order is not None:
+            raise ValueError("TABULAR axis_order must be None")
+        if self.task_type is not TaskType.REGRESSION:
+            raise ValueError(
+                "TABULAR task_type must be TaskType.REGRESSION, got "
+                f"{self.task_type!r}"
             )
 
     @property
