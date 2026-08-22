@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1010,17 +1100,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1047,6 +1126,17 @@
     <span class="md-ellipsis">
       
         Method
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabular-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabular regression
       
     </span>
   </a>
@@ -1685,17 +1775,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1722,6 +1801,17 @@
     <span class="md-ellipsis">
       
         Method
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabular-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabular regression
       
     </span>
   </a>
@@ -1757,16 +1847,21 @@
 
 
 <h1 id="discover">DISCOVER</h1>
-<p>A policy network emits expressions symbol by symbol, trained with policy gradients.</p>
-<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">discover</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">reward <em>max</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">heavy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid</div></div></div>
+<p>A recurrent controller writes expression trees token by token and is trained on
+its own best-rewarded draws; the coefficients come from a platform refit.</p>
+<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">discover</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">reward <em>max</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">heavy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION REGRESSION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid tabular</div></div></div>
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscoverConfig</span>
 
-<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;discover&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_chafee_infante</span><span class="p">()</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span>
+    <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;discover&quot;</span><span class="p">,</span>
+    <span class="n">generations</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">DiscoverConfig</span><span class="o">.</span><span class="n">chafee_preset</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">),</span>
+<span class="p">)</span>
 <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="main-parameters">Main parameters</h2>
 <table>
@@ -2050,14 +2145,182 @@
 </tbody>
 </table>
 </details>
-<h2 id="suitable-data">Suitable data</h2>
-<p>(to be written)</p>
 <h2 id="worked-example">Worked example</h2>
-<p>(to be added) One real run: the data, the result, the comparison.</p>
+<p>The run below uses the Chafee-Infante dataset that ships with KD: a 301 × 200
+grid over <code>x</code> in [0, 3] and <code>t</code> in [0.1, 0.5], carrying a single hump held at
+zero at both ends of the interval. Above <code>u = 1</code> the cubic term is larger than
+the linear one, so the hump climbs from 1.94 at the first time step to 4.67 at
+the last while diffusion keeps its profile smooth.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/discover-field.png" alt="Heatmap of the Chafee-Infante field u(x, t)">
+  <figcaption>The observed field u over x and t.</figcaption>
+</figure>
+
+<p>The equation returned by the run:</p>
+<div class="kd-compare">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Equation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovered</td>
+<td><span class="arithmatex">\(u_t = 0.9924\,u_{xx} -0.9792\,u +0.9926\,u^3\)</span></td>
+</tr>
+<tr>
+<td>Reference</td>
+<td><span class="arithmatex">\(u_t = u_{xx} -u +u^3\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>All three terms are recovered. All three reference coefficients have magnitude
+1, and the largest deviation from it here is 2.1%. The search was not narrowed
+to those terms: the run was given a list of operator tokens (<code>add</code>, <code>mul</code>,
+<code>div</code>, <code>diff_x</code>, <code>diff2_x</code>, <code>diff3_x</code>, <code>n2</code>, <code>n3</code>) rather than candidate terms,
+so the second derivative and the cubic term were each assembled one token at a
+time as the controller sampled.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/discover-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
+  <figcaption>The discovered equation evaluated against the data. u_t runs from a median of 0.94 to a peak of 67 over this field, so the first two panels share a symmetric-log color scale: linear across the median, logarithmic beyond it, and the color bar reads in decades. The third panel is their difference, on a scale of its own.</figcaption>
+</figure>
+
 <h2 id="result-interpretation">Result interpretation</h2>
-<p>(to be written)</p>
+<p><code>model.best_score_</code> is DISCOVER's own reward,
+<code>(1 - reward_alpha * terms) / (1 + sqrt(nmse))</code>: <strong>higher is better</strong>, on a scale
+that runs to 1. This run ends at 0.9548, and both parts of that number can be
+read directly: the fit's nmse is 2.53e-04, whose square root sets the
+denominator, and <code>reward_alpha</code>, at its default of 0.01, subtracts 0.03 from the
+numerator for the three terms of the answer. The reward combines fit and length,
+so nmse alone does not determine which of two expressions is preferred.</p>
+<p>Every derivative in the run is a finite difference of the observations. The
+fitted equation itself is on <code>model.result_.equation</code>, term by term with its
+coefficient.</p>
+<p>The search is recorded as well. <code>kd.VizEngine</code> renders the per-iteration
+record; alongside the universal convergence curve, DISCOVER contributes four
+diagnostic panels of its own, three of which this run drew (the full list is
+under <a href="../../viz/">Visualization</a>):</p>
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/discover-convergence.png" alt="Best reward and full-batch mean reward per iteration">
+  <figcaption>The best curve is the best reward found so far, so it only climbs: 0.7688 at the first iteration, then up a staircase to 0.9548 by iteration 21. The batch mean is the same iteration's average over all 500 candidates, and it goes on moving for the remaining 179, between 0.50 and 0.59.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/discover-panels.png" alt="Top-epsilon reward, full-batch reward and entropy loss panels">
+  <figcaption>Left: mean reward of the top 2% of the valid draws, the subset the controller is actually trained on, from 0.7306 to 0.8548. Middle: the same iteration's mean over the whole batch of 500, invalid draws included, from 0.5102 to 0.5661. This panel reflects the entire policy rather than only its best draws. Right: the entropy term of the loss, from -0.122 to -0.1998 as the controller's sampling distribution concentrates.</figcaption>
+</figure>
+
+<div class="highlight"><pre><span></span><code><span class="n">viz</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">VizEngine</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;out/chafee-infante&quot;</span><span class="p">)</span>
+<span class="n">viz</span><span class="o">.</span><span class="n">render_all</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">algorithm_</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="method">Method</h2>
-<p>(to be written)</p>
+<p>A recurrent controller writes the candidates. Each iteration it samples
+<code>batch_size</code> token sequences, one token at a time in pre-order, from the
+operator and variable library. Structural priors mask the tokens that would
+produce an illegal expression as it goes: a cap on how often one token may
+repeat, no addition or subtraction anywhere below a derivative, a derivative's
+argument restricted to a state variable or to another derivative, no unary
+operator directly under its own inverse, and a cap on the total order of a
+derivative chain. Sequences that fail the length or legality screen are dropped
+and the survivors deduplicated, so only distinct expressions are scored.</p>
+<p>Scoring is performed by the platform. An expression is split at its top-level additions
+into terms, the terms' coefficients are fitted by least squares, and the fit's
+nmse together with the term count become the reward. The best expression and
+reward seen so far are carried for the whole run, so the convergence curve is
+non-decreasing.</p>
+<p>The update rule is risk-seeking policy gradient. Invalid samples are dropped, the top
+<code>epsilon</code> fraction of the rest by reward is kept, a scalar baseline is
+subtracted, and one Adam step is taken on the policy-gradient loss plus an
+entropy bonus. The controller is trained on its own best draws rather than on the
+average of the batch, and the entropy term keeps it sampling widely while it
+learns. One controller iteration is one KD iteration, and <code>generations</code> sets how
+many are run.</p>
+<p>The coefficients in the returned equation come from a platform refit rather
+than from the controller: DISCOVER searches for the structure, and the
+coefficients are fitted on that structure by the same least-squares fit that
+scored it during the search.</p>
+<h2 id="tabular-regression">Tabular regression</h2>
+<p>DISCOVER also searches plain <code>X -&gt; y</code> tables. Passing <code>fit()</code> a
+<code>kd.TabularDataset</code> rather than a <code>PDEDataset</code> selects the tabular mode from the
+data itself, and the rest of the call is unchanged.</p>
+<div class="highlight"><pre><span></span><code><span class="n">config</span> <span class="o">=</span> <span class="n">DiscoverConfig</span><span class="p">(</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">reward_alpha</span><span class="o">=</span><span class="mf">0.005</span>
+<span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;discover&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">kd</span><span class="o">.</span><span class="n">load_tlc_cc</span><span class="p">())</span>
+</code></pre></div>
+<p>The controller and its training are unchanged. The mode changes which tokens the
+controller may draw and how complexity is counted. The token vocabulary is the
+table's own feature columns together with <code>add</code>, <code>sub</code>, <code>mul</code> and <code>div</code>, which KD
+derives from the dataset, so there are no derivative tokens and no library to
+configure. A <code>const</code> terminal joins them, and each distinct candidate that draws
+one has those constants fitted before it is scored, so a coefficient inside the
+expression is reached by fitting rather than assembled token by token.
+Complexity is counted in tokens rather than in terms, so the reward's parsimony
+charge is per token.</p>
+<p>The answer arrives as a <code>REGRESSION</code> equation on <code>result_.equation</code>, with the
+target column on the left of it. <code>result_.pareto_front()</code> carries the search's
+nondominated set alongside it, each entry with its expression, its token count,
+its loss and the outer coefficient fitted for it. The layout itself is described
+under <a href="../../data/shape/">data requirements</a>.</p>
+<p>The run below uses that table. Its 74 rows come from an automated
+column-chromatography platform: the features are the thin-layer retardation
+factor <code>R_F</code> and the petroleum-ether fraction <code>r</code> of the eluent, and the target
+is the retention volume <code>V_S</code> in millilitres. A formula relating the three has
+been published for this table (<a href="https://doi.org/10.1038/s41467-025-56136-x">Xu et al.,
+2025</a>). The settings are seed 0,
+200 iterations, 1000 draws per
+iteration, expressions of at most 15 tokens, and <code>reward_alpha</code> 0.005.</p>
+<div class="kd-compare">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Equation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovered</td>
+<td><span class="arithmatex">\(V_S = \dfrac{r}{0.1507\,R_F + 0.0111}\)</span></td>
+</tr>
+<tr>
+<td>Reference</td>
+<td><span class="arithmatex">\(V_S = \dfrac{r}{0.147\,R_F + 0.0114}\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both rows are written as <code>r / (a R_F + b)</code>. Scoring is scale-free, so the search
+returns a bare expression with the outer coefficient fitted beside it, and this
+answer arrived as 6.634 times <code>r / (R_F + 0.0737)</code>; dividing through puts it in
+the published form. The two coefficients land 2.5% and 2.6% from the published
+pair, from one run at a fixed seed, with the search given four arithmetic
+operators and two column names rather than any candidate terms.</p>
+<p>That expression is five tokens long, and it is an entry on the run's Pareto
+front rather than the answer the run selected. Three of the 74 rows were
+measured at <code>r = 0</code>, where the formula returns zero against measured volumes of
+4.41, 5.17 and 5.86 mL, so an expression carrying an intercept fits the table
+more closely. The answer this run selected carries one: nine tokens, at an nmse
+of 0.1021 against the five-token law's 0.1235.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/discover-tlc-pareto.png" alt="The run's Pareto front: nmse against token count, with the published law marked">
+  <figcaption>The Pareto front at the end of the run: nmse against the token count of the expression, with seven entries from three tokens to fifteen. The circled entry is the published law. The front falls from 0.278 at three tokens to 0.124 at five and then flattens, so the ten additional tokens between the law and the longest entry reduce the nmse only from 0.124 to 0.093. The diamond is the answer this run selected.</figcaption>
+</figure>
+
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/discover-tlc-parity.png" alt="Predicted retention volume against measured, over the 74 rows">
+  <figcaption>The selected answer against the measurements: all 74 rows, predicted retention volume against measured, at an R² of 0.898. The law's own fit on the same rows is 0.876.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/discover-tlc-convergence.png" alt="Best reward and batch mean reward per iteration, in two stacked panels">
+  <figcaption>Both reward curves on one iteration axis. Above is the best reward: a batch of a thousand draws already contains a near-best candidate, so the curve opens at 0.7214 and stays there until a single step at iteration 120 takes it to 0.7237. Below is the mean reward over the whole batch, which keeps moving for the entire run, between 0.32 and 0.42. The two panels carry separate scales because the best curve spans three parts in a thousand of its value.</figcaption>
+</figure>
+
 <h2 id="references">References</h2>
 <p>Du et al. (2024). "DISCOVER: Deep identification of symbolically concise open-form partial differential equations via enhanced reinforcement learning". <em>Phys. Rev. Research</em> 6, 013182. <a href="https://doi.org/10.1103/PhysRevResearch.6.013182">Paper</a> · <a href="https://arxiv.org/abs/2210.02181">arXiv:2210.02181</a></p>
 <p>Code: <a href="https://github.com/menggedu/DISCOVER">menggedu/DISCOVER</a></p>

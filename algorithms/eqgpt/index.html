@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1038,17 +1128,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1685,17 +1764,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1762,12 +1830,20 @@
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd</span><span class="w"> </span><span class="kn">import</span> <span class="n">EqGPTConfig</span>
 
-<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;eqgpt&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">generate_burgers_data</span><span class="p">(</span><span class="n">nx</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">101</span><span class="p">,</span> <span class="n">nu</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;eqgpt&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">EqGPTConfig</span><span class="o">.</span><span class="n">burgers_preset</span><span class="p">())</span>
 <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
 </code></pre></div>
+<p>EqGPT proposes from a pretrained transformer, so a run needs the published
+checkpoint. Point <code>KD_EQGPT_ASSET_DIR</code> at the directory holding it, or pass
+<code>EqGPTConfig(weights_path=...)</code>. The checkpoint is distributed by the authors of
+the paper below and is used here with their permission.</p>
+<p><code>config=</code> is required rather than optional: <code>sparsity_alpha</code> weights the penalty
+on the number of terms in the reward, and its working value depends on the size
+of the coefficients being recovered, so there is no default that fits every
+equation. <code>EqGPTConfig.burgers_preset()</code> carries the value used below, 0.02.</p>
 <h2 id="main-parameters">Main parameters</h2>
 <table>
 <thead>
@@ -1965,17 +2041,96 @@
 </tbody>
 </table>
 </details>
-<h2 id="suitable-data">Suitable data</h2>
-<p>(to be written)</p>
 <h2 id="worked-example">Worked example</h2>
-<p>(to be added) One real run: the data, the result, the comparison.</p>
+<p>The run below uses synthetic Burgers data: a 256 × 101 grid over <code>x</code> in [-1, 1]
+with periodic boundaries and <code>t</code> in [0, 1], started from <code>u(x, 0) = -sin(pi x)</code>
+and integrated at a viscosity of 0.1. The nonlinear term carries the profile
+toward the origin and steepens it there (the largest <code>|u_x|</code> of the run, 4.1,
+falls at t = 0.3), while diffusion flattens the whole field, from an amplitude
+of 1.0 at t = 0 to 0.32 at t = 1.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/eqgpt-field.png" alt="Heatmap of the Burgers field u(x, t)">
+  <figcaption>The observed field u over x and t.</figcaption>
+</figure>
+
+<p>The equation returned by the run:</p>
+<div class="kd-compare">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Equation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovered</td>
+<td><span class="arithmatex">\(u_t = -0.9986\,u\,u_x +0.09995\,u_{xx}\)</span></td>
+</tr>
+<tr>
+<td>Reference</td>
+<td><span class="arithmatex">\(u_t = -u\,u_x +0.1\,u_{xx}\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both terms and both coefficients match. The transformer proposes a whole
+equation at a time as a sequence of tokens, so no term was assembled from a
+candidate library. The terms come from the distribution the model learned over
+token sequences, and the coefficients from the least-squares fit inside the
+reward.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/eqgpt-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
+  <figcaption>The discovered equation evaluated against the data. The first two panels share a color scale and are indistinguishable by eye; the third is their difference, at most 7.0e-02 against a 2.25 peak of u_t, and confined to the first time step.</figcaption>
+</figure>
+
 <h2 id="result-interpretation">Result interpretation</h2>
-<p>(to be written)</p>
+<p><code>model.best_score_</code> is EqGPT's own reward, <code>(1 - sparsity_alpha * log10(k)) * R²</code>
+for an equation of <code>k</code> columns: <strong>higher is better</strong>. The R² is measured on the
+time derivative the equation predicts, and the factor in front discounts it by
+the number of terms, so a longer equation has to fit better to score the same.
+This run ends at 0.9904, with an nmse of 4.4e-05.</p>
+<p>The coefficients are the algorithm's own, not a platform refit: the same
+least-squares solve that produces the R² produces them, and
+<code>model.result_.equation</code> carries them term by term.</p>
+<p>The search is recorded as well. <code>kd.VizEngine</code> renders the per-epoch record;
+alongside the universal convergence curve, EqGPT contributes diagnostic panels of
+its own (the full list is under <a href="../../viz/">Visualization</a>):</p>
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/eqgpt-convergence.png" alt="Best EqGPT reward and the pool's worst reward per epoch">
+  <figcaption>The best reward is 0.9904 at the first epoch and unchanged over the remaining 14: the pretrained proposer writes the answer in its first batch. The elite pool behind it continues to improve, with its worst member starting at 0.8803 and reaching 0.9879 by the third epoch.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/eqgpt-panels.png" alt="Pool reward spread and fine-tuning loss panels">
+  <figcaption>Left: the reward band of the elite pool, best against median against worst. The band closes as the fine-tune concentrates the proposals, and the median settles at 0.9879. Right: the cross-entropy loss of each epoch's fine-tune on that pool, from 1.267 to 0.7587, not monotonically: it rises again around epoch 9 and is still falling at the last epoch.</figcaption>
+</figure>
+
+<div class="highlight"><pre><span></span><code><span class="n">viz</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">VizEngine</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;out/burgers&quot;</span><span class="p">)</span>
+<span class="n">viz</span><span class="o">.</span><span class="n">render_all</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">algorithm_</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="method">Method</h2>
-<p>(to be written)</p>
+<p>EqGPT is a transformer trained to write equations. It was pretrained on a corpus
+of equations collected from mathematical handbooks, so it starts a run already
+able to produce well-formed physical laws, and the search is a matter of
+directing it rather than of assembling terms.</p>
+<p>One epoch samples a batch of sentences from the model, token by token, keeping
+only sequences the grammar accepts as an equation. Each is converted to
+right-hand-side terms, and the platform builds the term columns from the data.
+The reward is then a least-squares fit of the time derivative onto those
+columns, scored by centered R² and discounted by <code>sparsity_alpha</code> times the
+log of the column count. The best candidates so far are kept as an elite pool,
+and each epoch ends by fine-tuning the model on that pool for a few Adam steps,
+so the next epoch's samples resemble the ones that scored well.
+One epoch is one KD iteration, and <code>generations</code> sets how many are run.</p>
 <h2 id="references">References</h2>
 <p>Xu et al. (2025). "Generative discovery of partial differential equations by learning from math handbooks". <em>Nat. Commun.</em> 16, 10255. <a href="https://doi.org/10.1038/s41467-025-65114-2">Paper</a></p>
 <p>Code: <a href="https://github.com/woshixuhao/EqGPT">woshixuhao/EqGPT</a></p>
+<p><small>Implementation note: KD drives the published checkpoint through its own
+sampler and reward, and reproduces the paper's single-case pipeline. The same
+plugin also runs the paper's multi-case wave-breaking setup, where one structure
+is scored against 12 experiments at once; that path is shown under
+<a href="../../examples/">Examples</a>.</small></p>
 
 
 

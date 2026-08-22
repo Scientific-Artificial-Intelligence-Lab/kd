@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -279,6 +279,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -343,6 +349,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -820,6 +910,17 @@
     <span class="md-ellipsis">
       
         Dataset catalog
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#real-world-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Real-world measurements
       
     </span>
   </a>
@@ -1655,6 +1756,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#real-world-measurements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Real-world measurements
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1676,7 +1788,8 @@
 
 <h1 id="bundled-datasets">Bundled datasets</h1>
 <p>KD ships a catalog of benchmark datasets with known equations, so you can try an algorithm out
-before pointing it at data of your own.</p>
+before pointing it at data of your own, and two sets of laboratory measurements to run against
+real data.</p>
 <h2 id="load-a-dataset">Load a dataset</h2>
 <p>Each dataset has a convenience loader that hands back an object <code>fit()</code> accepts directly:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
@@ -1867,6 +1980,28 @@ cached.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="real-world-measurements">Real-world measurements</h2>
+<p>Two datasets of laboratory measurements ship alongside the benchmarks. Both are tables of
+observations rather than fields on a regular grid, so they load as <code>kd.TabularDataset</code> and are not
+entries of the catalog above.</p>
+<p><code>kd.load_tlc_cc()</code> holds 74 rows from an automated column-chromatography platform, which separated
+192 organic compounds on 4 g silica columns with thin-layer chromatography giving the retardation
+factor of each compound and eluent pair. Each row is one experimental condition rather than one
+compound: the features are the retardation factor <code>R_F</code> and the petroleum-ether fraction <code>r</code> of the
+eluent, and the target is the retention volume averaged over the compounds run at that condition,
+either the volume at which a compound is first detected (<code>target="start"</code>) or the volume at which it
+has fully eluted (<code>target="end"</code>).</p>
+<p><code>kd.load_wave_breaking()</code> holds surface-elevation measurements from the 27.2 m glass-walled wave tank
+at Imperial College London: focused wave groups propagating toward breaking, with the air-water
+interface reconstructed frame by frame from three cameras running at 20 Hz. The features are the time
+<code>t</code> and the position <code>x</code> along the tank; the target is the surface elevation <code>eta</code>. The points are
+scattered rather than gridded, and the three camera windows do not overlap, so <code>x</code> covers three
+disjoint intervals. One experiment of the campaign is bundled, 314,478 points, and <code>data_dir=</code> points
+the loader at the others.</p>
+<p>Both datasets are published measurements, used with the permission of the authors: the chromatography
+platform in Xu, Wu, Chen, Zhang and Mo, <em>Nat Commun</em> <strong>16</strong>, 832 (2025), and the wave-tank campaigns
+in Xu, Chen, Cao, Tang, Du, Li, Callaghan and Zhang, <em>Nat Commun</em> <strong>16</strong>, 10255 (2025).
+<a href="../../examples/wave_breaking/">Breaking waves</a> is a worked run on the wave data.</p>
 
 
 

@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -975,17 +1065,6 @@
     <span class="md-ellipsis">
       
         Main parameters
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
       
     </span>
   </a>
@@ -1685,17 +1764,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1757,16 +1825,16 @@
 
 
 <h1 id="dlga-pde">DLGA-PDE</h1>
-<p>A neural network fits the field and supplies derivatives; a genetic algorithm searches term sets over a candidate library.</p>
+<p>A neural network fits the field and supplies derivatives; a genetic algorithm
+searches term sets over a candidate library.</p>
 <div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">dlga</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">DLGA fitness <em>min</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">heavy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">autograd</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid</div></div></div>
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;dlga&quot;</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;dlga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">pop_size</span><span class="o">=</span><span class="mi">40</span><span class="p">)</span>
 <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="main-parameters">Main parameters</h2>
 <table>
@@ -1945,14 +2013,92 @@
 </tbody>
 </table>
 </details>
-<h2 id="suitable-data">Suitable data</h2>
-<p>(to be written)</p>
 <h2 id="worked-example">Worked example</h2>
-<p>(to be added) One real run: the data, the result, the comparison.</p>
+<p>The run below uses the Burgers dataset that ships with KD: a 256 × 201 grid
+over <code>x</code> in [-8, 8] and <code>t</code> in [0, 10], whose initial profile steepens into a
+front at the origin and then spreads out as the diffusive term takes over.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/dlga-field.png" alt="Heatmap of the Burgers field u(x, t)">
+  <figcaption>The observed field u over x and t.</figcaption>
+</figure>
+
+<p>The equation returned by the run:</p>
+<div class="kd-compare">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Equation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovered</td>
+<td><span class="arithmatex">\(u_t = -0.9993\,u\,u_x +0.0999\,u_{xx}\)</span></td>
+</tr>
+<tr>
+<td>Reference</td>
+<td><span class="arithmatex">\(u_t = -u\,u_x +0.1\,u_{xx}\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both terms and both coefficients match. The terms were assembled from the
+default candidate library (<code>u</code>, <code>u_x</code>, <code>u_xx</code>, <code>u_xxx</code>), and the left-hand side
+was chosen by the run as well: DLGA-PDE fits both <code>u_t</code> and <code>u_tt</code> and keeps
+the one with the lower nmse.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/dlga-compare.png" alt="Surrogate u_t, predicted u_t, and the residual between them">
+  <figcaption>The discovered equation evaluated against the u_t the search fitted, which is the network's u_t rather than a finite difference of the observations. The first two panels share a color scale and are indistinguishable by eye; the third is their difference, at most 3.1e-02, and it is concentrated along the front.</figcaption>
+</figure>
+
 <h2 id="result-interpretation">Result interpretation</h2>
-<p>(to be written)</p>
+<p><code>model.best_score_</code> is DLGA-PDE's own fitness, <code>nmse + epsilon * length</code>:
+<strong>lower is better</strong>. This run ends at 3.46e-03, of which 4.61e-04 is the nmse
+and the remaining 3.0e-03 comes from <code>epsilon</code>, at its default of 1e-3, applied
+to the three tokens of the answer. The fitness combines fit and length, so nmse
+alone does not determine which of two term sets is preferred.</p>
+<p>That nmse is measured against the network's field, which is the field the search
+operates on. The fitted equation itself is on <code>model.result_.equation</code>,
+term by term with its coefficient.</p>
+<p>The search is recorded as well. <code>kd.VizEngine</code> renders the per-generation
+record; alongside the universal convergence curve, DLGA-PDE contributes four
+diagnostic panels of its own (the full list is under
+<a href="../../viz/">Visualization</a>):</p>
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/dlga-convergence.png" alt="Best DLGA fitness per generation">
+  <figcaption>The best fitness starts at 0.4489 and comes down in steps to 3.46e-03, the last of them at generation 29 of 40. The axis is logarithmic: the descent covers two orders of magnitude, and on a linear axis every step after the first would read as one flat line.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/dlga-panels.png" alt="Population diversity, complexity evolution and fitness spread panels">
+  <figcaption>Left: distinct candidate expressions per generation, between 29 and 39 out of a population of 40. Middle: mean term count of the valid candidates, between 1.78 and 2.68, so the population stays near the length of the answer. Right: mean fitness of the population on a log axis, between 0.86 and 2.3e+03. A single ill-conditioned candidate can raise a generation's mean into the thousands, so the axis is logarithmic and the best curve is drawn separately.</figcaption>
+</figure>
+
+<p>The fourth panel shows the training of the surrogate network, which is
+independent of the search:</p>
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/dlga-surrogate-training.png" alt="Training and validation loss of the neural surrogate per epoch">
+  <figcaption>Training and validation MSE over the 50000 epochs the surrogate is given, from 3.2e-01 down to 5.9e-08 across six decades. The two curves track each other the whole way. The vertical line marks the epoch whose weights were kept, 47600, which is the best one rather than the last.</figcaption>
+</figure>
+
+<div class="highlight"><pre><span></span><code><span class="n">viz</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">VizEngine</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;out/burgers&quot;</span><span class="p">)</span>
+<span class="n">viz</span><span class="o">.</span><span class="n">render_all</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">algorithm_</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="method">Method</h2>
-<p>(to be written)</p>
+<p>A neural network fits the observations first. Every derivative the search uses
+is taken from that network by autograd, so the candidate terms are built on a
+smooth field rather than on finite differences of the raw data.</p>
+<p>A candidate is a genome: a set of terms, each term a product of tokens drawn
+from the candidate library (<code>u</code>, <code>u_x</code>, <code>u_xx</code>, <code>u_xxx</code> by default). Crossover
+and mutation produce the next generation, and every candidate is scored by
+<code>nmse + epsilon * length</code>, which combines the fit error against the surrogate
+field with a penalty per token. Lower scores are better. One generation is one
+KD iteration,
+and <code>generations</code> sets how many are run.</p>
+<p>The coefficients in the returned equation come from a platform refit rather
+than from the algorithm: DLGA-PDE searches for the term set, and the
+coefficients are fitted on that set afterwards.</p>
 <h2 id="references">References</h2>
 <p>Xu et al. (2020). "DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm". <em>J. Comput. Phys.</em> 418, 109584. <a href="https://doi.org/10.1016/j.jcp.2020.109584">Paper</a> · <a href="https://arxiv.org/abs/2001.07305">arXiv:2001.07305</a></p>
 <p>Code: <a href="https://github.com/woshixuhao/DLGA_tutorial">woshixuhao/DLGA_tutorial</a> (the author's tutorial notebook, on the KdV case), <a href="https://github.com/woshixuhao/PIC_code">woshixuhao/PIC_code</a> (the author's own code for a later paper, running the same neural-network-plus-genetic-algorithm search)</p>

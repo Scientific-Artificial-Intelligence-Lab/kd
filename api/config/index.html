@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -5509,7 +5599,7 @@ mode (same handling as <code>autograd_train_epochs</code>).</p>
 
         <p>If True, train (or reuse) a FieldModel surrogate and use AutogradProvider
 for Layer 2 terminals (u_x, u_t). Layer 1 (raw u leaf) and Layer 3 (tree
-d / d^2 operators) are unchanged — see SPEC.md / D032.</p>
+d / d^2 operators) are unchanged.</p>
 
     </div>
 
@@ -5985,9 +6075,10 @@ also how many candidates the platform evaluates per iteration.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Random seed recorded in the run manifest next to the dataset fingerprint. This
-fit is deterministic and never draws on the value, so changing it alone does not
-change the result.</p>
+        <p>Random seed of the genetic search: it seeds the generator behind the initial
+population and every crossover, mutation, add and delete draw, and is also
+forwarded to the surrogate network's training. Runs differing only in this value
+explore different candidates.</p>
 
     </div>
 
@@ -7332,9 +7423,11 @@ reward.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Random seed recorded in the run manifest next to the dataset fingerprint. This
-fit is deterministic and never draws on the value, so changing it alone does not
-change the result.</p>
+        <p>Random seed of the search: <code>torch.manual_seed</code> is called with this value when
+the algorithm is constructed and again before the engine is built, so it governs
+both the controller's weight initialization and every token sampled from it. It is
+the only seeding entry and overrides a <code>torch.manual_seed</code> the caller made
+beforehand.</p>
 
     </div>
 
@@ -8150,9 +8243,10 @@ scoring.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Random seed recorded in the run manifest next to the dataset fingerprint. This
-fit is deterministic and never draws on the value, so changing it alone does not
-change the result.</p>
+        <p>Random seed of candidate sampling: it seeds the generator that hands every
+sampling call its own sub-seed, exploration draws included. A run resumed from a
+checkpoint restores the saved generator state instead, and falls back to this
+value only when the checkpoint carries none.</p>
 
     </div>
 

@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -2067,15 +2157,16 @@
 
 
 <h1 id="datasets">Datasets</h1>
-<p><code>kd.PDEDataset</code> is what every algorithm is fitted to, and three constructors
-build one out of data you already hold: <code>from_arrays</code> for fields on a regular
-grid, <code>from_scatter</code> for points that are not on one, and <code>from_xlsx</code> for a
-workbook whose columns are already coordinates and values. All three are
-documented under the class below.</p>
+<p>Every algorithm is fitted to a <code>kd.PDEDataset</code>. Three constructors build one
+from data you already hold: <code>from_arrays</code> for fields on a regular grid,
+<code>from_scatter</code> for points that are not on one, and <code>from_xlsx</code> for a workbook
+whose columns are already coordinates and values. All three are documented under
+the class below.</p>
 <p>A dataset states three things before a search can start: which fields it
-carries, which axes they live on, and which term is the left-hand side. What is
-required of each is under <a href="../../data/shape/">Data requirements</a>; what the
-package can hand you instead is under <a href="../datasets/">Dataset catalog</a>.</p>
+carries, which axes they are sampled on, and which term is the left-hand side.
+The requirements for each are described under
+<a href="../../data/shape/">Data requirements</a>, and the datasets shipped with the
+package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
 <div class="kd-api">
 <table>
 <thead>
@@ -2171,7 +2262,7 @@ package can hand you instead is under <a href="../datasets/">Dataset catalog</a>
               (<code><a class="autorefs autorefs-internal" title="            DataTopology (kd.data.schema.DataTopology)" href="#kd.DataTopology">DataTopology</a></code>)
           –
           <div class="doc-md-description">
-            <p>Data layout (grid or scattered)</p>
+            <p>Data layout (grid, scattered, or tabular)</p>
           </div>
         </li>
         <li class="doc-section-item field-body">
@@ -2205,7 +2296,7 @@ package can hand you instead is under <a href="../datasets/">Dataset catalog</a>
    (kd.data.schema.FieldData)" href="#kd.FieldData">FieldData</a>] | None</code>)
           –
           <div class="doc-md-description">
-            <p>Mapping from field name to FieldData. GRID: nD tensor shaped by <code>axis_order</code>. SCATTERED: 1-D per-point vector (length N).</p>
+            <p>Mapping from field name to FieldData. GRID: nD tensor shaped by <code>axis_order</code>. SCATTERED: 1-D per-point vector (length N). TABULAR: same-length 1-D feature and target columns.</p>
           </div>
         </li>
         <li class="doc-section-item field-body">

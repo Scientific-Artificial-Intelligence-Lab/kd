@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1700,7 +1790,9 @@ derivatives by finite difference, trained no surrogate network, and the panel is
 therefore empty.</p>
 <p><code>report.report</code> points at an HTML report with every figure inlined as SVG, so it
 travels as a single file; the LaTeX in the equation block is rendered by MathJax
-loaded from a public CDN. The <code>style=</code> argument of <code>VizEngine</code> takes extra
+loaded from a public CDN. The report this page's run writes is published here:
+<a href="../sga-kdv-report.html" rel="noopener" target="_blank">example report</a>, 15
+figures in 1.7 MB. The <code>style=</code> argument of <code>VizEngine</code> takes extra
 matplotlib rcParams and merges them over KD's defaults. To put several runs side
 by side, call <code>viz.render_comparison(results, labels=[...])</code>: the convergence
 curves are overlaid, plus a bar chart of R² across the runs and a summary table.</p>
@@ -1724,8 +1816,8 @@ algorithm:</p>
 gen_mean_complexity [1.8235294117647058, 2.34375, 3.242424242424242, 3.026315789473684, 3.6]
 </code></pre></div>
 <p>The Figure belongs to the caller: <code>render_plot</code> draws only on the Axes it is
-given, so size, colors and titles stay yours to set. What it returns is the
-degradation notes for that panel (no data, gaps in the series), and merging
+given, so size, colors and titles remain under the caller's control. It returns
+the degradation notes for that panel (no data, gaps in the series), and merging
 those into <code>report.warnings</code> is what <code>render_all</code> does with them.</p>
 <p><code>get_plot_data</code> returns the numbers behind the same panel, ready to serialize to
 JSON and hand to another plotting library or keep as a record. Its fields depend

@@ -817,18 +817,22 @@ html.kd-home .md-sidebar--primary {
 .kd-compare td:first-child,
 .kd-compare th:first-child { width: 7rem; color: var(--kd-slate); }
 
-/* ---------- API 索引表 ------------------------------------------------- */
-/* 名字列是调用式（等宽、不折行），不给说明列一个下限的话它会被挤成一条窄带，
-   一句话要换四行。两列各给一半，名字过长时让名字列自己横向滚。 */
+/* ---------- API index table -------------------------------------------- */
+/* The name column holds call signatures (monospace, no wrapping). Without a
+   minimum width on the description column it collapses into a narrow strip that
+   breaks one sentence across four lines. Each column takes half the width, and a
+   long name scrolls horizontally inside its own column. */
 .kd-api { overflow-x: auto; }
 .kd-api table:not([class]) { table-layout: fixed; width: 100%; }
 .kd-api table:not([class]) td:first-child,
 .kd-api table:not([class]) th:first-child { width: 50%; }
 .kd-api table:not([class]) td:first-child { overflow-x: auto; }
 
-/* ---------- 分层架构图 ------------------------------------------------- */
-/* 用 HTML 而不是 SVG 或 ASCII：这张图的内容全是要读的字，SVG 里的文字不重排，
-   窄屏上层名会压到条目上；ASCII 版还得靠手打空格对齐，一改就散。 */
+/* ---------- Layered architecture diagram -------------------------------- */
+/* HTML rather than SVG or ASCII: the diagram is entirely text that has to be
+   read. Text inside an SVG does not reflow, so on a narrow screen the band names
+   overlap the items; an ASCII version has to be aligned with hand-typed spaces
+   and breaks on any edit. */
 
 .kd-layers {
   display: grid;
@@ -862,17 +866,19 @@ html.kd-home .md-sidebar--primary {
 }
 .kd-layer--plugins .kd-layer__items { color: var(--kd-teal); }
 
-/* ---------- 单次 fit 的流水线图 ---------------------------------------- */
-/* 复用分层图的盒子（.kd-layer），换掉两处：格与格之间画一个向下的箭头，说明
-   这里读的是时间顺序不是依赖顺序；每格多一行 __lead 用正文字体讲这一步做什么，
-   条目行退回等宽字体列出涉及的名字。 */
+/* ---------- Pipeline diagram for a single fit --------------------------- */
+/* Reuses the layer boxes (.kd-layer) with two changes: a downward arrow between
+   boxes, marking this diagram as execution order rather than dependency order;
+   and a __lead line per box, set in the body font, describing what that stage
+   does, with the item row falling back to monospace for the names involved. */
 
 .kd-flow { margin: 1.5rem 0 2rem; }
 .kd-flow .kd-layer {
   border-left-color: color-mix(in srgb, var(--kd-plum) 42%, transparent);
 }
-/* 显式的箭头 div 而不是 ::before：伪元素要靠绝对定位摆放，父盒子一改内边距
-   就得跟着调；这里多几行标记换一个不会飘的位置。 */
+/* An explicit arrow div rather than ::before: a pseudo-element has to be placed
+   by absolute positioning and then re-tuned whenever the parent's padding
+   changes. A few extra lines of markup buy a position that stays put. */
 .kd-flow__arrow {
   font-family: var(--kd-mono);
   font-size: .8rem;
@@ -889,8 +895,24 @@ html.kd-home .md-sidebar--primary {
 
 @media (max-width: 44em) {
   .kd-layer { grid-template-columns: 1fr; }
-  /* 单列下第二列不存在，不复位会长出一条空的隐式列 */
+  /* In the single-column layout the second column does not exist; without this
+     reset an empty implicit column appears */
   .kd-layer__lead,
   .kd-flow .kd-layer__items { grid-column: 1; }
   .kd-flow__arrow { padding-left: .9rem; }
+}
+
+/* ---------- about page ------------------------------------------------ */
+
+/* The About page is a banner and three links, so it reuses the homepage hero
+   at a shorter height rather than introducing a second dark band of its own.
+   Its title is set as words rather than as the two-letter mark: a reader who
+   clicked "About" and landed on the same wordmark as the homepage reads it as
+   a mis-click. */
+.kd-hero--compact { padding: 3.2rem 1.2rem 2.8rem; margin-bottom: 2.4rem; }
+.md-typeset .kd-hero--compact .kd-hero__lede { max-width: 42rem; margin-bottom: 0; }
+.kd-hero__wordmark {
+  display: block;
+  font-size: clamp(2rem, 4.4vw, 2.9rem);
+  letter-spacing: -.025em;
 }

@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1713,12 +1803,13 @@
 
 
 <h1 id="parameter-tiers-and-resuming">Parameter tiers and resuming</h1>
-<p>Whether a run can be resumed is decided by which parameter changed, not by the caller.</p>
+<p>Whether a run can be resumed depends on which parameters changed between the checkpoint
+and the new <code>kd.Model</code>.</p>
 <p>The parameter table on every algorithm page has a "Resume" column, and every parameter
 carries a badge there:
 <span class="kd-tier kd-tier--safe">resume-safe</span> or
 <span class="kd-tier kd-tier--init">init-only</span>. The algorithm declares that badge
-itself, and it is what decides whether a new value takes effect when you resume.</p>
+itself, and the badge determines whether a new value takes effect on a resume.</p>
 <table>
 <thead>
 <tr>
@@ -1729,7 +1820,7 @@ itself, and it is what decides whether a new value takes effect when you resume.
 <tbody>
 <tr>
 <td><span class="kd-tier kd-tier--safe">resume-safe</span></td>
-<td>change it, resume from a checkpoint, and the new value takes effect; the stored search state stays valid</td>
+<td>the new value takes effect when resuming from a checkpoint, and the stored search state stays valid</td>
 </tr>
 <tr>
 <td><span class="kd-tier kd-tier--init">init-only</span></td>
@@ -1737,23 +1828,22 @@ itself, and it is what decides whether a new value takes effect when you resume.
 </tr>
 </tbody>
 </table>
-<p>A third tier does not appear in the tables: fields that change the scientific identity
-of the run (the candidate library, derivative semantics, and the like) are
-identity-breaking. Changing one makes the two segments a different experiment, and the
-resume raises as well.</p>
-<p>Any config field with no declared tier is treated as init-only. The default falls on
-the refusing side because of what each mistake costs: a field that should have been
-resume-safe costs one line of edit, while a resume that succeeded on two different
-configs leaves the error in the result.</p>
+<p>A third tier is not shown in the tables. Fields that change the scientific identity of
+the run, such as the candidate library and derivative semantics, are identity-breaking:
+changing one makes the two segments a different experiment, and the resume raises.</p>
+<p>Any config field with no declared tier is treated as init-only. The default refuses
+because the two mistakes have different consequences. A field that should have been
+declared resume-safe requires one line of edit to correct, while a resume that succeeded
+across two different configurations leaves the error in the result.</p>
 <p>The tables use the config field names. Two fields are spelled differently as <code>kd.Model</code>
 keywords: <code>num</code> is <code>population</code>, and <code>use_autograd</code> is <code>derivatives</code>.</p>
 <h2 id="checkpoint-writing">Checkpoint writing</h2>
-<p>Point <code>checkpoint_dir</code> at a directory and checkpointing starts; <code>checkpoint_every</code> sets
+<p>Setting <code>checkpoint_dir</code> to a directory enables checkpointing. <code>checkpoint_every</code> sets
 the interval in iterations, and a <code>checkpoint_final.pt</code> is written when the run ends.
-The directory is managed by a <code>manifest.json</code> and refuses reuse: pointing at a
-non-empty directory raises, so give each run a fresh one. <code>checkpoint_keep_last</code> bounds
-how many periodic checkpoints are retained; the final one is neither counted nor
-pruned.</p>
+The directory is managed by a <code>manifest.json</code> and cannot be reused: pointing at a
+non-empty directory raises, so each run needs a fresh directory. <code>checkpoint_keep_last</code>
+bounds how many periodic checkpoints are retained, and the final one is neither counted
+nor pruned.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_kdv</span><span class="p">()</span>
@@ -1765,8 +1855,8 @@ pruned.</p>
 </code></pre></div>
 <h2 id="the-manifest">The manifest</h2>
 <p><code>kd.load_checkpoint_manifest</code> returns the directory's entries in write order. It is
-read-only: no repair, no cleanup. Select a checkpoint from these entries rather than
-globbing the directory yourself.</p>
+read-only and performs no repair or cleanup. Select a checkpoint from these entries
+rather than globbing the directory.</p>
 <div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_checkpoint_manifest</span><span class="p">(</span><span class="s2">&quot;out/kdv-ckpt&quot;</span><span class="p">):</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">final_status</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">iteration</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">best_score</span><span class="p">)</span>
 </code></pre></div>
@@ -1781,12 +1871,12 @@ checkpoint_final.pt final completed 3 -18.37657775848694
 distinguishable. Both values have exported constants, <code>kd.KIND_FINAL</code> and
 <code>kd.FINAL_STATUS_COMPLETED</code>.</p>
 <h2 id="resume-a-run">Resume a run</h2>
-<p><code>fit</code> takes a checkpoint path as <code>resume_from</code>. What is restored is search state (the
-population, controller weights, the current best); the number of generations comes from
-this <code>kd.Model</code>, and the parameters are judged by the tiers below. <code>seed</code> is not in the
-tier table, so it falls to the unregistered-field default, init-only: a resume keeps the
-seed the checkpoint was written with, and a different one is rejected. Changing the seed
-is a new run, not a resume.</p>
+<p><code>fit</code> takes a checkpoint path as <code>resume_from</code>. A resume restores the search state: the
+population, the controller weights, and the current best. The number of generations comes
+from this <code>kd.Model</code>, and the parameters are judged by the tiers above. <code>seed</code> is not in
+the tier table, so it takes the unregistered-field default of init-only. A resume keeps
+the seed the checkpoint was written with, and a different seed is rejected, so changing
+the seed starts a new run.</p>
 <div class="highlight"><pre><span></span><code><span class="n">resumed</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">population</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
 <span class="n">resumed</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">resume_from</span><span class="o">=</span><span class="s2">&quot;out/kdv-ckpt/checkpoint_final.pt&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">resumed</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
@@ -1809,18 +1899,17 @@ changed vs the checkpoint: use_autograd (stored False -&gt; live True). A scienc
 change starts a new lineage: run a fresh fit in a new checkpoint directory; this
 checkpoint cannot be resumed under the new config.
 </code></pre></div>
-<p>Every message names the field and both values, so locating the offending change takes
-no guessing.</p>
+<p>Every message names the field and both of its values.</p>
 <h2 id="add-generations">Add generations</h2>
 <p><code>generations</code> is not a config field. For the iterative algorithms it maps to the
-iteration budget, so "run it a bit longer" always works: raise <code>generations</code> on the
-resuming model. PySR and PySINDy return their full result from a single fit, so for
-those two <code>generations</code> is not a quantity to raise on a resume.</p>
+iteration budget, so extending a run means raising <code>generations</code> on the resuming model.
+PySR and PySINDy return their full result from a single fit, so for those two
+<code>generations</code> cannot be raised on a resume.</p>
 <h2 id="the-two-manifests">The two manifests</h2>
 <p>The <code>manifest.json</code> above belongs to a checkpoint directory and lists what is in it.
-A finished run carries a second, unrelated one at <code>model.result_.manifest</code>: the facts
-needed to reproduce that run, and nothing that varies between two identical runs. It
-holds the dataset fingerprint, the KD version, the seed, the term library for the
+A finished run carries a second, unrelated manifest at <code>model.result_.manifest</code>. It
+records the facts needed to reproduce that run and excludes anything that varies between
+two identical runs: the dataset fingerprint, the KD version, the seed, the term library for the
 algorithms that take one, and, when the run continued an earlier one, where it resumed
 from.</p>
 

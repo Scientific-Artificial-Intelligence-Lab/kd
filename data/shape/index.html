@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -801,6 +891,17 @@
     <span class="md-ellipsis">
       
         Scattered points
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabular-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabular data
       
     </span>
   </a>
@@ -1685,6 +1786,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tabular-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabular data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#supported-layouts-per-algorithm" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1713,9 +1825,10 @@
 
 
 <h1 id="data-requirements">Data requirements</h1>
-<p>KD reads a set of observations and searches for the equation behind them. What it needs from you is
-two things: a set of coordinate axes, and one or more fields sampled on those coordinates. The
-derivatives, the candidate terms and the coefficients are all produced by the algorithm.</p>
+<p>KD reads a set of observations and searches for the equation behind them. For field data that means
+two things: a set of coordinate axes, and one or more fields sampled on those coordinates. Scalar
+regression data is a plain <code>X -&gt; y</code> table instead, and carries no axes at all. The derivatives, the
+candidate terms and the coefficients are all produced by the algorithm.</p>
 <h2 id="build-a-dataset-from-arrays">Build a dataset from arrays</h2>
 <p><code>kd.PDEDataset.from_arrays</code> wraps arrays you already have. The key order of <code>coords</code> fixes the axis
 order, and each field array must have exactly the shape given by the axis lengths in that order.</p>
@@ -1751,6 +1864,11 @@ left-hand side it parsed. <code>kd.preview_report</code> returns the same facts 
 code.</p>
 <h2 id="axis-and-field-requirements">Axis and field requirements</h2>
 <ul>
+<li>Any number of axes is accepted. The <code>coords</code> mapping fixes both the count and the order, and
+  each field array carries one dimension per axis. The example above has one spatial axis and
+  time; <code>kd.load_burgers_2d()</code> is a bundled dataset with two spatial axes and time, and <code>lap(u)</code>
+  sums the second derivative over whichever spatial axes the dataset has. Which layouts a given
+  algorithm accepts is declared per algorithm and checked at <code>fit()</code> (see below).</li>
 <li>Each axis is a 1-D increasing array: a decreasing coordinate is rejected by <code>from_arrays</code>
   itself, at construction.</li>
 <li>Axes are evenly spaced. Finite-difference stencils are written around a fixed step, so an
@@ -1768,8 +1886,8 @@ code.</p>
 <p><code>lhs</code> spells out the term on the left of the equation using KD's derivative naming convention; KD
 parses the field, the axis and the order out of it.</p>
 <ul>
-<li><code>lhs="u_t"</code> (default): first-order in time, i.e. <code>u_t = f(u, u_x, u_xx, ...)</code>. This is what most
-  algorithms target.</li>
+<li><code>lhs="u_t"</code> (default): first-order in time, i.e. <code>u_t = f(u, u_x, u_xx, ...)</code>. Most algorithms
+  target this form.</li>
 <li><code>lhs="u_tt"</code>: second order. The bundled <code>wave</code> and <code>klein-gordon</code> datasets are of this kind. DLGA-PDE
   is the algorithm that fits them: <code>kd.DLGAConfig(target_lhs_order=2)</code>, or the ready-made
   <code>kd.DLGAConfig.wave_preset()</code> / <code>kd.DLGAConfig.kg_preset()</code>. Every other algorithm builds a
@@ -1786,10 +1904,46 @@ coordinates need not be sorted. <code>kd.PDEDataset.from_xlsx</code> reads the s
 an xlsx workbook by column header, which fits experimental data already stored as <code>(x, y, u)</code>
 columns.</p>
 <p>Scattered data is handled by EqGPT: its multi-case wave mode and its steady mode declare
-<code>scattered</code>; every other algorithm asks for <code>grid</code>.</p>
+<code>scattered</code>.</p>
+<h2 id="tabular-data">Tabular data</h2>
+<p>A scalar regression task is a plain <code>X -&gt; y</code> table, and <code>kd.TabularDataset</code> carries one: <code>X</code> is an
+array of shape <code>(n_samples, n_features)</code>, <code>y</code> is a <code>(n_samples,)</code> array of the measured target,
+<code>var_names</code> gives one name per column of <code>X</code>, and <code>target_name</code> names <code>y</code>. There are no coordinate
+axes: a row is one observation, not a sample of a field. <code>name</code>, <code>source</code> and <code>description</code> record
+where the table came from, and are required alongside the four above.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
+
+<span class="n">pressure</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+<span class="n">flow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+
+<span class="n">table</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">TabularDataset</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">pressure</span><span class="p">,</span> <span class="n">flow</span><span class="p">]),</span>
+    <span class="n">y</span><span class="o">=</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">pressure</span> <span class="o">+</span> <span class="mf">3.0</span><span class="p">,</span>
+    <span class="n">var_names</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;pressure&quot;</span><span class="p">,</span> <span class="s2">&quot;flow&quot;</span><span class="p">),</span>
+    <span class="n">target_name</span><span class="o">=</span><span class="s2">&quot;yield&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;lab notebook&quot;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;reactor yield against pressure and flow rate&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><code>fit()</code> reads the table through one converter, and that is where the names and the values are
+checked: every name is a Python identifier, distinct from the others, and neither a Python keyword
+nor one of the names KD reserves for its own functions and derivatives; every value is finite; the
+columns are read as <code>float64</code>.</p>
+<p>That <code>table</code> goes straight into <code>kd.Model.fit()</code>. Each column becomes a field of its own and the
+target column becomes the left-hand side. No derivatives are taken, so a column named <code>x</code> or <code>t</code> is
+just another feature. The result is an expression in the feature names rather than a PDE.
+<code>result_.lhs_label</code> is the target column, and <code>best_expr_</code> carries the expression together with the
+constants fitted for it. An algorithm whose tabular mode declares the <code>REGRESSION</code> form returns the
+same answer on <code>result_.equation</code> as well, the target column on the left of it.</p>
+<p>DISCOVER and PySR both read this layout: each declares a tabular mode, and KD selects that mode from
+the dataset you hand to <code>fit()</code>. KD ships one table of its own, <code>kd.load_tlc_cc()</code>, which returns a
+<code>TabularDataset</code> ready to fit.</p>
 <h2 id="supported-layouts-per-algorithm">Supported layouts per algorithm</h2>
-<p>Every mode of every algorithm declares the layouts it accepts (<code>topologies</code>: <code>grid</code> / <code>scattered</code>)
-and the equation forms it searches (<code>forms</code>: <code>EVOLUTION</code> / <code>HOMOGENEOUS</code>) in
+<p>Every mode of every algorithm declares the layouts it accepts (<code>topologies</code>: <code>grid</code> / <code>scattered</code> /
+<code>tabular</code>) and the equation forms it searches (<code>forms</code>: <code>EVOLUTION</code> / <code>HOMOGENEOUS</code> / <code>REGRESSION</code>,
+or empty for a mode that returns a bare expression) in
 <code>kd.instrument_schemas()</code>; the spec strip at the top of each <a href="../../algorithms/">algorithm page</a>
 shows the same information. When the layout or the left-hand-side order of your data does not match
 the algorithm, <code>fit()</code> raises and names what that algorithm does support.</p>

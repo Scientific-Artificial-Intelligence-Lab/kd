@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1414,10 +1504,32 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kd.ExperimentResult.has_pareto_front" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;has_pareto_front
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kd.ExperimentResult.load" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;load
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kd.ExperimentResult.pareto_front" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;pareto_front
       
     </span>
   </a>
@@ -1812,10 +1924,32 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kd.ExperimentResult.has_pareto_front" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;has_pareto_front
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kd.ExperimentResult.load" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;load
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kd.ExperimentResult.pareto_front" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;pareto_front
       
     </span>
   </a>
@@ -1867,7 +2001,7 @@
 
 
 <h1 id="model-and-result">Model and result</h1>
-<p><code>kd.Model</code> runs a search; <code>kd.ExperimentResult</code> is what it produces.</p>
+<p><code>kd.Model</code> runs a search and returns a <code>kd.ExperimentResult</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
 <span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
@@ -1876,8 +2010,8 @@
 </code></pre></div>
 <p><code>algorithm</code> takes the name of any of the seven algorithms; each one's scope and
 parameters are on its own page under <a href="../../algorithms/">Algorithms</a>. Passing
-<code>config=</code> hands that algorithm its settings and becomes their single source, so
-supplying the same settings as keywords alongside it raises. Which parameters
+<code>config=</code> supplies that algorithm's settings and becomes the single source for
+them, so supplying the same settings as keywords alongside it raises. Which parameters
 may change on a resume is covered in
 <a href="../../design/resume/">Parameter tiers and resuming</a>, and
 what <code>best_score_</code> measures in
@@ -2257,7 +2391,12 @@ what <code>best_score_</code> measures in
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">,</span>
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></span><span class="p">,</span>
     <span class="n">resume_from</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="n"><span title="pathlib.Path">Path</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">sketch</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            Sketch
@@ -2283,10 +2422,15 @@ what <code>best_score_</code> measures in
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></code>)
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a> | <a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></code>)
           –
           <div class="doc-md-description">
-            <p>The PDE dataset to discover an equation for.</p>
+            <p>A PDE dataset or public <code>X -&gt; y</code> regression table.</p>
           </div>
         </li>
         <li class="doc-section-item field-body">
@@ -2388,17 +2532,17 @@ what <code>best_score_</code> measures in
 
 </div><h2 id="result-structure">Result structure</h2>
 <p>One fit produces one <code>ExperimentResult</code>, and the trailing-underscore attributes
-above are shortcuts into it. It answers four questions, and the entry below
-lists every field:</p>
+above are shortcuts into it. Its contents fall into four groups, and the entry
+below lists every field:</p>
 <ul>
-<li><strong>What was found.</strong> <code>best_expression</code> and <code>best_score</code>, with <code>score_kind</code> and
-  <code>score_direction</code> stating what that number is and which way is better.</li>
-<li><strong>How well it fits.</strong> <code>final_eval</code>, an <a href="../terms/#kd.EvaluationResult"><code>EvaluationResult</code></a>
+<li><strong>The answer.</strong> <code>best_expression</code> and <code>best_score</code>, with <code>score_kind</code> and
+  <code>score_direction</code> stating what that number is and which direction is better.</li>
+<li><strong>Fit quality.</strong> <code>final_eval</code>, an <a href="../terms/#kd.EvaluationResult"><code>EvaluationResult</code></a>
   carrying mse, nmse, r² and the coefficients, alongside the <code>actual</code> and
   <code>predicted</code> values behind them.</li>
-<li><strong>How the search went.</strong> <code>iterations</code>, <code>early_stopped</code>, and <code>recorder</code>, the
+<li><strong>Search progress.</strong> <code>iterations</code>, <code>early_stopped</code>, and <code>recorder</code>, the
   per-iteration record that <a href="../viz/#kd.VizEngine"><code>kd.VizEngine</code></a> draws from.</li>
-<li><strong>What produced it.</strong> <code>dataset_name</code>, <code>algorithm_name</code> and <code>config</code>, plus the
+<li><strong>Provenance.</strong> <code>dataset_name</code>, <code>algorithm_name</code> and <code>config</code>, plus the
   <code>manifest</code> and <code>run_record</code> that seal the run against its inputs.</li>
 </ul>
 
@@ -2450,6 +2594,26 @@ lists every field:</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="kd.ExperimentResult.has_pareto_front" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">has_pareto_front</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">has_pareto_front</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="bool">bool</span></span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return whether the recorder contains a Pareto expression series.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="kd.ExperimentResult.load" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">load</span>
 
@@ -2470,6 +2634,26 @@ lists every field:</p>
     <div class="doc doc-contents ">
 
         <p>Load a serialized result from disk.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kd.ExperimentResult.pareto_front" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">pareto_front</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">pareto_front</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="kd.search.result.ParetoEntry">ParetoEntry</span></span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the last complete recorder-backed Pareto front.</p>
 
 
     </div>

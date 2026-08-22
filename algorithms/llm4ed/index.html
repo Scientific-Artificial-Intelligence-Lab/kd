@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1066,17 +1156,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1685,17 +1764,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1762,12 +1830,24 @@
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kd</span><span class="w"> </span><span class="kn">import</span> <span class="n">Llm4edConfig</span>
 
-<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;llm4ed&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_llm4ed_heat</span><span class="p">()</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span>
+    <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;llm4ed&quot;</span><span class="p">,</span>
+    <span class="n">generations</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">Llm4edConfig</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.openai.com/v1&quot;</span><span class="p">),</span>
+<span class="p">)</span>
 <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
 </code></pre></div>
+<p>The endpoint is any OpenAI-compatible chat API; the key is read from the
+<code>OPENAI_API_KEY</code> environment variable. Both are required: of the seven
+algorithms, this is the one that calls a service outside the process.</p>
+<p>To take the transport into your own hands instead, pass a <code>provider=</code>. It takes
+anything satisfying <code>kd.llm.LLMProvider</code> (one prompt in, text out), so a run
+can be given a client with its own timeout and headers, metered by
+<code>BudgetedProvider</code>, or recorded to a JSONL tape by <code>TapeRecordingProvider</code> and
+replayed offline later.</p>
 <h2 id="main-parameters">Main parameters</h2>
 <table>
 <thead>
@@ -1890,14 +1970,97 @@
 </tbody>
 </table>
 </details>
-<h2 id="suitable-data">Suitable data</h2>
-<p>(to be written)</p>
 <h2 id="worked-example">Worked example</h2>
-<p>(to be added) One real run: the data, the result, the comparison.</p>
+<p>The run below uses the heat-equation dataset from the LLM4ED authors, mirrored
+on Hugging Face Hub: a 200 × 201 grid over <code>x</code> in [0, 9.95] with periodic
+boundaries and <code>t</code> in [0, 10]. The initial profile is a localized oscillation
+centred near x = 5, a positive lobe at x = 4.55 against a negative one at
+x = 5.45 with weaker lobes to either side, and diffusion spreads and flattens
+it: the amplitude falls from 0.89 at t = 0 to 0.049 at t = 10, half of it gone
+by t = 1.45.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/llm4ed-field.png" alt="Heatmap of the heat-equation field u(x, t)">
+  <figcaption>The observed field u over x and t.</figcaption>
+</figure>
+
+<p>Twelve rounds were run against <code>nvidia/llama-3.3-nemotron-super-49b-v1.5</code>,
+capped at six endpoint calls per round, with a seed of 42. The equation returned
+by the run:</p>
+<div class="kd-compare">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Equation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovered</td>
+<td><span class="arithmatex">\(u_t = 0.05014\,u_{xx}\)</span></td>
+</tr>
+<tr>
+<td>Reference</td>
+<td><span class="arithmatex">\(u_t = 0.05\,u_{xx}\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The term and the coefficient match. The model wrote a two-term right-hand side,
+<code>u_xx + u u_x</code>; the sparse regression fitted the second coefficient to zero, so
+one term survives and the reward counts one term.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/llm4ed-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
+  <figcaption>The discovered equation evaluated against the data. The first two panels share a color scale and are indistinguishable by eye; the third is their difference, at most 5.3e-04 against a 0.506 peak of u_t, and concentrated on the early times where the packet is sharpest.</figcaption>
+</figure>
+
 <h2 id="result-interpretation">Result interpretation</h2>
-<p>(to be written)</p>
+<p><code>model.best_score_</code> is LLM4ED's own sparse reward,
+<code>(1 - 0.01 k) / (1 + RMSE / std(u_t))</code> for a <code>k</code>-term equation: <strong>higher is
+better</strong>, with 1 as the upper bound. The term count enters the numerator, so a
+four-term answer cannot score above 0.96 regardless of how well it fits. The reward is
+rounded to four decimals before anything reads it, including the duplicate
+filter inside a round. This run ends at 0.9889, with an nmse of 1.2e-06.</p>
+<p>Every derivative comes from a finite difference of the observations, and the
+fitted equation is on <code>model.result_.equation</code>, term by term with its
+coefficient. Those coefficients are the algorithm's own sparse regression, not a
+platform refit.</p>
+<p>The search is recorded as well. <code>kd.VizEngine</code> renders the per-round record;
+alongside the universal convergence curve, LLM4ED contributes three diagnostic
+panels of its own (the full list is under <a href="../../viz/">Visualization</a>):</p>
+<figure class="kd-figure" markdown="0">
+  <img src="../../images/llm4ed-convergence.png" alt="Best LLM4ED reward and the pool's worst reward per round">
+  <figcaption>The best reward is 0.9889 in the first round and unchanged over the remaining 11: the answer is already in the opening batch of coefficient-free proposals. The pool behind it continues to improve, with its worst member starting at 0.6679 and reaching 0.8605 by round 9.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../../images/llm4ed-panels.png" alt="Pool reward spread, invalid proposal count and cumulative call panels">
+  <figcaption>Left: the reward band of the elite pool, best against median against worst; the median climbs from 0.6815 to 0.9124 as later rounds displace the pool's weaker members. Middle: proposals per round that failed to parse or to solve, between 11 and 60, most of them at round 4. Right: the running total of calls made to the endpoint, 40 across the 12 rounds, which is the run's budget as it is spent.</figcaption>
+</figure>
+
+<div class="highlight"><pre><span></span><code><span class="n">viz</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">VizEngine</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;out/heat&quot;</span><span class="p">)</span>
+<span class="n">viz</span><span class="o">.</span><span class="n">render_all</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">algorithm_</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="method">Method</h2>
-<p>(to be written)</p>
+<p>The language model is the search operator. It never sees the data: it is given a
+symbol library, told what to write, and shown how its previous proposals scored.</p>
+<p>The library is fixed for the run: the operators <code>+ - * / ^2 ^3</code> over the
+operands <code>u</code>, <code>u_x</code>, <code>u_xx</code>, <code>u_xxx</code> and <code>x</code>. Every candidate is a right-hand
+side written in it. The first round asks for a batch of
+coefficient-free equations. Every round after that alternates between two
+prompts: one lays the scored history out in ascending order and asks for
+equations that would score higher, the other asks the model to carry out the
+genetic operations itself, selecting two term sets, crossing them and mutating
+the result.</p>
+<p>Scoring is KD's, not the model's. Each proposed equation is parsed into terms,
+the terms are differentiated from the data by finite difference, a sparse
+regression (STRidge) fits the coefficients, and the reward is
+<code>(1 - 0.01 k) / (1 + RMSE / std(u_t))</code> for the <code>k</code> terms that survive with a
+nonzero coefficient. Candidates at or below <code>reward_limit</code> are dropped, as are
+ones whose reward repeats a reward already collected this round, and the round
+keeps the best <code>samples_per_epoch</code> of what is left. Those go into an elite pool
+of <code>pool_size</code>, and the next round's prompt shows the model that pool.
+One round is one KD iteration, and <code>generations</code> sets how many are run.</p>
 <h2 id="references">References</h2>
 <p>Du et al. (2024). "Large language models for automatic equation discovery of nonlinear dynamics". <em>Phys. Fluids</em> 36, 097121. <a href="https://doi.org/10.1063/5.0224297">Paper</a> · <a href="https://arxiv.org/abs/2405.07761">arXiv:2405.07761</a></p>
 <p>Code: <a href="https://github.com/menggedu/EDL">menggedu/EDL</a></p>

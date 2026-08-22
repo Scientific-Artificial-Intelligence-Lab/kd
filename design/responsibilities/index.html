@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1669,30 +1759,32 @@
 
 
 <h1 id="platform-and-plugins">Platform and plugins</h1>
-<p>The division that everything else follows: an algorithm keeps its scientific decisions,
-the platform keeps the work that is identical for all seven. It is what makes seven
-published methods one library rather than seven scripts sharing a folder.</p>
+<p>KD is organized as a platform with algorithm plugins. Each plugin implements the
+algorithm-specific search procedure and scientific logic, while the platform provides the
+infrastructure shared across algorithms, including data preparation, derivative
+computation, term evaluation, coefficient fitting, run management, visualization,
+checkpointing, and batch execution.</p>
 <h2 id="the-plugin-contract">The plugin contract</h2>
-<p>The contract is small. An algorithm prepares itself against the components it was
-handed, proposes candidates, evaluates them, updates itself on the results, exposes its
-best score and best expression, serializes its configuration and its state, and builds
-its own final result and the target that result is expressed in.</p>
-<p>Those members are checked when a run starts, and a missing one raises a single error
-naming every gap, so an incomplete algorithm fails at the door rather than halfway
-through a search.</p>
-<p>What the platform gives back is the run itself: the iteration loop, batches kept in 1:1
-correspondence with what was proposed, callbacks for early stopping and for collecting
-figure data, checkpoints written atomically from the algorithm's own state, the run
-record, and the assembled result object.</p>
-<p>One thing it deliberately does not do is re-score the winner. The algorithm builds its
-final result, because the residuals and the target have to come from the same domain,
-and splitting that across the two sides is how a result ends up describing a quantity
-nobody computed.</p>
+<p>An algorithm plugin implements the following members. It prepares itself against the
+components the platform hands it, proposes candidates, evaluates them, updates itself on
+the results, exposes its best score and best expression, serializes its configuration
+and its state, and builds its own final result together with the target that result is
+expressed in.</p>
+<p>KD checks these members when a run starts. A missing member raises a single error that
+names every gap, so an incomplete algorithm fails before the search begins.</p>
+<p>The platform provides the iteration loop, keeps batches in 1:1 correspondence with the
+candidates the algorithm proposed, calls back for early stopping and for figure data,
+writes checkpoints atomically from the algorithm's own state, keeps the run record, and
+assembles the result object.</p>
+<p>The platform does not re-score the winning candidate. The algorithm builds its own final
+result because the residuals and the target must be computed in the same domain. If the
+platform computed the residuals while the algorithm supplied the target, the two could
+refer to different quantities.</p>
 <h2 id="optional-services">Optional services</h2>
-<p>Derivatives, term execution, the design matrix, the solver, surrogate training: an
-algorithm uses what suits it and brings the rest. Nothing degrades when it declines, and
-the ones that decline are not exceptions to the design, they are the reason the boundary
-sits where it does.</p>
+<p>The platform also provides derivatives, term execution, the design matrix, the linear
+solver, and surrogate network training. An algorithm uses the services that fit its
+method and implements the rest itself. The table below lists what each algorithm
+implements on its own.</p>
 <table>
 <thead>
 <tr>
@@ -1732,11 +1824,11 @@ sits where it does.</p>
 </tbody>
 </table>
 <h2 id="declared-capabilities">Declared capabilities</h2>
-<p>Each algorithm declares what it can accept and what it costs, as data on the class:
-the equation forms and data layouts of each mode, where that mode's derivatives come
-from, what its score is called and which direction is better, whether it returns
-everything in one shot, which parameters exist and which of them survive a resume, and
-which fields change the scientific identity of a run.</p>
+<p>Each algorithm declares its capabilities as data on the class. The declaration covers
+the equation forms and data layouts of each mode, the source of that mode's derivatives,
+the name and direction of its score, whether the algorithm returns its answer in one
+shot, which parameters exist and which of them survive a resume, and which parameters
+change the scientific identity of a run.</p>
 <p><code>kd.instrument_schemas()</code> returns those declarations, one entry per algorithm:</p>
 <div class="highlight"><pre><span></span><code><span class="n">schema</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">kd</span><span class="o">.</span><span class="n">instrument_schemas</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;algorithm&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;pysindy&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">schema</span><span class="p">[</span><span class="s2">&quot;score_kind&quot;</span><span class="p">],</span> <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;score_direction&quot;</span><span class="p">],</span> <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;one_shot&quot;</span><span class="p">])</span>
@@ -1747,16 +1839,16 @@ which fields change the scientific identity of a run.</p>
 [{&#39;name&#39;: &#39;default&#39;, &#39;forms&#39;: [&#39;EVOLUTION&#39;], &#39;topologies&#39;: [&#39;grid&#39;], &#39;provider_kind&#39;: &#39;finite_diff&#39;, &#39;description&#39;: &#39;&#39;}]
 [(&#39;threshold&#39;, &#39;init_only&#39;), (&#39;max_iter&#39;, &#39;init_only&#39;), (&#39;normalize_columns&#39;, &#39;init_only&#39;)]
 </code></pre></div>
-<p>The platform reads the declaration instead of keeping tables of its own: which provider
-to build, which datasets to accept, how to label a score, what a resume may change. A
-program driving KD reads the same call, and the specification strips and parameter
-tables on this site are generated from it, which is why they cannot drift from the code
-they describe.</p>
-<p>The cost class in that entry (<code>light</code>, <code>medium</code>, <code>heavy</code>) is a routing hint declared up
-front, not a measurement, and it is the one field to read as an estimate rather than a
-fact.</p>
-<p>Algorithms are registered inside the package, and the seven above are what a released
-version offers; an eighth arrives by being added to KD, together with its declaration.</p>
+<p>The platform reads the declaration rather than keeping its own tables of the same
+information. It uses the declaration to decide which derivative provider to build, which
+datasets to accept, how to label a score, and what a resume may change. Programs driving
+KD read the same call, and the specification strips and parameter tables on this site are
+generated from it, so they cannot diverge from the code they describe.</p>
+<p>The cost class in that entry (<code>light</code>, <code>medium</code>, <code>heavy</code>) is declared by the algorithm
+rather than measured at runtime. It is an estimate used for routing.</p>
+<p>Algorithms are registered inside the package, and the seven listed above are the ones a
+released version provides. An additional algorithm is added to KD together with its
+declaration.</p>
 
 
 

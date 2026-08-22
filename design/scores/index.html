@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -617,10 +707,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#refit-on-one-footing" class="md-nav__link">
+  <a href="#refit-against-the-same-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Refit on one footing
+        Refit against the same data
       
     </span>
   </a>
@@ -1619,10 +1709,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#refit-on-one-footing" class="md-nav__link">
+  <a href="#refit-against-the-same-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Refit on one footing
+        Refit against the same data
       
     </span>
   </a>
@@ -1669,24 +1759,24 @@
 
 
 <h1 id="score-conventions-and-comparability">Score conventions and comparability</h1>
-<p>The platform ranks nothing across algorithms. What it offers instead is one way to
-refit the candidate terms against the same data.</p>
+<p>KD does not rank algorithms against one another. It provides a way to refit candidate
+terms against the same data so that the resulting numbers can be compared.</p>
 <p><code>model.best_score_</code> is that algorithm's own objective value. Its name and its direction
-are declared per algorithm: some report AIC, some report NMSE, some report a reward
-they define themselves, and both <code>min</code> and <code>max</code> directions are in use. The score cell
-in the spec strip at the top of each algorithm page is exactly these two facts. The
-same number from two different algorithms is not a comparison.</p>
-<p><code>model.result_.score_kind</code> and <code>score_direction</code> are how to read those two
-programmatically. <code>score_kind</code> is a stable identifier: two scores are commensurable
-only when the kind, the dataset and the scorer all match, which across algorithms they
-generally do not.</p>
-<h2 id="refit-on-one-footing">Refit on one footing</h2>
-<p><code>kd.evaluate_terms</code> takes a set of terms back to the same data and fits them once, with
-the same derivatives and the same least-squares solver. It is one step longer than
-converting the native scores would be, and what it buys is a number that points at a
-particular fit rather than at a conversion. Put the term sets you want to
-compare through that step and the resulting nmse, r2 and coefficients are quantities in
-one frame.</p>
+are declared per algorithm: some report AIC, some report NMSE, and some report a reward
+they define themselves, with both <code>min</code> and <code>max</code> directions in use. The score cell in
+the spec strip at the top of each algorithm page reports these two facts. Equal score
+values from two different algorithms therefore do not indicate equal quality.</p>
+<p><code>model.result_.score_kind</code> and <code>score_direction</code> expose those two facts
+programmatically. <code>score_kind</code> is a stable identifier. Two scores are comparable only
+when the kind, the dataset and the scorer all match, and across algorithms these
+conditions generally do not hold.</p>
+<h2 id="refit-against-the-same-data">Refit against the same data</h2>
+<p><code>kd.evaluate_terms</code> takes a set of terms back to the same data and fits them once, using
+the same derivatives and the same least-squares solver. This requires one additional
+step compared with converting the native scores, and it produces a number that refers to
+a specific fit rather than to a conversion. When the term sets under comparison are all
+evaluated this way, the resulting nmse, r2 and coefficients are measured in the same
+frame.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_kdv</span><span class="p">()</span>
@@ -1704,29 +1794,30 @@ one frame.</p>
 [&#39;mul(u, u_x)&#39;, &#39;diff_x(diff2_x(u))&#39;]
   nmse 2.903e-05 coefficients [-1.0, -0.0025]
 </code></pre></div>
-<p>The two sets differ in a second versus a third derivative. The second one is the true
-support of KdV: the refit returns <code>-1.0</code> and <code>-0.0025</code>, matching the reference
-equation, at an nmse more than four orders of magnitude lower. Those two nmse values
-may be compared with each other, because both fits used the same data, the same
-derivatives and the same solver.</p>
+<p>The two sets differ in a second versus a third derivative. The second set is the true
+support of KdV: the refit returns <code>-1.0</code> and <code>-0.0025</code>, matching the reference equation,
+at an nmse more than four orders of magnitude lower. These two nmse values can be
+compared with each other, because both fits used the same data, the same derivatives and
+the same solver.</p>
 <p>Besides <code>nmse</code>, <code>mse</code>, <code>r2</code> and <code>coefficients</code>, the returned <code>EvaluationResult</code> carries
-<code>condition_number</code>, the condition number of the columns this fit was handed, which is
-how to tell whether the candidate terms are collinear.</p>
+<code>condition_number</code>, the condition number of the columns this fit was handed, which
+indicates whether the candidate terms are collinear.</p>
 <h2 id="the-comparison-figure">The comparison figure</h2>
 <p><code>kd.VizEngine.render_comparison</code> overlays several runs: their score curves, a bar chart
 of final scores and R², and a summary table carrying each run's expression, nmse, r2 and
 how its term set differs from the first run's.</p>
 <p>The mean and standard deviation band over those curves is drawn only across runs that
-share one algorithm and one declared score kind and direction. Overlay a run reporting
-AIC with one reporting a reward and the band is dropped, a subtitle on the figure states
-that the curve trends are not comparable, and the accompanying warning points at the
-final nmse and r2 instead. Two different algorithms that happen to report the same metric
-lose the band as well, since one band over two populations describes neither.</p>
+share one algorithm and one declared score kind and direction. If a run reporting AIC is
+overlaid with one reporting a reward, the band is dropped, a subtitle on the figure
+states that the curve trends are not comparable, and the accompanying warning points to
+the final nmse and r2 instead. Two different algorithms that report the same metric also
+lose the band, because a single band over two populations does not describe either of
+them.</p>
 <h2 id="accepted-term-forms">Accepted term forms</h2>
-<p>One string is one term, in function-call form (see
-<a href="../ir/">Equation representation</a>). Infix notation and a top-level sum are
-rejected with the reason spelled out. <code>kd.validate_terms</code> classifies without fitting,
-so it can be used as a first pass:</p>
+<p>Each string is a single term in function-call form (see
+<a href="../ir/">Equation representation</a>). Infix notation and a top-level sum are rejected, and
+the rejection carries the reason. <code>kd.validate_terms</code> classifies terms without fitting
+them, so it can be used as a first pass:</p>
 <div class="highlight"><pre><span></span><code><span class="n">report</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">validate_terms</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;u + u_xx&quot;</span><span class="p">,</span> <span class="s2">&quot;add(u, u_xx)&quot;</span><span class="p">,</span> <span class="s2">&quot;mul(u, u_x)&quot;</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">valid</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">rejection</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">rejected</span><span class="p">:</span>
@@ -1736,10 +1827,10 @@ so it can be used as a first pass:</p>
 u + u_xx | syntax: non-canonical term (funcall IR required); Infix operators (e.g., &#39;a + b&#39;) are not allowed. Use function-call IR: add(a, b), mul(a, b), etc.
 add(u, u_xx) | composite: top-level additive structure; submit as 2 separate terms: [&#39;u&#39;, &#39;u_xx&#39;]
 </code></pre></div>
-<p><code>kd.evaluate_terms</code> is strict by default: one rejected term raises <code>InvalidTermsError</code>
-carrying the complete rejection list, not just the first offender. Pass
-<code>skip_invalid=True</code> and the rejected terms are dropped, the survivors are fitted, and
-one warning names what was dropped.</p>
+<p><code>kd.evaluate_terms</code> is strict by default. One rejected term raises <code>InvalidTermsError</code>
+carrying the complete list of rejections rather than only the first one. Pass
+<code>skip_invalid=True</code> and the rejected terms are dropped, the remaining terms are fitted,
+and one warning names what was dropped.</p>
 <div class="admonition warning">
 <p class="admonition-title">Terminology</p>
 <p><code>model.result_.run_record.evidence.headline_coefficient_source</code> records who

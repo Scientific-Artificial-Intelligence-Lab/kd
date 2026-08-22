@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1713,13 +1803,13 @@
 
 
 <h1 id="equation-representation">Equation representation</h1>
-<p>Everywhere an equation shows up in KD it is the same term strings: an algorithm's input
-configuration, the answer it hands back, the argument to <code>kd.evaluate_terms</code>. Each
-algorithm holds candidates in its own data structure internally and converts on the way
-out.</p>
-<p>The notation describes structure, not display. It is not trying to look like the
-notation in a paper; it is trying to guarantee that one law, whoever derived it, is
-written as one string.</p>
+<p>Equations are represented the same way everywhere in KD, as term strings. This applies
+to an algorithm's input configuration, the answer it returns, and the argument to
+<code>kd.evaluate_terms</code>. Each algorithm holds candidates in its own data structure
+internally and converts them on the way out.</p>
+<p>The notation describes structure rather than display. It is not intended to resemble
+the notation used in a paper. Its purpose is to ensure that one law is written as one
+string regardless of which algorithm produced it.</p>
 <h2 id="term-syntax">Term syntax</h2>
 <p>A term is a prefix function call, or a terminal token.</p>
 <table>
@@ -1764,17 +1854,17 @@ Six of them route through
 guarded implementations: <code>div</code> and <code>recip</code> floor a near-zero denominator, <code>log</code> floors
 a near-zero argument, and <code>exp</code>, <code>n2</code> and <code>n3</code> clamp their input magnitude, so none of
 these six produces an inf or a nan from a zero denominator or an overflowing exponent.</p>
-<p>Coefficients are not part of a term: an algorithm hands back terms, coefficients and a
-left-hand side separately, and the term string describes structure only. Whether two
-terms are the same is therefore independent of what multiplies them: <code>mul(u, u_x)</code> is
-<code>mul(u, u_x)</code> whether the fit put -1 or -0.5 in front of it. Writing a constant into a
-term is accepted (<code>mul(2, u)</code> is a valid term), but the fitted coefficient absorbs it,
-so it buys nothing.</p>
-<p>How far the terminal tokens go is set by <code>max_order</code> (a parameter of
-<code>kd.evaluate_terms</code> and <code>kd.validate_terms</code>), which defaults to 2, so <code>u_xx</code> can be
-written directly. Derivatives written as calls are not bounded by <code>max_order</code>, so
-<code>diff_x(diff2_x(u))</code> resolves under the default settings (the on-the-fly
-finite-difference scheme reaches third order).</p>
+<p>Coefficients are not part of a term. An algorithm returns terms, coefficients and a
+left-hand side separately, and the term string describes structure only. Two terms are
+therefore identical regardless of the coefficient fitted for them: <code>mul(u, u_x)</code> has the
+same term string whether the fit returned -1 or -0.5. A constant written into a term is
+accepted (<code>mul(2, u)</code> is a valid term), but the fitted coefficient absorbs it, so the
+constant has no effect.</p>
+<p><code>max_order</code> sets the highest derivative order available as a terminal token. It is a
+parameter of <code>kd.evaluate_terms</code> and <code>kd.validate_terms</code> and defaults to 2, so <code>u_xx</code>
+can be written directly. Derivatives written as calls are not bounded by <code>max_order</code>, so
+<code>diff_x(diff2_x(u))</code> resolves under the default settings, because the on-the-fly
+finite-difference scheme reaches third order.</p>
 <h2 id="notation-on-the-input-side">Notation on the input side</h2>
 <p>Candidate-term libraries and operator sets are written in the same IR as the terms that
 come back out:</p>
@@ -1842,8 +1932,8 @@ one.</p>
 add(mul(u,u_x), diff_x(diff2_x(u)))
 1f62a06976f85133 (&#39;diff_x(diff2_x(u))&#39;, &#39;mul(u,u_x)&#39;, &#39;u_t&#39;)
 </code></pre></div>
-<p>The display strings differ, the <code>structure_key</code> does not. That key is what to align
-results on across algorithms.</p>
+<p>The display strings differ while the <code>structure_key</code> is the same. That key is used
+to align results across algorithms.</p>
 <p>Settle on one spelling for the derivatives before you align on it. The canonical form
 does no algebraic rewriting, so the terminal token <code>u_xx</code> and the call <code>diff2_x(u)</code> are
 two different terms, and one equation written both ways yields two different

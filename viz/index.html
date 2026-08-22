@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1539,10 +1629,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#shared-panels" class="md-nav__link">
+  <a href="#platform-figures" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Shared panels
+        Platform figures
       
     </span>
   </a>
@@ -1550,10 +1640,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#each-algorithms-own-diagnostics" class="md-nav__link">
+  <a href="#algorithm-panels" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Each algorithm's own diagnostics
+        Algorithm panels
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#figure-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Figure index
       
     </span>
   </a>
@@ -1587,32 +1699,50 @@ candidate library. Looking at any of them is the same call: hand the fitted resu
 <code>algorithm=</code> and the figures follow, with nothing new to learn about how to read
 them. This page is the gallery; <a href="howto/">Figure generation</a> covers how to
 render them for your own run.</p>
-<h2 id="shared-panels">Shared panels</h2>
+<h2 id="platform-figures">Platform figures</h2>
 <p>Whichever algorithm ran, <code>VizEngine</code> draws the same group: best score per
-iteration (the convergence curve), measured against predicted, the equation
-typeset and as a structure tree, and the residual as a histogram and as a
-spatial map. Pass the dataset as well and it adds a coefficient bar chart, the
-field comparison (observed, integrated prediction, difference), the <code>u_t</code>
+iteration, measured against predicted, the equation typeset and as a structure
+tree, the fitted coefficients, and the residual as a histogram and as a spatial
+map. Pass the dataset as well and it adds the field comparison, the <code>u_t</code>
 residual field, time slices and an error heatmap.</p>
-<p>The three figures below come from one run: SGA-PDE on the KdV dataset that ships
+<p>The six figures below come from one run: SGA-PDE on the KdV dataset that ships
 with KD, 200 generations, seed 42.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../images/sga-field.png" alt="Heatmap of the KdV field u(x, t)">
-  <figcaption>The observations: u(x, t) of the KdV dataset. Every other figure here is computed against it.</figcaption>
+  <figcaption>The observed field u(x, t) of the KdV dataset. Every other figure on this page is computed against it.</figcaption>
 </figure>
 
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../images/sga-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
-  <figcaption>The discovered equation put back against the data: measured u_t on the left, the equation's u_t in the middle on a shared color scale, their difference on the right. The NMSE of this run is 2.7e-06.</figcaption>
+  <figcaption>The discovered equation evaluated against the data: measured u_t on the left, the equation's u_t in the middle on a shared color scale, their difference on the right. The nmse of this run is 2.7e-06.</figcaption>
+</figure>
+
+<figure class="kd-figure" markdown="0">
+  <img src="../images/sga-parity.png" alt="Predicted u_t against measured u_t, with a 45-degree reference line">
+  <figcaption>The same agreement as a scatter: all 51,456 grid points against the 45-degree line, at an R² of 0.999997. This figure is read the same way for every algorithm and every equation.</figcaption>
 </figure>
 
 <figure class="kd-figure" markdown="0">
   <img src="../images/sga-convergence.png" alt="Best AIC and population mean AIC per generation">
-  <figcaption>The convergence curve: the solid line is the best score per generation, an AIC for this run, where lower is better, settling at −19.42. The dashed line is the same run's population mean, which keeps moving after the best has settled.</figcaption>
+  <figcaption>The convergence curve. The solid line is the best score per generation, an AIC for this run, where lower is better, settling at −19.42 by generation 9. The dashed line is the same run's population mean, which keeps moving after the best has settled.</figcaption>
 </figure>
 
-<h2 id="each-algorithms-own-diagnostics">Each algorithm's own diagnostics</h2>
-<p>The shared group answers whether the result is right; an algorithm's own panels
+<figure class="kd-figure" markdown="0">
+  <img src="../images/sga-coefficient-bar.png" alt="Bar chart of the two fitted coefficients on a symmetric log axis">
+  <figcaption>The fitted coefficients on a symmetric log axis, since the two span two decades: −0.0025 on u_xxx and −0.5 on (u²)_x, which is the same law as −u u_x. The bars carry the algorithm's own coefficients rather than a platform refit.</figcaption>
+</figure>
+
+<figure class="kd-figure" markdown="0">
+  <img src="../images/sga-equation-tree.png" alt="The discovered equation drawn as an expression tree">
+  <figcaption>The answer as a structure tree: six nodes over four rows, with the coefficients left off, so the figure shows the shape of the equation rather than its magnitudes. <a href="../../design/ir/">Equation representation</a> covers the notation.</figcaption>
+</figure>
+
+<p>One call renders all 15 of them into a single HTML file, every figure inlined as
+SVG, together with the run's settings and its full result as JSON. The one from
+the configuration above is published here:
+<a href="sga-kdv-report.html" rel="noopener" target="_blank">example report</a> (1.7 MB).</p>
+<h2 id="algorithm-panels">Algorithm panels</h2>
+<p>The group above answers whether the result is right; an algorithm's own panels
 answer how it got there, so each algorithm declares and draws its own:</p>
 <ul>
 <li><strong>SGA-PDE, DLGA-PDE</strong>: population-level records, per generation the diversity of the
@@ -1633,134 +1763,238 @@ answer how it got there, so each algorithm declares and draws its own:</p>
 <li><strong>PySINDy</strong>: one comparison figure putting the NMSE of PySINDy's native
   coefficients next to the NMSE of KD's independent refit.</li>
 </ul>
+<p>Each row below is one algorithm's panels, from that algorithm's own worked run.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
-  <img src="../images/sga-panels.png" alt="Offspring diversity, complexity evolution and fitness spread panels">
-  <figcaption>SGA-PDE's three panels, from the KdV run above. Left: distinct candidate expressions per generation. Middle: mean term count of the generation's candidates. Right: mean AIC of the surviving population.</figcaption>
+  <img src="../images/sga-panels.png" alt="SGA-PDE offspring diversity, complexity evolution and fitness spread">
+  <figcaption>SGA-PDE on KdV: distinct candidate expressions per generation, mean term count, and mean AIC of the surviving population.</figcaption>
 </figure>
 
-<p>Of the seven algorithms, SGA-PDE is the one whose panels are rendered here so far;
-the figures for the other six are still to be rendered. The table below lists the
-panels each algorithm draws from its per-iteration record. Two more are composed at
-render time and are not in it: SGA-PDE's genome tree, and EqGPT's panels in multi-case
-and steady mode. At run time <code>plugin.list_plots()</code> returns the complete set.</p>
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/dlga-panels.png" alt="DLGA-PDE population diversity, complexity evolution and fitness spread">
+  <figcaption>DLGA-PDE on Burgers: the same three panels from a different algorithm. The fitness axis is logarithmic, so the one generation whose mean is carried into the thousands by an ill-conditioned candidate stays readable.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/discover-panels.png" alt="DISCOVER reward curves and entropy loss">
+  <figcaption>DISCOVER on Chafee-Infante: reward of the top 2% of draws, reward over the whole batch of 500, and the entropy regularizer. A policy-gradient search records the state of the network rather than the contents of a population.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/eqgpt-panels.png" alt="EqGPT pool reward spread and fine-tuning loss">
+  <figcaption>EqGPT on Burgers: the reward band of the elite pool, best against median against worst, and the cross-entropy loss of each epoch's fine-tune on that pool.</figcaption>
+</figure>
+
+<figure class="kd-figure kd-figure--wide" markdown="0">
+  <img src="../images/llm4ed-panels.png" alt="LLM4ED pool reward spread, invalid proposals and cumulative calls">
+  <figcaption>LLM4ED on the heat dataset: the pool's reward band, the proposals per round that failed to parse or to solve, and and the running total of endpoint calls, which tracks the run's budget.</figcaption>
+</figure>
+
+<h2 id="data-shape">Data shape</h2>
+<p>Which figures a run gets follows from the shape of its data rather than from the
+algorithm. Data on a regular grid gets the whole set. Scattered measurements
+carry point coordinates and no grid, so the field family is left out and the
+rest draws as usual; the
+<a href="../examples/wave_breaking/">breaking-waves example</a> is a run of that kind. A
+table of <code>X</code> against <code>y</code> has no field at all, and the coefficient bar follows
+whether the run returned an equation rather than on the shape of the data.
+Two-dimensional space plus time adds one more: pass <code>animate=True</code> and
+<code>render_all</code> writes a GIF of the field evolving.</p>
+<p>Whatever is left out is named in <code>report.warnings</code>, one note per figure family,
+and the same notes appear on the report page.</p>
+<h2 id="figure-index">Figure index</h2>
+<p>Every figure KD draws, and the call that draws just that one. The platform half
+runs for any result; the rest belong to the algorithm named beside them. Two are
+composed at render time and are not listed: SGA-PDE's genome tree, and EqGPT's
+panels in multi-case and steady mode. At run time <code>plugin.list_plots()</code> returns
+the complete set for the algorithm that ran.</p>
 <table>
 <thead>
 <tr>
-<th>Algorithm</th>
-<th>Panel</th>
-<th>Title</th>
+<th>Figure</th>
+<th>Call</th>
+<th>Owner</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>SGA-PDE</td>
-<td><code>population_diversity</code></td>
+<td>Coefficient bar</td>
+<td><code>kd.viz.plots.plot_coefficient_bar(result, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Convergence</td>
+<td><code>kd.viz.plots.plot_convergence(result, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Equation</td>
+<td><code>kd.viz.plots.plot_equation(result, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Equation tree</td>
+<td><code>kd.viz.plots.plot_equation_tree(result, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Error heatmap</td>
+<td><code>kd.viz.plots.plot_error_heatmap(dataset, integration_result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Field animation</td>
+<td><code>kd.viz.plots.plot_field_animation(dataset, integration_result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Field comparison</td>
+<td><code>kd.viz.plots.plot_field_comparison(dataset, integration_result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Parity</td>
+<td><code>kd.viz.plots.plot_parity(result, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Pde residual field</td>
+<td><code>kd.viz.plots.plot_pde_residual_field(result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Residual</td>
+<td><code>kd.viz.plots.plot_residual(result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Score bar</td>
+<td><code>kd.viz.plots.plot_score_bar(results, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Summary table</td>
+<td><code>kd.viz.plots.plot_summary_table(results, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Time slices</td>
+<td><code>kd.viz.plots.plot_time_slices(dataset, integration_result)</code></td>
+<td>platform</td>
+</tr>
+<tr>
+<td>Overlaid convergence</td>
+<td><code>kd.viz.plots.render_overlaid_convergence(results, ax)</code></td>
+<td>platform</td>
+</tr>
+<tr>
 <td>Offspring Diversity</td>
+<td><code>plugin.render_plot("population_diversity", ax)</code></td>
+<td>SGA-PDE</td>
 </tr>
 <tr>
-<td>SGA-PDE</td>
-<td><code>complexity_evolution</code></td>
 <td>Complexity Evolution</td>
+<td><code>plugin.render_plot("complexity_evolution", ax)</code></td>
+<td>SGA-PDE</td>
 </tr>
 <tr>
-<td>SGA-PDE</td>
-<td><code>fitness_spread</code></td>
 <td>Fitness Spread</td>
+<td><code>plugin.render_plot("fitness_spread", ax)</code></td>
+<td>SGA-PDE</td>
 </tr>
 <tr>
-<td>SGA-PDE</td>
-<td><code>surrogate_training</code></td>
 <td>Surrogate Training Curve</td>
+<td><code>plugin.render_plot("surrogate_training", ax)</code></td>
+<td>SGA-PDE</td>
 </tr>
 <tr>
-<td>DLGA-PDE</td>
-<td><code>fitness_spread</code></td>
 <td>Fitness Spread</td>
+<td><code>plugin.render_plot("fitness_spread", ax)</code></td>
+<td>DLGA-PDE</td>
 </tr>
 <tr>
-<td>DLGA-PDE</td>
-<td><code>population_diversity</code></td>
 <td>Population Diversity</td>
+<td><code>plugin.render_plot("population_diversity", ax)</code></td>
+<td>DLGA-PDE</td>
 </tr>
 <tr>
-<td>DLGA-PDE</td>
-<td><code>complexity_evolution</code></td>
 <td>Complexity Evolution</td>
-</tr>
-<tr>
+<td><code>plugin.render_plot("complexity_evolution", ax)</code></td>
 <td>DLGA-PDE</td>
-<td><code>surrogate_training</code></td>
+</tr>
+<tr>
 <td>Surrogate Training Curve</td>
+<td><code>plugin.render_plot("surrogate_training", ax)</code></td>
+<td>DLGA-PDE</td>
 </tr>
 <tr>
-<td>DISCOVER</td>
-<td><code>reward_convergence</code></td>
 <td>Reward (Mean of Top ε)</td>
+<td><code>plugin.render_plot("reward_convergence", ax)</code></td>
+<td>DISCOVER</td>
 </tr>
 <tr>
-<td>DISCOVER</td>
-<td><code>reward_full_mean</code></td>
 <td>Reward (Full-Batch Mean)</td>
+<td><code>plugin.render_plot("reward_full_mean", ax)</code></td>
+<td>DISCOVER</td>
 </tr>
 <tr>
-<td>DISCOVER</td>
-<td><code>entropy_loss_decay</code></td>
 <td>Entropy Loss</td>
-</tr>
-<tr>
+<td><code>plugin.render_plot("entropy_loss_decay", ax)</code></td>
 <td>DISCOVER</td>
-<td><code>baseline_ewma</code></td>
+</tr>
+<tr>
 <td>Reward Baseline</td>
+<td><code>plugin.render_plot("baseline_ewma", ax)</code></td>
+<td>DISCOVER</td>
 </tr>
 <tr>
-<td>EqGPT</td>
-<td><code>reward_convergence</code></td>
 <td>Reward Convergence</td>
+<td><code>plugin.render_plot("reward_convergence", ax)</code></td>
+<td>EqGPT</td>
 </tr>
 <tr>
-<td>EqGPT</td>
-<td><code>pool_reward_spread</code></td>
 <td>Pool Reward Spread</td>
+<td><code>plugin.render_plot("pool_reward_spread", ax)</code></td>
+<td>EqGPT</td>
 </tr>
 <tr>
-<td>EqGPT</td>
-<td><code>finetune_loss</code></td>
 <td>Fine-tune Loss</td>
+<td><code>plugin.render_plot("finetune_loss", ax)</code></td>
+<td>EqGPT</td>
 </tr>
 <tr>
-<td>LLM4ED</td>
-<td><code>pool_reward_spread</code></td>
 <td>Pool Reward Spread</td>
+<td><code>plugin.render_plot("pool_reward_spread", ax)</code></td>
+<td>LLM4ED</td>
 </tr>
 <tr>
-<td>LLM4ED</td>
-<td><code>invalid_count</code></td>
 <td>Invalid Count</td>
-</tr>
-<tr>
+<td><code>plugin.render_plot("invalid_count", ax)</code></td>
 <td>LLM4ED</td>
-<td><code>llm_calls</code></td>
+</tr>
+<tr>
 <td>Cumulative LLM Calls</td>
+<td><code>plugin.render_plot("llm_calls", ax)</code></td>
+<td>LLM4ED</td>
 </tr>
 <tr>
-<td>PySR</td>
-<td><code>pareto_front</code></td>
 <td>Pareto Front</td>
+<td><code>plugin.render_plot("pareto_front", ax)</code></td>
+<td>PySR</td>
 </tr>
 <tr>
-<td>PySR</td>
-<td><code>kd_audit_path</code></td>
 <td>kd Audit Path</td>
-</tr>
-<tr>
+<td><code>plugin.render_plot("kd_audit_path", ax)</code></td>
 <td>PySR</td>
-<td><code>score_agreement</code></td>
-<td>Score Agreement</td>
 </tr>
 <tr>
-<td>PySINDy</td>
-<td><code>native_refit_agreement</code></td>
+<td>Score Agreement</td>
+<td><code>plugin.render_plot("score_agreement", ax)</code></td>
+<td>PySR</td>
+</tr>
+<tr>
 <td>Native vs Refit NMSE</td>
+<td><code>plugin.render_plot("native_refit_agreement", ax)</code></td>
+<td>PySINDy</td>
 </tr>
 </tbody>
 </table>

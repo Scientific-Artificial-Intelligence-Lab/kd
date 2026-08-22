@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1784,7 +1874,7 @@
 </details>
 <h2 id="the-kd-wrapper">The KD wrapper</h2>
 <p>PySINDy is a third-party package, installed separately, and its authors document
-the method itself. What is specific to driving it from KD is this.</p>
+the method itself. The points below are specific to driving it from KD.</p>
 <p><strong>It runs once.</strong> One sparse-regression solve answers the whole run, so a KD run
 has a single iteration rather than a search curve across generations.</p>
 <p><strong>KD supplies the derivatives and the library; PySINDy supplies the solve.</strong>
@@ -1792,9 +1882,9 @@ has a single iteration rather than a search curve across generations.</p>
 function-call notation, and the sequentially thresholded least squares over them
 is PySINDy's own.</p>
 <p><strong>The coefficients are PySINDy's own.</strong> Its full coefficient vector is kept in
-the result, so what <code>best_expr_</code> prints is what the solve produced, with no
-refit in between. <code>best_score_</code> follows from the same coefficients: it is their
-NMSE on the data of that run, lower being better.</p>
+the result, so <code>best_expr_</code> prints the coefficients the solve produced, without
+an intervening refit. <code>best_score_</code> follows from the same coefficients: it is
+their NMSE on the data of that run, where lower is better.</p>
 <p><strong>Anything else the optimizer accepts</strong> goes through <code>extra_optimizer_kwargs</code>,
 unchanged.</p>
 <h2 id="references">References</h2>

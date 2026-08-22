@@ -16,7 +16,7 @@
         <link rel="prev" href="../">
       
       
-        <link rel="next" href="../../design/">
+        <link rel="next" href="../your_own_data/">
       
       
         
@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -279,6 +279,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -453,6 +459,90 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1711,7 +1801,7 @@
 
 
 <h1 id="getting-started-discover-a-pde-from-field-data">Getting started: discover a PDE from field data</h1>
-<p>This notebook walks through a compact PDE discovery workflow with kd. We will load a bundled Burgers benchmark with a known equation, inspect the field data, fit a symbolic model in one call, and compare the discovered equation with the ground truth. The final cell keeps the visualization inline so the notebook renders well on GitHub.</p>
+<p>KD recovers the Burgers equation from a bundled benchmark dataset whose equation is known. This notebook loads the data, inspects the field, fits a symbolic model in one call, compares the result with the known equation, and plots the convergence curve.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
 
 <span class="n">ds</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
@@ -1720,7 +1810,7 @@
 <div class="highlight"><pre><span></span><code>u_t = -u * u_x + 0.1 * u_xx
 </code></pre></div>
 <h2 id="look-at-the-data">Look at the data</h2>
-<p>The dataset contains a field <code>u</code> sampled on an <code>(x, t)</code> grid. Before fitting, <code>kd.preview</code> prints the grid, field, and left-hand-side derivative that kd will use.</p>
+<p>The dataset contains a field <code>u</code> sampled on an <code>(x, t)</code> grid. Before fitting, <code>kd.preview</code> prints the grid, the field, and the left-hand-side derivative that KD will use.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 
 <span class="n">kd</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
@@ -1746,9 +1836,9 @@ Fields:
 LHS: u_t  (field=&#39;u&#39;, axis=&#39;t&#39;)
 Status: ready to fit
 </code></pre></div>
-<p><img alt="png" src="../output_3_1.png" /></p>
+<p><img alt="png" src="../getting_started_3_1.png" /></p>
 <h2 id="fit-a-model">Fit a model</h2>
-<p>SGA searches over symbolic expression trees and scores candidate right-hand sides against the target derivative. The <code>generations</code> value is the search budget, so this tutorial uses a small deterministic budget that is still enough to recover a Burgers-like equation.</p>
+<p>SGA-PDE searches over symbolic expression trees and scores candidate right-hand sides against the target derivative. <code>generations</code> sets the search budget. The value below is small enough to run quickly and large enough to recover a Burgers-like equation.</p>
 <div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">best_score_</span><span class="p">)</span>
@@ -1757,7 +1847,7 @@ Status: ready to fit
 -28.776750720652373
 </code></pre></div>
 <h2 id="compare-to-ground-truth">Compare to ground truth</h2>
-<p>Read the discovered equation as kd's best symbolic right-hand side for <code>u_t</code>. The exact string can differ from the compact textbook form, but the useful check is whether it captures the nonlinear advection and diffusion terms.</p>
+<p>The discovered equation is KD's best symbolic right-hand side for <code>u_t</code>. The exact string can differ from the compact textbook form, so the check is whether it contains the nonlinear advection and diffusion terms.</p>
 <div class="highlight"><pre><span></span><code><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Discovered  : </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">best_expr_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ground truth: </span><span class="si">{</span><span class="n">ds</span><span class="o">.</span><span class="n">ground_truth</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
@@ -1779,18 +1869,18 @@ of warning strings, empty when the curve was drawn.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </code></pre></div>
-<p><img alt="png" src="../output_9_0.png" /></p>
+<p><img alt="png" src="../getting_started_9_0.png" /></p>
 <h2 id="next-steps">Next steps</h2>
-<p>This notebook used SGA, but kd ships <strong>seven engines</strong> behind the
-same one-line <code>kd.Model</code> facade. Explore further:</p>
+<p>This notebook used SGA-PDE. KD provides <strong>seven algorithms</strong> behind the same
+<code>kd.Model</code> interface:</p>
 <ul>
-<li>Bring your own field data with <a href="https://github.com/Mao-Hao/KD/blob/main/examples/02_your_data.py"><code>examples/02_your_data.py</code></a>.</li>
-<li>Compare all seven engines on one dataset, one unified NMSE ruler, with
-  <a href="https://github.com/Mao-Hao/KD/blob/main/examples/09_compare_algorithms.py"><code>examples/09_compare_algorithms.py</code></a>:
+<li>Bring your own field data with <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/02_your_data.py"><code>examples/02_your_data.py</code></a>.</li>
+<li>Compare all seven algorithms on one dataset against a single NMSE measure, with
+  <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/09_compare_algorithms.py"><code>examples/09_compare_algorithms.py</code></a>:
   SGA, DLGA, DISCOVER, PySR, PySINDy, EqGPT, and LLM4ED.</li>
-<li>Or run a single engine on its own: DISCOVER
-  (<a href="https://github.com/Mao-Hao/KD/blob/main/examples/07_discover.py"><code>07</code></a>), DLGA (<a href="https://github.com/Mao-Hao/KD/blob/main/examples/08_dlga.py"><code>08</code></a>), EqGPT
-  (<a href="https://github.com/Mao-Hao/KD/blob/main/examples/16_eqgpt.py"><code>16</code></a>), or LLM4ED (<a href="https://github.com/Mao-Hao/KD/blob/main/examples/17_llm4ed.py"><code>17</code></a>).</li>
+<li>Or run a single algorithm on its own: DISCOVER
+  (<a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/07_discover.py"><code>07</code></a>), DLGA (<a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/08_dlga.py"><code>08</code></a>), EqGPT
+  (<a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/16_eqgpt.py"><code>16</code></a>), or LLM4ED (<a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/17_llm4ed.py"><code>17</code></a>).</li>
 </ul>
 
 

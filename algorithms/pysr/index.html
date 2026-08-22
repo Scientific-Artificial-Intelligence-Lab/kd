@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1692,7 +1782,7 @@
 
 <h1 id="pysr">PySR</h1>
 <p>Multi-population evolutionary search returning a complexity/error Pareto front.</p>
-<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">pysr</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">NMSE <em>min</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">medium</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid</div></div></div>
+<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">pysr</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">NMSE <em>min</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">medium</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION REGRESSION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid tabular</div></div></div>
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
@@ -1794,17 +1884,39 @@
 </details>
 <h2 id="the-kd-wrapper">The KD wrapper</h2>
 <p>PySR is a third-party package, installed separately, and its authors document
-the search itself. What is specific to driving it from KD is this.</p>
+the search itself. The points below are specific to driving it from KD.</p>
 <p><strong>It runs once.</strong> PySR performs one batch search and returns its whole
 hall of fame, so a KD run has a single iteration rather than a curve across
 generations. Asking for more iterations does no further PySR work.</p>
-<p><strong>It regresses over KD's term library.</strong> <code>PySRConfig.terms</code> is the set of
-candidate term columns handed to PySR, in KD's function-call notation, and
-<code>binary_operators</code> and <code>unary_operators</code> are what it may combine them with.</p>
-<p><strong><code>best_score_</code> is KD's number, not PySR's.</strong> PySR's own loss is not what comes
-back: the selected expression is refitted by least squares on the data of that
-run, and the NMSE of that refit is the score, lower being better. The
-coefficients in <code>best_expr_</code> come from the same refit.</p>
+<p><strong>On a PDE dataset it regresses over KD's term library.</strong> <code>PySRConfig.terms</code> is
+the set of candidate term columns handed to PySR, in KD's function-call
+notation. The constants PySR fits are stripped off, leaving the structural
+terms for KD to refit.</p>
+<p><strong>On a table it keeps the expression whole.</strong> Hand <code>fit()</code> a
+<code>kd.TabularDataset</code> and KD runs PySR in its tabular mode: the columns are the
+feature columns of the table, so <code>terms</code> comes from the dataset rather than
+from the configuration, and the expression PySR returns is kept intact, fitted
+constants and all.</p>
+<p><strong>The operators are configurable in either mode.</strong> <code>binary_operators</code> and
+<code>unary_operators</code> define the operators PySR may combine its columns with, and
+both are read from the configuration regardless of which kind of dataset it was
+handed.</p>
+<p><strong><code>best_score_</code> is computed by KD.</strong> PySR's own loss is not returned. The
+selected expression is refitted by least squares on the data of that run, and
+the NMSE of that refit is the score, where lower is better. On a table
+that refit is a single outer coefficient, so the score measures the shape of the
+expression rather than the expression as written. The refit
+coefficients arrive on <code>result_.final_eval.coefficients</code>, and on
+<code>result_.equation</code> alongside the terms they belong to; <code>best_expr_</code> itself is
+the structural expression on a PDE dataset, and PySR's own expression,
+constants included, on a table.</p>
+<p><strong>The full front is returned with the result.</strong> Every hall-of-fame entry that
+converts to KD's notation is kept, and <code>model.result_.pareto_front()</code> returns
+them as typed entries: the expression in KD notation, PySR's own two axes as
+<code>complexity</code> and <code>loss</code>, and on a tabular run the outer coefficient fitted for
+that entry as <code>scale</code>. The series behind them stay on <code>model.result_.recorder</code>
+under the same names, <code>pareto_nmse</code> among them, which is KD's independent
+re-score of each entry.</p>
 <p><strong>Anything else PySR accepts</strong> goes through <code>extra_pysr_kwargs</code>, unchanged.</p>
 <h2 id="references">References</h2>
 <p>Cranmer (2023). "Interpretable machine learning for science with PySR and SymbolicRegression.jl". arXiv:2305.01582. <a href="https://arxiv.org/abs/2305.01582">Paper</a></p>

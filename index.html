@@ -53,7 +53,7 @@
     
       <link rel="stylesheet" href="assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="javascripts/katex/katex.min.css">
     
@@ -364,6 +364,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -428,6 +434,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1748,28 +1838,28 @@ Python. The example below uses a Burgers dataset bundled with KD.</p>
 <div class="kd-card__body">Load a bundled benchmark, fit in one call, read the result.</div>
 </div>
 </a>
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__thumb"><img src="images/sga-compare.png" alt=""></div>
+<a class="kd-card" href="examples/two_engines/">
+  <div class="kd-card__thumb"><img src="images/tlc-two-engines.png" alt=""></div>
 <div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>worked example</span></div>
-<div class="kd-card__name">KdV with SGA-PDE</div>
-<div class="kd-card__body">A genetic search with no candidate library, and the residual it leaves behind.</div>
+<div class="kd-card__eyebrow"><span>worked example</span><span>DISCOVER</span><span>PySR</span></div>
+<div class="kd-card__name">Column chromatography</div>
+<div class="kd-card__body">Two algorithms on one 74-row table, both recovering the published formula.</div>
 </div>
 </a>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
+<a class="kd-card" href="examples/your_own_data/">
+  <div class="kd-card__thumb"><img src="examples/your_own_data_4_0.png" alt=""></div>
+<div class="kd-card__eyebrow"><span>notebook</span></div>
+<div class="kd-card__name">Use your own data</div>
+<div class="kd-card__body">Two coordinate arrays and one field array, from NumPy to a fitted equation.</div>
+</a>
+<a class="kd-card" href="examples/wave_breaking/">
+  <div class="kd-card__thumb"><img src="examples/wave_breaking_3_1.png" alt=""></div>
 <div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Comparing two algorithms</div>
+<div class="kd-card__eyebrow"><span>notebook</span><span>EqGPT</span></div>
+<div class="kd-card__name">Breaking waves</div>
+<div class="kd-card__body">The published EqGPT equation, reproduced on 12 wave-tank experiments.</div>
 </div>
-</span>
-<span class="kd-card kd-card--empty">
-  <div class="kd-card__thumb kd-figure__placeholder"></div>
-<div class="kd-card__body">
-<div class="kd-card__eyebrow"><span>to be added</span></div>
-<div class="kd-card__name">Noisy data</div>
-</div>
-</span>
+</a>
 </div>
 <h2 id="algorithms">Algorithms</h2>
 <p>KD currently provides seven equation-discovery
@@ -1788,7 +1878,7 @@ algorithms through a common interface.</p>
 <a class="kd-card" href="algorithms/discover/">
   <div class="kd-card__eyebrow"><span>reward</span><span>heavy</span><span>finite_diff</span></div>
 <div class="kd-card__name">DISCOVER</div>
-<div class="kd-card__body">A policy network emits expressions symbol by symbol, trained with policy gradients.</div>
+<div class="kd-card__body">A recurrent controller writes expression trees token by token and is trained on its own best-rewarded draws; the coefficients come from a platform refit.</div>
 </a>
 <a class="kd-card" href="algorithms/eqgpt/">
   <div class="kd-card__eyebrow"><span>EqGPT reward</span><span>heavy</span><span>finite_diff</span></div>

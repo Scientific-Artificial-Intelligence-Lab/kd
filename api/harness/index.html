@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -2147,8 +2237,8 @@
 calls: an <code>ExperimentPlan</code> of <code>PlanEntry</code> rows states the matrix, <code>run_plan</code>
 executes it into a fresh directory, <code>EvidenceStore.load</code> reopens that directory
 and re-verifies it, and <code>build_consensus</code> groups the runs by the law each one
-selected. What the store guarantees and what the consensus axes mean are under
-<a href="../../design/batch/">Batch experiments and evidence</a>.</p>
+selected. The store's guarantees and the meaning of the consensus axes are
+described under <a href="../../design/batch/">Batch experiments and evidence</a>.</p>
 <p>These names are imported from the subpackage rather than the package root:
 <code>from kd.harness import ExperimentPlan, run_plan</code>. Listed below are the entry
 points a caller writes; the module also carries the sharding and artifact
@@ -2442,7 +2532,12 @@ machinery that <code>run_plan</code> and <code>build_consensus</code> drive on t
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">],</span>
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></span><span class="p">],</span>
     <span class="n">store_root</span><span class="p">:</span> <span class="n"><span title="pathlib.Path">Path</span></span><span class="p">,</span>
     <span class="n">model_factory</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="n"><a class="autorefs autorefs-internal" title="            Model (kd.api.Model)" href="../model/#kd.Model">Model</a></span><span class="p">,</span>
     <span class="n">device</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2486,10 +2581,15 @@ machinery that <code>run_plan</code> and <code>build_consensus</code> drive on t
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a>]</code>)
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a> | <a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a>]</code>)
           –
           <div class="doc-md-description">
-            <p>Maps each <code>dataset_ref</code> to a loaded <code>PDEDataset</code>.</p>
+            <p>Maps each <code>dataset_ref</code> to a loaded <code>PDEDataset</code> or a public <code>TabularDataset</code> (normalized once at entry through the same seam as <code>Model.fit</code>).</p>
           </div>
         </li>
         <li class="doc-section-item field-body">

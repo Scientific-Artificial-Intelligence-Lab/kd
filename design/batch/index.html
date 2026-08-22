@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1691,10 +1781,10 @@
 
 
 <h1 id="batch-experiments-and-evidence">Batch experiments and evidence</h1>
-<p>One fit answers one question. The questions that come up in practice are plural: does
-this result hold at another seed, on another dataset, under another algorithm?
-<code>kd.harness</code> runs the plural version and keeps what it ran, so the aggregate can be
-computed from records instead of from notes.</p>
+<p>A single fit covers one configuration. Answering whether a result holds at another
+seed, on another dataset or under another algorithm requires many runs. <code>kd.harness</code>
+runs a matrix of configurations and records each one, so the aggregate is computed from
+the records rather than assembled by hand.</p>
 <h2 id="the-experiment-plan">The experiment plan</h2>
 <p>An <code>ExperimentPlan</code> is an ordered matrix of entries, each naming an algorithm, a
 dataset, a seed and the settings for that run. Its hash covers the matrix including the
@@ -1728,34 +1818,32 @@ resolved at run time, which keeps the plan itself free of data.</p>
 1 sga 1 completed
 2 sga 2 completed
 </code></pre></div>
-<p>Widening the study is an edit to those entries: add an algorithm, add a dataset, add
-seeds. Nothing around the plan changes, and the new matrix gets its own hash.</p>
-<p>Entries run one after another. Parallel execution is a separate call that shards a plan
-across subprocesses, pinning the numerical libraries to one thread per worker, holding
-the heavy algorithms to one at a time, giving each shard a wall-clock limit and folding
-the shards back into a single store afterwards, replaying every record and checking that
-none of them changed on the way.</p>
+<p>Widening the study means editing those entries to add an algorithm, a dataset or more
+seeds. The surrounding code does not change, and the new matrix receives its own hash.</p>
+<p>Entries run sequentially. Parallel execution is a separate call that shards a plan
+across subprocesses. It pins the numerical libraries to one thread per worker, limits
+the memory-heavy algorithms to one at a time, and gives each shard a wall-clock limit.
+The shards are then merged back into a single store, which replays every record and
+checks that none of them changed during the merge.</p>
 <h2 id="failed-entries">Failed entries</h2>
 <p>An entry that raises is recorded with its error type and message, and the remaining
 entries still run. Each outcome carries one of three statuses: the fit completed, it
-raised, or it finished without sealing a record. The one failure that does stop a batch
-is a failure to write the evidence, on the grounds that a batch that cannot record what
-it did is not worth continuing.</p>
+raised, or it finished without sealing a record. A failure to write the evidence stops
+the batch, because the outcomes of the remaining entries could not be recorded.</p>
 <h2 id="the-evidence-store">The evidence store</h2>
 <p>Records are written atomically and never overwritten, and the index is rewritten after
-every outcome, so an interrupted batch keeps everything that finished. The directory has
-to be fresh: a store is not appended to.</p>
-<p>Reopening one re-checks it rather than trusting it. The plan hash is recomputed from the
-persisted plan, every record is verified against its own hash and against the plan slot
-it claims, records under one dataset name have to share one data fingerprint, and a file
-in the records directory that the index does not list is an error rather than a
-curiosity. What comes back is read-only. Each store also carries the environment it ran
-in: the KD, Python and torch versions, the platform string, and the commit when the run
-happened inside a checkout.</p>
+every outcome, so an interrupted batch keeps everything that finished. The directory
+must be fresh, since a store is never appended to.</p>
+<p>Reopening a store re-verifies it. The plan hash is recomputed from the persisted plan,
+every record is verified against its own hash and against the plan slot it claims,
+records under one dataset name must share one data fingerprint, and a file in the
+records directory that the index does not list raises an error. The reopened store is
+read-only. Each store also records the environment it ran in: the KD, Python and torch
+versions, the platform string, and the commit if the run happened inside a checkout.</p>
 <h2 id="consensus-across-runs">Consensus across runs</h2>
 <p><code>build_consensus</code> is a pure function over a sealed store. Runs are grouped by the
-canonical set of terms they selected, so two runs that print differently but chose the
-same law land in the same class:</p>
+canonical set of terms they selected, so two runs that print different strings but
+selected the same law are placed in the same class:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">kd.harness</span><span class="w"> </span><span class="kn">import</span> <span class="n">EvidenceStore</span><span class="p">,</span> <span class="n">build_consensus</span>
 
 <span class="n">store</span> <span class="o">=</span> <span class="n">EvidenceStore</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;out/burgers-seeds&quot;</span><span class="p">)</span>
@@ -1775,21 +1863,21 @@ same law land in the same class:</p>
     (&#39;diff2_x(sub(u,x))&#39;, &#39;diff_x(n2(u))&#39;, &#39;u_t&#39;)
 adjacency 9f6aa9b928 0bb825b5f3 overlap 0.2
 </code></pre></div>
-<p>Two classes out of three runs, and the second one is worth reading before calling the
-algorithm unstable: <code>diff_x(n2(u))</code> is the derivative of <code>u²</code>, which is <code>2·u·u_x</code>, and
-<code>diff2_x(sub(u, x))</code> is the second derivative of <code>u - x</code>, which is <code>u_xx</code>. Seed 2 found
-the same law in a different notation, and the adjacency line is where that shows up.
-Term sets are grouped, not simplified, which is why the report reports a relation
-between classes instead of quietly merging them.</p>
+<p>The three runs produced two classes. The second class is the same law in a different
+notation: <code>diff_x(n2(u))</code> is the derivative of <code>u²</code>, which equals <code>2·u·u_x</code>, and
+<code>diff2_x(sub(u, x))</code> is the second derivative of <code>u - x</code>, which equals <code>u_xx</code>. Seed 2
+therefore selected the same law written differently, and the adjacency line reports the
+overlap between the two classes. Term sets are grouped rather than simplified, so the
+report records a relation between classes instead of merging them.</p>
 <p>Each class is described along four independent axes: whether the structure agrees,
 whether the support agrees, whether the coefficients agree, and whether the empirical
-fit agrees. They stay separate, and there is no single confidence number folding them
-together, because the interesting cases are the ones where the axes disagree. Alongside
-them the report records how far the corroboration reaches, from several algorithms
-across different derivative sources down to a single run, so a class supported by three
-seeds of one algorithm is not read as a class supported by three algorithms.</p>
-<p>The whole report renders to Markdown and to a JSON artifact, both deterministic: the
-same evidence renders byte for byte the same way.</p>
+fit agrees. The four are reported separately, without a combined confidence number,
+because they can disagree with one another. The report also records how far the
+corroboration extends, from several algorithms across different derivative sources down
+to a single run, so a class supported by three seeds of one algorithm is not read as a
+class supported by three algorithms.</p>
+<p>The report renders to Markdown and to a JSON artifact. Both are deterministic: the same
+evidence renders byte for byte the same way.</p>
 
 
 

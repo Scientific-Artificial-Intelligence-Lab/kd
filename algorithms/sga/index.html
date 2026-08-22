@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -947,17 +1037,6 @@
     <span class="md-ellipsis">
       
         Main parameters
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
       
     </span>
   </a>
@@ -1685,17 +1764,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suitable-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Suitable data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#worked-example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1931,17 +1999,6 @@ algorithm's own sparse regression.</p>
 </tbody>
 </table>
 </details>
-<h2 id="suitable-data">Suitable data</h2>
-<ul>
-<li><strong>Evolution equations on a grid</strong>: the data is a field on a regular grid and
-  the target has the form <code>u_t = f(u, u_x, u_xx, ...)</code>.</li>
-<li><strong>When the candidate terms are not known up front</strong>: the search builds terms
-  out of operators, so no candidate library has to be supplied.</li>
-<li><strong>When the coefficients are wanted in one pass</strong>: they come out of the
-  algorithm's own sparse regression, with no separate refit step.</li>
-<li><strong>Data with a decent signal-to-noise ratio</strong>: structure recovery holds at
-  noise around <code>1e-3</code>.</li>
-</ul>
 <h2 id="worked-example">Worked example</h2>
 <p>The run below uses the KdV dataset that ships with KD: a 256 × 201 grid whose
 cosine initial condition steepens under the nonlinear term and then breaks into
@@ -1949,7 +2006,7 @@ a train of solitary waves that separate at different speeds, the tallest of them
 reaching an amplitude of 2.3.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../../images/sga-field.png" alt="Heatmap of the KdV field u(x, t)">
-  <figcaption>The observations: u evolving in time.</figcaption>
+  <figcaption>The observed field u over x and t.</figcaption>
 </figure>
 
 <p>Running the snippet above, <code>model.best_expr_</code> is:</p>
@@ -1981,22 +2038,22 @@ reaching an amplitude of 2.3.</p>
 </tbody>
 </table>
 </div>
-<p>Both terms and both coefficients match. Nothing narrowed the search to them
-either: SGA-PDE was given no candidate library, so the two terms were assembled
-out of operators during the run, and the two coefficients came from its own
-sparse regression rather than from a fit against the answer.</p>
+<p>Both terms and both coefficients match. The search was not narrowed to them:
+SGA-PDE was given no candidate library, so the two terms were assembled from
+operators during the run, and the two coefficients came from its own sparse
+regression rather than from a fit against the answer.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../../images/sga-compare.png" alt="Measured u_t, predicted u_t, and the residual between them">
-  <figcaption>The discovered equation put back against the data. The first two panels share a color scale and are indistinguishable by eye; the third is their difference, at most 9.4e-02, under 2% of the 5.97 peak of u_t, and confined to the two t boundaries and the steepest wave crest.</figcaption>
+  <figcaption>The discovered equation evaluated against the data. The first two panels share a color scale and are indistinguishable by eye; the third is their difference, at most 9.4e-02, under 2% of the 5.97 peak of u_t, and confined to the two t boundaries and the steepest wave crest.</figcaption>
 </figure>
 
 <h2 id="result-interpretation">Result interpretation</h2>
-<p><code>model.best_score_</code> is an AIC: <strong>lower is better</strong>. It charges for fit error and
-for equation length together, so nmse alone does not decide which of two
-equations wins.</p>
+<p><code>model.best_score_</code> is an AIC: <strong>lower is better</strong>. It combines fit error and
+equation length, so nmse alone does not determine which of two equations is
+preferred.</p>
 <p>The coefficients in <code>model.best_expr_</code> are the algorithm's own, not a
 platform refit, and can be read directly.</p>
-<p>The search itself is visible too. <code>kd.VizEngine</code> renders the per-generation
+<p>The search is recorded as well. <code>kd.VizEngine</code> renders the per-generation
 record; alongside the universal convergence curve, SGA-PDE contributes diagnostic
 panels of its own, three of which this run drew (the full list is under
 <a href="../../viz/">Visualization</a>):</p>

@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://scientific-artificial-intelligence-lab.github.io/kd/design/">
       
       
-        <link rel="prev" href="../examples/getting_started/">
+        <link rel="prev" href="../examples/two_engines/">
       
       
         <link rel="next" href="responsibilities/">
@@ -55,7 +55,7 @@
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../stylesheets/kd.css?v=7f2e3141">
+      <link rel="stylesheet" href="../stylesheets/kd.css?v=4dfd7045">
     
       <link rel="stylesheet" href="../javascripts/katex/katex.min.css">
     
@@ -277,6 +277,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -341,6 +347,90 @@
     
   
     Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
   
 
     
@@ -1655,106 +1745,109 @@
 
 
 <h1 id="design">Design</h1>
-<p>KD is a platform for discovering partial differential equations from data. Seven
-algorithms live in it as plugins: five published by our group (SGA-PDE, DLGA-PDE,
-DISCOVER, EqGPT, LLM4ED) and two external baselines (PySR, PySINDy). The platform owns
-what is not a scientific decision: reading data, computing derivatives, executing terms,
-fitting coefficients, keeping records, writing checkpoints, drawing figures, running a
-batch. Each plugin owns its search and the scientific choices inside it.</p>
+<p>KD is a platform for discovering partial differential equations from data, organized as
+a set of algorithm plugins. Each plugin implements the algorithm-specific search
+procedure and scientific logic, while the platform provides the data processing,
+execution, visualization, and experiment infrastructure shared across algorithms. Seven
+algorithms are currently integrated: five published by our group (SGA-PDE, DLGA-PDE,
+DISCOVER, EqGPT, LLM4ED) and two external baselines (PySR, PySINDy).</p>
 <p>Data is prepared once and an algorithm is chosen by name:</p>
 <div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </code></pre></div>
-<p>The fitted model carries the equation, the score and the record of the run. Changing
-<code>"sga"</code> to <code>"discover"</code> changes neither that line nor the way the answer is read.</p>
+<p>The fitted model carries the equation, the score, and the record of the run. Selecting a
+different algorithm changes only the <code>algorithm</code> argument; the surrounding code and the
+way the result is read stay the same.</p>
 <h2 id="division-of-responsibility">Division of responsibility</h2>
-<p>How to differentiate the data, how to search, how to score a candidate and which
-equation to hand back belong to the algorithm. What the seven need identically belongs
-to the platform.</p>
-<p>Those services are offered rather than imposed. An algorithm that wants its own
-scientific path takes it: EqGPT runs two of its modes without platform derivatives at
-all, SGA-PDE and LLM4ED fit candidates with code they brought with them. What a plugin
-does not opt out of is the small contract that makes it drivable, and a declaration of
-what it can accept: which equation forms, which data layouts, where its derivatives come
-from, what its score is called and which direction is better, which parameters survive a
-resume. Those declarations are readable at runtime through <code>kd.instrument_schemas()</code>, so
-a program driving the platform, and the parameter tables on this site, work off the same
-source instead of a table maintained by hand.</p>
+<p>The algorithm decides how to differentiate the data, how to search, how to score a
+candidate, and which equation to return. The platform implements the components that all
+seven algorithms need in the same form.</p>
+<p>These components are optional. An algorithm can implement any of them itself: EqGPT runs
+two of its three modes without platform derivatives, and SGA-PDE and LLM4ED fit
+candidates using code included with the plugin. Every plugin must provide two things: the
+contract that lets the platform drive it, and a declaration of what the algorithm
+accepts. The declaration covers which equation forms and data layouts it supports, where
+its derivatives come from, the name and direction of its score, and which parameters
+survive a resume. <code>kd.instrument_schemas()</code> returns those declarations at runtime, so a
+program driving the platform and the parameter tables on this site read the same source
+rather than a table maintained by hand.</p>
 <p>→ <a href="responsibilities/">Platform and plugins</a></p>
 <h2 id="shared-machinery">Shared machinery</h2>
-<p>Derivatives are the clearest case. <code>kd.PDEDataset</code> holds observations only: fields, axes,
-and which field-axis-order triple is the left-hand side. Derivatives are computed on
-demand, by finite differences on the grid or by training a surrogate of the field and
-differentiating that network, following what the algorithm declared it needs. They could
-not have been stored in the dataset to begin with: the autograd ones come out of a
-training run that had not happened when the dataset was written.</p>
-<p>The rest of the machinery under a search is shared the same way: executing a term string
-into a column of numbers, assembling the design matrix, solving the least-squares
-problem, computing MSE, NMSE, R² and AIC, training a surrogate network. Six of the
+<p>Derivatives are computed by the platform rather than stored in the dataset.
+<code>kd.PDEDataset</code> holds observations only: fields, axes, and which field-axis-order triple
+is the left-hand side. Derivatives are computed on demand, either by finite differences
+on the grid or by training a surrogate of the field and differentiating that network,
+according to what the algorithm declared it needs. They cannot be stored in the dataset,
+because the autograd derivatives come from a training run that has not happened when the
+dataset is written.</p>
+<p>The remaining components under a search are shared in the same way: executing a term
+string into a column of numbers, assembling the design matrix, solving the least-squares
+problem, computing MSE, NMSE, R² and AIC, and training a surrogate network. Six of the
 operators route through guarded implementations, so a near-zero denominator or an
-overflowing exponent produces neither an inf nor a nan. An algorithm that arrives writes
-its search and inherits the rest.</p>
+overflowing exponent produces a finite value rather than an inf or a nan. A new
+algorithm implements its search and uses these components for the rest.</p>
 <p>→ <a href="../data/shape/">Data requirements</a> · <a href="../data/derivatives/">Derivative sources</a></p>
 <h2 id="shared-notation">Shared notation</h2>
-<p>Internally the seven carry different things: SGA-PDE searches expression trees, PySR
-returns SymPy expressions, PySINDy and DLGA-PDE select columns from a candidate-term
-library. Before an answer reaches the platform it is written as the same term strings
-(<code>mul(u, u_x)</code>, <code>diff_x(diff2_x(u))</code>), and the equation is assembled from terms,
-coefficients and a left-hand side. Those private structures never leave their own
-package: results, checkpoints, figures and batch records all carry the shared notation.</p>
-<p>The platform keeps no per-algorithm result format. With one, two equations could only be
-compared by the string each happens to print, and most of the difference between two
-such strings is rendering: reorder one KdV candidate library and the same law prints as
-<code>add(diff_x(diff2_x(u)), mul(u,u_x))</code> in one run and <code>add(mul(u,u_x), diff_x(diff2_x(u)))</code>
-in the next. So <code>kd.law_signature</code> reads the set of terms rather than the string, and two
-equations with the same structure get the same <code>structure_key</code>.</p>
+<p>The seven algorithms use different internal representations: SGA-PDE searches expression
+trees, PySR returns SymPy expressions, and PySINDy and DLGA-PDE select columns from a
+candidate-term library. Before an answer reaches the platform it is converted to the
+same term strings (<code>mul(u, u_x)</code>, <code>diff_x(diff2_x(u))</code>), and the equation is assembled
+from terms, coefficients and a left-hand side. The internal structures stay inside their
+own package: results, checkpoints, figures and batch records all carry the shared
+notation.</p>
+<p>The platform keeps no per-algorithm result format. Without a shared notation, two
+equations could be compared only by the string each algorithm prints, and much of the
+difference between two such strings is rendering rather than content: reordering a KdV
+candidate library makes the same law print as <code>add(diff_x(diff2_x(u)), mul(u,u_x))</code> in
+one run and <code>add(mul(u,u_x), diff_x(diff2_x(u)))</code> in the next. <code>kd.law_signature</code>
+therefore reads the set of terms rather than the string, and two equations with the same
+structure receive the same <code>structure_key</code>.</p>
 <p>→ <a href="ir/">Equation representation</a></p>
 <h2 id="score-comparability">Score comparability</h2>
-<p>Each algorithm hands back its own objective value: SGA-PDE reports AIC, lower is better;
-DISCOVER reports a reward, higher is better. The two are not the same quantity and there
-is no conversion between them.</p>
-<p>The platform does not fold them into one score. Two scores are commensurable when the
-<code>score_kind</code>, the dataset and the scorer all match, and folding changes none of those
-three, it only hides that they do not match. To compare, refit the candidate terms
-against the same data and read the nmse from that fit, which is what <code>kd.evaluate_terms</code>
-does. That is also why <code>best_score_</code> stays in the algorithm's own units and is never
-rewritten by the platform.</p>
+<p>Each algorithm returns its own objective value: SGA-PDE reports AIC, where lower is
+better, and DISCOVER reports a reward, where higher is better. The two are not the same
+quantity, and there is no conversion between them.</p>
+<p>The platform does not combine them into a single score. Two scores are comparable when
+the <code>score_kind</code>, the dataset and the scorer all match. Combining them changes none of
+those three conditions and only obscures the mismatch. To compare two algorithms, refit
+the candidate terms against the same data and read the nmse from that fit, which is what
+<code>kd.evaluate_terms</code> does. For the same reason, <code>best_score_</code> stays in the algorithm's own
+units and is never rewritten by the platform.</p>
 <p>→ <a href="scores/">Score conventions and comparability</a></p>
 <h2 id="figures-from-one-call">Figures from one call</h2>
-<p><code>kd.VizEngine</code> renders from the per-iteration record inside the result object, so this
+<p><code>kd.VizEngine</code> renders from the per-iteration record inside the result object, so the
 call does not change with the algorithm:</p>
 <div class="highlight"><pre><span></span><code><span class="n">kd</span><span class="o">.</span><span class="n">VizEngine</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;out/kdv&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">render_all</span><span class="p">(</span>
     <span class="n">model</span><span class="o">.</span><span class="n">result_</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">algorithm_</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">data</span>
 <span class="p">)</span>
 </code></pre></div>
-<p>Out comes the set every algorithm shares (convergence, parity, residual distribution and
-field, the equation and the field it reproduces), the diagnostic panels that algorithm
-declares as its own, and a single-file HTML report. Nowhere does the engine branch on an
-algorithm's name; which panels are its own is something the algorithm declares. A figure
-that cannot be drawn is named in the report's warnings instead of quietly going missing,
-and an overlay of runs whose scores are of different kinds declines to average them and
-says so on the figure.</p>
+<p>The engine renders the figures common to all algorithms (convergence, parity, residual
+distribution and field, the equation and the field it reproduces), the diagnostic panels
+that the algorithm declares as its own, and a single-file HTML report. The engine does
+not branch on the algorithm's name; each algorithm declares which panels are its own. A
+figure that cannot be drawn is listed in the report's warnings rather than omitted
+silently. An overlay of runs whose scores are of different kinds does not average them,
+and the figure states that it did not.</p>
 <p>→ <a href="../viz/">Visualization</a></p>
 <h2 id="checkpoints-and-resuming">Checkpoints and resuming</h2>
 <p>Point <code>checkpoint_dir</code> at a directory and the run saves its state as it goes, plus a
 final checkpoint when it ends. <code>kd.load_checkpoint_manifest</code> reads the ledger that
 directory keeps, so a resume point comes from recorded entries rather than from a glob
 over filenames.</p>
-<p>What a resume restores is the search state; the configuration comes from the new
-<code>kd.Model</code>. Each parameter carries a tier the algorithm declared: change a resume-safe
-one and the new value takes effect, change an init-only one and the resume raises,
-naming the parameter along with its stored and live values. A parameter with no tier
-registered is treated as init-only, so forgetting to register one costs a refused resume
-rather than a silent pass.</p>
+<p>A resume restores the search state, while the configuration comes from the new
+<code>kd.Model</code>. Each parameter carries a tier declared by the algorithm. Changing a
+resume-safe parameter takes effect on the resumed run; changing an init-only parameter
+raises an error that names the parameter along with its stored and live values. A
+parameter with no registered tier is treated as init-only, so an unregistered parameter
+causes the resume to be refused rather than silently accepted.</p>
 <p>→ <a href="resume/">Parameter tiers and resuming</a></p>
 <h2 id="batch-studies">Batch studies</h2>
-<p>One fit answers one question. Research questions are usually plural: does this hold
-across seeds, across algorithms, across datasets? <code>kd.harness</code> takes an ordered matrix of
-entries, each an algorithm with a dataset, a seed and its settings, and runs it into a
-directory that is sealed on write and re-verified whenever it is reopened. An entry that
-raises is recorded as a failed outcome and the rest of the matrix still runs.</p>
-<p>The aggregate then comes from those records rather than from notes. Runs are grouped by
-the canonical set of terms they selected, and each group reports how far the agreement
-inside it goes.</p>
+<p>A single fit covers one configuration. Comparing results across seeds, algorithms or
+datasets requires many runs. <code>kd.harness</code> takes an ordered matrix of entries, each an
+algorithm with a dataset, a seed and its settings, and runs it into a directory that is
+sealed on write and re-verified whenever it is reopened. An entry that raises is recorded
+as a failed outcome, and the remaining entries still run.</p>
+<p>The aggregate is computed from those records. Runs are grouped by the canonical set of
+terms they selected, and each group reports how far the agreement inside it extends.</p>
 <p>→ <a href="batch/">Batch experiments and evidence</a></p>
 <h2 id="architecture">Architecture</h2>
 <div class="kd-layers" markdown="0">
@@ -1792,16 +1885,16 @@ inside it goes.</p>
   </div>
 </div>
 
-<p>Each band uses what is below it, and no algorithm's search is built on another's.
-Figures sit under the algorithms rather than over them because an algorithm declares its
-own diagnostic panels out of the drawing layer's descriptors, not the other way round.</p>
-<p>That order is checked rather than described. An import graph is built on every push and
-matched against this list, and the list is exhaustive both ways: a new module has to be
-placed in a band, and a new algorithm has to come out independent of the other six.
-Neither can be left undeclared without failing the build.</p>
+<p>Each band uses only the bands below it, and no algorithm's search depends on another's.
+Figures sit below the algorithms rather than above them because an algorithm declares its
+own diagnostic panels out of the drawing layer's descriptors.</p>
+<p>The layering is enforced rather than only documented. An import graph is built on every
+push and matched against this list, and the list is exhaustive in both directions: a new
+module must be placed in a band, and a new algorithm must be independent of the other
+six. An undeclared module or algorithm fails the build.</p>
 <h2 id="the-path-of-one-fit">The path of one fit</h2>
-<p>The bands above say what may use what. Read in time instead, a single
-<code>kd.Model.fit</code> passes through five stages, and the search itself is one of them:</p>
+<p>The bands above describe which layers may use which. In execution order, a single
+<code>kd.Model.fit</code> passes through five stages, one of which is the search:</p>
 <div class="kd-flow" markdown="0">
   <div class="kd-layer">
     <div class="kd-layer__name">Before</div>
@@ -1811,19 +1904,19 @@ Neither can be left undeclared without failing the build.</p>
   <div class="kd-flow__arrow">↓</div>
   <div class="kd-layer">
     <div class="kd-layer__name">Setup</div>
-    <div class="kd-layer__lead">The fit resolves and checks the left-hand side, reads what the algorithm declared it needs, and assembles that much and no more. An algorithm that declares it needs no derivatives from the platform is given neither those nor an evaluator, and keeps the term executor alone.</div>
+    <div class="kd-layer__lead">The fit resolves and checks the left-hand side, reads what the algorithm declared it needs, and assembles that much and no more. An algorithm that declares it needs no derivatives from the platform receives neither those nor an evaluator, and keeps the term executor alone.</div>
     <div class="kd-layer__items"><span>finite differences, or a surrogate network trained and differentiated</span><span>term executor</span><span>evaluator</span></div>
   </div>
   <div class="kd-flow__arrow">↓</div>
   <div class="kd-layer kd-layer--plugins">
     <div class="kd-layer__name">Search</div>
-    <div class="kd-layer__lead">One call to prepare, then the same three steps every iteration. This is the whole of the contract: the platform drives the loop and never decides what happens inside a step.</div>
+    <div class="kd-layer__lead">One call to prepare, then the same three steps every iteration. This is the whole contract: the platform drives the loop and does not decide what happens inside a step.</div>
     <div class="kd-layer__items"><span>propose → evaluate → update</span><span>callbacks</span><span>one record per iteration</span><span>a checkpoint per iteration, if a directory was given</span></div>
   </div>
   <div class="kd-flow__arrow">↓</div>
   <div class="kd-layer">
     <div class="kd-layer__name">Answer</div>
-    <div class="kd-layer__lead">The algorithm hands back its final candidate; the platform assembles the equation and the record of the run into one object. The fit returns here.</div>
+    <div class="kd-layer__lead">The algorithm returns its final candidate, and the platform assembles the equation and the record of the run into one object. The fit returns here.</div>
     <div class="kd-layer__items"><span>model.best_expr_</span><span>model.best_score_</span><span>model.result_</span></div>
   </div>
   <div class="kd-flow__arrow">↓</div>
@@ -1834,13 +1927,12 @@ Neither can be left undeclared without failing the build.</p>
   </div>
 </div>
 
-<p>How much of the setup stage an algorithm draws on is its own decision, which is what
-makes those services offered rather than imposed. DISCOVER uses the shared chain
+<p>Algorithms use different amounts of the setup stage. DISCOVER uses the shared chain
 throughout: the platform executes and caches the term columns, solves for the
 coefficients and computes the metrics. PySINDy, PySR and EqGPT are mixed, with the
 platform building the design matrix and re-scoring the answer while the algorithm's own
-backend does the coefficient regression. SGA-PDE runs its own pipeline end to end, down
-to its own sparse regression, and uses the loop and the records and nothing else.</p>
+backend performs the coefficient regression. SGA-PDE runs its own pipeline end to end,
+including its own sparse regression, and uses only the loop and the records.</p>
 
 
 
