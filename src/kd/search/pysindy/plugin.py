@@ -14,7 +14,12 @@ from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.schema import DataTopology
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.protocol import PlatformComponents
 from kd.search.pysindy import viz as _viz_helpers
 from kd.search.pysindy.assembly import (
@@ -49,6 +54,7 @@ _LHS_ORDER = 1
 _NATIVE_NMSE_KEY = _viz_helpers.NATIVE_NMSE_KEY
 _REFIT_NMSE_KEY = _viz_helpers.REFIT_NMSE_KEY
 _SUPPORT_SIZE_KEY = _viz_helpers.SUPPORT_SIZE_KEY
+_STLSQ_HISTORY_KEY = _viz_helpers.STLSQ_HISTORY_KEY
 _LOGGED_METRICS = _viz_helpers.LOGGED_METRICS
 
 _STATE_ALGORITHM = "algorithm"
@@ -114,6 +120,10 @@ class PySINDyPlugin:
                 resume_tier="init_only",
             ),
         ),
+
+
+
+        segmentation=Segmentation(archive="conclusion", unit="fits"),
     )
 
     def __init__(
@@ -146,6 +156,10 @@ class PySINDyPlugin:
         self._terms: list[str] | None = None
         self._support: list[int] | None = None
         self._coefficient_values: list[float] | None = None
+
+
+
+        self._stlsq_history: list[list[float]] | None = None
         self._final_eval: EvaluationResult | None = None
         self._metrics_logged = False
         self._restore_pending = False
@@ -182,6 +196,7 @@ class PySINDyPlugin:
             _NATIVE_NMSE_KEY: self._best_score,
             _REFIT_NMSE_KEY: refit.nmse if refit.is_valid else None,
             _SUPPORT_SIZE_KEY: len(self._support or []),
+            _STLSQ_HISTORY_KEY: self._stlsq_history,
         }
         log_whitelisted_metrics(self._recorder, _LOGGED_METRICS, metrics)
         self._metrics_logged = True
@@ -371,6 +386,7 @@ class PySINDyPlugin:
         self._terms = list(valid_terms)
         self._support = support
         self._coefficient_values = [float(value) for value in xi]
+        self._stlsq_history = backend.history()
         self._best_expression = expression
         self._final_eval = final_eval
         self._best_score = final_eval.nmse
@@ -392,6 +408,7 @@ class PySINDyPlugin:
         self._terms = None
         self._support = None
         self._coefficient_values = None
+        self._stlsq_history = None
         self._final_eval = None
         self._metrics_logged = False
 

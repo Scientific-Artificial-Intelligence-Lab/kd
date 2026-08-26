@@ -12,7 +12,12 @@ from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.schema import DataTopology
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
 from kd.search.discover.config import DiscoverConfig
@@ -254,7 +259,39 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 "Maximum generated expression length.",
                 resume_tier="init_only",
             ),
+            Knob(
+                "epsilon",
+                "float",
+                "Risk-seeking reward quantile: the top-epsilon fraction of a "
+                "batch's rewards feeds the policy-gradient update.",
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
+            ),
+
+
+
+
+
+
+
+
+
+
         ),
+        segmentation=Segmentation(archive="progress", unit="iterations"),
     )
 
     def __init__(

@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -26,6 +26,7 @@ from kd.search.run_dir import (
 
 if TYPE_CHECKING:
     from kd.data.schema import PDEDataset
+    from kd.search.callbacks import RunnerCallback
     from kd.search.records import RunRecord
     from kd.search.result import ExperimentResult
 
@@ -64,14 +65,17 @@ class EpisodeOutcome:
 
 
 def _recording_kwargs(
-    paths: RunDirPaths, options: RecordingOptions
+    paths: RunDirPaths,
+    options: RecordingOptions,
+    extra_callbacks: Sequence[RunnerCallback],
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "callbacks": [
             IterationEventEmitter(
                 jsonl_path=paths.events,
                 every_n_iterations=options.events_every_n,
-            )
+            ),
+            *extra_callbacks,
         ]
     }
     if options.checkpoint_every is not None:
@@ -136,6 +140,7 @@ def run_episode(
     recording: RecordingOptions | None = None,
     record_ref: str | None = None,
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
+    extra_callbacks: Sequence[RunnerCallback] | None = None,
 ) -> EpisodeOutcome:
     if run_dir is None and (recording is not None or record_ref is not None):
         raise ValueError(
@@ -161,7 +166,11 @@ def run_episode(
         if run_dir is not None:
             paths = create_run_dir(run_dir)
             run_id = new_run_id(entry.instrument)
-            sibling_kwargs.update(_recording_kwargs(paths, options))
+            sibling_kwargs.update(
+                _recording_kwargs(paths, options, extra_callbacks or ())
+            )
+        elif extra_callbacks is not None:
+            sibling_kwargs["callbacks"] = list(extra_callbacks)
         model = model_factory(
             algorithm=entry.instrument,
             seed=entry.seed,

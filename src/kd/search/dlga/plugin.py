@@ -28,7 +28,12 @@ from kd.search._torch_module_artifact import (
     TORCH_MODULE_ARTIFACT_FORMAT,
     torch_module_artifact,
 )
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.dlga import viz as _viz_helpers
 from kd.search.dlga.config import DLGAConfig
 from kd.search.dlga.genes import (
@@ -158,6 +163,7 @@ class DLGAPlugin:
                 resume_tier="init_only",
             ),
         ),
+        segmentation=Segmentation(archive="progress", unit="generations"),
     )
 
     def __init__(

@@ -26,7 +26,12 @@ from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer, TrainingResult
 from kd.search import surrogate_log as _surrogate_log
 from kd.search._torch_module_artifact import torch_module_artifact
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
@@ -114,6 +119,8 @@ _GEN_BEST_NMSE_KEY = _viz_helpers.GEN_BEST_NMSE_KEY
 _N_VALID_KEY = _viz_helpers.N_VALID_KEY
 _N_UNIQUE_KEY = _viz_helpers.N_UNIQUE_KEY
 _GEN_MEAN_COMPLEXITY_KEY = _viz_helpers.GEN_MEAN_COMPLEXITY_KEY
+_REPEAT_CROSS_KEY = _viz_helpers.REPEAT_CROSS_KEY
+_REPEAT_CHANGE_KEY = _viz_helpers.REPEAT_CHANGE_KEY
 
 
 
@@ -218,6 +225,50 @@ class SGAPlugin:
         knobs=(
             Knob("num", "int", "Population size.", resume_tier="resume_safe"),
             Knob(
+                "p_cro",
+                "float",
+                "Crossover probability per generation.",
+
+
+
+
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "p_mute",
+                "float",
+                "Per-node mutation probability.",
+
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "p_var",
+                "float",
+                "Probability that a node in a freshly generated term tree is a "
+                "variable rather than an operator.",
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "p_rep",
+                "float",
+                "Replace-draw probability for non-elite members.",
+
+
+                resume_tier="resume_safe",
+            ),
+            Knob(
                 "depth",
                 "int",
                 "Maximum term-tree depth.",
@@ -242,6 +293,7 @@ class SGAPlugin:
                 resume_tier="init_only",
             ),
         ),
+        segmentation=Segmentation(archive="progress", unit="generations"),
     )
 
     def __init__(self, config: SGAConfig | None = None) -> None:
@@ -1625,6 +1677,8 @@ class SGAPlugin:
             _N_UNIQUE_KEY: len({result.expression for result in results}),
             _GEN_MEAN_COMPLEXITY_KEY: gen_mean_complexity,
             _POP_MEAN_AIC_KEY: pop_mean_aic,
+            _REPEAT_CROSS_KEY: self._repeat_cross,
+            _REPEAT_CHANGE_KEY: self._repeat_change,
         }
         log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 

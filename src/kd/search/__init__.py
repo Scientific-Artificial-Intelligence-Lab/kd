@@ -19,7 +19,8 @@ That debt is still open, but the eager import it has to remove is
 Sanctioned direct-import module paths beyond this facade:
 ``kd.search.records`` / ``kd.search.mini_table`` / ``kd.search.descriptor``
 -- their key types (``RunRecord`` / ``build_mini_table`` /
-``InstrumentDescriptor`` / ``InstrumentMode`` / ``Knob`` / ``tool_schema``)
+``InstrumentDescriptor`` / ``InstrumentMode`` / ``Knob`` / ``Segmentation`` /
+``tool_schema``)
 are re-exported here (045 rows 4a-4c), but each module carries more than
 what is promoted (e.g. ``mini_table``'s ``escape_cell``) and stays
 direct-import-sanctioned at its own module path.
@@ -48,7 +49,13 @@ from kd.search.checkpoint_manifest import (
     CheckpointManifestError,
     load_checkpoint_manifest,
 )
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob, tool_schema
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+    tool_schema,
+)
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt import EqGPTConfig, EqGPTPlugin
@@ -156,6 +163,7 @@ __all__ = [
     "SGAConfig",
     "SGAPlugin",
     "SearchAlgorithm",
+    "Segmentation",
     "SketchClauseLevels",
     "SketchOutcome",
     "TerminatingSearchAlgorithm",

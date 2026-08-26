@@ -13,7 +13,12 @@ from kd.core.equation.library import TermLibrarySpec
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.schema import DataTopology
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.protocol import PlatformComponents
 from kd.search.pysr import assembly
 from kd.search.pysr import viz as _viz_helpers
@@ -123,6 +128,10 @@ class PySRPlugin:
                 resume_tier="init_only",
             ),
         ),
+
+
+
+        segmentation=Segmentation(archive="conclusion", unit="iterations"),
     )
 
     def __init__(

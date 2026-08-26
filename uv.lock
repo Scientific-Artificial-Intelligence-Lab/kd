@@ -1183,7 +1183,7 @@ wheels = [
 
 [[package]]
 name = "kd"
-version = "0.7.0"
+version = "0.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },

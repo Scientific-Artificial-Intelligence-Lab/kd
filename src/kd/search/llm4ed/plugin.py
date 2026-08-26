@@ -26,7 +26,12 @@ from kd.llm import (
     OpenAICompatProvider,
     TapeRecordingProvider,
 )
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.llm4ed import viz as _viz_helpers
 from kd.search.llm4ed.config import (
     ALGORITHM_NAME,
@@ -132,6 +137,11 @@ _POOL_WORST_KEY: Final[str] = _viz_helpers.POOL_WORST_KEY
 _N_INVALID_KEY: Final[str] = _viz_helpers.N_INVALID_KEY
 _N_LLM_CALLS_KEY: Final[str] = _viz_helpers.N_LLM_CALLS_KEY
 _N_VALID_KEY: Final[str] = _viz_helpers.N_VALID_KEY
+
+
+_INVALID_SPREAD_METRICS: Final[tuple[str, ...]] = _viz_helpers.INVALID_SPREAD_METRICS
+_INVALID_KEY_BY_LABEL: Final[dict[str, str]] = _viz_helpers.INVALID_KEY_BY_LABEL
+_N_INVALID_OTHER_KEY: Final[str] = _viz_helpers.N_INVALID_OTHER_KEY
 
 
 
@@ -243,6 +253,7 @@ class Llm4edPlugin:
                 resume_tier="init_only",
             ),
         ),
+        segmentation=Segmentation(archive="progress", unit="rounds"),
     )
 
     def __init__(
@@ -293,6 +304,11 @@ class Llm4edPlugin:
 
         self._round_cache: dict[str, EquationScore] = {}
         self._round_invalid: int = 0
+
+
+
+
+        self._round_invalid_by_label: dict[str, int] = {}
         self._round_llm_calls: int = 0
 
 
@@ -398,6 +414,7 @@ class Llm4edPlugin:
 
         self._round_cache = {}
         self._round_invalid = 0
+        self._round_invalid_by_label = {}
         self._round_llm_calls = 0
         survivors: list[PoolItem] = []
         seen_scores: list[float] = []
@@ -511,6 +528,12 @@ class Llm4edPlugin:
                 _N_INVALID_KEY: self._round_invalid,
                 _N_LLM_CALLS_KEY: self._round_llm_calls,
                 _N_VALID_KEY: len(members),
+
+
+                **{
+                    key: self._round_invalid_by_label.get(key, 0)
+                    for key in _INVALID_SPREAD_METRICS
+                },
             },
         )
 
@@ -694,6 +717,7 @@ class Llm4edPlugin:
         self._display = {}
         self._round_cache = {}
         self._round_invalid = 0
+        self._round_invalid_by_label = {}
         self._round_llm_calls = 0
 
     def _apply_state(self, state: dict[str, Any]) -> None:
@@ -745,6 +769,7 @@ class Llm4edPlugin:
         self._rng.setstate(state["rng_state"])
         self._round_cache = {}
         self._round_invalid = 0
+        self._round_invalid_by_label = {}
         self._round_llm_calls = 0
 
     def _current_phase(self) -> str:
@@ -818,6 +843,10 @@ class Llm4edPlugin:
                 self._round_invalid += 1
                 label = result.error_type or "unknown"
                 self._invalid_counts[label] = self._invalid_counts.get(label, 0) + 1
+                key = _INVALID_KEY_BY_LABEL.get(label, _N_INVALID_OTHER_KEY)
+                self._round_invalid_by_label[key] = (
+                    self._round_invalid_by_label.get(key, 0) + 1
+                )
                 continue
             assert result.reward is not None
             scored.append(PoolItem(score=result.reward, expression=candidate))

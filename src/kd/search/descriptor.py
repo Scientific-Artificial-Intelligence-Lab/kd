@@ -64,6 +64,24 @@ class Knob:
             raise ValueError(f"unknown resume_tier: {self.resume_tier!r}")
 
 
+_SEGMENTATION_ARCHIVES: frozenset[str] = frozenset(
+    {"progress", "conclusion", "none"}
+)
+
+
+@dataclass(frozen=True)
+class Segmentation:
+
+    archive: str
+    unit: str
+
+    def __post_init__(self) -> None:
+        if self.archive not in _SEGMENTATION_ARCHIVES:
+            raise ValueError(f"unknown segmentation archive: {self.archive!r}")
+        if not self.unit:
+            raise ValueError("segmentation unit must be non-empty")
+
+
 @dataclass(frozen=True)
 class InstrumentDescriptor:
 
@@ -72,6 +90,9 @@ class InstrumentDescriptor:
     cost_class: Literal["light", "medium", "heavy"]
     modes: tuple[InstrumentMode, ...]
     knobs: tuple[Knob, ...]
+
+
+    segmentation: Segmentation = field(kw_only=True)
 
     def __post_init__(self) -> None:
         if not self.modes:
@@ -157,6 +178,10 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
             }
             for knob in descriptor.knobs
         ],
+        "segmentation": {
+            "archive": descriptor.segmentation.archive,
+            "unit": descriptor.segmentation.unit,
+        },
         "fields": field_specs(plugin_cls),
         "score_kind": plugin_cls.score_kind,
         "score_direction": plugin_cls.score_direction,
@@ -172,6 +197,7 @@ __all__ = [
     "InstrumentMode",
     "Knob",
     "ResumeTier",
+    "Segmentation",
     "assert_sketch_supported",
     "mode_for_topology",
     "tool_schema",

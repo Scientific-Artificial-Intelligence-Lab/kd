@@ -35,11 +35,23 @@ POOL_BEST_KEY = "pool_best"
 POOL_MEDIAN_KEY = "pool_median"
 POOL_WORST_KEY = "pool_worst"
 FINETUNE_LOSS_KEY = "finetune_loss"
+
+
+
+
+
+
+
+
+
+
+N_DROPPED_KEY = "n_dropped"
 LOGGED_METRICS: tuple[str, ...] = (
     POOL_BEST_KEY,
     POOL_MEDIAN_KEY,
     POOL_WORST_KEY,
     FINETUNE_LOSS_KEY,
+    N_DROPPED_KEY,
 )
 
 
@@ -411,6 +423,7 @@ def _plot_title(name: str) -> str:
 __all__ = [
     "FINETUNE_LOSS_KEY",
     "LOGGED_METRICS",
+    "N_DROPPED_KEY",
     "PER_CASE_PLOT_INFO",
     "POOL_BEST_KEY",
     "POOL_MEDIAN_KEY",

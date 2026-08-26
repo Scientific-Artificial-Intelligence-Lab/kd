@@ -4,6 +4,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from kd.core.jsonsafe import sanitize_float
+from kd.search.llm4ed.score import (
+    ERROR_ABNORMAL_COEF,
+    ERROR_INEXPRESSIBLE,
+    ERROR_LSTSQ,
+    ERROR_NON_FINITE,
+    ERROR_PARSE,
+    ERROR_UNDEFINED_OPERANDS,
+    ERROR_UNDEFINED_OPERATORS,
+)
 from kd.viz.axes import integer_ticks
 from kd.viz.extension import PlotInfo
 from kd.viz.gap_notes import (
@@ -25,12 +34,50 @@ if TYPE_CHECKING:
 
 
 
+
 POOL_BEST_KEY = "pool_best"
 POOL_MEDIAN_KEY = "pool_median"
 POOL_WORST_KEY = "pool_worst"
 N_INVALID_KEY = "n_invalid"
 N_LLM_CALLS_KEY = "n_llm_calls"
 N_VALID_KEY = "n_valid"
+
+
+
+
+
+
+
+
+
+N_INVALID_UNDEFINED_OPERANDS_KEY = "n_invalid_undefined_operands"
+N_INVALID_UNDEFINED_OPERATORS_KEY = "n_invalid_undefined_operators"
+N_INVALID_INEXPRESSIBLE_KEY = "n_invalid_inexpressible"
+N_INVALID_PARSE_KEY = "n_invalid_parse"
+N_INVALID_NON_FINITE_KEY = "n_invalid_non_finite"
+N_INVALID_LSTSQ_KEY = "n_invalid_lstsq"
+N_INVALID_ABNORMAL_COEF_KEY = "n_invalid_abnormal_coef"
+N_INVALID_OTHER_KEY = "n_invalid_other"
+
+
+
+
+INVALID_KEY_BY_LABEL: dict[str, str] = {
+    ERROR_UNDEFINED_OPERANDS: N_INVALID_UNDEFINED_OPERANDS_KEY,
+    ERROR_UNDEFINED_OPERATORS: N_INVALID_UNDEFINED_OPERATORS_KEY,
+    ERROR_INEXPRESSIBLE: N_INVALID_INEXPRESSIBLE_KEY,
+    ERROR_PARSE: N_INVALID_PARSE_KEY,
+    ERROR_NON_FINITE: N_INVALID_NON_FINITE_KEY,
+    ERROR_LSTSQ: N_INVALID_LSTSQ_KEY,
+    ERROR_ABNORMAL_COEF: N_INVALID_ABNORMAL_COEF_KEY,
+}
+
+
+INVALID_SPREAD_METRICS: tuple[str, ...] = (
+    *INVALID_KEY_BY_LABEL.values(),
+    N_INVALID_OTHER_KEY,
+)
+
 LOGGED_METRICS: tuple[str, ...] = (
     POOL_BEST_KEY,
     POOL_MEDIAN_KEY,
@@ -38,6 +85,7 @@ LOGGED_METRICS: tuple[str, ...] = (
     N_INVALID_KEY,
     N_LLM_CALLS_KEY,
     N_VALID_KEY,
+    *INVALID_SPREAD_METRICS,
 )
 
 
@@ -265,8 +313,18 @@ def _plot_title(name: str) -> str:
 
 
 __all__ = [
+    "INVALID_KEY_BY_LABEL",
+    "INVALID_SPREAD_METRICS",
     "LOGGED_METRICS",
+    "N_INVALID_ABNORMAL_COEF_KEY",
+    "N_INVALID_INEXPRESSIBLE_KEY",
     "N_INVALID_KEY",
+    "N_INVALID_LSTSQ_KEY",
+    "N_INVALID_NON_FINITE_KEY",
+    "N_INVALID_OTHER_KEY",
+    "N_INVALID_PARSE_KEY",
+    "N_INVALID_UNDEFINED_OPERANDS_KEY",
+    "N_INVALID_UNDEFINED_OPERATORS_KEY",
     "N_LLM_CALLS_KEY",
     "N_VALID_KEY",
     "POOL_BEST_KEY",

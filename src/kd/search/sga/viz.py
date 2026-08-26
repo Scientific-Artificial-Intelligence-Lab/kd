@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 
+
 GEN_BEST_AIC_KEY = "gen_best_aic"
 GEN_MEAN_AIC_KEY = "gen_mean_aic"
 GEN_BEST_NMSE_KEY = "gen_best_nmse"
@@ -50,6 +51,14 @@ GEN_MEAN_COMPLEXITY_KEY = "gen_mean_complexity"
 
 
 POP_MEAN_AIC_KEY = "pop_mean_aic"
+
+
+
+
+
+
+REPEAT_CROSS_KEY = "repeat_cross"
+REPEAT_CHANGE_KEY = "repeat_change"
 LOGGED_METRICS: tuple[str, ...] = (
     GEN_BEST_AIC_KEY,
     GEN_MEAN_AIC_KEY,
@@ -58,6 +67,8 @@ LOGGED_METRICS: tuple[str, ...] = (
     N_UNIQUE_KEY,
     GEN_MEAN_COMPLEXITY_KEY,
     POP_MEAN_AIC_KEY,
+    REPEAT_CROSS_KEY,
+    REPEAT_CHANGE_KEY,
 )
 
 
@@ -65,6 +76,7 @@ LOGGED_METRICS: tuple[str, ...] = (
 
 
 BEST_AIC_KEY = "best_aic"
+
 
 
 
@@ -296,6 +308,8 @@ __all__ = [
     "N_UNIQUE_KEY",
     "N_VALID_KEY",
     "POP_MEAN_AIC_KEY",
+    "REPEAT_CHANGE_KEY",
+    "REPEAT_CROSS_KEY",
     "get_data",
     "list_plot_infos",
     "render",

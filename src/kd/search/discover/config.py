@@ -351,10 +351,12 @@ class DiscoverConfig:
     """
 
     epsilon: float = DEFAULT_EPSILON
-    """Complexity penalty in the genetic fitness ``NMSE + epsilon * length``, where
-    ``length`` is the total number of tokens across the candidate's terms. Raise it
-    to push the search toward shorter equations; the useful value is problem-
-    dependent, and the packaged presets span 1e-6 to 1e-3.
+    """Risk-seeking quantile: the policy-gradient update keeps the batch rewards at
+    or above the ``1 - epsilon`` quantile (``RSPGStrategy``), so a smaller value is a
+    greedier update off fewer samples. Ties at the quantile are all kept, so the
+    retained share can exceed ``epsilon`` (an all-equal batch keeps everything). Must
+    lie in ``(0, 1]``. The packaged PDE presets use 0.01-0.02; the delta registry
+    records the lineage of the ``0.05`` default in.
     """
     baseline: str = DEFAULT_BASELINE
     """Value subtracted from the rewards in the policy-gradient loss. ``"R_e"`` (the

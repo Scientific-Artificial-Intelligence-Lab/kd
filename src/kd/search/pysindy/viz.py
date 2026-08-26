@@ -21,7 +21,20 @@ logger = logging.getLogger(__name__)
 NATIVE_NMSE_KEY = "native_nmse"
 REFIT_NMSE_KEY = "refit_nmse"
 SUPPORT_SIZE_KEY = "support_size"
-LOGGED_METRICS: tuple[str, ...] = (NATIVE_NMSE_KEY, REFIT_NMSE_KEY, SUPPORT_SIZE_KEY)
+
+
+
+
+
+
+
+STLSQ_HISTORY_KEY = "stlsq_history"
+LOGGED_METRICS: tuple[str, ...] = (
+    NATIVE_NMSE_KEY,
+    REFIT_NMSE_KEY,
+    SUPPORT_SIZE_KEY,
+    STLSQ_HISTORY_KEY,
+)
 
 _AGREEMENT_PLOT_NAME = "native_refit_agreement"
 _AGREEMENT_TITLE = "Native vs Refit NMSE"
@@ -147,6 +160,7 @@ __all__ = [
     "LOGGED_METRICS",
     "NATIVE_NMSE_KEY",
     "REFIT_NMSE_KEY",
+    "STLSQ_HISTORY_KEY",
     "SUPPORT_SIZE_KEY",
     "get_data",
     "list_plot_infos",

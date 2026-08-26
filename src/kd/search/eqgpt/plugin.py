@@ -12,7 +12,12 @@ from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.term_cache import TermColumnCache
 from kd.data.schema import DataTopology
-from kd.search.descriptor import InstrumentDescriptor, InstrumentMode, Knob
+from kd.search.descriptor import (
+    InstrumentDescriptor,
+    InstrumentMode,
+    Knob,
+    Segmentation,
+)
 from kd.search.eqgpt import _scoring
 from kd.search.eqgpt import steady_viz as _steady_viz_helpers
 from kd.search.eqgpt import viz as _viz_helpers
@@ -79,6 +84,7 @@ _POOL_BEST_KEY: Final[str] = _viz_helpers.POOL_BEST_KEY
 _POOL_MEDIAN_KEY: Final[str] = _viz_helpers.POOL_MEDIAN_KEY
 _POOL_WORST_KEY: Final[str] = _viz_helpers.POOL_WORST_KEY
 _FINETUNE_LOSS_KEY: Final[str] = _viz_helpers.FINETUNE_LOSS_KEY
+_N_DROPPED_KEY: Final[str] = _viz_helpers.N_DROPPED_KEY
 
 
 
@@ -169,6 +175,7 @@ class EqGPTPlugin:
                 resume_tier="resume_safe",
             ),
         ),
+        segmentation=Segmentation(archive="progress", unit="epochs"),
     )
 
     def __init__(
@@ -214,6 +221,13 @@ class EqGPTPlugin:
 
 
         self._pending_cache: dict[str, list[int]] = {}
+
+
+
+
+
+
+        self._n_dropped: int | None = None
 
 
 
@@ -350,6 +364,7 @@ class EqGPTPlugin:
         )
         self._sampler = Sampler(self._backend, vocab, sampling_config)
         self._pending_cache = {}
+        self._n_dropped = None
 
 
         self._term_cache = TermColumnCache()
@@ -403,6 +418,9 @@ class EqGPTPlugin:
             candidates.append(candidate)
 
         self._pending_cache = cache
+
+
+        self._n_dropped = len(raw_batch) - len(candidates)
         return candidates
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
@@ -498,6 +516,9 @@ class EqGPTPlugin:
             _LOGGED_METRICS,
             self._epoch_metrics(finetune_loss),
         )
+
+
+        self._n_dropped = None
 
 
     def build_final_result(self) -> EvaluationResult:
@@ -786,6 +807,11 @@ class EqGPTPlugin:
             _POOL_WORST_KEY: float(pool_worst),
             _FINETUNE_LOSS_KEY: (
                 float(finetune_loss) if finetune_loss is not None else _NO_MEASUREMENT
+            ),
+            _N_DROPPED_KEY: (
+                float(self._n_dropped)
+                if self._n_dropped is not None
+                else _NO_MEASUREMENT
             ),
         }
 

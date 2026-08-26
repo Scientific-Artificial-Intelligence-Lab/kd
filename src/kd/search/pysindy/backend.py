@@ -19,6 +19,9 @@ class PySINDyOptimizerBackend(Protocol):
     def coefficients(self) -> np.ndarray:
         ...
 
+    def history(self) -> list[list[float]]:
+        ...
+
 
 class _PySINDyOptimizerBackend:
 
@@ -59,6 +62,14 @@ class _PySINDyOptimizerBackend:
                 "coefficients() called before fit(); call fit(...) first"
             )
         return np.array(self._coefficients, dtype=np.float64, copy=True)
+
+    def history(self) -> list[list[float]]:
+        if self._optimizer is None:
+            raise RuntimeError("history() called before fit(); call fit(...) first")
+        return [
+            [float(value) for value in np.asarray(row, dtype=np.float64).ravel()]
+            for row in self._optimizer.history_
+        ]
 
     @staticmethod
     def _validated_coefficients(optimizer: Any, n_features: int) -> np.ndarray:
