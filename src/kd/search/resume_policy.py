@@ -89,6 +89,11 @@ _FINGERPRINT_PHANTOM_ALGORITHMS: Final[frozenset[str]] = frozenset(
 
 
 
+
+_SEED_FIELD: Final[str] = "seed"
+
+
+
 _MAX_FIELD_VALUE_CHARS: Final[int] = 120
 
 
@@ -209,6 +214,7 @@ def check_resume_config(
     plugin_cls: type[FacadeWiringContract],
     live_config: dict[str, Any],
     live_artifacts: Mapping[str, Any] | None = None,
+    reseed: bool = False,
 ) -> None:
 
 
@@ -243,6 +249,8 @@ def check_resume_config(
     init_changes: list[str] = []
     resume_safe_changes: list[str] = []
 
+    reseed_change: str | None = None
+
 
     identity_detail: list[dict[str, object]] = []
     init_detail: list[dict[str, object]] = []
@@ -256,6 +264,19 @@ def check_resume_config(
         stored_val = stored_config.get(field, _MISSING)
         live_val = live_canon.get(field, _MISSING)
         if stored_val == live_val:
+            continue
+
+
+
+
+
+        if (
+            reseed
+            and field == _SEED_FIELD
+            and stored_val is not _MISSING
+            and live_val is not _MISSING
+        ):
+            reseed_change = _render_change(field, stored_val, live_val)
             continue
         tier = resolve_field_tier(plugin_cls, algorithm, field)
         rendered = _render_change(field, stored_val, live_val)
@@ -276,6 +297,13 @@ def check_resume_config(
 
 
 
+        if reseed_change is not None:
+            logger.info(
+                "resume config accepted for algorithm %r: branch (reseed=True) "
+                "carries a new seed: %s",
+                algorithm,
+                reseed_change,
+            )
         if resume_safe_changes:
             logger.info(
                 "resume config accepted for algorithm %r: resume_safe field(s) "

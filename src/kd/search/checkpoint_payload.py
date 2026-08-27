@@ -55,6 +55,7 @@ def build_checkpoint_payload(
     algorithm: Any,
     *,
     task: DiscoveryTask | None = None,
+    dataset_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     config_snapshot = _config_snapshot(algorithm)
     if task is not None and config_snapshot is not None:
@@ -70,6 +71,7 @@ def build_checkpoint_payload(
         "config_canon_scheme": (
             CONFIG_CANON_SCHEME if config_snapshot is not None else None
         ),
+        "dataset_fingerprint": dataset_fingerprint,
     }
 
 

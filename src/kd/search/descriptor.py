@@ -74,12 +74,19 @@ class Segmentation:
 
     archive: str
     unit: str
+    reseed: bool = field(kw_only=True)
 
     def __post_init__(self) -> None:
         if self.archive not in _SEGMENTATION_ARCHIVES:
             raise ValueError(f"unknown segmentation archive: {self.archive!r}")
         if not self.unit:
             raise ValueError("segmentation unit must be non-empty")
+        if self.reseed and self.archive != "progress":
+            raise ValueError(
+                "segmentation reseed=True requires archive='progress'; "
+                f"got archive={self.archive!r} (a conclusion-only or absent "
+                "archive carries no search stream to re-derive)"
+            )
 
 
 @dataclass(frozen=True)
@@ -181,6 +188,7 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
         "segmentation": {
             "archive": descriptor.segmentation.archive,
             "unit": descriptor.segmentation.unit,
+            "reseed": descriptor.segmentation.reseed,
         },
         "fields": field_specs(plugin_cls),
         "score_kind": plugin_cls.score_kind,

@@ -29,7 +29,7 @@ from kd.core.equation.sketch import Sketch
 from kd.core.equation.types import LhsSpec
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.data.regression import TabularDataset
-from kd.data.schema import DataTopology
+from kd.data.schema import DataTopology, compute_dataset_fingerprint
 from kd.data.tabular_bridge import dataset_from_tabular
 from kd.search import tool_schema
 from kd.search.callbacks import (
@@ -219,6 +219,39 @@ def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _check_resume_dataset(
+    stored_fingerprint: object,
+    *,
+    live_fingerprint: str,
+    dataset_name: str,
+) -> None:
+    """Refuse a resume whose checkpoint was searched against other data (K4).
+
+    Bound by ``Model.fit`` into the runner's opaque ``dataset_guard``, mirroring
+    the tier-gated ``config_guard`` split: the facade owns the policy and the
+    stage, the runner only calls the callable. Both fingerprints are taken at
+    the FACADE stage (the fit input before the builder resolves LHS defaults),
+    so a same-dataset resume compares equal even when the builder later rewrites
+    the dataset's LHS defaults.
+
+    ``stored_fingerprint is None`` is a pre-K4 checkpoint that recorded nothing:
+    skipped, the same additive-optional courtesy the ``algorithm`` key gets.
+    Anything else that differs raises, and because the runner calls this before
+    the state setter, a rejected branch leaves the plugin untouched.
+    """
+    if stored_fingerprint is None:
+        return
+    if stored_fingerprint != live_fingerprint:
+        raise ValueError(
+            "resume dataset mismatch: this checkpoint was written against "
+            f"dataset fingerprint {stored_fingerprint!r}, but this fit's "
+            f"dataset {dataset_name!r} fingerprints as {live_fingerprint!r}. "
+            "Search state (scores, best, population) is priced on the data it "
+            "was searched against; resume onto the original dataset, or start "
+            "a fresh fit on this one."
+        )
 
 
 def instrument_schemas() -> list[dict[str, Any]]:
@@ -1274,8 +1307,58 @@ class Model:
         resume_from: str | Path | None = None,
         *,
         sketch: Sketch | None = None,
+        reseed: bool = False,
     ) -> Model:
         """Run the search and populate post-fit attributes.
+
+        Recording: a fit writes NO run record and NO catalog row
+        (``checkpoint_dir`` persists resume state and ``phases_path`` phase
+        lines; neither is a record). The run stays in memory behind
+        ``result_``, the public ``ExperimentResult`` accessor. Two public paths
+        put it on disk:
+
+        - ``kd.harness.run_episode(entry=..., entry_index=..., dataset=...,
+          run_dir=...)`` creates and seals the run directory itself, at the
+          cost of building a ``PlanEntry`` first. It appends no catalog row;
+          only ``run_plan`` does that automatically.
+        - The ``kd.search`` recipe below, wrapped around this facade::
+
+              from datetime import datetime, timezone
+
+              import kd
+              from kd.search import (
+                  CATALOG_FILENAME,
+                  DEFAULT_RUNS_ROOT,
+                  append_catalog_row,
+                  catalog_row_from_result,
+                  create_run_dir,
+                  finalize_run_dir,
+                  new_run_id,
+              )
+
+              run_id = new_run_id("pysindy")
+              paths = create_run_dir(DEFAULT_RUNS_ROOT / run_id)
+              model = kd.Model(algorithm="pysindy", seed=42)
+              model.fit(kd.load_burgers())
+              finalize_run_dir(paths, model.result_, run_id=run_id,
+                               instrument="pysindy", status="completed")
+              append_catalog_row(
+                  DEFAULT_RUNS_ROOT / CATALOG_FILENAME,
+                  catalog_row_from_result(
+                      model.result_, run_id=run_id,
+                      created_at=datetime.now(timezone.utc).isoformat(),
+                      instrument="pysindy", status="completed",
+                      run_dir=str(paths.root), seed=42),
+              )
+
+          It leaves ``manifest.json`` / ``record.json`` / ``recorder.json`` in
+          the run directory plus one catalog row. Two edges: ``status`` is a
+          closed vocabulary (``completed`` / ``no_record`` / ``raised``, any
+          other value raises), and ``create_run_dir`` takes the run's OWN
+          directory (``DEFAULT_RUNS_ROOT / run_id``), not the runs root, and
+          refuses a non-empty one. ``new_run_id`` is what mints an id;
+          ``run_id_of_run_dir`` only reads one back out of a finalized
+          directory, returning ``None`` where there is no manifest.
 
         Args:
             dataset: A PDE dataset or public ``X -> y`` regression table.
@@ -1362,6 +1445,23 @@ class Model:
                 when the discovered law satisfies every sketch clause. The
                 sketch is part of the run's scientific identity (RunSpec /
                 checkpoint / resume).
+            reseed: Turn the resume into a BRANCH (K4). A plain resume keeps
+                the checkpoint's random streams and continues one trajectory;
+                ``reseed=True`` keeps the restored search state (population /
+                controller weights / best) but re-derives the random streams
+                from THIS Model's seed the way a cold start would, so two
+                branches off one checkpoint explore differently. The new seed
+                travels through the ordinary seed channel (``Model(seed=...)``
+                / ``config.seed``); this flag only declares the intent, and
+                branching to the SAME seed is legal — it is a deterministic
+                re-throw of the stream, not a replay of the archived one.
+                Requires ``resume_from``, and only for an algorithm whose
+                declaration says it can branch
+                (``segmentation.reseed`` on the instrument schema: sga, dlga,
+                discover today). Both refusals are ``ValueError`` raised before
+                any expensive build. With ``reseed=True`` a changed ``seed`` is
+                the one config difference the resume gate accepts; every other
+                field keeps its tier.
 
         Returns:
             ``self`` for sklearn-style chaining.
@@ -1381,7 +1481,10 @@ class Model:
                 canonicalized (G2b resume guard); or if ``checkpoint_dir`` /
                 ``resume_from`` lives in a manifest-managed directory that is
                 torn or that does not list the resumed file
-                (``CheckpointManifestError``, a ``ValueError``).
+                (``CheckpointManifestError``, a ``ValueError``); or if
+                ``reseed=True`` without ``resume_from`` / for an algorithm
+                declaring no branch support; or if ``resume_from`` records a
+                dataset fingerprint differing from this fit's dataset (K4).
             FileNotFoundError: If ``resume_from`` does not exist.
             IsADirectoryError: If ``resume_from`` points at a directory.
             RuntimeError: If a LEGACY ``resume_from`` (no config snapshot) was
@@ -1414,6 +1517,46 @@ class Model:
             raise NotImplementedError(
                 f"Algorithm '{self.algorithm}' is not implemented. "
                 f"Supported algorithms: {list(_SUPPORTED_ALGORITHMS)}"
+            )
+
+
+
+
+
+        if reseed:
+            if resume_from is None:
+                raise ValueError(
+                    "reseed=True requires resume_from: a branch re-derives the "
+                    "random streams of a RESTORED search, so there is nothing "
+                    "to branch from on a fresh fit."
+                )
+            segmentation = _PLUGIN_CLASS_BY_ALGORITHM[
+                self.algorithm
+            ].descriptor.segmentation
+            if not segmentation.reseed:
+                raise ValueError(
+                    f"algorithm {self.algorithm!r} does not support reseed: its "
+                    "capability declaration says segmentation.reseed=False "
+                    f"(archive={segmentation.archive!r}). Drop reseed=True, or "
+                    "run a fresh fit with the new seed."
+                )
+
+
+
+
+
+
+
+
+
+        dataset_fingerprint: str | None = None
+        dataset_guard: Callable[[object], None] | None = None
+        if self.checkpoint_dir is not None or resume_from is not None:
+            dataset_fingerprint = compute_dataset_fingerprint(dataset)
+            dataset_guard = functools.partial(
+                _check_resume_dataset,
+                live_fingerprint=dataset_fingerprint,
+                dataset_name=dataset.name,
             )
 
         task: DiscoveryTask | None = None
@@ -1481,6 +1624,10 @@ class Model:
             if resume_from is not None
             else None
         )
+        if resume_lineage is not None:
+
+
+            resume_lineage["reseed"] = reseed
 
 
 
@@ -1493,12 +1640,14 @@ class Model:
             self._build_callbacks(
                 lineage=resume_lineage,
                 phase_writer=phase_writer,
+                dataset_fingerprint=dataset_fingerprint,
             )
             if task is None
             else self._build_callbacks(
                 lineage=resume_lineage,
                 phase_writer=phase_writer,
                 task=task,
+                dataset_fingerprint=dataset_fingerprint,
             )
         )
         runner = ExperimentRunner(
@@ -1547,6 +1696,8 @@ class Model:
                     if CONFIG_ARTIFACT_KEYS.get(self.algorithm)
                     else None
                 ),
+
+                reseed=reseed,
             )
 
 
@@ -1570,7 +1721,9 @@ class Model:
             runner.load_checkpoint(
                 resume_path,
                 config_guard=config_guard,
+                dataset_guard=dataset_guard,
                 resume_source=resume_lineage,
+                reseed=reseed,
             )
         build_started = time.perf_counter()
         components = (
@@ -2037,7 +2190,12 @@ class Model:
         return self.generations
 
     def _build_resume_lineage(self, resume_path: Path) -> dict[str, Any]:
-        """Assemble the M4 resume-provenance dict (``LINEAGE_FIELDS`` face).
+        """Assemble the SOURCE half of the M4 resume-provenance dict.
+
+        The result carries the five source-describing ``LINEAGE_FIELDS`` keys;
+        ``fit`` stamps the sixth (``reseed``, K4 — a property of THIS segment,
+        not of its source) onto the returned dict before any write surface sees
+        it.
 
         Enrichment only — the authoritative resume gates (manifest fence, tier
         guard, payload validation) run unchanged in ``fit``. A source outside
@@ -2082,6 +2240,7 @@ class Model:
         lineage: dict[str, Any] | None = None,
         phase_writer: PhaseWriter | None = None,
         task: DiscoveryTask | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> list[RunnerCallback]:
         """Return the runner callback list.
 
@@ -2090,8 +2249,9 @@ class Model:
         user-provided callbacks (in order), then a FRESH
         ``CheckpointCallback`` when ``checkpoint_dir`` is set (fresh per fit
         so ``_last_iteration`` cannot leak across fits; carrying this fit's
-        resume lineage for the ledger header), then ``_ProgressPrinter`` when
-        ``verbose=True``.
+        resume lineage for the ledger header and the K4 facade-stage
+        ``dataset_fingerprint`` for every payload it writes), then
+        ``_ProgressPrinter`` when ``verbose=True``.
         """
         cbs: list[RunnerCallback] = []
         if phase_writer is not None:
@@ -2104,6 +2264,7 @@ class Model:
                     every_n=self.checkpoint_every,
                     keep_last_n=self.checkpoint_keep_last,
                     lineage=lineage,
+                    dataset_fingerprint=dataset_fingerprint,
                 )
                 if task is None
                 else CheckpointCallback(
@@ -2112,6 +2273,7 @@ class Model:
                     keep_last_n=self.checkpoint_keep_last,
                     lineage=lineage,
                     task=task,
+                    dataset_fingerprint=dataset_fingerprint,
                 )
             )
             cbs.append(checkpoint)

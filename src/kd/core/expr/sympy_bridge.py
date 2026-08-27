@@ -279,7 +279,7 @@ def _fold_funcall(name: str, args: Sequence[str]) -> str:
 def _serialize_rational(expr: sympy.Rational) -> str:
     if expr.q == 1:
         return str(expr.p)
-    return f"div({expr.p}, {expr.q})"
+    return str(float(expr))
 
 
 def _repeat_mul(base: str, exponent: int) -> str:

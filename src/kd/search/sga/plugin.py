@@ -293,7 +293,9 @@ class SGAPlugin:
                 resume_tier="init_only",
             ),
         ),
-        segmentation=Segmentation(archive="progress", unit="generations"),
+        segmentation=Segmentation(
+            archive="progress", unit="generations", reseed=True
+        ),
     )
 
     def __init__(self, config: SGAConfig | None = None) -> None:
@@ -820,6 +822,9 @@ class SGAPlugin:
         self._sketch_capacity_rejected = int(value.get("sketch_capacity_rejected", 0))
         self._clear_pending_generation()
         self._restore_pending = True
+
+    def reseed(self) -> None:
+        self._rng.manual_seed(self._config.seed)
 
 
 

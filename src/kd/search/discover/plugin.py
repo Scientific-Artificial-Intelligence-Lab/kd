@@ -22,6 +22,7 @@ from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.engine import DiscoverEngine, EngineState
+from kd.search.discover.evaluation.magnitude import magnitude_rejection
 from kd.search.discover.tabular import (
     ParetoTracker,
     TabularCandidateScorer,
@@ -280,18 +281,19 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
                 resume_tier="resume_safe",
             ),
+            Knob(
+                "magnitude_filter",
+                "bool",
+                "Reject fitted coefficients outside the reference magnitude bounds.",
 
 
 
-
-
-
-
-
-
-
+                resume_tier="resume_safe",
+            ),
         ),
-        segmentation=Segmentation(archive="progress", unit="iterations"),
+        segmentation=Segmentation(
+            archive="progress", unit="iterations", reseed=True
+        ),
     )
 
     def __init__(
@@ -526,6 +528,9 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if self._engine is not None:
             self._engine.state = parsed
 
+    def reseed(self) -> None:
+        pass
+
 
 
 
@@ -594,14 +599,32 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         self._recorder.log(PARETO_LOSS_KEY, [entry.loss for entry in entries])
         self._recorder.log(PARETO_SCALE_KEY, [entry.scale for entry in entries])
 
-    @staticmethod
-    def _front_from_extras(extras: dict[str, Any] | None) -> ParetoTracker:
+    def _front_from_extras(self, extras: dict[str, Any] | None) -> ParetoTracker:
         if extras is None:
             return ParetoTracker()
         raw = extras.get(_TABULAR_FRONT, [])
         if not isinstance(raw, list):
             raise TypeError("tabular_front checkpoint extra must be a list.")
-        return ParetoTracker.from_state(raw)
+        if not self._config.magnitude_filter:
+            return ParetoTracker.from_state(raw)
+        tracker = ParetoTracker()
+        for row in raw:
+            scale = cast(float, row["scale"])
+            if (
+                magnitude_rejection(
+                    torch.tensor([scale]),
+                    selected_indices=None,
+                )
+                is not None
+            ):
+                continue
+            tracker.offer(
+                expression=cast(str, row["expression"]),
+                complexity=cast(int, row["complexity"]),
+                nmse=cast(float, row["loss"]),
+                scale=scale,
+            )
+        return tracker
 
     def _require_engine(self) -> DiscoverEngine:
         if self._engine is None:

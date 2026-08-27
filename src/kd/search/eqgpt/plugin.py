@@ -175,7 +175,9 @@ class EqGPTPlugin:
                 resume_tier="resume_safe",
             ),
         ),
-        segmentation=Segmentation(archive="progress", unit="epochs"),
+        segmentation=Segmentation(
+            archive="progress", unit="epochs", reseed=False
+        ),
     )
 
     def __init__(

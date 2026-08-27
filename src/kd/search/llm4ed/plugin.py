@@ -253,7 +253,9 @@ class Llm4edPlugin:
                 resume_tier="init_only",
             ),
         ),
-        segmentation=Segmentation(archive="progress", unit="rounds"),
+        segmentation=Segmentation(
+            archive="progress", unit="rounds", reseed=False
+        ),
     )
 
     def __init__(

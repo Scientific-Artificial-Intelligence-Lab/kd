@@ -131,7 +131,9 @@ class PySRPlugin:
 
 
 
-        segmentation=Segmentation(archive="conclusion", unit="iterations"),
+        segmentation=Segmentation(
+            archive="conclusion", unit="iterations", reseed=False
+        ),
     )
 
     def __init__(

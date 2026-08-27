@@ -89,8 +89,13 @@ LINEAGE_FIELDS: tuple[str, ...] = (
     "source_config_hash",
     "source_final_status",
     "source_iteration",
+    "reseed",
 )
 _LINEAGE_FIELD_SET = frozenset(LINEAGE_FIELDS)
+
+
+
+_LEGACY_LINEAGE_FIELD_SET = _LINEAGE_FIELD_SET - {"reseed"}
 
 
 def validate_lineage(
@@ -103,10 +108,10 @@ def validate_lineage(
     if not isinstance(lineage, Mapping):
         raise error_cls(f"lineage must be an object or null; got {lineage!r}")
     keys = frozenset(lineage)
-    if keys != _LINEAGE_FIELD_SET:
+    if keys not in (_LINEAGE_FIELD_SET, _LEGACY_LINEAGE_FIELD_SET):
         raise error_cls(
-            f"lineage keys must be exactly {sorted(_LINEAGE_FIELD_SET)!r}; "
-            f"got {sorted(keys)!r}"
+            f"lineage keys must be exactly {sorted(_LINEAGE_FIELD_SET)!r} "
+            f"(or the pre-K4 set without 'reseed'); got {sorted(keys)!r}"
         )
     resume_from = lineage["resume_from"]
     if not isinstance(resume_from, str) or not resume_from:
@@ -127,7 +132,12 @@ def validate_lineage(
             "lineage.source_iteration must be a non-negative int or None "
             f"(bool rejected); got {iteration!r}"
         )
-    return {field: lineage[field] for field in LINEAGE_FIELDS}
+    reseed = lineage.get("reseed", False)
+    if type(reseed) is not bool:
+        raise error_cls(f"lineage.reseed must be a bool; got {reseed!r}")
+    copied = {field: lineage[field] for field in LINEAGE_FIELDS if field != "reseed"}
+    copied["reseed"] = reseed
+    return copied
 
 
 _EQUATION_FIELDS = frozenset({"form", "lhs_spec", "terms", "attrs", "active_indices"})

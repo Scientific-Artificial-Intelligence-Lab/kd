@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kd"
-version = "0.7.1"
+version = "0.7.2"
 description = "Symbolic regression platform for PDE discovery"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -75,15 +75,7 @@ pysindy = [
 llm4ed = [
     "openai>=1.40",
 ]
-# suites actually run there. What stays pinned is that the PACKAGE ROOT is light:
-# import the framework at module level — ``adapter``'s injected-argument
-# annotations and ``state``'s channel schema both require it.
-# deepagents was ruled OUT by the 2026-08 v0 (its filesystem/sub-agent middleware
-# is non-excludable scaffolding, ~2.4k tokens of file-tool schema per turn) and
-# back IN by the 2026-08-10 rewrite: the collaborator's ask #3 is the model
-# writing its own analysis scripts, and ``execute`` ships only with that backend.
-# langchain-openai provides the OpenAI-compatible chat model kd's convention
-# targets (OPENAI_API_KEY / OPENAI_BASE_URL).
+# Optional dependencies for agent-controller integrations.
 agent = [
     "deepagents>=0.7,<1",
     "langchain>=1.3,<2",
@@ -110,12 +102,8 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-# Discover all `kd*` packages under src/. ``pdeagent/src`` is a second root
-# because the controller moved out to its own subproject dir (2026-08-18): that
-# whole directory is what ``git subtree push --prefix=pdeagent`` publishes to the
-# PDEAgent repo, so its README / pyproject / test conftest live there and have
-# exactly one home. Dropping this entry does not fail loudly -- ``import
-where = ["src", "pdeagent/src"]
+# Discover the public kd packages under src/.
+where = ["src"]
 
 [tool.setuptools.package-data]
 # Bundle benchmark dataset files + report HTML template into the wheel so
@@ -130,10 +118,8 @@ where = ["src", "pdeagent/src"]
 "kd.search.eqgpt" = ["_assets/*.json"]
 
 [tool.pytest.ini_options]
-# Two roots since 2026-08-18: the controller's tests moved with it into
-# running the controller suite (CI runs `pytest tests/` -- see ci.yml, which
-# names both paths for the same reason).
-testpaths = ["tests", "pdeagent/tests"]
+# Keep pytest discovery scoped to the kd test tree.
+testpaths = ["tests"]
 # Default = fast tier: bare pytest must never trip the
 # slow/golden science-contract tests (multi-hour, golden also requires
 # PYTHONHASHSEED=0). An explicit -m on the CLI REPLACES this filter:

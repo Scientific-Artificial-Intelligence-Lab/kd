@@ -311,6 +311,7 @@ class CheckpointCallback:
         keep_last_n: int | None = None,
         lineage: dict[str, Any] | None = None,
         task: DiscoveryTask | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> None:
         if every_n < _MIN_EVERY_N:
             raise ValueError(f"every_n must be >= 1, got {every_n}")
@@ -327,6 +328,7 @@ class CheckpointCallback:
         self._keep_last_n = keep_last_n
         self._lineage = lineage
         self._task = task
+        self._dataset_fingerprint = dataset_fingerprint
         self._last_iteration: int = -1
         self._manifest: CheckpointManifestWriter | None = None
 
@@ -355,10 +357,17 @@ class CheckpointCallback:
             filename = _CHECKPOINT_PATTERN.format(iteration=iteration)
             manifest = self._require_manifest()
             payload = (
-                build_checkpoint_payload(iteration, algorithm)
+                build_checkpoint_payload(
+                    iteration,
+                    algorithm,
+                    dataset_fingerprint=self._dataset_fingerprint,
+                )
                 if self._task is None
                 else build_checkpoint_payload(
-                    iteration, algorithm, task=self._task
+                    iteration,
+                    algorithm,
+                    task=self._task,
+                    dataset_fingerprint=self._dataset_fingerprint,
                 )
             )
             atomic_torch_save(payload, self._directory / filename)
@@ -381,9 +390,16 @@ class CheckpointCallback:
         manifest = self._require_manifest()
         iteration = max(self._last_iteration, 0)
         payload = (
-            build_checkpoint_payload(iteration, algorithm)
+            build_checkpoint_payload(
+                iteration, algorithm, dataset_fingerprint=self._dataset_fingerprint
+            )
             if self._task is None
-            else build_checkpoint_payload(iteration, algorithm, task=self._task)
+            else build_checkpoint_payload(
+                iteration,
+                algorithm,
+                task=self._task,
+                dataset_fingerprint=self._dataset_fingerprint,
+            )
         )
         atomic_torch_save(payload, self._directory / _CHECKPOINT_FINAL)
         manifest.append(

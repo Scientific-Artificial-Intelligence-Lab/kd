@@ -904,14 +904,25 @@ class ExperimentRunner:
         path: Path,
         *,
         config_guard: Callable[[object, object], None] | None = None,
+        dataset_guard: Callable[[object], None] | None = None,
         resume_source: dict[str, Any] | None = None,
+        reseed: bool = False,
     ) -> None:
         raw = self._torch_load_checkpoint(Path(path))
         data = self._validate_checkpoint_payload(raw)
         if config_guard is not None:
             config_guard(data.get("config"), data.get("config_canon_scheme"))
+        if dataset_guard is not None:
+            dataset_guard(data.get("dataset_fingerprint"))
         self._resume_source = resume_source
         self._algorithm.state = data["algorithm_state"]
+        if reseed:
+
+
+
+
+
+            getattr(self._algorithm, "reseed")()
 
 
 

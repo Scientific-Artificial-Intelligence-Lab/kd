@@ -88,7 +88,7 @@ def _recording_kwargs(
     return kwargs
 
 
-def _attempted_lineage(resume_from: Path | str) -> dict[str, Any]:
+def _attempted_lineage(resume_from: Path | str, *, reseed: bool) -> dict[str, Any]:
     parent = Path(resume_from).resolve().parent
     return {
         "resume_from": str(resume_from),
@@ -100,6 +100,7 @@ def _attempted_lineage(resume_from: Path | str) -> dict[str, Any]:
         "source_config_hash": None,
         "source_final_status": None,
         "source_iteration": None,
+        "reseed": reseed,
     }
 
 
@@ -137,6 +138,7 @@ def run_episode(
     device: str | None = None,
     run_dir: Path | None = None,
     resume_from: Path | str | None = None,
+    reseed: bool = False,
     recording: RecordingOptions | None = None,
     record_ref: str | None = None,
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
@@ -178,7 +180,13 @@ def run_episode(
             **model_kwargs,
             **sibling_kwargs,
         )
-        if resume_from is not None:
+        if reseed:
+
+
+
+
+            model.fit(dataset, resume_from=resume_from, reseed=True)
+        elif resume_from is not None:
             model.fit(dataset, resume_from=resume_from)
         else:
             model.fit(dataset)
@@ -209,7 +217,9 @@ def run_episode(
             run_dir=None if paths is None else paths.root,
 
             lineage=(
-                None if resume_from is None else _attempted_lineage(resume_from)
+                None
+                if resume_from is None
+                else _attempted_lineage(resume_from, reseed=reseed)
             ),
         )
         if persist_outcome is not None:

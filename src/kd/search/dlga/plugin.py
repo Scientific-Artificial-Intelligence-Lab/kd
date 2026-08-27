@@ -163,7 +163,9 @@ class DLGAPlugin:
                 resume_tier="init_only",
             ),
         ),
-        segmentation=Segmentation(archive="progress", unit="generations"),
+        segmentation=Segmentation(
+            archive="progress", unit="generations", reseed=True
+        ),
     )
 
     def __init__(
@@ -555,6 +557,9 @@ class DLGAPlugin:
         elif isinstance(rng_state, Tensor):
             self._rng.set_state(rng_state)
         self._restore_pending = True
+
+    def reseed(self) -> None:
+        self._rng.manual_seed(self._config.seed)
 
     def _reset_search_state(self) -> None:
         self._population = None

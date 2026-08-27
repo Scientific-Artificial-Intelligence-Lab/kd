@@ -123,7 +123,9 @@ class PySINDyPlugin:
 
 
 
-        segmentation=Segmentation(archive="conclusion", unit="fits"),
+        segmentation=Segmentation(
+            archive="conclusion", unit="fits", reseed=False
+        ),
     )
 
     def __init__(
