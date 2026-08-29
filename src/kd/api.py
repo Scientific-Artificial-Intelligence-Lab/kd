@@ -71,7 +71,7 @@ from kd.search.pysindy.plugin import PySINDyPlugin
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
 from kd.search.result import DEFAULT_SCORE_KIND
-from kd.search.resume_policy import CONFIG_ARTIFACT_KEYS, check_resume_config
+from kd.search.resume_policy import check_resume_config
 from kd.search.run_dir import CHECKPOINTS_DIRNAME, run_id_of_run_dir
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
@@ -502,12 +502,13 @@ class Model:
             algorithms (sga / dlga / discover / eqgpt / llm4ed) spend it as the
             kd runner's ``max_iterations``. ``pysr`` is one-shot: the runner
             loop is pinned to 1 and ``generations`` becomes PySR's internal GP
-            ``niterations`` instead (only when no ``config=PySRConfig(...)``
-            supplies its own). ``pysindy`` consumes it NOWHERE (one STLSQ
-            solve, whose ``max_iter`` is a convergence cap set through
-            ``config=PySINDyConfig(...)``), so passing it explicitly there
-            emits a ``UserWarning`` naming the algorithm rather than silently
-            dropping the value.
+            ``niterations`` instead; passing an explicit ``generations``
+            together with ``config=PySRConfig(...)`` is refused, since that
+            would state the same quantity twice. ``pysindy`` consumes it
+            NOWHERE (one STLSQ solve, whose ``max_iter`` is a convergence cap
+            set through ``config=PySINDyConfig(...)``), so passing it there
+            explicitly emits a ``UserWarning`` naming the algorithm rather than
+            silently dropping the value.
         population: SGA population size (number of PDE candidates). SGA-only.
         depth: Maximum tree depth per term. SGA-only.
         width: Maximum number of terms per PDE. SGA-only.
@@ -539,7 +540,8 @@ class Model:
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
             ``checkpoint_dir``/``checkpoint_every``, (for DLGA)
             ``surrogate_model``, and (for llm4ed) ``provider`` remain effective
-            on the facade.
+            on the facade — except for pysr, where ``generations`` maps into
+            the config's own ``niterations`` and passing both raises.
             Type must match ``algorithm`` (e.g. ``algorithm='dlga' +
             config=SGAConfig(...)`` raises). The config is deep-copied to
             prevent aliasing.
@@ -579,12 +581,14 @@ class Model:
         checkpoint_dir: Optional directory for periodic checkpoints. Writing
             covers all seven algorithms (the payload is the plugin's own
             ``state``, part of the search protocol), but RESUME semantics split
-            by plugin: the five iterative engines (sga / dlga / discover /
-            eqgpt / llm4ed) restore the search state and keep searching, so a
-            larger ``generations`` extends the run, while the two one-shot
-            engines (pysr / pysindy) restore the finished fit without
-            re-running the solver (recover-without-rerun; their runner loop is
-            pinned to one iteration either way). When set, every ``fit``
+            by plugin: six of them (the five iterative engines sga / dlga /
+            discover / eqgpt / llm4ed, plus pysr) restore the search state and
+            keep searching, so a larger ``generations`` extends the run. For
+            pysr the resumed segment is one warm ``PySRRegressor.fit`` from the
+            archived populations and ``generations`` is that segment's PySR
+            iteration increment (its runner loop stays pinned to one iteration).
+            Only pysindy restores the finished fit without re-running the
+            solver (recover-without-rerun). When set, every ``fit``
             attaches a fresh ``CheckpointCallback`` writing
             ``checkpoint_{iteration:06d}.pt``
             every ``checkpoint_every`` iterations plus a
@@ -717,7 +721,16 @@ class Model:
 
 
         self._validate_config_exclusivity(
-            config, population, depth, width, aic_ratio, derivatives, seed, kwargs
+            config,
+            algorithm,
+            generations,
+            population,
+            depth,
+            width,
+            aic_ratio,
+            derivatives,
+            seed,
+            kwargs,
         )
         kwargs = self._normalize_kwarg_values(algorithm, kwargs)
         self._validate_callbacks(callbacks)
@@ -988,6 +1001,8 @@ class Model:
         | EqGPTConfig
         | Llm4edConfig
         | None,
+        algorithm: str,
+        generations: Any,
         population: Any,
         depth: Any,
         width: Any,
@@ -1002,10 +1017,19 @@ class Model:
         ``Model(config=cfg, population=20)`` (where 20 happens to equal the
         default) is rejected — the user-set check uses ``is _UNSET`` rather
         than equality to the default value.
+
+        ``generations`` is rejected only for the algorithms whose facade
+        ``generations`` maps INTO a config field (``_GENERATIONS_INTO_CONFIG``,
+        i.e. pysr's ``niterations``): there the same quantity would be stated
+        twice and one statement would have to win silently. Everywhere else
+        ``generations`` drives the runner loop, reaches no config field, and
+        stays legal alongside ``config=``.
         """
         if config is None:
             return
         overrides: list[str] = []
+        if generations is not _UNSET and algorithm in _GENERATIONS_INTO_CONFIG:
+            overrides.append("generations")
         if population is not _UNSET:
             overrides.append("population")
         if depth is not _UNSET:
@@ -1025,8 +1049,8 @@ class Model:
                 f"Cannot pass both 'config=' and algorithm-specific "
                 f"parameters: {overrides}. When 'config' is provided, use "
                 f"it as the single source of plugin settings; only "
-                f"'generations' (except pysr, where the config's own "
-                f"'niterations' wins), 'verbose', 'callbacks', "
+                f"'generations' (refused too for pysr, where it maps into the "
+                f"config's own 'niterations'), 'verbose', 'callbacks', "
                 f"'checkpoint_dir'/'checkpoint_every' ('surrogate_model' "
                 f"for DLGA, 'provider' for llm4ed) remain effective on the "
                 f"facade."
@@ -1348,15 +1372,21 @@ class Model:
                       model.result_, run_id=run_id,
                       created_at=datetime.now(timezone.utc).isoformat(),
                       instrument="pysindy", status="completed",
-                      run_dir=str(paths.root), seed=42),
+                      run_dir=run_id, seed=42),
               )
 
           It leaves ``manifest.json`` / ``record.json`` / ``recorder.json`` in
-          the run directory plus one catalog row. Two edges: ``status`` is a
+          the run directory plus one catalog row. Three edges: ``status`` is a
           closed vocabulary (``completed`` / ``no_record`` / ``raised``, any
-          other value raises), and ``create_run_dir`` takes the run's OWN
+          other value raises); ``create_run_dir`` takes the run's OWN
           directory (``DEFAULT_RUNS_ROOT / run_id``), not the runs root, and
-          refuses a non-empty one. ``new_run_id`` is what mints an id;
+          refuses a non-empty one; and every path column in a row is stored
+          relative to the CATALOG FILE, which is why ``run_dir`` here is the
+          bare ``run_id`` and not the path ``create_run_dir`` was handed. That
+          keeps the runs tree relocatable as a unit, and a reader resolves a
+          row with ``catalog_path.parent / row["run_dir"]``.
+
+          ``new_run_id`` is what mints an id;
           ``run_id_of_run_dir`` only reads one back out of a finalized
           directory, returning ``None`` where there is no manifest.
 
@@ -1390,13 +1420,14 @@ class Model:
 
                 Because ``generations`` maps into ``max_iterations`` (not the
                 config) for every iterative plugin, "resume with more
-                generations" keeps working — EXCEPT for the one-shot engines:
-                for PySR ``generations`` maps into ``niterations``
-                (``init_only``), so changing it is rejected by the diff; for
-                PySINDy it reaches no knob at all (accepted but inert, warned
-                at construction). A controller must special-case one-shot
-                instruments (no "add more generations" action for
-                pysr/pysindy).
+                generations" keeps working. For PySR it maps into
+                ``niterations`` instead — a ``resume_safe`` knob, so it may
+                change and the resumed segment runs that many further PySR
+                iterations from the archived populations. Only PySINDy is the
+                exception: ``generations`` reaches no knob at all (accepted but
+                inert, warned at construction), so a controller must
+                special-case it (no "add more generations" action for
+                pysindy).
 
                 A checkpoint written under a DIFFERENT kd config schema (a field
                 was added or removed since it was written) is fail-closed: the
@@ -1681,11 +1712,13 @@ class Model:
                 if task is None
                 else {**dict(plugin.config), SKETCH_CONFIG_KEY: task.payload}
             )
+            plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
             config_guard = functools.partial(
                 check_resume_config,
                 algorithm=self.algorithm,
-                plugin_cls=_PLUGIN_CLASS_BY_ALGORITHM[self.algorithm],
+                plugin_cls=plugin_cls,
                 live_config=live_config,
+
 
 
 
@@ -1693,7 +1726,7 @@ class Model:
 
                 live_artifacts=(
                     getattr(plugin, "artifacts", None)
-                    if CONFIG_ARTIFACT_KEYS.get(self.algorithm)
+                    if plugin_cls.descriptor.config_artifact_keys
                     else None
                 ),
 
@@ -1892,7 +1925,9 @@ class Model:
 
         With a user
         ``config=PySRConfig(...)`` the config is the single source of truth and
-        is deep-copied verbatim (its ``niterations`` is preserved). Without one,
+        is deep-copied verbatim; its ``niterations`` is preserved because the
+        facade refuses an explicit ``generations`` alongside it
+        (``_validate_config_exclusivity``). Without one,
         the facade ``generations`` knob maps to PySR's *internal* GP loop length
         via ``PySRConfig(niterations=self.generations)`` — note this is the GP
         loop, not the kd runner loop (which is pinned to 1 for the one-shot
@@ -2176,8 +2211,11 @@ class Model:
         recorder with empty no-op iterations and confuse early-stop, so the kd
         runner loop is pinned to a single iteration. The facade ``generations``
         still reaches PySR via its internal GP ``niterations`` (see
-        ``_build_pysr_config``). All other algorithms are genuinely iterative
-        and keep ``max_iterations == generations``. The one-shot flag is the
+        ``_build_pysr_config``). On a resume the pinning is unchanged: the
+        restored PySR plugin does its warm fit on the segment's FIRST
+        ``propose``, and the runner still drives exactly one iteration. All
+        other algorithms are genuinely iterative and keep
+        ``max_iterations == generations``. The one-shot flag is the
         plugin's own ``FacadeWiringContract.one_shot`` declaration (no
         facade-resident ``algorithm == "pysr"`` special case).
 

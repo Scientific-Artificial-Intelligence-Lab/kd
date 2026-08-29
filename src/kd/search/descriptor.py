@@ -13,7 +13,6 @@ from kd.core.platform.sketch_compile import (
 )
 from kd.data.schema import DataTopology
 from kd.search.config_fields import field_specs
-from kd.search.resume_policy import SCIENCE_AXIS_DENYLISTS
 
 if TYPE_CHECKING:
     from kd.search.protocol import FacadeWiringContract
@@ -101,6 +100,10 @@ class InstrumentDescriptor:
 
     segmentation: Segmentation = field(kw_only=True)
 
+
+    identity_breaking_fields: frozenset[str] = field(kw_only=True)
+    config_artifact_keys: frozenset[str] = field(kw_only=True)
+
     def __post_init__(self) -> None:
         if not self.modes:
             raise ValueError("descriptor modes must be non-empty")
@@ -110,6 +113,22 @@ class InstrumentDescriptor:
         knob_names = [knob.name for knob in self.knobs]
         if len(knob_names) != len(set(knob_names)):
             raise ValueError("descriptor knob names must be distinct")
+
+
+
+
+
+
+
+
+        identity = self.identity_breaking_fields | self.config_artifact_keys
+        for knob in self.knobs:
+            if knob.name in identity and knob.resume_tier != "identity_breaking":
+                raise ValueError(
+                    f"knob {knob.name!r} is an identity_breaking field or "
+                    f"config-artifact key of {self.algorithm!r}; declare "
+                    f"resume_tier='identity_breaking' (got {knob.resume_tier!r})"
+                )
 
 
 def mode_for_topology(
@@ -194,9 +213,7 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
         "score_kind": plugin_cls.score_kind,
         "score_direction": plugin_cls.score_direction,
         "one_shot": plugin_cls.one_shot,
-        "identity_breaking_fields": sorted(
-            SCIENCE_AXIS_DENYLISTS.get(descriptor.algorithm, frozenset())
-        ),
+        "identity_breaking_fields": sorted(descriptor.identity_breaking_fields),
     }
 
 

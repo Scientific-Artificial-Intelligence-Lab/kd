@@ -19,13 +19,19 @@ def main(argv: list[str]) -> None:
     result: dict[str, Any]
     try:
         backend = _PySRRegressorBackend(request["config"])
-        backend.fit(request["X"], request["y"], request["variable_names"])
+        backend.fit(
+            request["X"],
+            request["y"],
+            request["variable_names"],
+            search_state=request["search_state"],
+        )
         result = {
             "best": sympy.srepr(backend.best_sympy()),
             "hof": [
                 (entry.complexity, entry.loss, sympy.srepr(entry.sympy_expr))
                 for entry in backend.hall_of_fame()
             ],
+            "search_state": backend.search_state(),
         }
     except Exception:
         result = {"error": traceback.format_exc()}

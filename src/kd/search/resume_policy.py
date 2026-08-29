@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
 from kd.search.run_spec import (
@@ -18,56 +17,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "CONFIG_ARTIFACT_KEYS",
-    "SCIENCE_AXIS_DENYLISTS",
     "check_resume_config",
     "config_artifact_overlay",
     "resolve_field_tier",
 ]
-
-
-
-
-
-
-
-
-
-SCIENCE_AXIS_DENYLISTS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({
-    "sga": frozenset({"use_autograd", "field_model"}),
-
-
-
-
-
-    "dlga": frozenset(
-        {"library", "lhs_auto_select", "target_lhs_order", "surrogate_model"}
-    ),
-    "discover": frozenset({"library", "max_diff_order", "pinn"}),
-    "pysr": frozenset({"terms", "binary_operators", "unary_operators"}),
-    "eqgpt": frozenset(
-        {"variables", "start_words", "masked_tokens", "steady_constant_column"}
-    ),
-    "pysindy": frozenset({"terms"}),
-    "llm4ed": frozenset(),
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-CONFIG_ARTIFACT_KEYS: Final[dict[str, frozenset[str]]] = {
-    "sga": frozenset({"field_model"}),
-    "dlga": frozenset({"surrogate_model"}),
-}
 
 
 
@@ -109,9 +62,8 @@ _MISSING: Final[_Missing] = _Missing()
 
 
 def config_artifact_overlay(
-    canon: dict[str, Any], algorithm: str, artifacts: object
+    canon: dict[str, Any], keys: frozenset[str], artifacts: object
 ) -> dict[str, Any]:
-    keys = CONFIG_ARTIFACT_KEYS.get(algorithm)
     if not keys or not isinstance(artifacts, Mapping):
         return canon
     for key in keys:
@@ -121,7 +73,7 @@ def config_artifact_overlay(
 
 
 def resolve_field_tier(
-    plugin_cls: type[FacadeWiringContract], algorithm: str, field: str
+    plugin_cls: type[FacadeWiringContract], field: str
 ) -> ResumeTier:
     from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 
@@ -130,7 +82,7 @@ def resolve_field_tier(
     for knob in plugin_cls.descriptor.knobs:
         if knob.name == field:
             return knob.resume_tier
-    if field in SCIENCE_AXIS_DENYLISTS.get(algorithm, frozenset()):
+    if field in plugin_cls.descriptor.identity_breaking_fields:
         return "identity_breaking"
     return "init_only"
 
@@ -242,7 +194,9 @@ def check_resume_config(
 
 
     live_canon = config_artifact_overlay(
-        canonicalize_config(dict(live_config)), algorithm, live_artifacts
+        canonicalize_config(dict(live_config)),
+        plugin_cls.descriptor.config_artifact_keys,
+        live_artifacts,
     )
 
     identity_changes: list[str] = []
@@ -278,7 +232,7 @@ def check_resume_config(
         ):
             reseed_change = _render_change(field, stored_val, live_val)
             continue
-        tier = resolve_field_tier(plugin_cls, algorithm, field)
+        tier = resolve_field_tier(plugin_cls, field)
         rendered = _render_change(field, stored_val, live_val)
         if tier == "resume_safe":
             resume_safe_changes.append(rendered)

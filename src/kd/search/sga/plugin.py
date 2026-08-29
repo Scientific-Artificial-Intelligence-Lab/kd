@@ -296,6 +296,11 @@ class SGAPlugin:
         segmentation=Segmentation(
             archive="progress", unit="generations", reseed=True
         ),
+        identity_breaking_fields=frozenset({"use_autograd", "field_model"}),
+
+
+
+        config_artifact_keys=frozenset({"field_model"}),
     )
 
     def __init__(self, config: SGAConfig | None = None) -> None:

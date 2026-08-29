@@ -178,6 +178,13 @@ class EqGPTPlugin:
         segmentation=Segmentation(
             archive="progress", unit="epochs", reseed=False
         ),
+        identity_breaking_fields=frozenset(
+            {"variables", "start_words", "masked_tokens", "steady_constant_column"}
+        ),
+
+
+
+        config_artifact_keys=frozenset(),
     )
 
     def __init__(

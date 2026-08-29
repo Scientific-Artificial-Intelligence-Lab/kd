@@ -66,6 +66,7 @@ _STATE_TERMS = "terms"
 _STATE_HOF_CANDIDATES = "hof_candidates"
 _STATE_HOF_META = "hof_meta"
 _STATE_MODE = "mode"
+_STATE_SEARCH_STATE = "search_state"
 
 
 class PySRPlugin:
@@ -110,6 +111,15 @@ class PySRPlugin:
         ),
         knobs=(
             Knob(
+                "niterations",
+                "int",
+                "PySR's internal GP iterations per fit; the facade generations "
+                "parameter maps here, and on a resume it is the number of "
+                "further iterations the new segment runs from the archived "
+                "populations.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
                 "population_size",
                 "int",
                 "Members per PySR population.",
@@ -131,9 +141,13 @@ class PySRPlugin:
 
 
 
-        segmentation=Segmentation(
-            archive="conclusion", unit="iterations", reseed=False
+
+
+        segmentation=Segmentation(archive="progress", unit="iterations", reseed=False),
+        identity_breaking_fields=frozenset(
+            {"terms", "binary_operators", "unary_operators"}
         ),
+        config_artifact_keys=frozenset(),
     )
 
     def __init__(
@@ -166,6 +180,11 @@ class PySRPlugin:
         self._restore_pending: bool = False
 
 
+        self._search_state: bytes | None = None
+
+        self._segment_fitted: bool = False
+
+
 
     def prepare(self, components: PlatformComponents) -> None:
         if components.evaluator is None:
@@ -196,10 +215,11 @@ class PySRPlugin:
 
     def propose(self, n: int) -> list[str]:
         evaluator = self._require_evaluator()
-        if self._fitted:
+        if self._segment_fitted:
             return []
         self._run_fit(evaluator)
         self._fitted = True
+        self._segment_fitted = True
         return list(self._hof_candidates or [])
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
@@ -324,6 +344,8 @@ class PySRPlugin:
                 if self._hof_meta is not None
                 else None
             ),
+
+            _STATE_SEARCH_STATE: self._search_state,
         }
 
     @state.setter
@@ -364,6 +386,20 @@ class PySRPlugin:
 
 
 
+
+
+
+
+
+        if value.get(_STATE_FITTED, False) and value.get(_STATE_SEARCH_STATE) is None:
+            raise ValueError(
+                "PySR checkpoint carries a fitted conclusion but no "
+                "'search_state' (written before PySR archived its search "
+                "state); it cannot be resumed. Run a fresh fit in a new "
+                "checkpoint directory."
+            )
+
+
         self._reset_fit_state()
         self._best_expression = str(value.get(_STATE_BEST_EXPRESSION, ""))
         self._best_score = float(value.get(_STATE_BEST_SCORE, INITIAL_BEST_SCORE))
@@ -378,6 +414,7 @@ class PySRPlugin:
             if meta is not None
             else None
         )
+        self._search_state = value.get(_STATE_SEARCH_STATE)
         self._restore_pending = True
 
 
@@ -412,6 +449,20 @@ class PySRPlugin:
 
     def _run_fit(self, evaluator: Evaluator) -> None:
         theta, valid_terms = evaluator.build_theta_matrix(list(self._library.terms))
+        if self._search_state is not None and list(valid_terms) != list(
+            self._terms or []
+        ):
+
+
+
+
+
+            raise ValueError(
+                f"PySR search state was archived over terms {self._terms!r}, "
+                f"but this segment's Theta yields {valid_terms!r}; the "
+                "archived populations index columns by position, so the "
+                "segment cannot continue from it"
+            )
         self._terms = valid_terms
         x_matrix = theta.detach().cpu().numpy()
         y_vector = evaluator.lhs_target.detach().cpu().numpy().reshape(-1)
@@ -420,7 +471,8 @@ class PySRPlugin:
         )
 
         backend = self._backend_factory(self._config)
-        backend.fit(x_matrix, y_vector, feature_names)
+        backend.fit(x_matrix, y_vector, feature_names, search_state=self._search_state)
+        self._search_state = backend.search_state()
 
         if self._mode == "tabular":
             self._best_expression = assembly.convert_best_tabular(
@@ -481,6 +533,8 @@ class PySRPlugin:
         self._selected_loss = None
         self._selected_nmse = None
         self._pareto_logged = False
+        self._search_state = None
+        self._segment_fitted = False
 
     def _require_evaluator(self) -> Evaluator:
         if self._evaluator is None:

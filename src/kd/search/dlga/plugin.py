@@ -166,6 +166,18 @@ class DLGAPlugin:
         segmentation=Segmentation(
             archive="progress", unit="generations", reseed=True
         ),
+
+
+
+
+
+        identity_breaking_fields=frozenset(
+            {"library", "lhs_auto_select", "target_lhs_order", "surrogate_model"}
+        ),
+
+
+
+        config_artifact_keys=frozenset({"surrogate_model"}),
     )
 
     def __init__(

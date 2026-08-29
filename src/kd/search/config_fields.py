@@ -168,9 +168,7 @@ def field_specs(plugin_cls: type[FacadeWiringContract]) -> list[dict[str, Any]]:
                 "required": required,
                 "settable_from": settable_from,
                 "facade_param": mapped.get(field.name),
-                "resume_tier": resolve_field_tier(
-                    plugin_cls, algorithm, field.name
-                ),
+                "resume_tier": resolve_field_tier(plugin_cls, field.name),
                 "knob": knob is not None,
                 "description": "" if knob is None else knob.description,
             }

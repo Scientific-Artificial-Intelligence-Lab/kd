@@ -39,7 +39,14 @@ class HOFEntry(NamedTuple):
 @runtime_checkable
 class PySRBackend(Protocol):
 
-    def fit(self, X: np.ndarray, y: np.ndarray, variable_names: list[str]) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        variable_names: list[str],
+        *,
+        search_state: bytes | None,
+    ) -> None:
         ...
 
     def best_sympy(self) -> Any:
@@ -48,6 +55,31 @@ class PySRBackend(Protocol):
     def hall_of_fame(self) -> list[HOFEntry]:
         ...
 
+    def search_state(self) -> bytes:
+        ...
+
+
+def _regressor_kwargs(cfg: PySRConfig) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "niterations": cfg.niterations,
+        "population_size": cfg.population_size,
+        "populations": cfg.populations,
+        "maxsize": cfg.maxsize,
+        "binary_operators": list(cfg.binary_operators),
+        "unary_operators": list(cfg.unary_operators),
+        "random_state": cfg.seed,
+
+
+
+
+
+
+
+        "temp_equation_file": True,
+    }
+    kwargs.update(cfg.extra_pysr_kwargs or {})
+    return kwargs
+
 
 class _PySRRegressorBackend:
 
@@ -55,7 +87,14 @@ class _PySRRegressorBackend:
         self._config = config
         self._model: Any = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray, variable_names: list[str]) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        variable_names: list[str],
+        *,
+        search_state: bytes | None,
+    ) -> None:
         os.environ.setdefault(_JULIA_SIGNALS_ENV_VAR, _JULIA_SIGNALS_ENV_VALUE)
         try:
             from pysr import PySRRegressor
@@ -65,24 +104,26 @@ class _PySRRegressorBackend:
                 "`pysr` (which bundles a Julia runtime); install it with "
                 f"`uv sync --extra pysr`. Original error: {e}"
             ) from e
-        cfg = self._config
-        kwargs: dict[str, Any] = {
-            "niterations": cfg.niterations,
-            "population_size": cfg.population_size,
-            "populations": cfg.populations,
-            "maxsize": cfg.maxsize,
-            "binary_operators": list(cfg.binary_operators),
-            "unary_operators": list(cfg.unary_operators),
-            "random_state": cfg.seed,
+        if search_state is None:
+            self._model = PySRRegressor(**_regressor_kwargs(self._config))
+        else:
+            self._model = pickle.loads(search_state)
 
 
 
 
 
-            "temp_equation_file": True,
-        }
-        kwargs.update(cfg.extra_pysr_kwargs or {})
-        self._model = PySRRegressor(**kwargs)
+
+
+            self._model.set_params(
+                niterations=self._config.niterations, warm_start=True
+            )
+
+
+
+
+
+            self._model.output_directory_ = tempfile.mkdtemp()
         self._model.fit(X, y, variable_names=variable_names)
 
     def best_sympy(self) -> Any:
@@ -112,6 +153,13 @@ class _PySRRegressorBackend:
             for _, row in equations.iterrows()
         ]
 
+    def search_state(self) -> bytes:
+        if self._model is None:
+            raise RuntimeError(
+                "search_state() called before fit(); call fit(...) first"
+            )
+        return pickle.dumps(self._model)
+
 
 class _SubprocessBackend:
 
@@ -119,13 +167,22 @@ class _SubprocessBackend:
         self._config = config
         self._best: Any = None
         self._hof: list[HOFEntry] | None = None
+        self._search_state: bytes | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray, variable_names: list[str]) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        variable_names: list[str],
+        *,
+        search_state: bytes | None,
+    ) -> None:
         request = {
             "X": X,
             "y": y,
             "variable_names": list(variable_names),
             "config": self._config,
+            "search_state": search_state,
         }
         with tempfile.TemporaryDirectory(prefix="kd-pysr-") as tmp:
             request_path = os.path.join(tmp, "request.pkl")
@@ -151,6 +208,7 @@ class _SubprocessBackend:
             HOFEntry(complexity=complexity, loss=loss, sympy_expr=sympy.sympify(srepr))
             for complexity, loss, srepr in result["hof"]
         ]
+        self._search_state = result["search_state"]
 
     def best_sympy(self) -> Any:
         if self._best is None:
@@ -163,6 +221,13 @@ class _SubprocessBackend:
                 "hall_of_fame() called before fit(); call fit(...) first"
             )
         return list(self._hof)
+
+    def search_state(self) -> bytes:
+        if self._search_state is None:
+            raise RuntimeError(
+                "search_state() called before fit(); call fit(...) first"
+            )
+        return self._search_state
 
 
 def default_backend_factory(config: PySRConfig) -> PySRBackend:

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
-from kd.search.resume_policy import CONFIG_ARTIFACT_KEYS, config_artifact_overlay
+from kd.search.resume_policy import config_artifact_overlay
 from kd.search.run_spec import (
     CONFIG_CANON_SCHEME,
     ConfigCanonicalizationError,
@@ -82,14 +82,26 @@ def _config_snapshot(algorithm: Any) -> dict[str, Any] | None:
             "checkpoint writer requires a Mapping algorithm.config; "
             f"got {type(config).__name__}"
         )
+
+
+
+
+    descriptor = getattr(algorithm, "descriptor", None)
+    if descriptor is None:
+        raise TypeError(
+            "checkpoint writer requires algorithm.descriptor (an "
+            "InstrumentDescriptor declaring config_artifact_keys); "
+            f"got {type(algorithm).__name__} without one"
+        )
     try:
         snapshot = canonicalize_config(dict(config))
     except ConfigCanonicalizationError:
         return None
-    algorithm_name = _algorithm_name(algorithm)
-    if algorithm_name is not None and CONFIG_ARTIFACT_KEYS.get(algorithm_name):
+    keys = descriptor.config_artifact_keys
+    if keys:
+
         artifacts = getattr(algorithm, "artifacts", None)
-        config_artifact_overlay(snapshot, algorithm_name, artifacts)
+        config_artifact_overlay(snapshot, keys, artifacts)
     return snapshot
 
 

@@ -294,6 +294,8 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         segmentation=Segmentation(
             archive="progress", unit="iterations", reseed=True
         ),
+        identity_breaking_fields=frozenset({"library", "max_diff_order", "pinn"}),
+        config_artifact_keys=frozenset(),
     )
 
     def __init__(

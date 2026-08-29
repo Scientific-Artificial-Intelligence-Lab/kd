@@ -126,6 +126,8 @@ class PySINDyPlugin:
         segmentation=Segmentation(
             archive="conclusion", unit="fits", reseed=False
         ),
+        identity_breaking_fields=frozenset({"terms"}),
+        config_artifact_keys=frozenset(),
     )
 
     def __init__(

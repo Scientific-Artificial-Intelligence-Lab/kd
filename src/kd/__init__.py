@@ -18,6 +18,7 @@ from kd.data import (
     generate_diffusion_data,
     get_dataset,
     list_datasets,
+    list_datasets_answer_blind,
     list_remote_datasets,
     load_allen_cahn,
     load_burgers,
@@ -69,7 +70,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.7.2"
+__version__ = "0.7.3"
 
 
 
@@ -118,6 +119,7 @@ __all__ = [
     "instrument_schemas",
     "law_signature",
     "list_datasets",
+    "list_datasets_answer_blind",
     "list_remote_datasets",
     "load_allen_cahn",
     "load_burgers",

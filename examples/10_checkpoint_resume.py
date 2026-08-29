@@ -31,11 +31,12 @@ run. Checkpoints are written atomically (tmp + rename): a process killed
 mid-write can never leave a torn checkpoint behind.
 
 ``checkpoint_dir`` works for all seven facade algorithms, in two flavours.
-The iterative engines (sga / dlga / discover / eqgpt / llm4ed) resume by
-restoring the search state and continuing to search. The one-shot backends
-(pysr / pysindy) run a single fit, so resuming them is recover-without-rerun:
-the fitted result is reloaded (no second PySR / PySINDy pass) rather than the
-search being extended.
+Six of them resume by restoring the search state and continuing to search:
+the five iterative engines (sga / dlga / discover / eqgpt / llm4ed) plus pysr,
+whose resumed segment is one warm ``PySRRegressor.fit`` from the archived
+populations, with ``generations`` as that segment's PySR iteration increment.
+Only pysindy is recover-without-rerun: the fitted result is reloaded (no
+second PySINDy pass) rather than the search being extended.
 
 Run: python examples/10_checkpoint_resume.py
 """

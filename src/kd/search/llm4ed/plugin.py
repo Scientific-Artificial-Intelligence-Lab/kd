@@ -256,6 +256,11 @@ class Llm4edPlugin:
         segmentation=Segmentation(
             archive="progress", unit="rounds", reseed=False
         ),
+        identity_breaking_fields=frozenset(),
+
+
+
+        config_artifact_keys=frozenset(),
     )
 
     def __init__(

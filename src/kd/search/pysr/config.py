@@ -30,6 +30,10 @@ _DEFAULT_UNARY_OPERATORS: tuple[str, ...] = ("sin", "cos", "exp", "log")
 
 
 
+
+
+
+
 _TYPED_PYSR_FIELDS: tuple[str, ...] = (
     "niterations",
     "population_size",
@@ -38,6 +42,7 @@ _TYPED_PYSR_FIELDS: tuple[str, ...] = (
     "binary_operators",
     "unary_operators",
     "random_state",
+    "warm_start",
 )
 
 
@@ -57,8 +62,10 @@ class PySRConfig:
       For full determinism pass ``extra_pysr_kwargs={"deterministic":
       True, "parallelism": "serial"}``, at a significant speed cost.
     - ``niterations``: number of PySR *internal* GP iterations (algebraic
-      generations inside PySR). This is **not** the kd ``generations`` knob --
-      it controls only PySR's own evolutionary loop.
+      generations inside PySR); the facade ``generations`` parameter maps
+      here. It controls only PySR's own evolutionary loop, never the kd runner
+      loop. On a resume it is the number of FURTHER iterations the new segment
+      runs from the archived populations (an increment, not a total).
     - ``population_size`` / ``populations`` / ``maxsize``: PySR GP knobs
       (per-population members, number of populations, max expression size).
     - ``binary_operators`` / ``unary_operators``: operator sets exposed to
@@ -104,5 +111,6 @@ class PySRConfig:
                     "extra_pysr_kwargs must not override typed fields "
                     f"{collisions}; set the typed field instead "
                     "(niterations is facade-owned: use Model(generations=...), "
-                    "and random_state is Model(seed=...))"
+                    "and random_state is Model(seed=...); warm_start is decided "
+                    "by the resume state and cannot be set here)"
                 )

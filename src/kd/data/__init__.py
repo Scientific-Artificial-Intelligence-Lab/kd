@@ -5,6 +5,7 @@ from kd.data.catalog import (
     DatasetSpec,
     get_dataset,
     list_datasets,
+    list_datasets_answer_blind,
 )
 from kd.data.noise import (
     NoiseScale,
@@ -68,6 +69,7 @@ __all__ = [
     "generate_diffusion_data",
     "get_dataset",
     "list_datasets",
+    "list_datasets_answer_blind",
     "list_remote_datasets",
     "load_allen_cahn",
     "load_burgers",
