@@ -175,6 +175,20 @@ class PlatformBuilder:
             task=self._task,
         )
 
+    def train_surrogate(self) -> tuple[torch.nn.Module, TrainingResult]:
+
+
+        self._surrogate_training = None
+        dataset = self._resolve_lhs(self._dataset)
+        coords = self._build_autograd_coords(dataset, device=self._device)
+        model = self._train_default_surrogate(dataset, coords)
+        if self._surrogate_training is None:
+            raise RuntimeError(
+                "surrogate training produced no TrainingResult; "
+                "FieldModelTrainer.fit must return one"
+            )
+        return model, self._surrogate_training
+
     def _build_field_lhs_components(self) -> PlatformComponents:
         dataset = self._dataset
         if dataset.topology is not DataTopology.TABULAR:

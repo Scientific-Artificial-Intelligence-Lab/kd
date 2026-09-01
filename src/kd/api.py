@@ -83,7 +83,8 @@ if TYPE_CHECKING:
     from kd.core.platform.requirements import DerivativeReqs
     from kd.data.schema import PDEDataset
     from kd.llm import LLMProvider
-    from kd.search.protocol import SearchAlgorithm
+    from kd.models.trainer import TrainingResult
+    from kd.search.protocol import SearchAlgorithm, SurrogateTrainer
     from kd.search.result import ExperimentResult
 
 __all__ = ["Model", "instrument_schemas"]
@@ -967,6 +968,7 @@ class Model:
                 f"Model(algorithm={algorithm!r}) fields={sorted(collision)} collide "
                 f"with facade-owned parameters: {hints}."
             )
+
     @staticmethod
     def _normalize_kwarg_values(
         algorithm: str, kwargs: dict[str, Any]
@@ -1324,6 +1326,87 @@ class Model:
                 )
 
 
+
+    def train_surrogate(
+        self, dataset: PDEDataset | TabularDataset
+    ) -> tuple[torch.nn.Module, TrainingResult]:
+        """Train this instrument's derivative surrogate without running a search.
+
+        The plugin is built exactly as ``fit`` builds it (same config
+        resolution, same ``device``), and its ``train_surrogate`` face
+        (``kd.search.SurrogateTrainer``) does the training, so the returned
+        module is the one a ``fit`` under this configuration would have
+        trained itself. Save it with ``kd.models.save_field_model`` and hand a
+        later ``Model`` the file's ``load_field_model`` result through the
+        instrument's injection kwarg (sga ``field_model`` under
+        ``derivatives="autograd"``, dlga ``surrogate_model``; the schema's
+        ``config_artifact_keys`` names it). Which constructor parameters
+        shape the surrogate is the schema's ``surrogate_fields`` (plus
+        ``seed``); the rest of the configuration does not enter the network.
+
+        Returns:
+            ``(module, training_result)``; the module is not installed on
+            this facade.
+
+        Raises:
+            NotImplementedError: The instrument accepts no injected surrogate
+                (empty ``config_artifact_keys``), so it trains none; or the
+                dataset's (topology, lhs_order) is one the instrument cannot
+                fit -- the same gate ``fit`` runs before its platform build,
+                with the same message.
+            TypeError: A tabular dataset (scalar regression has no field
+                surrogate).
+            ValueError: This facade already holds an injected model
+                (``field_model`` / ``surrogate_model``); training here would
+                retrain and silently discard it. Also sga under the default
+                ``derivatives="finite_diff"``, which never consults a surrogate.
+        """
+        plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
+        if not plugin_cls.descriptor.config_artifact_keys:
+            raise NotImplementedError(
+                f"Model(algorithm={self.algorithm!r}).train_surrogate: this "
+                "instrument accepts no injected surrogate and trains none; "
+                "instruments with a non-empty config_artifact_keys do "
+                "(see kd.instrument_schemas())."
+            )
+        if isinstance(dataset, TabularDataset):
+            raise TypeError(
+                "train_surrogate takes a gridded PDEDataset; a TabularDataset "
+                "(scalar regression) has no field surrogate to train."
+            )
+        from kd.core.platform.builder import _resolve_derivative_requirements
+
+        plugin, _ = self._build_plugin()
+
+
+
+
+
+
+        trainer = cast("SurrogateTrainer", plugin)
+        injected = trainer.artifacts
+        if injected:
+            keys = ", ".join(sorted(injected))
+            raise ValueError(
+                f"Model(algorithm={self.algorithm!r}) already holds an injected "
+                f"surrogate ({keys}); train_surrogate would retrain and discard "
+                f"it. Construct a Model without {keys} to train a fresh one."
+            )
+
+
+
+
+
+        self._check_dataset_supported(dataset, _resolve_derivative_requirements(plugin))
+        if self.algorithm == "dlga":
+
+
+
+
+            return cast("DLGAPlugin", plugin).train_surrogate(
+                dataset, device=self.device
+            )
+        return trainer.train_surrogate(dataset)
 
     def fit(
         self,
@@ -1725,7 +1808,7 @@ class Model:
 
 
                 live_artifacts=(
-                    getattr(plugin, "artifacts", None)
+                    cast("SurrogateTrainer", plugin).artifacts
                     if plugin_cls.descriptor.config_artifact_keys
                     else None
                 ),
@@ -1820,11 +1903,7 @@ class Model:
         if self.algorithm == "pysindy":
             plugin = plugin_factory(cfg, task=task)
         elif self.algorithm in {"discover", "pysr"}:
-            mode = (
-                "tabular"
-                if self._tabular_feature_names is not None
-                else "default"
-            )
+            mode = "tabular" if self._tabular_feature_names is not None else "default"
             plugin = plugin_factory(cfg, mode=mode)
         elif self.algorithm == "dlga":
 

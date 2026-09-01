@@ -29,6 +29,7 @@ from kd.search._torch_module_artifact import (
     torch_module_artifact,
 )
 from kd.search.descriptor import (
+    SCORE_FRAME_SURROGATE_FIELD,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
@@ -54,6 +55,8 @@ from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+    from kd.models.trainer import TrainingResult
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,8 @@ class DLGAPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
+                lhs_orders=frozenset({1, 2}),
+                score_frame=SCORE_FRAME_SURROGATE_FIELD,
             ),
         ),
         knobs=(
@@ -178,6 +183,21 @@ class DLGAPlugin:
 
 
         config_artifact_keys=frozenset({"surrogate_model"}),
+
+
+
+
+        surrogate_fields=frozenset(
+            {
+                "surrogate_hidden_sizes",
+                "surrogate_activation",
+                "surrogate_lr",
+                "surrogate_max_epochs",
+                "surrogate_patience",
+                "surrogate_val_ratio",
+                "surrogate_restore_best",
+            }
+        ),
     )
 
     def __init__(
@@ -259,6 +279,18 @@ class DLGAPlugin:
                 "restore_best": self._config.surrogate_restore_best,
             },
         )
+
+    def train_surrogate(
+        self, dataset: PDEDataset, *, device: str | None = None
+    ) -> tuple[nn.Module, TrainingResult]:
+
+
+
+
+        from kd.core.platform.builder import PlatformBuilder
+
+        reqs = replace(self.derivative_requirements, surrogate_model=None)
+        return PlatformBuilder(dataset, reqs, device).train_surrogate()
 
     def prepare(self, components: PlatformComponents) -> None:
         self._prepared = False

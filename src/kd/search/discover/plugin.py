@@ -13,6 +13,7 @@ from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.schema import DataTopology
 from kd.search.descriptor import (
+    SCORE_FRAME_PLATFORM_FULL_GRID,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
@@ -217,6 +218,11 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
                 description="Facade-reachable finite-difference search mode.",
+                lhs_orders=frozenset({1}),
+
+
+
+                score_frame=SCORE_FRAME_PLATFORM_FULL_GRID,
             ),
             InstrumentMode(
                 name="tabular",
@@ -224,6 +230,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
                 description="Facade-reachable tabular regression mode.",
+                lhs_orders=frozenset({0}),
             ),
         ),
         knobs=(
@@ -296,6 +303,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         ),
         identity_breaking_fields=frozenset({"library", "max_diff_order", "pinn"}),
         config_artifact_keys=frozenset(),
+        surrogate_fields=frozenset(),
     )
 
     def __init__(

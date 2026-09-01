@@ -98,6 +98,7 @@ class PySINDyPlugin:
                     operator_set="generation_enforced",
                     field_axis_set="generation_enforced",
                 ),
+                lhs_orders=frozenset({1}),
             ),
         ),
         knobs=(
@@ -128,6 +129,7 @@ class PySINDyPlugin:
         ),
         identity_breaking_fields=frozenset({"terms"}),
         config_artifact_keys=frozenset(),
+        surrogate_fields=frozenset(),
     )
 
     def __init__(

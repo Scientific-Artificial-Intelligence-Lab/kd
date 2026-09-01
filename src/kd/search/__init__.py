@@ -79,6 +79,7 @@ from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
     SearchAlgorithm,
+    SurrogateTrainer,
     TerminatingSearchAlgorithm,
 )
 from kd.search.pysindy import PySINDyConfig, PySINDyPlugin
@@ -166,6 +167,7 @@ __all__ = [
     "Segmentation",
     "SketchClauseLevels",
     "SketchOutcome",
+    "SurrogateTrainer",
     "TerminatingSearchAlgorithm",
     "VizDataCollector",
     "VizRecorder",

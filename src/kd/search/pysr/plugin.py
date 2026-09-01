@@ -100,6 +100,7 @@ class PySRPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                lhs_orders=frozenset({1}),
             ),
             InstrumentMode(
                 name="tabular",
@@ -107,6 +108,7 @@ class PySRPlugin:
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
                 description="Scalar symbolic regression on tabular X -> y data.",
+                lhs_orders=frozenset({0}),
             ),
         ),
         knobs=(
@@ -148,6 +150,7 @@ class PySRPlugin:
             {"terms", "binary_operators", "unary_operators"}
         ),
         config_artifact_keys=frozenset(),
+        surrogate_fields=frozenset(),
     )
 
     def __init__(

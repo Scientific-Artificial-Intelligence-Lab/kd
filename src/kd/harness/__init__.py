@@ -50,7 +50,7 @@ from kd.harness.dispatcher import (
     dispatch_plan,
     run_dispatch,
 )
-from kd.harness.episode import EpisodeOutcome, run_episode
+from kd.harness.episode import SKETCH_SIDECAR_FILENAME, EpisodeOutcome, run_episode
 from kd.harness.merge import (
     DispatchMergeError,
     MergeReplayError,
@@ -70,6 +70,7 @@ __all__ = [
     "DISPATCH_LOG_ARTIFACT_TAG",
     "ELIGIBILITY_RULES_VERSION",
     "PLAN_HASH_SCHEME",
+    "SKETCH_SIDECAR_FILENAME",
     "STRATUM_RULES_VERSION",
     "ConsensusArtifactError",
     "ConsensusPolicy",

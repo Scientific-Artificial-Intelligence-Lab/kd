@@ -219,6 +219,7 @@ class Llm4edPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                lhs_orders=frozenset({1}),
             ),
         ),
         knobs=(
@@ -261,6 +262,7 @@ class Llm4edPlugin:
 
 
         config_artifact_keys=frozenset(),
+        surrogate_fields=frozenset(),
     )
 
     def __init__(

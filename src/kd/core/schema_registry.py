@@ -17,6 +17,8 @@ class SchemaEntry:
 
 SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
+    "kd-surrogate-v1": SchemaEntry(1, "kd.models.serialize"),
+
     "kd-term-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-termlib-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-lawsig-v2": SchemaEntry(2, "kd.core.equation.signature"),
@@ -36,6 +38,12 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
     "kd-torch-module-v1": SchemaEntry(1, "kd.search._torch_module_artifact"),
     "kd-field-model-v1": SchemaEntry(1, "kd.search.sga.plugin"),
     "kd-sketch-outcome-v1": SchemaEntry(1, "kd.search.sketch_outcome"),
+
+
+
+    "kd-evaluate-terms-full-grid-v1": SchemaEntry(1, "kd.search.descriptor"),
+    "kd-frame-surrogate-field-v1": SchemaEntry(1, "kd.search.descriptor"),
+    "kd-frame-native-internal-v1": SchemaEntry(1, "kd.search.descriptor"),
 
     "kd-plan-v1": SchemaEntry(1, "kd.harness.plan"),
     "kd-consensus-v1": SchemaEntry(1, "kd.harness.consensus"),

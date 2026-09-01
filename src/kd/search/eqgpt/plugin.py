@@ -121,6 +121,7 @@ class EqGPTPlugin:
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
                 description="Default single-case evolution-equation path.",
+                lhs_orders=frozenset({1}),
             ),
             InstrumentMode(
                 name="wave_multicase",
@@ -130,6 +131,7 @@ class EqGPTPlugin:
                 ),
                 provider_kind="none",
                 description="Private multi-case wave evaluation path.",
+                lhs_orders=frozenset({1}),
             ),
             InstrumentMode(
                 name="steady",
@@ -137,6 +139,7 @@ class EqGPTPlugin:
                 topologies=frozenset({DataTopology.SCATTERED}),
                 provider_kind="none",
                 description="Private steady homogeneous-equation path.",
+                lhs_orders=frozenset({0}),
             ),
         ),
         knobs=(
@@ -185,6 +188,7 @@ class EqGPTPlugin:
 
 
         config_artifact_keys=frozenset(),
+        surrogate_fields=frozenset(),
     )
 
     def __init__(

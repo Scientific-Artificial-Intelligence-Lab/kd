@@ -27,6 +27,8 @@ from kd.models.trainer import FieldModelTrainer, TrainingResult
 from kd.search import surrogate_log as _surrogate_log
 from kd.search._torch_module_artifact import torch_module_artifact
 from kd.search.descriptor import (
+    SCORE_FRAME_NATIVE_INTERNAL,
+    SCORE_FRAME_SURROGATE_FIELD,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
@@ -48,6 +50,8 @@ from kd.viz.extension import PlotInfo
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
+    from kd.data.schema import PDEDataset
+
 logger = logging.getLogger(__name__)
 
 _INVALID_AIC = float("inf")
@@ -64,6 +68,14 @@ def _field_model_artifact(model: FieldModel) -> dict[str, str | int]:
             "field_names": list(model.field_names),
         },
     )
+
+
+def _grid_field_shape(dataset: Any) -> tuple[int, ...] | None:
+    if dataset.fields is None:
+        return None
+    for fd in dataset.fields.values():
+        return tuple(fd.values.shape)
+    return None
 
 
 _AIC_LOWER_BOUND = -100.0
@@ -209,6 +221,8 @@ class SGAPlugin:
                 provider_kind="finite_diff",
                 sketch=_SKETCH_LEVELS,
                 description="Platform finite-difference derivatives.",
+                lhs_orders=frozenset({1}),
+                score_frame=SCORE_FRAME_NATIVE_INTERNAL,
             ),
             InstrumentMode(
                 name="autograd",
@@ -220,6 +234,8 @@ class SGAPlugin:
                     "use_autograd=True: SGA trains its own field surrogate and "
                     "differentiates it with autograd."
                 ),
+                lhs_orders=frozenset({1}),
+                score_frame=SCORE_FRAME_SURROGATE_FIELD,
             ),
         ),
         knobs=(
@@ -301,6 +317,17 @@ class SGAPlugin:
 
 
         config_artifact_keys=frozenset({"field_model"}),
+
+
+
+        surrogate_fields=frozenset(
+            {
+                "autograd_train_epochs",
+                "autograd_train_lr",
+                "autograd_train_patience",
+                "autograd_train_val_ratio",
+            }
+        ),
     )
 
     def __init__(self, config: SGAConfig | None = None) -> None:
@@ -411,6 +438,25 @@ class SGAPlugin:
             needs_surrogate=False,
         )
 
+    def train_surrogate(self, dataset: PDEDataset) -> tuple[FieldModel, TrainingResult]:
+        if not self._config.use_autograd:
+            raise ValueError(
+                "SGA trains a field surrogate only under use_autograd=True "
+                "(Model(derivatives='autograd')); the finite-difference mode "
+                "never consults one."
+            )
+        field_shape = _grid_field_shape(dataset)
+        if field_shape is None:
+            raise ValueError(
+                "use_autograd=True requires dataset.fields with grid shape."
+            )
+        coord_names, field_names, flat_coords, flat_targets = (
+            self._autograd_training_data(dataset, field_shape)
+        )
+        return self._train_field_model(
+            coord_names, field_names, flat_coords, flat_targets
+        )
+
 
 
     def prepare(self, components: PlatformComponents) -> None:
@@ -448,11 +494,7 @@ class SGAPlugin:
         self._validate_naming(dataset)
 
 
-        field_shape: tuple[int, ...] | None = None
-        if dataset.fields is not None:
-            for fd in dataset.fields.values():
-                field_shape = tuple(fd.values.shape)
-                break
+        field_shape = _grid_field_shape(dataset)
 
 
         data_dict: dict[str, Tensor] = {}
@@ -1179,6 +1221,41 @@ class SGAPlugin:
         dataset: Any,
         field_shape: tuple[int, ...],
     ) -> AutogradProvider:
+        coord_names, field_names, flat_coords, flat_targets = (
+            self._autograd_training_data(dataset, field_shape)
+        )
+
+        if self._config.field_model is not None:
+            field_model: FieldModel = self._config.field_model
+            self._validate_field_model(field_model, coord_names, field_names)
+
+
+
+            field_model = self._align_field_model_to_data(field_model, flat_coords)
+        else:
+
+
+
+            field_model, self._surrogate_training_result = self._train_field_model(
+                coord_names, field_names, flat_coords, flat_targets
+            )
+
+        grad_coords = {
+            name: c.detach().clone().requires_grad_(True)
+            for name, c in flat_coords.items()
+        }
+        return AutogradProvider(
+            model=field_model,
+            coords=grad_coords,
+            dataset=dataset,
+            max_order=1,
+        )
+
+    def _autograd_training_data(
+        self,
+        dataset: Any,
+        field_shape: tuple[int, ...],
+    ) -> tuple[list[str], list[str], dict[str, Tensor], dict[str, Tensor]]:
         if dataset.fields is None or dataset.axes is None:
             raise ValueError(
                 "use_autograd=True requires dataset.fields and dataset.axes."
@@ -1198,55 +1275,42 @@ class SGAPlugin:
         flat_targets: dict[str, Tensor] = {
             name: fdata.values.flatten() for name, fdata in dataset.fields.items()
         }
+        return coord_names, field_names, flat_coords, flat_targets
 
-        if self._config.field_model is not None:
-            field_model: FieldModel = self._config.field_model
-            self._validate_field_model(field_model, coord_names, field_names)
-
-
-
-            field_model = self._align_field_model_to_data(field_model, flat_coords)
-        else:
-            field_model = FieldModel(
-                coord_names=coord_names,
-                field_names=field_names,
-            )
-
-
-
-
-
-
-
-
-            field_model = self._align_field_model_to_data(field_model, flat_coords)
-            trainer = FieldModelTrainer(field_model, lr=self._config.autograd_train_lr)
-
-
-
-
-
-
-
-            self._surrogate_training_result = trainer.fit(
-                coords=flat_coords,
-                targets=flat_targets,
-                max_epochs=self._config.autograd_train_epochs,
-                patience=self._config.autograd_train_patience,
-                val_ratio=self._config.autograd_train_val_ratio,
-                seed=self._config.seed,
-            )
-
-        grad_coords = {
-            name: c.detach().clone().requires_grad_(True)
-            for name, c in flat_coords.items()
-        }
-        return AutogradProvider(
-            model=field_model,
-            coords=grad_coords,
-            dataset=dataset,
-            max_order=1,
+    def _train_field_model(
+        self,
+        coord_names: list[str],
+        field_names: list[str],
+        flat_coords: dict[str, Tensor],
+        flat_targets: dict[str, Tensor],
+    ) -> tuple[FieldModel, TrainingResult]:
+        field_model = FieldModel(
+            coord_names=coord_names,
+            field_names=field_names,
         )
+
+
+
+
+
+
+
+
+        field_model = self._align_field_model_to_data(field_model, flat_coords)
+        trainer = FieldModelTrainer(field_model, lr=self._config.autograd_train_lr)
+
+
+
+
+        result = trainer.fit(
+            coords=flat_coords,
+            targets=flat_targets,
+            max_epochs=self._config.autograd_train_epochs,
+            patience=self._config.autograd_train_patience,
+            val_ratio=self._config.autograd_train_val_ratio,
+            seed=self._config.seed,
+        )
+        return field_model, result
 
     @staticmethod
     def _align_field_model_to_data(

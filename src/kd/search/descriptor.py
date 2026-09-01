@@ -22,6 +22,31 @@ _CLAIMABLE_FORMS = frozenset(
 )
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SCORE_FRAME_PLATFORM_FULL_GRID = "kd-evaluate-terms-full-grid-v1"
+
+
+
+SCORE_FRAME_SURROGATE_FIELD = "kd-frame-surrogate-field-v1"
+
+
+
+SCORE_FRAME_NATIVE_INTERNAL = "kd-frame-native-internal-v1"
+
+
 @dataclass(frozen=True)
 class InstrumentMode:
 
@@ -31,6 +56,8 @@ class InstrumentMode:
     provider_kind: Literal["finite_diff", "autograd", "none"]
     description: str = ""
     sketch: SketchClauseLevels = SketchClauseLevels()
+    lhs_orders: frozenset[int] | None = None
+    score_frame: str = "undeclared"
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -41,6 +68,24 @@ class InstrumentMode:
             raise ValueError(f"reserved forms are not claimable: {names}")
         if not self.topologies:
             raise ValueError("mode topologies must be non-empty")
+        if self.lhs_orders is None:
+            return
+
+
+
+        if not self.lhs_orders:
+            raise ValueError(
+                "declared lhs_orders must be non-empty (None declares nothing)"
+            )
+        offending = sorted(
+            repr(order)
+            for order in self.lhs_orders
+            if type(order) is not int or order < 0
+        )
+        if offending:
+            raise ValueError(
+                f"lhs_orders must be non-negative ints: {', '.join(offending)}"
+            )
 
 
 ResumeTier = Literal["init_only", "resume_safe", "identity_breaking"]
@@ -104,6 +149,9 @@ class InstrumentDescriptor:
     identity_breaking_fields: frozenset[str] = field(kw_only=True)
     config_artifact_keys: frozenset[str] = field(kw_only=True)
 
+
+    surrogate_fields: frozenset[str] = field(kw_only=True)
+
     def __post_init__(self) -> None:
         if not self.modes:
             raise ValueError("descriptor modes must be non-empty")
@@ -113,6 +161,14 @@ class InstrumentDescriptor:
         knob_names = [knob.name for knob in self.knobs]
         if len(knob_names) != len(set(knob_names)):
             raise ValueError("descriptor knob names must be distinct")
+        if bool(self.surrogate_fields) != bool(self.config_artifact_keys):
+            raise ValueError(
+                f"descriptor {self.algorithm!r}: surrogate_fields must be "
+                "non-empty exactly when config_artifact_keys is non-empty "
+                "(an instrument trains a surrogate iff it accepts one injected); "
+                f"got surrogate_fields={sorted(self.surrogate_fields)}, "
+                f"config_artifact_keys={sorted(self.config_artifact_keys)}"
+            )
 
 
 
@@ -192,6 +248,13 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
                 "topologies": sorted(topology.value for topology in mode.topologies),
                 "provider_kind": mode.provider_kind,
                 "description": mode.description,
+                "sketch": {
+                    clause: mode.sketch.level(clause) for clause in SKETCH_CLAUSES
+                },
+                "lhs_orders": (
+                    None if mode.lhs_orders is None else sorted(mode.lhs_orders)
+                ),
+                "score_frame": mode.score_frame,
             }
             for mode in descriptor.modes
         ],
@@ -214,10 +277,15 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
         "score_direction": plugin_cls.score_direction,
         "one_shot": plugin_cls.one_shot,
         "identity_breaking_fields": sorted(descriptor.identity_breaking_fields),
+        "config_artifact_keys": sorted(descriptor.config_artifact_keys),
+        "surrogate_fields": sorted(descriptor.surrogate_fields),
     }
 
 
 __all__ = [
+    "SCORE_FRAME_NATIVE_INTERNAL",
+    "SCORE_FRAME_PLATFORM_FULL_GRID",
+    "SCORE_FRAME_SURROGATE_FIELD",
     "InstrumentDescriptor",
     "InstrumentMode",
     "Knob",

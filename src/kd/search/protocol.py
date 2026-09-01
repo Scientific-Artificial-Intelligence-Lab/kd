@@ -10,12 +10,14 @@ from kd.search.descriptor import InstrumentDescriptor
 
 if TYPE_CHECKING:
     from torch import Tensor
+    from torch.nn import Module
 
     from kd.core.evaluator import EvaluationResult, Evaluator
     from kd.core.executor.context import ExecutionContext
     from kd.core.expr.executor import PythonExecutor
     from kd.core.expr.registry import FunctionRegistry
     from kd.data.schema import PDEDataset
+    from kd.models.trainer import TrainingResult
     from kd.search.recorder import VizRecorder
 
 
@@ -65,6 +67,16 @@ class FacadeWiringContract(ScoreContract, Protocol):
 
     @property
     def runner_batch_size(self) -> int:
+        ...
+
+
+class SurrogateTrainer(Protocol):
+
+    @property
+    def artifacts(self) -> dict[str, dict[str, str | int]] | None:
+        ...
+
+    def train_surrogate(self, dataset: PDEDataset) -> tuple[Module, TrainingResult]:
         ...
 
 

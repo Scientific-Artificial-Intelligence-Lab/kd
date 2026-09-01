@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from kd.api import Model
+from kd.core.equation.sketch import sketch_to_dict
 from kd.data.regression import TabularDataset
 from kd.data.tabular_bridge import dataset_from_tabular
 from kd.harness.plan import PlanEntry
@@ -23,12 +24,20 @@ from kd.search.run_dir import (
     new_run_id,
     run_id_of_run_dir,
 )
+from kd.search.sketch_outcome import write_sketch_artifact
 
 if TYPE_CHECKING:
+    from kd.core.equation.sketch import Sketch
     from kd.data.schema import PDEDataset
     from kd.search.callbacks import RunnerCallback
     from kd.search.records import RunRecord
     from kd.search.result import ExperimentResult
+
+
+
+
+
+SKETCH_SIDECAR_FILENAME: Final[str] = "sketch.json"
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +131,7 @@ def _finalize_recording(
         status=status,
         lineage=lineage,
         record_ref=(
-            record_ref
-            if result is not None and result.run_record is not None
-            else None
+            record_ref if result is not None and result.run_record is not None else None
         ),
     )
 
@@ -139,6 +146,7 @@ def run_episode(
     run_dir: Path | None = None,
     resume_from: Path | str | None = None,
     reseed: bool = False,
+    sketch: Sketch | None = None,
     recording: RecordingOptions | None = None,
     record_ref: str | None = None,
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
@@ -180,16 +188,22 @@ def run_episode(
             **model_kwargs,
             **sibling_kwargs,
         )
+
+
+
+        fit_kwargs: dict[str, Any] = {}
+        if sketch is not None:
+            fit_kwargs["sketch"] = sketch
         if reseed:
 
 
 
 
-            model.fit(dataset, resume_from=resume_from, reseed=True)
+            model.fit(dataset, resume_from=resume_from, reseed=True, **fit_kwargs)
         elif resume_from is not None:
-            model.fit(dataset, resume_from=resume_from)
+            model.fit(dataset, resume_from=resume_from, **fit_kwargs)
         else:
-            model.fit(dataset)
+            model.fit(dataset, **fit_kwargs)
         result: ExperimentResult | None = model.result_
         record: RunRecord | None = model.result_.run_record
     except Exception as exc:
@@ -293,10 +307,29 @@ def run_episode(
             lineage=outcome.lineage,
             record_ref=record_ref,
         )
+    if sketch is not None and paths is not None and record is not None:
+
+
+
+
+
+
+
+
+
+        sketch_outcome = result.sketch_outcome if result is not None else None
+        if sketch_outcome is not None:
+            write_sketch_artifact(
+                sketch_outcome,
+                sketch_payload=sketch_to_dict(sketch),
+                evidence_hash=record.evidence_hash,
+                path=paths.root / SKETCH_SIDECAR_FILENAME,
+            )
     return outcome
 
 
 __all__ = [
+    "SKETCH_SIDECAR_FILENAME",
     "STATUS_COMPLETED",
     "STATUS_NO_RECORD",
     "STATUS_RAISED",
