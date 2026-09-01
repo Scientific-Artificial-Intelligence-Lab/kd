@@ -1295,6 +1295,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1568,6 +1572,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1712,6 +1772,28 @@
     <span class="md-ellipsis">
       
         Batch experiments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#surrogate-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Surrogate models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugin-interfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin interfaces
       
     </span>
   </a>
@@ -1880,6 +1962,10 @@ under <a href="../design/">Guide</a> hold it: resume tiers in
 <tr>
 <td><a href="datasets/#kd.list_datasets"><code>kd.list_datasets()</code></a></td>
 <td>Return built-in dataset specs sorted by stable dataset id.</td>
+</tr>
+<tr>
+<td><a href="datasets/#kd.list_datasets_answer_blind"><code>kd.list_datasets_answer_blind()</code></a></td>
+<td>Return the catalog as JSON-safe rows with the ground truth withheld.</td>
 </tr>
 <tr>
 <td><a href="datasets/#kd.get_dataset"><code>kd.get_dataset(dataset_id)</code></a></td>
@@ -2140,6 +2226,48 @@ under <a href="../design/">Guide</a> hold it: resume tiers in
 <tr>
 <td><a href="harness/#kd.harness.render_consensus_markdown"><code>kd.harness.render_consensus_markdown(report)</code></a></td>
 <td>Render the report as a deterministic Markdown document (pure function).</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.SKETCH_SIDECAR_FILENAME"><code>kd.harness.SKETCH_SIDECAR_FILENAME</code></a></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="surrogate-models">Surrogate models</h2>
+<div class="kd-api">
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="models/#kd.models.save_field_model"><code>kd.models.save_field_model(model, path)</code></a></td>
+<td>Write <code>model</code> as a <code>kd-surrogate-v1</code> file and return its path.</td>
+</tr>
+<tr>
+<td><a href="models/#kd.models.load_field_model"><code>kd.models.load_field_model(path)</code></a></td>
+<td>Rebuild the <code>FieldModel</code> a <code>kd-surrogate-v1</code> file describes.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="plugin-interfaces">Plugin interfaces</h2>
+<div class="kd-api">
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="search/#kd.search.SurrogateTrainer"><code>kd.search.SurrogateTrainer(args, kwargs)</code></a></td>
+<td>Plugin face for training the derivative surrogate as a standalone action.</td>
 </tr>
 </tbody>
 </table>

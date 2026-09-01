@@ -1293,6 +1293,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -3242,6 +3246,62 @@
     
   
     Batch experiments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
   
 
     
@@ -6877,10 +6937,12 @@ controller commits to one expression family too early, set 0.0 to drop the bonus
 
     <div class="doc doc-contents ">
 
-        <p>Complexity penalty in the genetic fitness <code>NMSE + epsilon * length</code>, where
-<code>length</code> is the total number of tokens across the candidate's terms. Raise it
-to push the search toward shorter equations; the useful value is problem-
-dependent, and the packaged presets span 1e-6 to 1e-3.</p>
+        <p>Risk-seeking quantile: the policy-gradient update keeps the batch rewards at
+or above the <code>1 - epsilon</code> quantile (<code>RSPGStrategy</code>), so a smaller value is a
+greedier update off fewer samples. Ties at the quantile are all kept, so the
+retained share can exceed <code>epsilon</code> (an all-equal batch keeps everything). Must
+lie in <code>(0, 1]</code>. The packaged PDE presets use 0.01-0.02; the delta registry
+records the lineage of the <code>0.05</code> default in D-028.</p>
 
     </div>
 
@@ -9018,8 +9080,10 @@ other two sources.</p>
   For full determinism pass <code>extra_pysr_kwargs={"deterministic":
   True, "parallelism": "serial"}</code>, at a significant speed cost.
 - <code>niterations</code>: number of PySR <em>internal</em> GP iterations (algebraic
-  generations inside PySR). This is <strong>not</strong> the kd <code>generations</code> knob --
-  it controls only PySR's own evolutionary loop.
+  generations inside PySR); the facade <code>generations</code> parameter maps
+  here. It controls only PySR's own evolutionary loop, never the kd runner
+  loop. On a resume it is the number of FURTHER iterations the new segment
+  runs from the archived populations (an increment, not a total).
 - <code>population_size</code> / <code>populations</code> / <code>maxsize</code>: PySR GP knobs
   (per-population members, number of populations, max expression size).
 - <code>binary_operators</code> / <code>unary_operators</code>: operator sets exposed to

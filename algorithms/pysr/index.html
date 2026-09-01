@@ -1386,6 +1386,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1659,6 +1663,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1804,6 +1864,12 @@
 </thead>
 <tbody>
 <tr>
+<td><code>niterations</code></td>
+<td><code>40</code></td>
+<td><span class="kd-tier kd-tier--safe">resume-safe</span></td>
+<td>PySR's internal GP iterations per fit; the facade generations parameter maps here, and on a resume it is the number of further iterations the new segment runs from the archived populations.</td>
+</tr>
+<tr>
 <td><code>population_size</code></td>
 <td><code>33</code></td>
 <td><span class="kd-tier kd-tier--init">init-only</span></td>
@@ -1885,9 +1951,11 @@
 <h2 id="the-kd-wrapper">The KD wrapper</h2>
 <p>PySR is a third-party package, installed separately, and its authors document
 the search itself. The points below are specific to driving it from KD.</p>
-<p><strong>It runs once.</strong> PySR performs one batch search and returns its whole
+<p><strong>One fit per run.</strong> PySR performs one batch search and returns its whole
 hall of fame, so a KD run has a single iteration rather than a curve across
-generations. Asking for more iterations does no further PySR work.</p>
+generations. A resumed run (<code>resume_from</code>) continues that search from the
+populations and hall of fame stored in the checkpoint; the resuming model's
+<code>generations</code> is the number of further PySR iterations the new segment runs.</p>
 <p><strong>On a PDE dataset it regresses over KD's term library.</strong> <code>PySRConfig.terms</code> is
 the set of candidate term columns handed to PySR, in KD's function-call
 notation. The constants PySR fits are stripped off, leaving the structural

@@ -1375,6 +1375,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1648,6 +1652,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1827,8 +1887,8 @@ implements on its own.</p>
 <p>Each algorithm declares its capabilities as data on the class. The declaration covers
 the equation forms and data layouts of each mode, the source of that mode's derivatives,
 the name and direction of its score, whether the algorithm returns its answer in one
-shot, which parameters exist and which of them survive a resume, and which parameters
-change the scientific identity of a run.</p>
+shot, which parameters exist and which of them survive a resume, which parameters
+change the scientific identity of a run, and how far each mode can honour a sketch.</p>
 <p><code>kd.instrument_schemas()</code> returns those declarations, one entry per algorithm:</p>
 <div class="highlight"><pre><span></span><code><span class="n">schema</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">kd</span><span class="o">.</span><span class="n">instrument_schemas</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;algorithm&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;pysindy&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">schema</span><span class="p">[</span><span class="s2">&quot;score_kind&quot;</span><span class="p">],</span> <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;score_direction&quot;</span><span class="p">],</span> <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;one_shot&quot;</span><span class="p">])</span>
@@ -1836,9 +1896,13 @@ change the scientific identity of a run.</p>
 <span class="nb">print</span><span class="p">([(</span><span class="n">knob</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">knob</span><span class="p">[</span><span class="s2">&quot;resume_tier&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">knob</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;knobs&quot;</span><span class="p">]])</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code>NMSE min True
-[{&#39;name&#39;: &#39;default&#39;, &#39;forms&#39;: [&#39;EVOLUTION&#39;], &#39;topologies&#39;: [&#39;grid&#39;], &#39;provider_kind&#39;: &#39;finite_diff&#39;, &#39;description&#39;: &#39;&#39;}]
+[{&#39;name&#39;: &#39;default&#39;, &#39;forms&#39;: [&#39;EVOLUTION&#39;], &#39;topologies&#39;: [&#39;grid&#39;], &#39;provider_kind&#39;: &#39;finite_diff&#39;, &#39;description&#39;: &#39;&#39;, &#39;sketch&#39;: {&#39;fixed_terms&#39;: &#39;lowered&#39;, &#39;anchors&#39;: &#39;exit_checked&#39;, &#39;hole_count&#39;: &#39;exit_checked&#39;, &#39;derivative_order&#39;: &#39;generation_enforced&#39;, &#39;operator_set&#39;: &#39;generation_enforced&#39;, &#39;field_axis_set&#39;: &#39;generation_enforced&#39;}}]
 [(&#39;threshold&#39;, &#39;init_only&#39;), (&#39;max_iter&#39;, &#39;init_only&#39;), (&#39;normalize_columns&#39;, &#39;init_only&#39;)]
 </code></pre></div>
+<p>The <code>sketch</code> block of a mode is that mode's answer, clause by clause, for a partially
+specified equation passed to <code>Model.fit(sketch=...)</code>: <code>lowered</code>, <code>generation_enforced</code>,
+<code>fit_enforced</code>, <code>exit_checked</code>, or <code>unsupported</code>. All six clauses are always listed, so a
+mode that supports none of them still carries six keys.</p>
 <p>The platform reads the declaration rather than keeping its own tables of the same
 information. It uses the declaration to decide which derivative provider to build, which
 datasets to accept, how to label a score, and what a resume may change. Programs driving

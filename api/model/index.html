@@ -1293,6 +1293,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1469,6 +1473,17 @@
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;fit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kd.Model.train_surrogate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;train_surrogate
       
     </span>
   </a>
@@ -1768,6 +1783,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1889,6 +1960,17 @@
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;fit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kd.Model.train_surrogate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;train_surrogate
       
     </span>
   </a>
@@ -2405,6 +2487,7 @@ what <code>best_score_</code> measures in
   
       dataclass
    (kd.core.equation.sketch.Sketch)" href="../terms/#kd.Sketch">Sketch</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">reseed</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            Model (kd.api.Model)" href="#kd.Model">Model</a></span>
 </code></pre></div>
 
@@ -2456,6 +2539,16 @@ what <code>best_score_</code> measures in
           –
           <div class="doc-md-description">
             <p>Optional semantic search-space contract for this fit (<code>kd.Sketch</code>): pinned terms are deducted from the regression target and restored with their exact coefficients, and the run's result carries a sound <code>SketchOutcome</code> (<code>result_.sketch_outcome</code>) whose <code>solution</code> is only filled when the discovered law satisfies every sketch clause.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>reseed</code></b>
+              (<code><span title="bool">bool</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Turn the resume into a BRANCH (K4). A plain resume keeps the checkpoint's random streams and continues one trajectory.</p>
           </div>
         </li>
     </ul>
@@ -2515,6 +2608,76 @@ what <code>best_score_</code> measures in
             –
           <div class="doc-md-description">
             <p>If a LEGACY <code>resume_from</code> (no config snapshot) was written by a structurally different config (state_dict shape mismatch on restore); a snapshot-bearing checkpoint hits the <code>ValueError</code> tier gate first.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kd.Model.train_surrogate" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">train_surrogate</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">train_surrogate</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="tuple">tuple</span></span><span class="p">[</span><span class="n"><span title="torch.nn.Module">Module</span></span><span class="p">,</span> <span class="n"><span title="kd.models.trainer.TrainingResult">TrainingResult</span></span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Train this instrument's derivative surrogate without running a search.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="tuple">tuple</span>[<span title="torch.nn.Module">Module</span>, <span title="kd.models.trainer.TrainingResult">TrainingResult</span>]</code>
+          –
+          <div class="doc-md-description">
+            <p><code>(module, training_result)</code>; the module is not installed on this facade.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="NotImplementedError">NotImplementedError</span></code>
+            –
+          <div class="doc-md-description">
+            <p>The instrument accepts no injected surrogate (empty <code>config_artifact_keys</code>), so it trains none; or the dataset's (topology, lhs_order) is one the instrument cannot fit -- the same gate <code>fit</code> runs before its platform build, with the same message.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+              <code><span title="TypeError">TypeError</span></code>
+            –
+          <div class="doc-md-description">
+            <p>A tabular dataset (scalar regression has no field surrogate).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+              <code><span title="ValueError">ValueError</span></code>
+            –
+          <div class="doc-md-description">
+            <p>This facade already holds an injected model (<code>field_model</code> / <code>surrogate_model</code>); training here would retrain and silently discard it. Also sga under the default <code>derivatives="finite_diff"</code>, which never consults a surrogate.</p>
           </div>
         </li>
     </ul>

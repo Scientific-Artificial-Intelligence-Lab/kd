@@ -1419,6 +1419,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1692,6 +1696,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1903,6 +1963,18 @@ its own best-rewarded draws; the coefficients come from a platform refit.</p>
 <td><code>15</code></td>
 <td><span class="kd-tier kd-tier--init">init-only</span></td>
 <td>Maximum generated expression length.</td>
+</tr>
+<tr>
+<td><code>epsilon</code></td>
+<td><code>0.05</code></td>
+<td><span class="kd-tier kd-tier--safe">resume-safe</span></td>
+<td>Risk-seeking reward quantile: the top-epsilon fraction of a batch's rewards feeds the policy-gradient update.</td>
+</tr>
+<tr>
+<td><code>magnitude_filter</code></td>
+<td><code>False</code></td>
+<td><span class="kd-tier kd-tier--safe">resume-safe</span></td>
+<td>Reject fitted coefficients outside the reference magnitude bounds.</td>
 </tr>
 </tbody>
 </table>

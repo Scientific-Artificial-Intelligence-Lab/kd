@@ -1397,6 +1397,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1670,6 +1674,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogate models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin interfaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1874,9 +1934,12 @@ distinguishable. Both values have exported constants, <code>kd.KIND_FINAL</code>
 <p><code>fit</code> takes a checkpoint path as <code>resume_from</code>. A resume restores the search state: the
 population, the controller weights, and the current best. The number of generations comes
 from this <code>kd.Model</code>, and the parameters are judged by the tiers above. <code>seed</code> is not in
-the tier table, so it takes the unregistered-field default of init-only. A resume keeps
-the seed the checkpoint was written with, and a different seed is rejected, so changing
-the seed starts a new run.</p>
+the tier table, so it takes the unregistered-field default of init-only. A plain resume
+keeps the seed the checkpoint was written with, and a different seed is rejected. Passing
+<code>reseed=True</code> to <code>fit</code> turns the resume into a branch: it keeps the restored search state
+and re-derives the random streams from this model's seed, so a changed seed is accepted.
+Branching is available for the algorithms whose <code>segmentation.reseed</code> declaration is true,
+today <code>sga</code>, <code>dlga</code> and <code>discover</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="n">resumed</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;sga&quot;</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">population</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
 <span class="n">resumed</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">resume_from</span><span class="o">=</span><span class="s2">&quot;out/kdv-ckpt/checkpoint_final.pt&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">resumed</span><span class="o">.</span><span class="n">best_expr_</span><span class="p">)</span>
@@ -1903,8 +1966,9 @@ checkpoint cannot be resumed under the new config.
 <h2 id="add-generations">Add generations</h2>
 <p><code>generations</code> is not a config field. For the iterative algorithms it maps to the
 iteration budget, so extending a run means raising <code>generations</code> on the resuming model.
-PySR and PySINDy return their full result from a single fit, so for those two
-<code>generations</code> cannot be raised on a resume.</p>
+PySR stores its populations and hall of fame in the checkpoint, so raising
+<code>generations</code> on a resume extends that segment's PySR search. PySINDy solves in
+one pass, so for it <code>generations</code> cannot be raised on a resume.</p>
 <h2 id="the-two-manifests">The two manifests</h2>
 <p>The <code>manifest.json</code> above belongs to a checkpoint directory and lists what is in it.
 A finished run carries a second, unrelated manifest at <code>model.result_.manifest</code>. It
