@@ -130,7 +130,6 @@ class LSTMController(nn.Module):
         self.observe_action = observe_action
         self.observe_dangling = observe_dangling
         self.use_embedding = use_embedding
-        self.use_attention = attention
         self.attn_length = attn_length
         self.initializer: InitializerName = initializer
         self._validate_observation_config()

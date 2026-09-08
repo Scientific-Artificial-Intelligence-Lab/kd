@@ -11,6 +11,47 @@ examples accompany each release on its GitHub Release page.
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-09-08
+
+### Added
+
+- `kd.SearchInterrupted`: the exception an embedding process (a signal
+  handler, a wall-clock watchdog) raises inside a running `fit` to stop it.
+  Every place in the search stack that totalizes a failing candidate and keeps
+  going now re-raises this type first, so the interrupt reaches the caller
+  instead of being recorded as one more invalid candidate. The signal is
+  scoped to one search: `kd.harness.run_plan` seals the interrupted episode as
+  `raised` and continues with the next entry.
+- `kd.core.platform.resolve_derivative_requirements(plugin)`: the resolver
+  that turns an instrument's declared derivative requirements into the
+  executor's, previously a private helper of the platform builder.
+- `kd.core.expr.executor.DIFF_OPERATOR_PATTERN`: the one regular expression
+  that recognizes a derivative operator token, previously copied into three
+  private modules.
+
+### Changed
+
+- **Breaking**: `FiniteDiffProvider(method=)` is gone; the keyword was
+  accepted and never read. Drop it from the call.
+- **Breaking**: `PivotRegressionForm.rhs_irs` is gone; the field was written
+  and never read. The form carries `pivot_ir` only.
+- **Breaking**: `kd.search.eqgpt.Vocab.encode_sentence` and `decode_sentence`
+  are gone; nothing in kd called them. Encode and decode tokens one at a time
+  through the primitives `Vocab` keeps.
+- **Breaking**: `kd.core.platform._resolve_derivative_requirements` is no
+  longer exported; call `resolve_derivative_requirements` (above) instead.
+- A plugin of your own that declares no `derivative_requirements` is now
+  gated on the resolver's default (`GRID`, target order 1) before the run
+  starts, where 0.7.4 skipped the capability gate for it. A plugin that fits
+  a non-grid dataset or a second-order target must declare the property, the
+  row `FacadeWiringContract` now names. `ExperimentResult.config` carries
+  `provider_kind` for every plugin as a consequence.
+- The HTML report prints the algorithm identifier (`"sga"`, what `kd.Model`
+  takes) instead of the plugin class name (`"SGAPlugin"`), the resolution
+  `Model.summary()` already used; the JSON block inside the report keeps the
+  class name.
+- The PySR audit figures title the re-score as KD rather than kd.
+
 ## [0.7.4] - 2026-09-01
 
 ### Added
@@ -137,7 +178,8 @@ examples accompany each release on its GitHub Release page.
   run. It now emits a single Float literal, exact when the rational is a
   binary float (1/2, 3/4), approximate otherwise (1/3).
 
-[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/releases/tag/v0.7.2

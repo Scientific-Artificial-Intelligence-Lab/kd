@@ -27,10 +27,13 @@ from kd.core.equation import (
 )
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.naming import parse_derivative_name
-from kd.core.platform.requirements import DerivativeReqs, assert_dataset_supported
+from kd.core.platform.requirements import (
+    assert_dataset_supported,
+    resolve_derivative_requirements,
+)
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY, CompileReport
 from kd.core.verify import verify_equation
-from kd.data.schema import DataTopology, PDEDataset, compute_dataset_fingerprint
+from kd.data.schema import DataTopology, compute_dataset_fingerprint
 from kd.search.callbacks import RunnerCallback, VizDataCollector
 from kd.search.checkpoint_payload import (
     CHECKPOINT_VERSION,
@@ -72,10 +75,6 @@ logger = logging.getLogger(__name__)
 
 
 
-
-
-
-_NON_PDE_DATASET_FINGERPRINT = "<non-pde-dataset>"
 
 
 
@@ -169,8 +168,7 @@ class ExperimentRunner:
         *,
         preprocessing_seconds: float | None = None,
     ) -> ExperimentResult:
-        raw_task = getattr(components, "task", None)
-        self._task = raw_task if isinstance(raw_task, DiscoveryTask) else None
+        self._task = components.task
         self._assert_algorithm_protocol()
         self._assert_sketch_capability()
         self._assert_dataset_supported(components)
@@ -207,7 +205,7 @@ class ExperimentRunner:
 
 
 
-        recorder_before = getattr(components, "recorder", None)
+        recorder_before = components.recorder
         try:
             return self._run_search(components, lifecycle, preprocessing_seconds)
         finally:
@@ -329,15 +327,10 @@ class ExperimentRunner:
             )
 
     def _assert_dataset_supported(self, components: PlatformComponents) -> None:
-        reqs = getattr(self._algorithm, "derivative_requirements", None)
-        dataset = getattr(components, "dataset", None)
-        if isinstance(reqs, DerivativeReqs) and isinstance(dataset, PDEDataset):
-            algorithm = (
-                _algorithm_name(self._algorithm) or type(self._algorithm).__name__
-            )
-            assert_dataset_supported(
-                dataset.lhs_order, dataset.topology, reqs, algorithm
-            )
+        reqs = resolve_derivative_requirements(self._algorithm)
+        dataset = components.dataset
+        algorithm = _algorithm_name(self._algorithm) or type(self._algorithm).__name__
+        assert_dataset_supported(dataset.lhs_order, dataset.topology, reqs, algorithm)
 
     def _assert_sketch_capability(self) -> None:
         if self._task is None:
@@ -406,7 +399,7 @@ class ExperimentRunner:
                 )
 
     def _ensure_recorder(self, components: PlatformComponents) -> VizRecorder:
-        recorder = getattr(components, "recorder", None)
+        recorder = components.recorder
         if recorder is None:
             recorder = self._callback_recorder()
         if recorder is None:
@@ -418,7 +411,7 @@ class ExperimentRunner:
 
 
 
-        if getattr(components, "recorder", None) is None:
+        if components.recorder is None:
             components.recorder = recorder
         return recorder
 
@@ -455,6 +448,9 @@ class ExperimentRunner:
                 else:
                     cb.on_experiment_end(self._algorithm)
             except Exception as exc:
+
+
+
                 logger.exception(
                     "Callback %r.%s raised",
                     type(cb).__name__,
@@ -708,15 +704,8 @@ class ExperimentRunner:
             return self._lhs_spec_from_name(components, lhs_name)
 
         dataset = components.dataset
-        lhs_field = getattr(dataset, "lhs_field", None)
-        lhs_axis = getattr(dataset, "lhs_axis", None)
-        if (
-            isinstance(lhs_field, str)
-            and lhs_field
-            and isinstance(lhs_axis, str)
-            and lhs_axis
-        ):
-            return LhsSpec(lhs_field, lhs_axis, getattr(dataset, "lhs_order", 1))
+        if dataset.lhs_field and dataset.lhs_axis:
+            return LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
         return None
 
     def _lhs_spec_from_name(
@@ -725,8 +714,8 @@ class ExperimentRunner:
         lhs_name: str,
     ) -> LhsSpec | None:
         dataset = components.dataset
-        known_fields = self._known_dataset_fields(dataset)
-        known_axes = self._known_dataset_axes(dataset)
+        known_fields = None if dataset.fields is None else set(dataset.fields)
+        known_axes = None if dataset.axis_order is None else set(dataset.axis_order)
         parsed = parse_derivative_name(
             lhs_name,
             known_fields=known_fields,
@@ -739,25 +728,11 @@ class ExperimentRunner:
         field, axis, order = parsed
         return LhsSpec(field, axis, order)
 
-    @staticmethod
-    def _known_dataset_fields(dataset: object) -> set[str] | None:
-        fields = getattr(dataset, "fields", None)
-        if not isinstance(fields, dict):
-            return None
-        return {field for field in fields if isinstance(field, str)}
-
-    @staticmethod
-    def _known_dataset_axes(dataset: object) -> set[str] | None:
-        axis_order = getattr(dataset, "axis_order", None)
-        if not isinstance(axis_order, (list, tuple)):
-            return None
-        return {axis for axis in axis_order if isinstance(axis, str)}
-
     def _result_config(self) -> dict[str, Any]:
         config = dict(self._algorithm.config)
-        reqs = getattr(self._algorithm, "derivative_requirements", None)
-        if isinstance(reqs, DerivativeReqs):
-            config["provider_kind"] = reqs.provider_kind
+        config["provider_kind"] = resolve_derivative_requirements(
+            self._algorithm
+        ).provider_kind
         if self._task is not None:
 
 
@@ -771,13 +746,8 @@ class ExperimentRunner:
     def _build_manifest(self, components: PlatformComponents) -> RunManifest:
         from kd import __version__ as kd_version
 
-        dataset = components.dataset
-        if isinstance(dataset, PDEDataset):
-            fingerprint = compute_dataset_fingerprint(dataset)
-        else:
-            fingerprint = _NON_PDE_DATASET_FINGERPRINT
         return RunManifest(
-            dataset_cache_fingerprint=fingerprint,
+            dataset_cache_fingerprint=compute_dataset_fingerprint(components.dataset),
             kd_version=kd_version,
             seed=self._algorithm.config.get("seed"),
 
@@ -835,30 +805,24 @@ class ExperimentRunner:
         components: PlatformComponents,
         final_eval: EvaluationResult,
     ) -> str:
-        if isinstance(final_eval.lhs_name, str) and final_eval.lhs_name:
+        if final_eval.lhs_name:
             return final_eval.lhs_name
         dataset = components.dataset
-        if getattr(dataset, "topology", None) is DataTopology.TABULAR:
+        if dataset.topology is DataTopology.TABULAR:
             return dataset.lhs_field
-        lhs_field = getattr(dataset, "lhs_field", None)
-        lhs_axis = getattr(dataset, "lhs_axis", None)
-
-
-        if (
-            isinstance(lhs_field, str)
-            and lhs_field
-            and isinstance(lhs_axis, str)
-            and lhs_axis
-        ):
+        if dataset.lhs_field and dataset.lhs_axis:
 
 
 
 
 
 
-            lhs_order: int = getattr(dataset, "lhs_order", 1)
             return render_lhs_label(
-                LhsSpec(field=lhs_field, axis=lhs_axis, order=lhs_order)
+                LhsSpec(
+                    field=dataset.lhs_field,
+                    axis=dataset.lhs_axis,
+                    order=dataset.lhs_order,
+                )
             )
         logger.warning(
             "Neither the algorithm (final_eval.lhs_name) nor the dataset "

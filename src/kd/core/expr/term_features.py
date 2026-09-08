@@ -5,13 +5,17 @@ import ast
 import re
 from dataclasses import dataclass
 
-from kd.core.expr.executor import _DIFF_PATTERN, _SPECIAL_OPERATORS, _UNITY_TOKEN
+from kd.core.expr.executor import (
+    _SPECIAL_OPERATORS,
+    _UNITY_TOKEN,
+    DIFF_OPERATOR_PATTERN,
+)
 from kd.core.expr.naming import parse_compound_derivative
 
 
 
 
-_DIFF_HEAD = _DIFF_PATTERN
+_DIFF_HEAD = DIFF_OPERATOR_PATTERN
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import keyword
-import re
 from collections.abc import Sequence
 from typing import Self, cast
 
@@ -13,6 +12,8 @@ import torch
 from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
+from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
+from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import STRidgeSolver
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.schema import FieldData, PDEDataset, TaskType
@@ -32,7 +33,6 @@ _ZERO_EXPRESSION = "0"
 _KD_IR_RESERVED_NAMES: frozenset[str] = frozenset(
     FunctionRegistry.create_default().list_names()
 )
-_DIFF_RESERVED_PATTERN = re.compile(r"^diff[0-9]*_[a-z]+$")
 
 
 class SINDyRegressor:
@@ -230,7 +230,7 @@ def _validate_var_names(names: Sequence[str]) -> None:
 
 
 def _is_diff_reserved_name(name: str) -> bool:
-    return _DIFF_RESERVED_PATTERN.match(name) is not None
+    return DIFF_OPERATOR_PATTERN.match(name) is not None
 
 
 def _build_context(x_arr: FloatArray, var_names: Sequence[str]) -> ExecutionContext:
@@ -260,6 +260,10 @@ def _execute_terms(
         for term in terms:
             try:
                 raw = executor.execute(term, context).value
+            except SearchInterrupted:
+
+
+                raise
             except Exception as exc:
                 raise ValueError(f"Execution error for '{term}': {exc}") from exc
 

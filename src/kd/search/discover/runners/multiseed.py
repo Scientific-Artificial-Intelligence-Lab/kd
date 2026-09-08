@@ -23,6 +23,7 @@ from kd.core.expr import (
 from kd.core.linear_solve.least_squares import (
     LeastSquaresSolver,
 )
+from kd.core.safety import safe_div
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
 )
@@ -290,7 +291,7 @@ def run_single_seed(
         "data_path": str(data_path),
         "n_points": n_points,
         "n_iterations": n_iterations,
-        "ground_truth_fit": _fit_summary(fit_result),
+        "ground_truth_fit": build_fit_summary(fit_result),
         "mode1_run": engine_result,
     }
 
@@ -332,7 +333,7 @@ def run_single_seed_time_sliced(
         "time_slice": time_slice,
         "n_points": int(sample_indices.shape[0]),
         "n_iterations": n_iterations,
-        "ground_truth_fit": _fit_summary(fit_result),
+        "ground_truth_fit": build_fit_summary(fit_result),
         "mode1_run": engine_result,
     }
 
@@ -408,12 +409,15 @@ def _run_mode1(
     }
 
 
-def _fit_summary(result: EvaluationResult) -> dict[str, Any]:
+def build_fit_summary(result: EvaluationResult) -> dict[str, Any]:
     if result.coefficients is None:
         raise ValueError("fit result has no coefficients")
     coefficients = result.coefficients.detach().cpu().to(torch.float64)
     true = torch.tensor(GROUND_TRUTH_COEFFS, dtype=torch.float64)
-    rel = (coefficients - true).abs() / true.abs().clamp_min(REL_ERROR_DENOM_FLOOR)
+    rel = safe_div(
+        (coefficients - true).abs(),
+        true.abs().clamp_min(REL_ERROR_DENOM_FLOOR),
+    )
     l1_ratio = float(
         (coefficients - true).abs().sum().item()
         / max(float(true.abs().sum().item()), L1_RATIO_DENOM_FLOOR)

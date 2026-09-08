@@ -15,6 +15,7 @@ from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr.executor import PythonExecutor
 from kd.core.expr.registry import FunctionRegistry
+from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import (
     LeastSquaresSolver,
     SparseSolver,
@@ -218,7 +219,6 @@ class DLGAPlugin:
         self._registry: FunctionRegistry | None = None
         self._dataset: PDEDataset | None = None
         self._population: list[Genome] | None = None
-        self._last_results: list[EvaluationResult] | None = None
         self._last_result_genomes: list[Genome | None] | None = None
         self._best_result: EvaluationResult | None = None
         self._best_genome: Genome | None = None
@@ -391,7 +391,6 @@ class DLGAPlugin:
             self._evaluate_one(candidate, genome)
             for candidate, genome in zip(candidates, genomes, strict=True)
         ]
-        self._last_results = results
         self._last_result_genomes = genomes
         return results
 
@@ -475,7 +474,6 @@ class DLGAPlugin:
             crossover_rate=self._config.crossover_rate,
         )
         self._population = [self._mutate(genome) for genome in crossed]
-        self._last_results = None
         self._last_result_genomes = None
         self._last_fitness = None
 
@@ -500,6 +498,10 @@ class DLGAPlugin:
             )
         try:
             result = self._evaluate_one(self._best_expression, self._best_genome)
+        except SearchInterrupted:
+
+
+            raise
         except Exception as exc:
             logger.debug("Failed to build DLGA final result", exc_info=exc)
             return self._invalid_result(
@@ -607,7 +609,6 @@ class DLGAPlugin:
 
     def _reset_search_state(self) -> None:
         self._population = None
-        self._last_results = None
         self._last_result_genomes = None
         self._best_result = None
         self._best_genome = None

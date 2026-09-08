@@ -274,7 +274,6 @@ class FiniteDiffProvider(DerivativeProvider):
         self,
         dataset: PDEDataset,
         max_order: int = 3,
-        method: str = "central",
         accuracy: int = 4,
     ) -> None:
 
@@ -299,13 +298,8 @@ class FiniteDiffProvider(DerivativeProvider):
                 f"max_order must be <= {MAX_SUPPORTED_ORDER}, got {max_order}"
             )
 
-
-        if method != "central":
-            raise ValueError(f"Method '{method}' not supported, use 'central'")
-
         self._dataset = dataset
         self._max_order = max_order
-        self._method = method
         self._accuracy = accuracy
 
 

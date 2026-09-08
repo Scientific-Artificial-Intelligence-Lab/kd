@@ -22,6 +22,7 @@ import torch
 from kd.core.evaluator import release_cuda_memory
 from kd.core.expr.naming import parse_derivative_name
 from kd.core.expr.terms import split_terms
+from kd.core.interrupt import SearchInterrupted
 from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
 
 if TYPE_CHECKING:
@@ -223,6 +224,10 @@ def _classify_one(
         with torch.no_grad():
             exec_result = executor.execute(term, context)
             column = exec_result.value.detach().flatten()
+    except SearchInterrupted:
+
+
+        raise
     except torch.cuda.OutOfMemoryError:
 
 
@@ -262,6 +267,9 @@ def _canonical_reason(term: str, registry: FunctionRegistry) -> str | None:
     """
     try:
         parts = split_terms(term, registry)
+    except SearchInterrupted:
+
+        raise
     except Exception as exc:
         return f"{_REASON_SYNTAX}: non-canonical term (funcall IR required); {exc}"
     if len(parts) > 1:

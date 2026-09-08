@@ -120,9 +120,9 @@ _PLOT_SPECS: tuple[_PlotSpec, ...] = (
     ),
     _PlotSpec(
         name="kd_audit_path",
-        title="kd Audit Path",
+        title="KD Audit Path",
         description=(
-            "kd's independent NMSE re-score per Pareto complexity (the audit "
+            "KD's independent NMSE re-score per Pareto complexity (the audit "
             "substrate); the selected model is highlighted."
         ),
         x_key=PARETO_COMPLEXITY_KEY,
@@ -137,7 +137,7 @@ _PLOT_SPECS: tuple[_PlotSpec, ...] = (
         name="score_agreement",
         title="Score Agreement",
         description=(
-            "PySR loss vs kd NMSE per Pareto point -- do the two rankings agree?"
+            "PySR loss vs KD NMSE per Pareto point -- do the two rankings agree?"
         ),
         x_key=PARETO_LOSS_KEY,
         y_key=PARETO_NMSE_KEY,

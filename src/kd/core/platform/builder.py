@@ -12,6 +12,7 @@ from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
+from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve._helpers import is_cpu_alloc_failure
 from kd.core.linear_solve.least_squares import LeastSquaresSolver
 from kd.core.platform.requirements import DerivativeReqs
@@ -42,7 +43,6 @@ _DEFAULT_SURROGATE_ACTIVATION = "tanh"
 
 __all__ = [
     "PlatformBuilder",
-    "_resolve_derivative_requirements",
     "resolve_lhs_defaults",
 ]
 
@@ -54,24 +54,6 @@ def _resolve_device(device: str | None) -> torch.device | None:
     if resolved.type == "cuda" and resolved.index is None:
         resolved = torch.device("cuda", torch.cuda.current_device())
     return resolved
-
-
-def _resolve_derivative_requirements(plugin: Any) -> DerivativeReqs:
-    raw = getattr(plugin, "derivative_requirements", None)
-    if raw is None:
-        return DerivativeReqs()
-    if callable(raw):
-        raise TypeError(
-            f"{type(plugin).__name__}.derivative_requirements must be a "
-            f"@property returning DerivativeReqs, got a callable/method. "
-            f"Decorate the definition with @property."
-        )
-    if not isinstance(raw, DerivativeReqs):
-        raise TypeError(
-            f"{type(plugin).__name__}.derivative_requirements must return "
-            f"a DerivativeReqs instance, got {type(raw).__name__}."
-        )
-    return raw
 
 
 def resolve_lhs_defaults(dataset: PDEDataset) -> PDEDataset:
@@ -362,6 +344,11 @@ class PlatformBuilder:
                     .flatten()
                     .to(context.device)
                 )
+            except SearchInterrupted:
+
+
+
+                raise
             except torch.cuda.OutOfMemoryError:
 
 

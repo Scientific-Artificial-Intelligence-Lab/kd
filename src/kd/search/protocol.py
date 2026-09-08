@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from kd.core.executor.context import ExecutionContext
     from kd.core.expr.executor import PythonExecutor
     from kd.core.expr.registry import FunctionRegistry
+    from kd.core.platform.requirements import DerivativeReqs
     from kd.data.schema import PDEDataset
     from kd.models.trainer import TrainingResult
     from kd.search.recorder import VizRecorder
@@ -67,6 +68,10 @@ class FacadeWiringContract(ScoreContract, Protocol):
 
     @property
     def runner_batch_size(self) -> int:
+        ...
+
+    @property
+    def derivative_requirements(self) -> DerivativeReqs:
         ...
 
 

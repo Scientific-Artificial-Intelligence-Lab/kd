@@ -2,41 +2,32 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import math
-import time
 from typing import Any
 
 import torch
 from torch import Tensor
 
-from kd.core.evaluator import (
-    EvaluationResult,
-)
 from kd.core.expr import (
     FunctionRegistry,
 )
 from kd.core.expr.term_key import structure_term_key
+from kd.core.interrupt import SearchInterrupted
 from kd.core.safety import safe_div
 from kd.data.derivatives.finite_diff import (
     FiniteDiffProvider,
 )
 from kd.data.schema import PDEDataset
-from kd.search.discover.builder import build_engine
-from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.runners.multiseed import (
-    ALLEN_CAHN_OPERATORS,
-    GROUND_TRUTH_COEFFS,
     GROUND_TRUTH_TERMS,
     MAX_DIFF_ORDER,
-    TERM_LABELS,
     _build_base_evaluator,
+    _multiseed_config,
+    _run_mode1,
     _sample_indices,
+    build_fit_summary,
 )
 from kd.search.discover.runners.sampled_evaluator import SampledEvaluator
-from kd.search.discover.tokens.library import LibraryConfig
-
-_LOGGER = logging.getLogger(__name__)
 
 
 
@@ -51,9 +42,6 @@ _STAT_EPS = 1e-12
 _SKEW_ABS_MAX = 0.2
 _EXCESS_KURT_ABS_MAX = 0.5
 _AUTOCORR_ABS_MAX = 0.1
-_REL_ERROR_DENOM_FLOOR = 1e-30
-_L1_RATIO_DENOM_FLOOR = 1e-30
-_MODE1_LOG_INTERVAL = 10
 
 
 def assert_noise_statistics(
@@ -119,6 +107,10 @@ def detect_structure_hit(
     active_registry = registry or FunctionRegistry.create_default()
     try:
         terms = split_terms(expression, active_registry)
+    except SearchInterrupted:
+
+
+        raise
     except Exception:
         return False
 
@@ -140,8 +132,8 @@ def run_mode1_on_noise(
     evaluator = _build_base_evaluator(noisy, provider)
     indices = _sample_indices(seed, evaluator.lhs_target.shape[0], n_points)
     sampled = SampledEvaluator(evaluator, indices)
-    config = _mode1_config(n_iterations, batch_size)
-    mode1_result = _run_mode1_iterations(seed, config, sampled)
+    config = _multiseed_config(n_iterations, batch_size)
+    mode1_result = _run_mode1(seed, config, sampled)
     fit_result = sampled.evaluate_terms(list(GROUND_TRUTH_TERMS))
     if not fit_result.is_valid or fit_result.coefficients is None:
         raise RuntimeError(
@@ -229,95 +221,6 @@ def _validate_mode1_args(
 
 
 
-
-def _mode1_config(n_iterations: int, batch_size: int) -> DiscoverConfig:
-    return DiscoverConfig.burgers_preset(
-        n_iterations=n_iterations,
-        batch_size=batch_size,
-        library=LibraryConfig(
-            operators=list(ALLEN_CAHN_OPERATORS),
-            state_vars=["u"],
-            coord_vars=["x", "y", "t"],
-        ),
-        max_diff_order=MAX_DIFF_ORDER,
-    )
-
-
-def _run_mode1_iterations(
-    seed: int,
-    config: DiscoverConfig,
-    evaluator: SampledEvaluator,
-) -> dict[str, Any]:
-    torch.manual_seed(seed)
-    engine = build_engine(config)
-    start = time.time()
-    last_metrics: dict[str, float] = {}
-    for iteration in range(config.n_iterations):
-        last_metrics = engine.run_iteration(evaluator)
-        _log_mode1_progress(seed, iteration, config.n_iterations, engine)
-    state = engine.state
-    return {
-        "elapsed_seconds": time.time() - start,
-        "best_reward": float(engine.best_reward),
-        "best_expression": engine.best_expression,
-        "best_terms": state.best_result_terms,
-        "best_coefficients": state.best_result_coefficients,
-        "last_metrics": last_metrics,
-    }
-
-
-def _log_mode1_progress(
-    seed: int,
-    iteration: int,
-    n_iterations: int,
-    engine: Any,
-) -> None:
-    if (iteration + 1) % _MODE1_LOG_INTERVAL != 0 and iteration + 1 != n_iterations:
-        return
-    _LOGGER.info(
-        "mode1-noise seed=%d iter=%d best_reward=%.6f expr=%s",
-        seed,
-        iteration + 1,
-        engine.best_reward,
-        engine.best_expression,
-    )
-
-
-def build_fit_summary(result: EvaluationResult) -> dict[str, Any]:
-    if result.coefficients is None:
-        raise ValueError("fit result has no coefficients")
-    coefficients = result.coefficients.detach().cpu().to(torch.float64)
-    true = torch.tensor(GROUND_TRUTH_COEFFS, dtype=torch.float64)
-    rel = safe_div(
-        (coefficients - true).abs(),
-        true.abs().clamp_min(_REL_ERROR_DENOM_FLOOR),
-    )
-    l1_ratio = float(
-        (coefficients - true).abs().sum().item()
-        / max(float(true.abs().sum().item()), _L1_RATIO_DENOM_FLOOR)
-    )
-    return {
-        "terms": list(GROUND_TRUTH_TERMS),
-        "coefficients": _label_mapping(coefficients),
-        "ground_truth": dict(zip(TERM_LABELS, GROUND_TRUTH_COEFFS, strict=True)),
-        "per_term_rel_error": _label_mapping(rel),
-        "max_rel_coef_error": float(rel.max().item()),
-        "l1_ratio_error": l1_ratio,
-        "mse": result.mse,
-        "nmse": result.nmse,
-        "r2": result.r2,
-    }
-
-
-def _label_mapping(values: Tensor) -> dict[str, float]:
-    return {
-        label: float(value)
-        for label, value in zip(
-            TERM_LABELS,
-            values.detach().cpu().tolist(),
-            strict=True,
-        )
-    }
 
 
 

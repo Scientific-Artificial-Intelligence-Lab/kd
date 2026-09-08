@@ -109,8 +109,12 @@ def _build_json_summary(result: ExperimentResult) -> str:
     return json.dumps(data, indent=JSON_INDENT_SPACES, default=str)
 
 
+def _display_algorithm(result: ExperimentResult) -> str:
+    return str(result.config.get("algorithm") or result.algorithm_name)
+
+
 def _best_expression_display(result: ExperimentResult) -> EquationDisplay:
-    return latex_display(result, label=result.algorithm_name)
+    return latex_display(result, label=_display_algorithm(result))
 
 
 def generate_report(
@@ -144,7 +148,7 @@ def generate_report(
 
     html = template.render(
         dataset_name=result.dataset_name,
-        algorithm_name=result.algorithm_name,
+        algorithm_name=_display_algorithm(result),
 
 
 

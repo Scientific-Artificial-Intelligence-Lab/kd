@@ -12,17 +12,19 @@ from torch import Tensor
 from torch.optim import Adam, Optimizer
 
 from kd.core.jsonsafe import NO_MEASUREMENT
+from kd.search.discover.config import (
+    DEFAULT_BASELINE,
+    DEFAULT_ENTROPY_GAMMA,
+    DEFAULT_ENTROPY_WEIGHT,
+    DEFAULT_EPSILON,
+    DEFAULT_GAMMA,
+    DEFAULT_LEARNING_RATE,
+)
 from kd.search.discover.core.batch import Batch
 
 if TYPE_CHECKING:
     from kd.search.discover.engine import Generator
 
-DEFAULT_EPSILON = 0.05
-DEFAULT_BASELINE = "R_e"
-DEFAULT_ENTROPY_WEIGHT = 0.005
-DEFAULT_GAMMA = 0.5
-DEFAULT_ENTROPY_GAMMA = 1.0
-DEFAULT_LEARNING_RATE = 0.001
 REWARD_CLIP_ABS = 1e6
 GRAD_NORM_ORDER = 2
 ALLOWED_BASELINES = frozenset({"R_e", "ewma_R", "combined"})
@@ -135,7 +137,9 @@ class RSPGStrategy:
         filtered_rewards = rewards
         if valid_mask is not None:
             filtered_batch, filtered_rewards = self._apply_valid_mask(
-                batch, rewards, valid_mask,
+                batch,
+                rewards,
+                valid_mask,
             )
         if filtered_rewards.shape[0] == 0:
             logger.warning(
@@ -149,13 +153,16 @@ class RSPGStrategy:
         )
         clipped_rewards = self._clip_rewards(filtered_rewards, controller.device)
         baseline_value, new_state = self._compute_baseline(
-            clipped_rewards, quantile, baseline_state,
+            clipped_rewards,
+            quantile,
+            baseline_state,
         )
         optimizer = self._get_optimizer(controller)
         controller.train()
         optimizer.zero_grad()
         neglogp, entropy = controller.make_neglogp_and_entropy(
-            filtered_batch, entropy_gamma=self.entropy_gamma,
+            filtered_batch,
+            entropy_gamma=self.entropy_gamma,
         )
         pg_loss = self._policy_gradient_loss(clipped_rewards, baseline_value, neglogp)
         entropy_loss = -self.entropy_weight * torch.mean(entropy)
@@ -294,9 +301,7 @@ class RSPGStrategy:
         mean_reward = float(torch.mean(rewards).item())
         ewma_reward = self._update_ewma(mean_reward, quantile, baseline_state)
         baseline_value = (
-            ewma_reward
-            if self.baseline == "ewma_R"
-            else quantile + ewma_reward
+            ewma_reward if self.baseline == "ewma_R" else quantile + ewma_reward
         )
         new_state = BaselineState(
             ewma_reward=ewma_reward,
@@ -336,7 +341,9 @@ class RSPGStrategy:
         neglogp: Tensor,
     ) -> Tensor:
         baseline_tensor = torch.as_tensor(
-            baseline, dtype=torch.float32, device=neglogp.device,
+            baseline,
+            dtype=torch.float32,
+            device=neglogp.device,
         )
         return torch.mean((rewards - baseline_tensor) * neglogp)
 

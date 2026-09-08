@@ -27,6 +27,7 @@ import torch
 
 from kd.core.equation.sketch import Sketch
 from kd.core.equation.types import LhsSpec
+from kd.core.platform.requirements import resolve_derivative_requirements
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, compute_dataset_fingerprint
@@ -190,10 +191,11 @@ _FACADE_PARAM_LITERALS: dict[str, list[str]] = {
 def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
     """Describe the facade parameters this algorithm consumes, and where.
 
-    ``effect`` is derived from the same two predicates
-    ``_warn_if_generations_unused`` reads (``one_shot`` and
-    ``_GENERATIONS_INTO_CONFIG``), so a caller reading the schema and a caller
-    reading the warning cannot be told different things.
+    ``effect`` comes from two sources: ``FACADE_MAPPED[algorithm]``, the table
+    naming the config field each facade parameter feeds, and the plugin class's
+    ``one_shot`` flag. A mapped name reports ``config_field``; an unmapped
+    ``generations`` reports ``unused`` on a one-shot plugin and
+    ``max_iterations`` otherwise.
     """
     into_config = {
         facade_name: field_name
@@ -1374,8 +1376,6 @@ class Model:
                 "train_surrogate takes a gridded PDEDataset; a TabularDataset "
                 "(scalar regression) has no field surrogate to train."
             )
-        from kd.core.platform.builder import _resolve_derivative_requirements
-
         plugin, _ = self._build_plugin()
 
 
@@ -1397,7 +1397,7 @@ class Model:
 
 
 
-        self._check_dataset_supported(dataset, _resolve_derivative_requirements(plugin))
+        self._check_dataset_supported(dataset, resolve_derivative_requirements(plugin))
         if self.algorithm == "dlga":
 
 
@@ -2222,7 +2222,7 @@ class Model:
         """Wire up the platform stack for the given dataset (declarative).
 
         Resolves plugin-declared ``DerivativeReqs`` (via
-        ``_resolve_derivative_requirements`` helper — Protocol does not
+        ``resolve_derivative_requirements`` helper — Protocol does not
         support default property implementations, so the helper handles the
         getattr+isinstance check) and delegates assembly to
         ``PlatformBuilder``. The builder preserves the LHS resolve +
@@ -2234,12 +2234,9 @@ class Model:
         property (or with one returning ``None``) gets the SGA-aligned
         default — identical to the facade's original hard-coded wiring.
         """
-        from kd.core.platform.builder import (
-            PlatformBuilder,
-            _resolve_derivative_requirements,
-        )
+        from kd.core.platform.builder import PlatformBuilder
 
-        reqs = _resolve_derivative_requirements(self._algorithm)
+        reqs = resolve_derivative_requirements(self._algorithm)
         self._check_dataset_supported(dataset, reqs)
         if task is None:
             return PlatformBuilder(dataset, reqs, device=self.device).build()

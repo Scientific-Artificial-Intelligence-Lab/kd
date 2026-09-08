@@ -28,6 +28,7 @@ from kd.core.equation.types import (
 )
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr.executor import PythonExecutor
+from kd.core.interrupt import SearchInterrupted
 from kd.data.schema import compute_dataset_fingerprint
 
 
@@ -133,6 +134,10 @@ def _execute_column(
 ) -> Tensor:
     try:
         return executor.execute(term_ir, context).value.detach().double()
+    except SearchInterrupted:
+
+
+        raise
     except Exception as exc:
         raise ValueError(f"failed to execute verification term {term_ir!r}") from exc
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 import ast
 import logging
 import math
-import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
@@ -15,12 +14,12 @@ from sympy.core.relational import Equality
 from torch import Tensor
 
 from kd.core.expr.display_spelling import diff_display_class, lap_display_class
+from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
 from kd.core.expr.naming import build_derivative_name
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_LHS_LABEL = "u_t"
-_DIFF_NAME_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
 
 
 
@@ -94,7 +93,7 @@ def _derivative_symbol_name(expr: Expr, axis: str, order: int) -> str:
 
 
 def _make_diff_callable(name: str) -> Callable[[Expr], Expr] | None:
-    match = _DIFF_NAME_PATTERN.match(name)
+    match = DIFF_OPERATOR_PATTERN.match(name)
     if match is None:
         return None
     order_str, axis = match.groups()
@@ -323,7 +322,7 @@ def _sympy_to_ir(expr: Expr) -> str:
         )
     if isinstance(expr, sympy.Pow) and expr.exp.is_Integer:
         return _serialize_pow(expr.base, int(expr.exp))
-    if isinstance(expr, sympy.Function) and _DIFF_NAME_PATTERN.match(
+    if isinstance(expr, sympy.Function) and DIFF_OPERATOR_PATTERN.match(
         type(expr).__name__
     ):
         if len(expr.args) != 1:

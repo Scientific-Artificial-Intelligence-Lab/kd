@@ -60,27 +60,6 @@ class Vocab:
             words.append(self.id2word[word_id])
         return words
 
-    def encode_sentence(
-        self, terms: Sequence[str], *, pad_to: int | None = None
-    ) -> list[int]:
-        ids = [S_ID, *self.encode(terms), E_ID]
-        if pad_to is not None:
-            if len(ids) > pad_to:
-                raise ValueError(
-                    f"framed sentence length {len(ids)} exceeds pad_to={pad_to}"
-                )
-            ids = ids + [PAD_ID] * (pad_to - len(ids))
-        return ids
-
-    def decode_sentence(self, ids: Sequence[int]) -> list[str]:
-        words = self.decode(ids)
-        start = 1 if words and words[0] == self.id2word[S_ID] else 0
-        try:
-            end = words.index(self.id2word[E_ID])
-        except ValueError:
-            end = len(words)
-        return words[start:end]
-
 
 def vocab_asset_path() -> Path:
     return Path(

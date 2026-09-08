@@ -15,6 +15,8 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from kd.core.interrupt import SearchInterrupted
+
 
 _ALLOWED_POWER_ORDERS = frozenset({"2", "3", "4", "5"})
 _POWER_ORDER_PATTERN = re.compile(r"\^(\d+)")
@@ -47,7 +49,6 @@ class InexpressibleTermError(Llm4edParseError):
 @dataclass(frozen=True)
 class ParsedTerm:
 
-    sympy_term: sympy.Expr
     term_str: str
     ir: str
     base_ir: str
@@ -84,6 +85,11 @@ def equation_to_sympy(equation: str, operands: Sequence[str]) -> sympy.Expr:
 
 
         return sympy.expand(expr)
+    except SearchInterrupted:
+
+
+
+        raise
     except Exception as exc:
         raise Llm4edParseError(
             f"cannot parse equation {equation!r}: {type(exc).__name__}: {exc}"
@@ -195,7 +201,6 @@ def parse_equation(equation: str, operands: Sequence[str]) -> ParsedEquation:
 def _build_parsed_term(term: sympy.Expr) -> ParsedTerm:
     base_ir, coeff = term_base_ir_and_coeff(term)
     return ParsedTerm(
-        sympy_term=term,
         term_str=_term_str(term),
         ir=term_to_ir(term),
         base_ir=base_ir,

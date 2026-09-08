@@ -10,6 +10,7 @@ import torch
 from torch import Tensor
 
 from kd.core.equation.types import Form
+from kd.core.interrupt import SearchInterrupted
 from kd.core.jsonsafe import make_json_safe, sanitize_float
 from kd.core.metrics import ScorerFn, make_aic_scorer
 from kd.core.metrics import nmse as _metrics_nmse
@@ -208,7 +209,7 @@ class Evaluator:
                 terms[:3],
                 exc,
             )
-            _release_cuda_memory()
+            release_cuda_memory()
             return self._make_invalid_result("autograd OOM", reason="evaluation_error")
 
     def _build_theta(
@@ -248,7 +249,9 @@ class Evaluator:
                 try:
                     result = self._executor.execute(term, self._context)
                     col = result.value.flatten()
-                except torch.cuda.OutOfMemoryError:
+                except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
+
 
 
 
@@ -320,7 +323,9 @@ class Evaluator:
 
         try:
             solve_result = self._solver.solve(theta, self._lhs_flat)
-        except torch.cuda.OutOfMemoryError:
+        except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
+
 
             raise
         except Exception as e:
@@ -369,6 +374,10 @@ class Evaluator:
 
         try:
             terms = split_terms(expr, self._executor.registry)
+        except SearchInterrupted:
+
+
+            raise
         except Exception as e:
             result = self._make_invalid_result(
                 f"split_terms error: {e}", reason="structural_reject"
@@ -411,9 +420,3 @@ class Evaluator:
 def release_cuda_memory() -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-
-
-
-
-
-_release_cuda_memory = release_cuda_memory

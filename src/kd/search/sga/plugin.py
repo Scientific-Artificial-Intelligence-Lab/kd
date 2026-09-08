@@ -15,6 +15,7 @@ from kd.core.equation.signature import law_term_entry, law_term_key
 from kd.core.equation.sketch import Sketch, constraint_admits
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.term_features import TermFeatures, analyze_term, column_fingerprint
+from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
 from kd.core.platform.requirements import DerivativeReqs
@@ -178,6 +179,10 @@ def _safe_evaluate_aic(
             diff_ctx=diff_ctx,
         )
         return cr.aic_score, cr.pruned_pde
+    except SearchInterrupted:
+
+
+        raise
     except Exception:
         logger.debug("Evaluation failed for PDE, assigning inf AIC")
         return _INVALID_AIC, pde
@@ -375,12 +380,6 @@ class SGAPlugin:
         self._sketch_capacity_checked: int = 0
 
         self._sketch_capacity_rejected: int = 0
-
-    @property
-    def _delta(self) -> dict[str, float]:
-        if self._diff_ctx is None:
-            return {}
-        return self._diff_ctx.delta
 
     @property
     def _lhs_axis(self) -> str | None:
@@ -666,6 +665,10 @@ class SGAPlugin:
 
                     offspring[i] = cr.pruned_pde
                     results.append(self._to_eval_result(cr, expr_str))
+                except SearchInterrupted:
+
+
+                    raise
                 except Exception:
                     logger.debug("Evaluation failed for candidate %d", i)
 
@@ -781,6 +784,10 @@ class SGAPlugin:
                 diff_ctx=self._diff_ctx,
             )
             predicted = self._predict_rhs(candidate.pruned_pde, candidate.coefficients)
+        except SearchInterrupted:
+
+
+            raise
         except Exception as exc:
             logger.debug("Failed to build final result", exc_info=exc)
             return self._invalid_final_result(
@@ -1697,6 +1704,10 @@ class SGAPlugin:
             aic = result.score if result.score is not None else _INVALID_AIC
             score = aic if result.is_valid and math.isfinite(aic) else _INVALID_AIC
             return _ScoredPDE(pruned, score, result)
+        except SearchInterrupted:
+
+
+            raise
         except Exception:
             logger.debug("Evaluation failed for staged offspring")
             return _ScoredPDE(

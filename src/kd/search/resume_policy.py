@@ -31,18 +31,6 @@ _PHANTOM_KEYS: Final[frozenset[str]] = frozenset({"algorithm"})
 
 
 
-
-
-
-
-_FINGERPRINT_PHANTOM_KEY: Final[str] = "library_fingerprint"
-_FINGERPRINT_PHANTOM_ALGORITHMS: Final[frozenset[str]] = frozenset(
-    {"pysr", "pysindy"}
-)
-
-
-
-
 _SEED_FIELD: Final[str] = "seed"
 
 
@@ -210,10 +198,7 @@ def check_resume_config(
     init_detail: list[dict[str, object]] = []
     init_has_missing = False
 
-    phantom_keys = _PHANTOM_KEYS
-    if algorithm in _FINGERPRINT_PHANTOM_ALGORITHMS:
-        phantom_keys = phantom_keys | {_FINGERPRINT_PHANTOM_KEY}
-    fields = (set(stored_config) | set(live_canon)) - phantom_keys
+    fields = (set(stored_config) | set(live_canon)) - _PHANTOM_KEYS
     for field in sorted(fields):
         stored_val = stored_config.get(field, _MISSING)
         live_val = live_canon.get(field, _MISSING)

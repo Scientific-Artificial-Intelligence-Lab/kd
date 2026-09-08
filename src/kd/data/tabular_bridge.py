@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 import keyword
-import re
 
 import numpy as np
 import torch
 
+from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
 from kd.core.expr.registry import FunctionRegistry
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, FieldData, PDEDataset, TaskType
 
-_DIFF_RESERVED_PATTERN = re.compile(r"^diff[0-9]*_[a-z]+$")
 _UNITY_TOKEN = "one"
 
 
@@ -82,7 +81,7 @@ def _validate_names(var_names: list[str], target_name: str) -> None:
             raise ValueError(f"name must be a valid Python identifier, got {name!r}")
         if keyword.iskeyword(name):
             raise ValueError(f"name {name!r} is a Python keyword")
-        if name in reserved or _DIFF_RESERVED_PATTERN.fullmatch(name):
+        if name in reserved or DIFF_OPERATOR_PATTERN.fullmatch(name):
             raise ValueError(f"name {name!r} collides with a reserved kd token")
     duplicates = sorted({name for name in all_names if all_names.count(name) > 1})
     if duplicates:

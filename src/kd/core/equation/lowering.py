@@ -26,7 +26,6 @@ class RegressionForm:
 class PivotRegressionForm:
 
     pivot_ir: str
-    rhs_irs: tuple[str, ...]
 
 
 def lower_to_regression(eq: Equation) -> RegressionForm | PivotRegressionForm:
@@ -40,10 +39,7 @@ def lower_to_regression(eq: Equation) -> RegressionForm | PivotRegressionForm:
             )
         case Homogeneous():
             pivot_ir, _pivot_coefficient = eq.terms[0]
-            return PivotRegressionForm(
-                pivot_ir=pivot_ir,
-                rhs_irs=tuple(term_ir for term_ir, _coefficient in eq.terms[1:]),
-            )
+            return PivotRegressionForm(pivot_ir=pivot_ir)
         case Regression():
             return RegressionForm(
                 lhs_spec=eq.lhs_spec,

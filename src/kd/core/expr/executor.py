@@ -20,7 +20,11 @@ if TYPE_CHECKING:
 
 
 
-_DIFF_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
+
+
+
+
+DIFF_OPERATOR_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
 
 _SPECIAL_OPERATOR_STUBS: dict[str, Any] = {"lap": _lap_stub}
 
@@ -479,9 +483,7 @@ def _should_use_full_path(
     force_diff_path: bool,
 ) -> bool:
     return (
-        force_diff_path
-        or _context_fields_missing(context)
-        or parsed.has_open_form_diff
+        force_diff_path or _context_fields_missing(context) or parsed.has_open_form_diff
     )
 
 
@@ -506,7 +508,7 @@ def _get_ast_depth(node: ast.AST) -> int:
 
 
 def _is_diff_operator(name: str) -> bool:
-    return _DIFF_PATTERN.match(name) is not None
+    return DIFF_OPERATOR_PATTERN.match(name) is not None
 
 
 def _is_special_operator(name: str) -> bool:
@@ -514,7 +516,7 @@ def _is_special_operator(name: str) -> bool:
 
 
 def _parse_diff_name(name: str) -> tuple[str, int]:
-    match = _DIFF_PATTERN.match(name)
+    match = DIFF_OPERATOR_PATTERN.match(name)
     if not match:
         raise ValueError(f"Invalid diff operator name: {name}")
 

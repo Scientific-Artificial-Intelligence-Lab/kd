@@ -14,6 +14,7 @@ from torch import Tensor
 from kd.core.evaluator import Evaluator
 from kd.core.executor import ExecutionContext
 from kd.core.expr import PythonExecutor
+from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import SparseSolver
 from kd.data.derivatives.autograd import (
     AutogradProvider,
@@ -71,26 +72,6 @@ def _honest_best_terms(
         final_state.best_expression,
     )
     return None, None
-
-
-def _split_obs_data(
-    data: dict[str, Tensor],
-    val_ratio: float,
-    seed: int = 0,
-) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
-    first_key = next(iter(data))
-    n = data[first_key].shape[0]
-    n_val = int(n * val_ratio)
-    if n_val == 0:
-        empty: dict[str, Tensor] = {k: v[:0] for k, v in data.items()}
-        return dict(data), empty
-    gen = torch.Generator().manual_seed(seed)
-    perm = torch.randperm(n, generator=gen)
-    val_idx = perm[:n_val]
-    train_idx = perm[n_val:]
-    train = {k: v[train_idx] for k, v in data.items()}
-    val = {k: v[val_idx] for k, v in data.items()}
-    return train, val
 
 
 @dataclass(frozen=True, slots=True)
@@ -491,6 +472,10 @@ class PINNCycleRunner:
                     )
                 )
                 ran = True
+            except SearchInterrupted:
+
+
+                raise
             except Exception as exc:
                 logger.warning(
                     "Stability selection failed; keeping pre-filter result: %s",

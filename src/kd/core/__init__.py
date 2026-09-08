@@ -2,6 +2,7 @@
 from typing import TYPE_CHECKING
 
 from kd.core.evaluator import EvaluationResult, Evaluator
+from kd.core.interrupt import SearchInterrupted
 from kd.core.metrics import (
     ScorerFn,
     aic,
@@ -53,6 +54,7 @@ __all__ = [
     "safe_log",
     "Evaluator",
     "EvaluationResult",
+    "SearchInterrupted",
     "IntegrationResult",
     "integrate_pde",
     "ScorerFn",

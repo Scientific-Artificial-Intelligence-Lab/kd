@@ -10,6 +10,7 @@ from kd.core.evaluator import (
     EvaluationResult,
     Evaluator,
 )
+from kd.core.interrupt import SearchInterrupted
 from kd.core.metrics import make_aic_scorer
 from kd.core.metrics import nmse as kd_nmse
 from kd.search.discover.evaluation.magnitude import (
@@ -73,6 +74,10 @@ class SampledEvaluator:
 
         try:
             terms = split_terms(expr, self._base.executor.registry)
+        except SearchInterrupted:
+
+
+            raise
         except Exception as exc:
             result = self._make_invalid_result(
                 f"split_terms error: {exc}", reason="structural_reject"
@@ -95,6 +100,10 @@ class SampledEvaluator:
             solve_result = self._base.solver.solve(theta, self._lhs)
         except _SampledStructuralError as exc:
             return self._make_invalid_result(str(exc), reason="structural_reject")
+        except SearchInterrupted:
+
+
+            raise
         except _SampledNonFiniteError as exc:
             return self._make_invalid_result(str(exc), reason="non_finite")
         except Exception as exc:
@@ -141,6 +150,10 @@ class SampledEvaluator:
         for term in terms:
             try:
                 column = self._term_column(term)
+            except SearchInterrupted:
+
+
+                raise
             except Exception:
                 if not skip_invalid:
                     raise

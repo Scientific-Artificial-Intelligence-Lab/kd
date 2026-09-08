@@ -67,6 +67,24 @@ class DerivativeReqs:
                 )
 
 
+def resolve_derivative_requirements(plugin: Any) -> DerivativeReqs:
+    raw = getattr(plugin, "derivative_requirements", None)
+    if raw is None:
+        return DerivativeReqs()
+    if callable(raw):
+        raise TypeError(
+            f"{type(plugin).__name__}.derivative_requirements must be a "
+            f"@property returning DerivativeReqs, got a callable/method. "
+            f"Decorate the definition with @property."
+        )
+    if not isinstance(raw, DerivativeReqs):
+        raise TypeError(
+            f"{type(plugin).__name__}.derivative_requirements must return "
+            f"a DerivativeReqs instance, got {type(raw).__name__}."
+        )
+    return raw
+
+
 def assert_dataset_supported(
     dataset_lhs_order: int,
     dataset_topology: DataTopology,

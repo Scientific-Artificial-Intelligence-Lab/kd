@@ -15,7 +15,7 @@ from kd.core.equation.sketch import (
 
 
 
-from kd.core.expr.executor import _DIFF_PATTERN
+from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
 from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.term_features import ColumnFingerprint, TermFeatures, analyze_term
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
@@ -48,7 +48,7 @@ _IR_OPERATOR_MAP = {
     "n2": ("^2", 1),
     "n3": ("^3", 1),
 }
-_DIFF_HEAD = _DIFF_PATTERN
+_DIFF_HEAD = DIFF_OPERATOR_PATTERN
 
 _OUTSIDE_VOCABULARY = "outside-vocabulary"
 _CONSTRAINT_FILTERED = "constraint-filtered"
@@ -69,7 +69,6 @@ class SGACompiled:
     pinned_fingerprints: frozenset[ColumnFingerprint]
     anchored_keys: frozenset[str]
     default_kept: bool
-    default_law_key: str | None
     default_hole_id: str | None
     report: CompileReport
     dropped: tuple[tuple[str, str], ...]
@@ -407,7 +406,6 @@ def _closed_compilation(
     op2: OperatorPool,
     default_term_name: str | None,
 ) -> SGACompiled:
-    default_key = None if default_term_name is None else law_term_key(default_term_name)
     return SGACompiled(
         vars=variables,
         den=den,
@@ -420,7 +418,6 @@ def _closed_compilation(
         pinned_fingerprints=frozenset(),
         anchored_keys=frozenset(),
         default_kept=default_term_name is not None,
-        default_law_key=default_key,
         default_hole_id=None,
         report=CompileReport(
             levels=_LEVELS,
@@ -501,7 +498,6 @@ def compile_for_sga(
         pinned_fingerprints=pin_fingerprints,
         anchored_keys=anchored_keys,
         default_kept=default_kept,
-        default_law_key=default_key,
         default_hole_id=default_hole_id,
         report=CompileReport(
             levels=_LEVELS,

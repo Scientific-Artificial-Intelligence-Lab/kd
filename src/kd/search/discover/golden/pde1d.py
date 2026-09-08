@@ -101,12 +101,13 @@ def _run_1d_pde(
         epsilon=EPSILON,
         entropy_weight=ENTROPY_WEIGHT,
         gamma=GAMMA,
+        entropy_gamma=entropy_gamma,
         reward_alpha=DEFAULT_REWARD_ALPHA,
     )
 
     evaluator = _build_1d_evaluator(dataset)
     seed_all(seed)
-    engine = _build_1d_engine(config=config, entropy_gamma=entropy_gamma)
+    engine = _build_1d_engine(config=config)
     result = run_engine_and_summarise(
         engine=engine,
         evaluator=evaluator,
@@ -151,10 +152,11 @@ def _build_1d_evaluator(dataset: Any) -> Any:
     )
 
 
-def _build_1d_engine(*, config: Any, entropy_gamma: float) -> Any:
+def _build_1d_engine(*, config: Any) -> Any:
     from kd.search.discover.builder import (
         _make_magnitude_filter,
         _make_reward_adapter,
+        build_strategy,
     )
     from kd.search.discover.engine import DiscoverEngine
     from kd.search.discover.evaluation.dedup import Deduplicator
@@ -164,7 +166,7 @@ def _build_1d_engine(*, config: Any, entropy_gamma: float) -> Any:
     library = Library.from_config(config.library)
     prior_system = _build_1d_prior(library, config)
     controller = _build_1d_controller(library, prior_system, config)
-    strategy = _build_1d_strategy(config, entropy_gamma)
+    strategy = build_strategy(config)
     validator = CandidateValidator(
         library,
         max_length=config.max_length,
@@ -206,18 +208,6 @@ def _build_1d_controller(library: Any, prior_system: Any, config: Any) -> Any:
         num_units=config.num_units,
         num_layers=config.num_layers,
         embedding_dim=config.embedding_dim,
-    )
-
-
-def _build_1d_strategy(config: Any, entropy_gamma: float) -> Any:
-    from kd.search.discover.training.strategy import RSPGStrategy
-
-    return RSPGStrategy(
-        epsilon=config.epsilon,
-        baseline=config.baseline,
-        entropy_weight=config.entropy_weight,
-        gamma=config.gamma,
-        entropy_gamma=entropy_gamma,
     )
 
 
