@@ -376,6 +376,8 @@ class FiniteDiffProvider(DerivativeProvider):
         expression: torch.Tensor,
         axis: str,
         order: int,
+        *,
+        is_periodic: bool | None = None,
     ) -> torch.Tensor:
         if axis not in self._axis_indices:
             raise KeyError(f"Axis '{axis}' not found in dataset")
@@ -395,9 +397,9 @@ class FiniteDiffProvider(DerivativeProvider):
                 )
 
         dx = self._dx[axis]
-        is_periodic = self._is_periodic[axis]
+        stencil = self._is_periodic[axis] if is_periodic is None else is_periodic
 
-        return central_diff(expression, dx, axis_idx, order, is_periodic=is_periodic)
+        return central_diff(expression, dx, axis_idx, order, is_periodic=stencil)
 
     def available_derivatives(self) -> list[tuple[str, str, int]]:
         return list(self._cache.keys())

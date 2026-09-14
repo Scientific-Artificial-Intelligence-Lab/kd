@@ -9,6 +9,8 @@ from torch import Tensor
 
 from kd.core.equation import Form
 from kd.core.expr.sympy_bridge import to_latex
+from kd.viz._result_data import _NO_SKETCH_SOLUTION, _equation_data
+from kd.viz.axes import _get_axes
 from kd.viz.equation_display import RENDER_ERRORS, UNRENDERABLE_MARKER
 from kd.viz.style import style_context
 
@@ -35,19 +37,21 @@ _VALUE_LABEL_FONTSIZE = 7
 
 def plot_coefficient_bar(
     result: ExperimentResult,
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     ground_truth: Tensor | None = None,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
 
-    terms = result.final_eval.terms
-    coefficients = result.final_eval.coefficients
+    terms, coefficients, selected = _equation_data(result)
 
 
     if terms is None or coefficients is None:
         warnings.append("No coefficient data available")
+        if result.config.get("sketch") is not None:
+            warnings.append(_NO_SKETCH_SOLUTION)
         with style_context(style):
             ax.set_title("Coefficients")
             ax.text(
@@ -61,10 +65,9 @@ def plot_coefficient_bar(
         return warnings
 
 
-    coeff_np = np.array(coefficients.detach().cpu().numpy(), dtype=np.float64)
+    coeff_np = np.array(coefficients, dtype=np.float64)
 
 
-    selected = result.final_eval.selected_indices
     if selected is not None:
         display_terms = [terms[i] for i in selected]
         display_coeffs = coeff_np[selected]
@@ -117,7 +120,9 @@ def plot_coefficient_bar(
             x,
             display_coeffs,
             bar_width,
-            label="Discovered",
+            label="Published"
+            if result.config.get("sketch") is not None
+            else "Discovered",
             color="steelblue",
             alpha=_BAR_ALPHA,
         )
@@ -156,15 +161,25 @@ def plot_coefficient_bar(
         if ground_truth is not None:
             gt_np = np.array(ground_truth.detach().cpu().numpy(), dtype=np.float64)
             gt_display: np.ndarray | None
-            if selected is not None and len(gt_np) == len(terms):
+            if equation is not None and len(gt_np) == len(equation.terms):
+                active = equation.active_indices
+                gt_display = (
+                    gt_np
+                    if active is None
+                    else gt_np[np.asarray(sorted(active), dtype=int)]
+                )
+            elif selected is not None and len(gt_np) == len(terms):
                 gt_display = gt_np[np.asarray(selected)]
             elif len(gt_np) == len(display_coeffs):
                 gt_display = gt_np
             else:
                 gt_display = None
+                catalog_size = (
+                    len(equation.terms) if equation is not None else len(terms)
+                )
                 warnings.append(
                     f"Ground truth length {len(gt_np)} matches neither the full "
-                    f"term library ({len(terms)}) nor the displayed terms "
+                    f"term library ({catalog_size}) nor the displayed terms "
                     f"({len(display_coeffs)}); skipping ground-truth overlay"
                 )
 
@@ -262,8 +277,6 @@ def _make_labels(terms: list[str]) -> list[str]:
         try:
             labels.append(f"${to_latex(term)}$")
         except RENDER_ERRORS:
-            logger.exception(
-                "Term not renderable as display math; raw IR: %s", term
-            )
+            logger.exception("Term not renderable as display math; raw IR: %s", term)
             labels.append(UNRENDERABLE_MARKER)
     return labels

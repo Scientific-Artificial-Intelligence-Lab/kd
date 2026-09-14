@@ -5,13 +5,16 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from kd.core.equation.rendering import format_equation
 from kd.core.expr.sympy_bridge import format_pde, to_sympy, to_unicode
+from kd.viz._result_data import _NO_SKETCH_SOLUTION, _equation_data, _equation_lhs
 from kd.viz.equation_display import (
     RENDER_ERRORS as _RENDER_ERRORS,
 )
 from kd.viz.equation_display import (
     UNRENDERABLE_MARKER as _UNRENDERABLE_MARKER,
 )
+from kd.viz.equation_display import expression_display
 
 if TYPE_CHECKING:
     from kd.core.equation import TermDiff
@@ -47,11 +50,13 @@ def _render_term_diff_cell(delta: TermDiff, label: str, warnings: list[str]) -> 
         markers.append("form!")
     if delta.lhs_changed:
         markers.append("lhs!")
-    parts = (
-        markers
-        + [f"+{term}" for term in sorted(delta.added)]
-        + [f"-{term}" for term in sorted(delta.removed)]
-    )
+    parts = list(markers)
+    for sign, terms in (("+", delta.added), ("-", delta.removed)):
+        for term in sorted(terms):
+            display = expression_display(term)
+            parts.append(f"{sign}{display.text}")
+            if display.note is not None:
+                warnings.append(f"{label}: {display.note}")
     if not parts:
         return "="
     full = " ".join(parts)
@@ -64,16 +69,19 @@ def _render_term_diff_cell(delta: TermDiff, label: str, warnings: list[str]) -> 
 
 
 def _fitted_equation_text(result: ExperimentResult) -> str | None:
-    final_eval = result.final_eval
-    if final_eval.terms is None or final_eval.coefficients is None:
-        return None
     try:
-        formatted = format_pde(
-            final_eval.terms,
-            final_eval.coefficients,
-            lhs=result.lhs_label,
-            selected_indices=final_eval.selected_indices,
-        )
+        if result.equation is not None:
+            formatted = format_equation(result.equation)
+        else:
+            terms, coefficients, selected = _equation_data(result)
+            if terms is None or coefficients is None:
+                return None
+            formatted = format_pde(
+                terms,
+                coefficients,
+                lhs=_equation_lhs(result),
+                selected_indices=selected,
+            )
     except _RENDER_ERRORS:
         logger.exception("Failed to format summary-table equation as full PDE")
         return None
@@ -113,6 +121,9 @@ def _fit_to_budget(text: str, label: str, warnings: list[str], max_len: int) -> 
 
 
 def _expression_cell(result: ExperimentResult, label: str, warnings: list[str]) -> str:
+    if result.equation is None and result.config.get("sketch") is not None:
+        warnings.append(f"{label}: {_NO_SKETCH_SOLUTION}")
+        return "No certified sketch solution"
     fitted = _fitted_equation_text(result)
     if fitted is not None:
         return _fit_to_budget(fitted, label, warnings, _EXPRESSION_MAX_LEN)

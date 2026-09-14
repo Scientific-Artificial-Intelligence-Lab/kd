@@ -9,7 +9,7 @@ from typing import Final, Literal, cast
 from kd.core.equation.construct import build_equation
 from kd.core.equation.signature import law_term_entry
 from kd.core.equation.sketch import Sketch
-from kd.core.equation.types import Equation
+from kd.core.equation.types import Equation, LhsSpec
 from kd.core.evaluator import EvaluationResult
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,12 @@ class CompiledSketch:
     def closed(self) -> bool:
         return not self.sketch.anchored and not self.sketch.holes
 
-    def lift(self, final_eval: EvaluationResult | None) -> Equation | None:
+    def lift(
+        self,
+        final_eval: EvaluationResult | None,
+        *,
+        lhs_spec: LhsSpec,
+    ) -> Equation | None:
         if final_eval is None:
             if not self.closed:
                 raise ValueError("final_eval is required for an open sketch")
@@ -119,7 +124,7 @@ class CompiledSketch:
         return build_equation(
             [term_ir for term_ir, _value in entries],
             [value for _term_ir, value in entries],
-            self.sketch.lhs_spec,
+            lhs_spec,
             active_indices=None,
             is_valid=True,
         )

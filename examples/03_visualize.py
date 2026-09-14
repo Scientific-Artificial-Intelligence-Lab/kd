@@ -32,19 +32,12 @@ model = kd.Model(
 model.fit(dataset)
 
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best AIC: {model.best_score_:.4f}")
 
-# 3. Render the HTML report. We pass the fitted SGA plugin
-# (``model.algorithm_``) so plugin-specific figures are included
-# alongside the universal ones.
+# 3. Render all supported figures, including SGA's search diagnostics.
 out_dir = Path(__file__).parent / "out" / "chafee_infante"
-viz = kd.VizEngine(output_dir=out_dir)
-report = viz.render_all(
-    model.result_,
-    algorithm=model.algorithm_,
-    dataset=dataset,
-)
+report = model.report(out_dir)
 
 print(f"Report: {report.report}")
 print(f"Figures: {len(report.figures)} files")

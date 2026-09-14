@@ -17,18 +17,25 @@ without needing to wire up logging.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
+from pathlib import Path
 from typing import TextIO
 
+import h5py
+import numpy as np
 import torch
 
 from kd._inspect_report import (
+    ArrayReport,
     AxisReport,
     AxisSpacing,
     DatasetReport,
     FieldReport,
+    SourceReport,
 )
 from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.types import LhsSpec
+from kd.data.containers import ArrayEntry, Inventory, read_inventory
 from kd.data.derivatives.finite_diff import (
     UNIFORM_GRID_RTOL,
     is_uniform_grid,
@@ -36,12 +43,79 @@ from kd.data.derivatives.finite_diff import (
 from kd.data.schema import DataTopology, PDEDataset
 
 __all__ = [
+    "ArrayReport",
     "AxisReport",
     "DatasetReport",
     "FieldReport",
+    "SourceReport",
+    "inspect_file",
     "preview",
     "preview_report",
 ]
+
+
+def inspect_file(path: str | Path) -> SourceReport:
+    """Describe arrays in a file before choosing a dataset layout or mapping.
+
+    Supports numpy, MATLAB, HDF5 and CSV (numeric matrices or named point-table
+    columns, whose 1-D shapes give the row count). Each array
+    reports its key, shape, dtype, finite extrema and NaN/Inf counts; nonnumeric
+    arrays and arrays without finite values have no extrema. Complex arrays
+    raise ValueError because the report's extrema are real scalars. HDF5 arrays
+    stream over the leading dimension, retaining only one slice at a time. Missing
+    files and unsupported containers (including XLSX) raise at inventory read.
+    ``SourceReport.to_dict()`` provides the JSON view.
+    """
+    inventory = read_inventory(path)
+    return SourceReport(
+        path=str(inventory.path),
+        container=inventory.container,
+        arrays=[
+            _array_report(entry, inventory) for entry in inventory.entries.values()
+        ],
+    )
+
+
+def _array_chunks(entry: ArrayEntry, inventory: Inventory) -> Iterator[np.ndarray]:
+    if inventory.container not in {"hdf5", "mat73"}:
+        yield entry.read()
+    elif entry.shape:
+        for index in range(entry.shape[0]):
+            yield entry.read_index0(index)
+    else:
+
+        with h5py.File(inventory.path, "r") as handle:
+            yield np.asarray(handle[entry.key][()])
+
+
+def _array_report(entry: ArrayEntry, inventory: Inventory) -> ArrayReport:
+    if entry.numeric and np.issubdtype(np.dtype(entry.dtype), np.complexfloating):
+        raise ValueError(
+            f"array {entry.key!r} has complex dtype {entry.dtype}; "
+            "ArrayReport extrema require real-valued arrays"
+        )
+    minimum: float | None = None
+    maximum: float | None = None
+    nan_count = inf_count = 0
+    if entry.numeric:
+        for chunk in _array_chunks(entry, inventory):
+            nan_count += int(np.count_nonzero(np.isnan(chunk)))
+            inf_count += int(np.count_nonzero(np.isinf(chunk)))
+            finite = chunk[np.isfinite(chunk)]
+            if finite.size:
+                low, high = float(finite.min()), float(finite.max())
+                minimum = low if minimum is None else min(minimum, low)
+                maximum = high if maximum is None else max(maximum, high)
+    return ArrayReport(
+        key=entry.key,
+        shape=entry.shape,
+        dtype=entry.dtype,
+        min=minimum,
+        max=maximum,
+        nan_count=nan_count,
+        inf_count=inf_count,
+    )
+
 
 
 

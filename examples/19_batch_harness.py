@@ -32,6 +32,7 @@ import shutil
 from pathlib import Path
 
 import kd
+from kd.core.expr import to_sympy
 from kd.harness import (
     EvidenceStore,
     ExperimentPlan,
@@ -100,10 +101,9 @@ print("\n--- consensus ---")
 for dataset_consensus in report.datasets:
     print(f"dataset {dataset_consensus.dataset_ref}:")
     for cls in dataset_consensus.classes:
-        members = ", ".join(
-            f"{m.instrument}/seed{m.seed}" for m in cls.members
-        )
-        print(f" class {cls.structure_key[:10]} {{{', '.join(cls.terms)}}}")
+        members = ", ".join(f"{m.instrument}/seed{m.seed}" for m in cls.members)
+        terms = ", ".join(str(to_sympy(term)) for term in cls.terms)
+        print(f" class {cls.structure_key[:10]} {{{terms}}}")
         print(f" members: {members}")
     for adjacency in dataset_consensus.adjacency:
         print(
@@ -133,7 +133,12 @@ print(f"\nWrote {markdown} and {artifact.name}")
 # typically lands in its own with terms like diff_x(n2(u)) and
 # diff2_x(sub(u, x)). That is the SAME law in different notation -
 # d/dx(u^2) = 2*u*u_x and d2/dx2(u - x) = u_xx - so the split is a
-# notation difference, not a disagreement about physics. The adjacency
+# notation difference, not a disagreement about physics. The platform
+# executor agrees with that reading: fitting either spelling against the
+# same data recovers the same law, so the equality is checkable rather
+# than only asserted here. (The two columns are not bit-identical: a
+# coordinate leaf under diff_x forces the non-periodic stencil, which
+# costs accuracy on the two boundary rows per side.) The adjacency
 # line is what tells you the two classes are related; read it before
 # concluding that an engine is unstable.
 print(

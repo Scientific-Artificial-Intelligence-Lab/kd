@@ -31,14 +31,7 @@ class _PySINDyOptimizerBackend:
         self._coefficients: np.ndarray | None = None
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        try:
-            from pysindy.optimizers import STLSQ
-        except ImportError as exc:
-            raise RuntimeError(
-                "Model(algorithm='pysindy') requires the optional dependency "
-                "`pysindy`; install it with `uv sync --extra pysindy`. "
-                f"Original error: {exc}"
-            ) from exc
+        from pysindy.optimizers import STLSQ
 
         cfg = self._config
         kwargs: dict[str, Any] = {

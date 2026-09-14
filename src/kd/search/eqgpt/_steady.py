@@ -252,8 +252,6 @@ class SteadyEvaluator:
         )
         return replace(
             scored,
-            coefficients=None,
-            terms=list(terms),
             expression=candidate,
             form=Form.HOMOGENEOUS,
         )

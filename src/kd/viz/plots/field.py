@@ -9,7 +9,9 @@ import numpy as np
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
+from kd.data.schema import DataTopology
 from kd.viz.plots._dim_utils import (
+    _annotate_spatial_slice,
     _imshow_extent_for_spatial_axes,
     _pick_time_steps,
     _slice_nd_to_2d,
@@ -121,6 +123,7 @@ def plot_field_comparison(
                 no_pred_reason=no_pred_reason,
             )
 
+    _annotate_spatial_slice(fig, dataset, warnings)
     return fig, warnings
 
 
@@ -367,3 +370,44 @@ def _predicted_title(
     if t_val is not None:
         return f"Predicted ({tag}, {time_axis}={t_val:.3g})"
     return f"Predicted ({tag})"
+
+
+_RAW_FIELD_FIGSIZE = (7.0, 3.2)
+
+
+def plot_field(
+    dataset: PDEDataset,
+    ax: Axes | None = None,
+    *,
+    field: str | None = None,
+    style: dict[str, Any] | None = None,
+) -> None:
+    name = dataset.lhs_field if field is None else field
+    values = dataset.get_field(name).detach().cpu().numpy().astype(np.float64)
+    spatial = dataset.spatial_axes
+    if len(spatial) != 1:
+        raise ValueError(
+            f"plot_field draws one spatial axis, dataset {dataset.name!r} has "
+            f"{len(spatial)} spatial axes {spatial}"
+        )
+    time_axis, spatial_axis = dataset.lhs_axis, spatial[0]
+    t = dataset.get_coords(time_axis).detach().cpu().numpy()
+    s = dataset.get_coords(spatial_axis).detach().cpu().numpy()
+    title = f"{name}({spatial_axis}, {time_axis})"
+    with style_context(style):
+        if ax is None:
+            _, ax = plt.subplots(figsize=_RAW_FIELD_FIGSIZE, dpi=_DEFAULT_DPI)
+        if dataset.topology is DataTopology.SCATTERED:
+            points = ax.scatter(t, s, c=values, s=8, cmap="viridis", rasterized=True)
+            ax.figure.colorbar(points, ax=ax, fraction=0.046, pad=0.04)
+            ax.set_xlabel(time_axis)
+            ax.set_ylabel(spatial_axis)
+            ax.set_title(title)
+            return
+
+        order = dataset.axis_order
+        assert order is not None
+        grid = np.moveaxis(values, order.index(time_axis), -1)
+        _pcolormesh_panel(
+            ax, t, s, grid, title, time_axis=time_axis, spatial_axis=spatial_axis
+        )

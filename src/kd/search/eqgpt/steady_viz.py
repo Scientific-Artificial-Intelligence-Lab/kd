@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import numpy as np
-import torch
 
-from kd.core.safety import safe_div
+from kd.viz.equation_display import expression_display
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -94,10 +93,8 @@ def render_steady_term_balance(
     if matrix is None or terms is None:
         return _degrade(ax, _NO_DATA)
     values = np.asarray(matrix)
-
-
-
-    labels = ["1" if term == "one" else term for term in terms]
+    displays = [expression_display(term) for term in terms]
+    labels = [display.text for display in displays]
     if values.ndim != 2 or values.shape[1] != len(labels) or values.size == 0:
         return _degrade(ax, _NO_DATA)
     if not np.isfinite(values).all():
@@ -116,7 +113,7 @@ def render_steady_term_balance(
     bars[pivot_index].set_label("Pivot")
     ax.text(pivot_index, rms[pivot_index], "pivot", ha="center", va="bottom")
     ax.set_ylabel("Column RMS")
-    return []
+    return [display.note for display in displays if display.note is not None]
 
 
 def render_steady_surrogate_fit(
@@ -144,11 +141,7 @@ def render_steady_surrogate_fit(
     denominator = float(np.sum(np.square(centered)))
     if denominator > 0.0:
         numerator = float(np.sum(np.square(observed_finite - predicted_finite)))
-        ratio = safe_div(
-            torch.tensor(numerator, dtype=torch.float64),
-            torch.tensor(denominator, dtype=torch.float64),
-        )
-        r2_text = f"R² = {1.0 - float(ratio.item()):.4f}"
+        r2_text = f"R² = {1.0 - numerator / denominator:.4f}"
     else:
         r2_text = "R² undefined (constant observations)"
     ax.text(0.05, 0.95, r2_text, transform=ax.transAxes, va="top")

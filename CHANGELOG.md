@@ -6,10 +6,301 @@ All notable changes to KD are documented in this file. The format follows
 Versioning policy: KD is in 0.x development. A patch release may contain a
 breaking change; every breaking entry is marked **Breaking** and names what a
 caller must change. The seven bundled instruments are updated in the same
-release and are never the party that breaks. Longer release notes with worked
-examples accompany each release on its GitHub Release page.
+release and are never the party that breaks. From 0.8.0 on, each release is
+also published on PyPI and as a GitHub Release carrying longer notes.
 
 ## [Unreleased]
+
+## [0.8.0] - 2026-09-15
+
+The first release on PyPI. The distribution is named `sail-kd` (`pip install sail-kd`; PyPI does not allow the name `kd`), the import name stays `kd`, and the console script stays `kd-agent`.
+
+### Added
+
+- `kd.add_noise(dataset, level, *, seed)`: a copy of a `PDEDataset` with
+  relative Gaussian noise on every field (the `xu2020_relative` recipe; field
+  `k` draws from `seed + k`), `noise_level` recorded, the input untouched.
+- `kd.search.used_clauses` and `kd.search.SKETCH_CLAUSES`: inspect the clauses a sketch uses before checking an instrument's per-mode declarations.
+- `kd.load(source, ...)`: one entry for every dataset source. A catalog id
+  returns that entry (`kd.load("kdv")` is `kd.load_kdv()`); a file path is
+  read on evidence and never on a guess: a registered layout that recognizes
+  the file's arrays builds it (`pdebench-1d` and `pdebench-cfd` for PDEBench
+  HDF5 files, `kd-npz` for the self-describing npz convention the DISCOVER
+  loader already used), otherwise the caller names the arrays with
+  `coords=` / `fields=` (plus `field_axes=` and `select=` for a stored axis
+  order or a sample axis), or passes `loader=`, a function of their own.
+  A file no layout recognizes raises with the file inventory and the mapping
+  form spelled out; a multi-sample PDEBench file without `select` is refused
+  rather than defaulted. `.xlsx` routes to `PDEDataset.from_xlsx`. The layout
+  and mapping routes end in `from_arrays` (xlsx in `from_scatter`), so
+  validation runs once.
+- `kd.inspect_file(path)` and `kd.SourceReport` / `kd.ArrayReport`: what a
+  data file holds before any interpretation (per array: key, shape, dtype,
+  finite min/max, NaN and Inf counts), for `.npy` / `.npz` / `.mat` /
+  `.h5` / `.hdf5` / `.csv`. HDF5 arrays are streamed, so a
+  multi-GB PDEBench file is described without loading it. `to_dict()` is the
+  JSON view for a program or an agent that will write the `coords=` /
+  `fields=` mapping.
+- `PDEDataset.source` and `kd.DatasetSource`: the provenance `kd.load`
+  records on a file-loaded dataset (resolved path, sha256, container, layout
+  or loader name, hints, sample selection). It is not part of the dataset
+  fingerprint (content identity) and is carried through `stride_subsample`
+  and `ratio_subsample`; datasets built by a layout or a mapping are named
+  by the file stem.
+- `h5py` joins the core dependencies: the HDF5 reader behind the file ingress
+  (`kd.load` / `kd.inspect_file`), which is the container PDEBench ships every
+  dataset in and the one behind MATLAB v7.3 `.mat` files.
+- `CITATION.cff` at the repository root, so GitHub's "Cite this repository"
+  and citation tools pick up the software citation.
+- `kd.resolve_checkpoint` / `kd.eligible_checkpoint_iterations` (also on
+  `kd.search`), with `ResolvedCheckpoint` and `CheckpointSelectionError`: the
+  one rule for which archive a segment restores from a `kd-ckptman-v1`
+  checkpoint directory (periodic entries plus a completed final, the latest
+  when no iteration is named, the last entry for a repeated iteration, nothing
+  for a run that archived no directory). Until now kd shipped the ledger and
+  every resuming caller re-derived the rule; example 10 and the controller
+  lanes call this instead.
+- `Model(algorithm="eqgpt")` works after a plain install: the pretrained GPT
+  checkpoint (151.7 MB) and the 23 wave-breaking per-case surrogate
+  checkpoints are fetched from the KD Hub mirror (`timeoutHao/KD-data`,
+  `eqgpt/`, pinned to one commit, the GPT checkpoint sha256-verified) into the Hugging
+  Face cache the first time they are needed. `KD_EQGPT_ASSET_DIR` and
+  `KD_V1_WAVE_ASSETS` keep overriding the download with a local tree.
+  `kd.data.remote` exports `fetch_eqgpt_weights`, `fetch_wave_surrogate_tree`
+  and the directory fetch `fetch_hub_tree` behind them.
+- `kd.search.EvaluationBudgetCallback`: the candidate-evaluation sibling of
+  `WallClockBudgetCallback`. It charges every result handed across the
+  propose/evaluate boundary (the same count `RunCost.boundary_results`
+  publishes) and stops the search at the first iteration boundary at or past
+  `max_evaluations`, so a run may overshoot the cap by one iteration and
+  reports that spend rather than hiding it. It is this-experiment-only by
+  design: cross-segment accounting stays with the caller's ledger.
+- `kd.core.recovery` (exported from `kd`): the three-axis recovery judge
+  `judge_recovery` / `RecoveryVerdict` / `span_floor`, re-homed byte for byte
+  from the validation suite's conftest so experiment scripts and the
+  controller package import one implementation, plus two partial-credit
+  scores beside the binary verdict: `term_set_jaccard` (a set score on labels
+  the caller has canonicalized) and `load_bearing_recall` (read off the
+  verdict's drop-one margins, no canonicalization needed).
+- `kd.core.rates` (exported from `kd`): `wilson_interval`, `rate_summary` /
+  `RateSummary`, and `paired_exact_test` (two-sided exact McNemar on the
+  discordant pairs), the reporting helpers the benchmark standard fixes for
+  every success-rate cell.
+- `kd.data.stride_subsample` / `kd.data.ratio_subsample`: the benchmark's
+  sampling axis. `stride` decimates a GRID dataset per axis and keeps the grid
+  (finite differences accept the result; a periodic axis refuses a stride that
+  breaks the seam); `ratio` keeps a seeded uniform fraction of the boundary-
+  trimmed interior as a SCATTERED dataset for the surrogate-derivative path.
+  Both keep the dataset `name`; the fingerprint is what changes.
+- `kd.data.resample_to_grid(dataset, axes=...)`: fit a `FieldModel` to a
+  SCATTERED dataset and sample it on the regular `axes` you name, returning a
+  GRID dataset the existing algorithms and the finite-difference provider
+  accept with no schema or provider change. Training options follow
+  `FieldModelTrainer.fit`; the task, LHS, periodicity, noise level and ground
+  truth carry over, the name gains `_resampled`, and `source` describes a
+  derived dataset. Sampling in a hole or outside the observations is
+  unconstrained extrapolation: there is no coverage mask.
+- `kd.load` reads a header-bearing CSV as one observation per row. Without
+  mappings the field named by `lhs` is the only field and every other column is
+  a coordinate, in header order; `coords=` / `fields=` select columns by name
+  when there are several fields or unused columns. Coordinate combinations that
+  are unique and complete pivot to a GRID dataset (the axes must be uniform),
+  any other point set stays SCATTERED. Rows are never dropped: a selected
+  column that is non-numeric or holds a non-finite value is an error.
+  `kd.inspect_file` lists the named columns, text columns included. A
+  header-less numeric matrix keeps the existing route.
+- `ExperimentResult.search_trajectory()` and `has_search_trajectory()`, with
+  `kd.search.SearchTrajectoryCandidate`: the distinct fitted structures a
+  search evaluated, recorded per iteration. Each candidate carries the
+  evaluated candidate IR, the instrument's native score, the fitted support
+  (the selected non-zero columns) and the LHS it targets. SGA, DLGA, DISCOVER,
+  LLM4ED and EqGPT record it; the one-shot backends (PySINDy, PySR) do not.
+  `VizRecorder(trajectory_top_k=10)` bounds how many distinct structures an
+  iteration keeps and `0` turns the recording off; it is a recording policy,
+  so it is not part of the run identity or the checkpoint. A resume records
+  from where it resumed and does not reconstruct the archived run's history.
+- Two report figures read that record: `term_presence` (which fitted terms are
+  active across the recorded structures, with targets kept apart) and
+  `search_score_distribution` (median, interquartile range and min-max of the
+  native scores). They are rendered beside the convergence curve whenever a
+  result carries the record, and describe the recorded selection rather than
+  the whole population.
+- `kd.viz.plots.plot_equation_card` and the `equation_card` report figure: the
+  published equation, its per-term coefficients next to the dataset's ground
+  truth when there is one (aligned on structural term identity, so aliases and
+  the constant column line up), and the native search-fit NMSE. It is a
+  projection of the result and never refits.
+- `Model.report(output_dir, animate=False)`: a fitted model renders its own
+  figures and HTML report, so a caller no longer wires `VizEngine` by hand. In
+  a notebook the returned `ReportResult` displays the report inline.
+- `kd.viz.plots.plot_field(dataset, ax=None)`: one field of a dataset as it was
+  measured, before any search (a heatmap for a GRID dataset with one spatial
+  axis, a scatter for a SCATTERED one). `plot_plugin(algorithm, name, ax=None)`
+  draws one named panel from an instrument's own visualization extension, and
+  `save_field_animation(dataset, integration_result, path)` writes the measured
+  and integrated fields to a GIF and returns the panel's disclosure notes. The
+  single-axis `plot_*` functions now default to `ax=None` and create their own
+  axes.
+- `kd.evaluate.compare_results(dataset, results)` and `ComparisonResult`: refit
+  every run's discovered structure on the same finite-difference features and
+  the dataset's LHS, so runs are compared on one scale instead of their native
+  scores. A run with no evolution equation, a different LHS, or terms the
+  evaluator refuses is listed in `exclusions` with the reason.
+  `ComparisonResult.render(path)` writes the equation table, the normalized
+  progress and the refit-NMSE sheet.
+- `kd.data.loaders.load_wave_breaking_datasets(path=None, case_filter="")`: the
+  wave-tank cases as SCATTERED datasets in sorted case order, elevation named
+  `u` with LHS `u_t`; `case_filter="N"` selects the paper's discovery
+  experiments.
+- `kd.format_pde(terms, coefficients, lhs=...)` with `kd.FormattedEquation`,
+  and `kd.render_lhs_label(lhs_spec)` with `kd.LhsSpec`: the equation
+  formatting kd's own reports use (LaTeX, Unicode and the SymPy objects
+  behind them), so a script or an agent prints a discovered law the same way
+  the report does.
+- `kd.SKETCH_EXIT_VERIFY` and the `verify=` keyword on `Model.fit` and
+  `kd.harness.run_episode`: the residual gate the sketch exit judges the
+  lifted law with. See Changed for what this changes about a sketch run.
+- `sail-kd[agent]` and the `kd-agent` command: the LLM controller ships inside the
+  package as an experimental extra (`pip install "sail-kd[agent]"`), with the seven
+  instrument cards as package data so its tool descriptions match the
+  installed algorithms. `kd-agent setup` stores the endpoint, model name and
+  API key in a `0600` config file; `kd-agent run` discovers an equation in one
+  run and `kd-agent chat` does it as a conversation. Both accept `--dataset`
+  for a catalog id or a saved input reference, `--data` with `--load-options`
+  for a file of your own (read through `kd.load`), `--workspace` to reuse an
+  existing run ledger, `--recursion-limit` and `--time-budget-minutes`. Every
+  run and every chat turn writes `<workspace>/report.md` from the sealed
+  records and the ledger, without reloading data or refitting. Installed
+  without the extra, the command still parses its arguments and `run` exits 2
+  naming the dependency it needs.
+- `examples/notebooks/kdv_walkthrough.ipynb`: SGA recovers
+  `u_t = -u u_x - 0.0025 u_xxx` from the bundled KdV benchmark at its
+  validated budget, read term by term, with the convergence, parity,
+  equation-tree and coefficient figures and the HTML report. Outputs are
+  committed.
+
+### Changed
+
+- **Breaking** for install commands only: `pysindy`, `openai` and
+  `huggingface_hub` are core dependencies, so `pip install sail-kd` runs six of the
+  seven algorithms (SGA, DLGA, DISCOVER, EqGPT, PySINDy, LLM4ED) with no second
+  step. `pysr` stays an extra because its first import downloads a Julia
+  runtime, and `agent` stays one because it carries the controller's LangChain
+  stack; `sail-kd[all]` selects both. The "install it with `uv sync --extra ...`"
+  errors for the three folded-in backends are gone with them; the PySR one now
+  names `pip install "sail-kd[pysr]"`. The `huggingface_hub` floor is 1.0 (the httpx
+  client), and `socksio` rides along so the Hub downloads work behind a
+  SOCKS proxy (`ALL_PROXY=socks5://...`), where that client otherwise
+  raises `ImportError` on the first request.
+- **Breaking** for sketch runs: the sketch exit judges the lifted law against
+  the data, not only against its clauses. `Model.fit(..., verify=None)` and
+  `kd.harness.run_episode(..., verify=None)` resolve to `kd.SKETCH_EXIT_VERIFY`
+  (`VerifyPolicy(nmse_max=0.05)`), so a run whose clauses all matched but whose
+  law does not fit the data now returns no certified solution, and the failure
+  names the measured NMSE and the threshold. Pass an explicit `VerifyPolicy()`
+  to restore the clause-only exit. A closed sketch is gated the same way, and a
+  run where verification cannot be performed withholds the solution instead of
+  issuing it. `verify` without a `sketch` raises `ValueError` before the plugin
+  is built. The policy is not part of the run identity or the checkpoint.
+- **Breaking** for PySR PDE runs: `PySRConfig.unary_operators` defaults to the
+  empty tuple, so a PDE search no longer wraps structural terms in `sin`,
+  `cos`, `exp` or `log` and fits constants inside them. The tabular mode and
+  `Model(algorithm="pysr")` on a tabular task keep those four; an explicit
+  `unary_operators=` is used as given either way.
+- **Breaking**: `DerivativeProvider.diff` takes a keyword-only
+  `is_periodic: bool | None = None`, and the executor passes it on every call
+  (`None` keeps the provider's own periodicity). A provider of your own must
+  accept the keyword. See Fixed for the artifact it exists to prevent.
+- Ten instrument parameters move from `init_only` to `resume_safe`, so a resume
+  may change them: SGA `depth`, `width`, `aic_ratio` and `lam`; DLGA `epsilon`;
+  DISCOVER `max_length`; EqGPT `top_k` and `sparsity_alpha`; LLM4ED `pool_size`
+  and `reward_limit`. The resume applies the live value to the carried state
+  rather than the archived one: the pricing parameters re-evaluate the carried
+  population, pool or champion instead of converting old scores, and the cap
+  parameters re-gate the carried state (SGA eliminates the members that exceed
+  the live `depth` / `width` and refills the population, DISCOVER clears a
+  champion longer than the live `max_length`, EqGPT and LLM4ED re-gate the
+  carried pool). A resume that leaves the value alone is bit-identical to
+  before.
+- EqGPT, LLM4ED and PySR declare `Segmentation(reseed=True)` and implement
+  `reseed()`, so branching off an archived run re-derives the random streams
+  from the live seed instead of continuing the archived lineage. PySR passes
+  the seed through to `random_state` on a warm-started fit.
+- The HTML report prints a caption under each of its standard figures saying
+  what to read from it; downstream galleries reuse the same words.
+- Progress lines and `repr(Model)` print the published equation the way the
+  report renders it, instead of the raw IR of the best expression.
+
+### Removed
+
+- The `hub`, `pysindy` and `llm4ed` extras, whose dependencies are core now,
+  and the wheel-level `dev` extra that duplicated the development dependency
+  group (pip warns on an unknown extra and installs the package anyway).
+  `pysr` and `agent` remain, and `sail-kd[all]` is `sail-kd[pysr,agent]`.
+
+### Fixed
+
+- Reports and plots of a sketch run show the published equation, fixed
+  terms included, in the formula, the coefficient bar, the expression tree,
+  the comparison table and the time integration; a sketch with no certified
+  solution says so instead of presenting the partial fit as the law. Native
+  fit metrics and residual plots name their target (the LHS minus the fixed
+  terms) rather than being relabelled as full-equation quality.
+- The visualization integrator refuses a law whose actual LHS is not the
+  dataset's first-order evolution (a DLGA `u_tt` result, for instance) and
+  returns the reason instead of integrating it as first order.
+- Error heatmaps disclose the p99 colorbar clipping: colorbar arrows and the
+  real error range per panel.
+- The EqGPT steady surrogate panel computes R² as the plain SSE/SST ratio, so
+  it no longer depends on the physical scale of the observations.
+- `kd.load` rejects a file whose interior coordinates are not uniform instead
+  of silently rebuilding the axis; kd-npz, explicit-mapping and PDEBench
+  routes validate every point at the existing 1e-5 tolerance.
+- Consensus verification of a TABULAR dataset uses the default derivative
+  factory's own provider declaration (`none`), so tabular plans verify.
+- A reused `ExperimentRunner` no longer reports the previous resume source
+  on a fresh run's manifest.
+- DLGA labels its LHS from the dataset's field and axis, and LLM4ED refuses
+  a dataset whose field is not `u` or whose axis is not `x`, instead of
+  either one hard-coding the names.
+- A sketch anchor written as `u_x` matches a candidate written as
+  `diff_x(u)`: anchored clauses compare column fingerprints, so a derivative
+  alias no longer fails certification.
+- A sketch is certified against the LHS the search actually reported. A plugin
+  that fits `u_tt` (DLGA picks its target when `lhs_auto_select` is on, which
+  a second-order target requires) was certified as covering the sketch's `u_t`,
+  and its residual was scored against `u_t` as well, so the quality figure
+  belonged to a different equation.
+- SGA and PySINDy reject a sketch `operators` clause at compile time, naming
+  the hole and the operator, when it contains a name the backend cannot emit or
+  when the clause as a whole admits no operator. Until now the clause was
+  dropped with a note in the compile report and the search ran in a space that
+  could not contain the intended law. An empty `frozenset()` still means "bare
+  terms only".
+- Differentiating an expression that contains the differentiated axis's own
+  coordinate as a leaf uses the non-periodic stencil. The coordinate is a ramp,
+  not a periodic function, so the wrap-around template returned a jump rather
+  than a derivative at the two boundary rows on each side: on the periodic
+  Burgers grid, `diff2_x(sub(u, x))` fitted at NMSE 0.79 and now fits at
+  3.2e-4, the same as `diff2_x(u)`. An expression that is genuinely periodic
+  and carries that coordinate leaf loses the wrap template, which costs
+  accuracy on the boundary rows and changes nothing in the interior.
+- A PDE equation whose terms cannot be canonicalized (PySR's `sin(2*u)`, for
+  instance) is no longer published as an `Equation`: the builder warns once and
+  omits it, while the fitted expression, coefficients, scores, predictions and
+  Pareto data are unchanged. Regression results keep their fitted constants.
+- A resume that lowers SGA's `num` no longer truncates the population on the
+  archived run's scores before the live pricing is applied, which could discard
+  the member that was best under the live parameters and never recover it.
+- Field heatmaps put the grid nodes at pixel centers: the image extent gains
+  half a cell on each side, so the plotted coordinates are the dataset's.
+- A field panel of a dataset with more than two spatial axes states which axes
+  were held fixed and at what value, in the figure title and in the returned
+  warnings.
+- `PDEDataset.from_xlsx` logs the raw, kept and dropped row counts at INFO when
+  missing values in the selected columns remove rows. A complete input and
+  `drop_na=False` stay silent.
+
 
 ## [0.7.5] - 2026-09-08
 
@@ -178,7 +469,8 @@ examples accompany each release on its GitHub Release page.
   run. It now emits a single Float literal, exact when the rational is a
   binary float (1/2, 3/4), approximate otherwise (1/3).
 
-[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.5...v0.8.0
 [0.7.5]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.7.2...v0.7.3

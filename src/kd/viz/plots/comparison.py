@@ -2,23 +2,129 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from kd.core.equation import structure, term_diff
+from kd.core.expr import format_pde
 from kd.search.recorder import BEST_SCORE_KEY
 from kd.search.result import DEFAULT_SCORE_KIND
-from kd.viz.axes import integer_ticks
+from kd.viz._result_data import _sketch_fit_note
+from kd.viz.axes import _get_axes, integer_ticks
 from kd.viz.gap_notes import append_subtitle
 from kd.viz.plots._comparison_cells import _expression_cell, _render_term_diff_cell
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+    from torch import Tensor
 
     from kd.core.equation import Equation
+    from kd.evaluate import ComparisonResult
     from kd.search.result import ExperimentResult
+
+
+def plot_structure_comparison(
+    comparison: ComparisonResult,
+    *,
+    note: str = "",
+    style: dict[str, Any] | None = None,
+) -> tuple[Figure, list[str]]:
+    warnings = [f"{name}: {why}" for name, why in comparison.exclusions.items()]
+    with style_context(style):
+        fig = plt.figure(figsize=(13, 8), layout="constrained")
+        grid = fig.add_gridspec(2, 2, height_ratios=[1, 1.2])
+        table_ax = fig.add_subplot(grid[0,:])
+        progress_ax = fig.add_subplot(grid[1, 0])
+        score_ax = fig.add_subplot(grid[1, 1])
+        _structure_comparison_table(comparison, table_ax)
+        warnings.extend(_normalized_progress(comparison.results, progress_ax))
+        names = list(comparison.evaluations)
+        values = [comparison.evaluations[name].nmse for name in names]
+        bars = score_ax.bar(names, values, color="darkorange", alpha=0.85)
+        score_ax.bar_label(
+            bars, labels=[f"{value:.2e}" for value in values], padding=3, fontsize=9
+        )
+        score_ax.margins(y=0.2)
+        score_ax.set(
+            ylabel="NMSE (shared structure refit)", title="One ruler: lower is better"
+        )
+        score_ax.tick_params(axis="x", labelrotation=20, labelsize=8)
+        score_ax.grid(axis="y", alpha=0.25)
+        title = "One dataset, one ruler: structure refits"
+        if comparison.reference is not None:
+            title += f"\nReference: {comparison.reference}"
+        fig.suptitle(title)
+        if note:
+            fig.supxlabel(note, fontsize=9)
+    return fig, warnings
+
+
+def _structure_comparison_table(comparison: ComparisonResult, ax: Axes) -> None:
+    rows = []
+    for name, result in comparison.results.items():
+        if name in comparison.exclusions:
+            cells = [comparison.exclusions[name], "n/a", "n/a"]
+        else:
+            evaluation = comparison.evaluations[name]
+            equation = format_pde(
+                cast(list[str], evaluation.terms),
+                cast("Tensor", evaluation.coefficients),
+                lhs=comparison.lhs_label,
+                sig_figs=3,
+            )
+            cells = [
+                f"${equation.latex}$",
+                f"{evaluation.nmse:.2e}",
+                f"{evaluation.r2:.4f}",
+            ]
+        rows.append([name, *cells, str(result.iterations)])
+    ax.axis("off")
+    table = ax.table(
+        cellText=rows,
+        colLabels=["Run", "Equation (shared refit)", "NMSE", "$R^2$", "Iterations"],
+        loc="center",
+        cellLoc="center",
+        colWidths=[0.16, 0.48, 0.12, 0.10, 0.14],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 2)
+    for (row, _), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_text_props(weight="bold")
+            cell.set_facecolor("#eef2f7")
+
+
+def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list[str]:
+    notes = []
+    for name, result in results.items():
+        scores = np.asarray(result.recorder.get(BEST_SCORE_KEY), dtype=float)
+        finite = np.isfinite(scores)
+        if not finite.any():
+            notes.append(f"{name}: no finite score history; progress omitted")
+            continue
+        start, end = scores[finite][[0, -1]]
+        progress = np.full(scores.shape, np.nan)
+        progress[finite] = (
+            1.0 if start == end else (scores[finite] - start) / (end - start)
+        )
+        ax.plot(np.arange(len(scores)), progress, marker=".", markersize=4, label=name)
+    ax.set(
+        xlabel="Iteration",
+        ylabel="Normalized best-score progress",
+        title="Per-run progress from first to last finite score",
+    )
+    integer_ticks(ax)
+    ax.grid(alpha=0.25)
+    if ax.lines:
+        ax.legend(fontsize=8, loc="lower right")
+    if notes:
+        append_subtitle(ax, "\n".join(notes))
+    return notes
 
 
 def _disambiguate_labels(raw_labels: list[str]) -> list[str]:
@@ -72,11 +178,12 @@ def _band_identity(result: ExperimentResult) -> tuple[str, str, str]:
 
 def render_overlaid_convergence(
     results: list[ExperimentResult],
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     labels: list[str] | None = None,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
     any_data = False
     drawn_mixed = False
@@ -102,9 +209,7 @@ def render_overlaid_convergence(
 
                     label = f"{label} (undeclared metric)"
                 else:
-                    label = (
-                        f"{label} ({result.score_kind}, {result.score_direction})"
-                    )
+                    label = f"{label} ({result.score_kind}, {result.score_direction})"
             scores = result.recorder.get(BEST_SCORE_KEY)
             if not scores:
                 continue
@@ -232,11 +337,12 @@ def render_overlaid_convergence(
 
 def plot_score_bar(
     results: list[ExperimentResult],
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     labels: list[str] | None = None,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
     run_labels = _run_labels(results, labels)
     r2_values: list[float] = []
@@ -287,26 +393,26 @@ def plot_score_bar(
         ax.set_ylabel("$R^2$")
         ax.set_title("Score Comparison")
         ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=0.5)
+        _annotate_sketch_metrics(ax, results, run_labels, warnings)
 
     return warnings
 
 
 def plot_summary_table(
     results: list[ExperimentResult],
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     labels: list[str] | None = None,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style, figsize=(12, 5))
     warnings: list[str] = []
     run_labels = _run_labels(results, labels)
 
     col_labels = ["Run", "Expression", "NMSE", "R2", "Iterations", "Δ Terms vs Run 0"]
     table_data: list[list[Any]] = []
 
-    baseline_equation = _validate_baseline_for_term_diff(
-        results, run_labels, warnings
-    )
+    baseline_equation = _validate_baseline_for_term_diff(results, run_labels, warnings)
     _warn_on_mixed_algorithm_vocabularies(results, warnings)
 
     for i, result in enumerate(results):
@@ -339,17 +445,36 @@ def plot_summary_table(
         table.auto_set_font_size(False)
         table.set_fontsize(8)
         table.scale(1.0, 1.4)
+        _annotate_sketch_metrics(ax, results, run_labels, warnings)
 
     return warnings
+
+
+def _annotate_sketch_metrics(
+    ax: Axes,
+    results: list[ExperimentResult],
+    labels: list[str],
+    warnings: list[str],
+) -> None:
+    notes = [
+        f"{label}: {note}"
+        for result, label in zip(results, labels, strict=True)
+        if (note := _sketch_fit_note(result)) is not None
+    ]
+    if notes:
+        ax.set_title(
+            "Search-fit metrics (targets may differ)\n"
+            "Not a comparison of full-equation quality",
+            fontsize="medium",
+        )
+        warnings.extend(notes)
 
 
 def _metric_cell(
     value: float, fmt: str, metric: str, run_label: str, warnings: list[str]
 ) -> str:
     if not np.isfinite(value):
-        warnings.append(
-            f"Non-finite {metric} ({value}) for {run_label}; shown as N/A"
-        )
+        warnings.append(f"Non-finite {metric} ({value}) for {run_label}; shown as N/A")
         return "N/A"
     return format(value, fmt)
 

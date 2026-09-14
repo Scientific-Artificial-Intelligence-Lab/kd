@@ -23,7 +23,7 @@ from kd.search.protocol import PlatformComponents
 from kd.search.pysr import assembly
 from kd.search.pysr import viz as _viz_helpers
 from kd.search.pysr.backend import PySRBackend, default_backend_factory
-from kd.search.pysr.config import PySRConfig
+from kd.search.pysr.config import TABULAR_UNARY_OPERATORS, PySRConfig
 from kd.search.pysr.convert import build_feature_names
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.viz.extension import PlotInfo
@@ -145,7 +145,12 @@ class PySRPlugin:
 
 
 
-        segmentation=Segmentation(archive="progress", unit="iterations", reseed=False),
+
+
+
+
+
+        segmentation=Segmentation(archive="progress", unit="iterations", reseed=True),
         identity_breaking_fields=frozenset(
             {"terms", "binary_operators", "unary_operators"}
         ),
@@ -163,7 +168,11 @@ class PySRPlugin:
         if mode not in ("default", "tabular"):
             raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
         self._mode = mode
-        self._config = config or PySRConfig()
+        self._config = config or (
+            PySRConfig(unary_operators=TABULAR_UNARY_OPERATORS)
+            if mode == "tabular"
+            else PySRConfig()
+        )
         self._library: TermLibrarySpec = TermLibrarySpec.from_terms(self._config.terms)
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
@@ -419,6 +428,9 @@ class PySRPlugin:
         )
         self._search_state = value.get(_STATE_SEARCH_STATE)
         self._restore_pending = True
+
+    def reseed(self) -> None:
+        pass
 
 
 

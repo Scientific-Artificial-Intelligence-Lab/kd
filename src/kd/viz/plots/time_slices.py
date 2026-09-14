@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from kd.viz.plots._dim_utils import (
+    _annotate_spatial_slice,
     _imshow_extent_for_spatial_axes,
     _pick_time_steps,
     _slice_nd_to_2d,
@@ -151,6 +152,7 @@ def plot_time_slices(
                 no_pred_reason=no_pred_reason,
             )
 
+    _annotate_spatial_slice(fig, dataset, warnings)
     return fig, warnings
 
 

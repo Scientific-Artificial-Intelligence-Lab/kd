@@ -89,8 +89,10 @@ to the user's instance. Repeated calls with the same inputs are deterministic.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from kd._evaluate_classify import (
     TermRejection,
@@ -98,7 +100,8 @@ from kd._evaluate_classify import (
     TermValidationReport,
     classify_terms,
 )
-from kd.core.platform.builder import PlatformBuilder
+from kd.core.equation import Evolution, LhsSpec, active_law, render_lhs_label
+from kd.core.platform.builder import PlatformBuilder, resolve_lhs_defaults
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.schema import DataTopology
 
@@ -106,20 +109,114 @@ if TYPE_CHECKING:
     from kd.core.evaluator import EvaluationResult
     from kd.data.schema import PDEDataset
     from kd.search.protocol import PlatformComponents
+    from kd.search.result import ExperimentResult
+    from kd.viz.report import ReportResult
 
 logger = logging.getLogger(__name__)
 
 
 
 __all__ = [
+    "ComparisonResult",
     "EvaluationFailedError",
     "InvalidTermsError",
     "TermRejection",
     "TermValidation",
     "TermValidationReport",
     "evaluate_terms",
+    "compare_results",
     "validate_terms",
 ]
+
+
+@dataclass
+class ComparisonResult:
+    """Structure refits on one dataset, separate from native search scores.
+
+    ``evaluations`` contains successful refits; ``exclusions`` names every
+    run that could not be compared and explains why. Labels are supplied by
+    the caller, so a preset answer can be labelled as such in every view.
+    """
+
+    results: dict[str, ExperimentResult]
+    evaluations: dict[str, EvaluationResult]
+    exclusions: dict[str, str]
+    lhs_label: str
+    reference: str | None
+
+    def __str__(self) -> str:
+        lines = [
+            "Unified platform evaluation (structure refit, same NMSE)",
+            f"{'Run':<24} {'NMSE':>12} {'R^2':>10} Structure",
+        ]
+        for name in self.results:
+            if name in self.exclusions:
+                lines.append(f"{name}: excluded - {self.exclusions[name]}")
+            else:
+                ev = self.evaluations[name]
+                lines.append(
+                    f"{name:<24} {ev.nmse:>12.4g} {ev.r2:>10.4f} "
+                    + " + ".join(cast(list[str], ev.terms))
+                )
+        return "\n".join(lines)
+
+    def render(self, output_path: str | Path, *, note: str = "") -> ReportResult:
+        """Save the equation table, normalized progress and refit-NMSE sheet."""
+        import matplotlib.pyplot as plt
+
+        from kd.viz.plots import plot_structure_comparison
+        from kd.viz.report import ReportResult
+
+        figure, notes = plot_structure_comparison(self, note=note)
+        path = Path(output_path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            figure.savefig(path, bbox_inches="tight")
+        finally:
+            plt.close(figure)
+        return ReportResult(figures=[path], warnings=notes)
+
+
+def compare_results(
+    dataset: PDEDataset,
+    results: Mapping[str, ExperimentResult],
+    *,
+    max_order: int = 3,
+) -> ComparisonResult:
+    """Refit each active evolution-law structure on the same FD features.
+
+    The shared target is the dataset's LHS. This compares discovered
+    structures, not the algorithms' native scores or original coefficients.
+    Missing equations, other forms/LHSs, and refused term evaluations are
+    explicitly excluded. Other errors propagate. Inputs are never mutated.
+    """
+    resolved = resolve_lhs_defaults(dataset)
+    lhs = LhsSpec(resolved.lhs_field, resolved.lhs_axis, resolved.lhs_order)
+    comparison = ComparisonResult(
+        dict(results), {}, {}, render_lhs_label(lhs), dataset.ground_truth
+    )
+    for name, result in results.items():
+        equation = result.equation
+        if not isinstance(equation, Evolution):
+            comparison.exclusions[name] = "no evolution equation to compare"
+            continue
+        if equation.lhs_spec != lhs:
+            comparison.exclusions[name] = (
+                f"LHS={render_lhs_label(equation.lhs_spec)} != {comparison.lhs_label}"
+            )
+            continue
+        terms = [term for term, _ in active_law(equation).terms]
+        if not terms:
+            comparison.exclusions[name] = "equation has no terms to refit"
+            continue
+        try:
+            comparison.evaluations[name] = evaluate_terms(
+                resolved, terms, max_order=max_order
+            )
+        except (InvalidTermsError, EvaluationFailedError) as error:
+            comparison.exclusions[name] = f"unified refit refused: {error}"
+    return comparison
+
 
 
 
@@ -348,8 +445,7 @@ def _resolve_lhs_order(dataset: PDEDataset, lhs_order: int | None) -> int:
     if resolved == 0:
         if dataset.topology is DataTopology.TABULAR:
             raise NotImplementedError(
-                "tabular datasets are not supported by "
-                "evaluate_terms/validate_terms"
+                "tabular datasets are not supported by evaluate_terms/validate_terms"
             )
         raise NotImplementedError(
             "homogeneous (lhs_order=0) datasets are not supported by "

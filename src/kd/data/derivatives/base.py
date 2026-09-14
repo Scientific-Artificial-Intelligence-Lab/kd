@@ -39,6 +39,8 @@ class DerivativeProvider(ABC):
         expression: torch.Tensor,
         axis: str,
         order: int,
+        *,
+        is_periodic: bool | None = None,
     ) -> torch.Tensor:
         raise NotImplementedError
 

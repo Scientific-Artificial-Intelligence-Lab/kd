@@ -48,15 +48,13 @@ model.fit(dataset)
 
 # 4. Inspect the result.
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best fitness: {model.best_score_:.4f}")
 
-# 5. Visualize. ``render_all`` includes DLGA's 4 VizExtension diagnostics
+# 5. Visualize. ``model.report`` includes DLGA's 4 VizExtension diagnostics
 # (fitness_spread / population_diversity / complexity_evolution /
 # surrogate_training — the NN_1 train/val loss curve) automatically,
 # alongside the universal report figures.
 out_dir = Path(__file__).parent / "out" / "08_dlga"
-report = kd.VizEngine(output_dir=out_dir).render_all(
-    model.result_, algorithm=model.algorithm_, dataset=dataset
-)
+report = model.report(out_dir)
 print(f"Report: {report.report}")

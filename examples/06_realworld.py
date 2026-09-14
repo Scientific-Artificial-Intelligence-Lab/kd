@@ -95,15 +95,10 @@ for loader in DATASETS:
         shutil.rmtree(out_dir / "checkpoints", ignore_errors=True)
         model.fit(dataset)
 
-        print(f"Discovered: {model.best_expr_}")
+        print(f"Discovered: {model.result_.equation}")
         print(f"Best AIC: {model.best_score_:.4f}")
 
-        viz = kd.VizEngine(output_dir=out_dir)
-        report = viz.render_all(
-            model.result_,
-            algorithm=model.algorithm_,
-            dataset=dataset,
-        )
+        report = model.report(out_dir)
         print(f"Report: {report.report}")
         print(f"Figures: {len(report.figures)} files")
 

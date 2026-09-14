@@ -10,11 +10,18 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from kd.viz.plots._dim_utils import (
+    _annotate_spatial_slice,
     _imshow_extent_for_spatial_axes,
     _pick_time_steps,
     _slice_nd_to_2d,
 )
-from kd.viz.plots._field_panels import _RESIDUAL_SIGN, _diverged_tag, _robust_abs_max
+from kd.viz.plots._field_panels import (
+    _RESIDUAL_SIGN,
+    _colorbar_extend,
+    _diverged_tag,
+    _range_note,
+    _robust_abs_max,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -168,6 +175,7 @@ def plot_error_heatmap(
                 div_tag=div_tag,
             )
 
+    _annotate_spatial_slice(fig, dataset, warnings)
     return fig, warnings
 
 
@@ -187,31 +195,29 @@ def _render_1d_error(
 
     error_2d = error.T if time_dim == 0 else error
 
-    extent = (
-        float(t_coords[0]),
-        float(t_coords[-1]),
-        float(s_coords[0]),
-        float(s_coords[-1]),
-    )
-
 
     vmax = _robust_abs_max(error_2d)
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 5), dpi=_DEFAULT_DPI)
-    im = ax.imshow(
+    im = ax.pcolormesh(
+        t_coords,
+        s_coords,
         error_2d,
-        aspect="auto",
-        origin="lower",
-        extent=extent,
+        shading="nearest",
         cmap="RdBu_r",
         vmin=-vmax,
         vmax=vmax,
         rasterized=True,
     )
-    fig.colorbar(im, ax=ax, label=_COLORBAR_LABEL)
+    fig.colorbar(
+        im,
+        ax=ax,
+        label=_COLORBAR_LABEL,
+        extend=_colorbar_extend(error_2d, -vmax, vmax),
+    )
     ax.set_xlabel(time_axis)
     ax.set_ylabel(s_name)
-    ax.set_title(f"Error Heatmap{div_tag}")
+    ax.set_title(f"Error Heatmap{div_tag}" + _range_note(error_2d, (-vmax, vmax)))
 
     return fig
 
@@ -239,7 +245,8 @@ def _render_2d_error(
             error_slice = _slice_nd_to_2d(error_slice, (0, 1))
         error_slices.append(error_slice)
 
-    vmax = _robust_abs_max(np.stack(error_slices, axis=0))
+    displayed = np.stack(error_slices, axis=0)
+    vmax = _robust_abs_max(displayed)
 
     fig, axes_arr = plt.subplots(
         1,
@@ -267,13 +274,17 @@ def _render_2d_error(
         )
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(f"Error Heatmap{div_tag} ({time_axis}={t_val:.3g})")
+        ax.set_title(
+            f"Error Heatmap{div_tag} ({time_axis}={t_val:.3g})"
+            + _range_note(error_slice, (-vmax, vmax))
+        )
 
     if mappable is not None:
         fig.colorbar(
             mappable,
             ax=list(axes_arr.flat),
             label=_COLORBAR_LABEL,
+            extend=_colorbar_extend(displayed, -vmax, vmax),
         )
 
     return fig

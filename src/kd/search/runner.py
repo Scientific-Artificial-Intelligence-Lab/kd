@@ -341,10 +341,17 @@ class ExperimentRunner:
                 f"{type(self._algorithm).__name__} must declare a descriptor "
                 "of type InstrumentDescriptor to run a sketch task"
             )
+        sketch_lower_owner = getattr(type(self._algorithm), "sketch_lower_owner", None)
+        if sketch_lower_owner is None:
+            raise TypeError(
+                f"{type(self._algorithm).__name__} must declare sketch_lower_owner "
+                "to run a sketch task"
+            )
         assert_sketch_supported(
             descriptor,
             self._task.sketch,
             algorithm=descriptor.algorithm,
+            sketch_lower_owner=sketch_lower_owner,
         )
 
     def _assert_run_identity_serializable(self) -> None:
@@ -604,7 +611,27 @@ class ExperimentRunner:
         task = self._task
         assert task is not None
         compile_report = self._sketch_compile_report(task)
-        lifted = task.compiled.lift(None if task.compiled.closed else final_eval)
+        if task.compiled.closed:
+            lifted = task.compiled.lift(None, lhs_spec=task.sketch.lhs_spec)
+        else:
+            fitted_lhs = self._equation_lhs_spec(components, final_eval)
+            if fitted_lhs is None:
+
+
+
+
+
+
+                dataset = components.dataset
+
+                fields = None if dataset.fields is None else sorted(dataset.fields)
+                raise TypeError(
+                    "sketch exit cannot resolve the LHS the search reported: "
+                    f"lhs_name={final_eval.lhs_name!r} does not parse against "
+                    f"dataset fields {fields} / axes {dataset.axis_order} "
+                    f"({type(self._algorithm).__name__})"
+                )
+            lifted = task.compiled.lift(final_eval, lhs_spec=fitted_lhs)
         if lifted is None:
             return SketchOutcome(
                 solution=None,
@@ -630,7 +657,6 @@ class ExperimentRunner:
 
         full_verify = None
         failure = None
-        verify_failed = False
         if components.context is None:
             failure = "verify: platform context is unavailable"
         else:
@@ -639,12 +665,23 @@ class ExperimentRunner:
                     lifted,
                     executor=components.executor,
                     context=components.context,
+                    policy=task.verify,
                 )
             except ValueError as exc:
                 logger.warning("Sketch verification failed: %s", exc)
                 failure = f"verify: {exc}"
-                verify_failed = True
-        solution = lifted if verdict.overall and not verify_failed else None
+            else:
+                if full_verify.passed is False:
+                    failure = (
+                        f"verify: nmse {full_verify.nmse:.3e} exceeds policy "
+                        f"nmse_max {task.verify.nmse_max}"
+                    )
+        certified = (
+            verdict.overall
+            and full_verify is not None
+            and full_verify.passed is not False
+        )
+        solution = lifted if certified else None
         return SketchOutcome(
             solution=solution,
             best_candidate=lifted,
@@ -756,7 +793,7 @@ class ExperimentRunner:
             terms=getattr(self._algorithm, "terms", None),
             artifacts=getattr(self._algorithm, "artifacts", None),
             resumed=self._resumed,
-            resume_source=self._resume_source,
+            resume_source=self._resume_source if self._resumed else None,
         )
 
     def _final_eval(self) -> EvaluationResult:
@@ -881,6 +918,7 @@ class ExperimentRunner:
         self._resume_source = resume_source
         self._algorithm.state = data["algorithm_state"]
         if reseed:
+
 
 
 

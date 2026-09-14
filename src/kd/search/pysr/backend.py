@@ -102,7 +102,7 @@ class _PySRRegressorBackend:
             raise RuntimeError(
                 "Model(algorithm='pysr') requires the optional dependency "
                 "`pysr` (which bundles a Julia runtime); install it with "
-                f"`uv sync --extra pysr`. Original error: {e}"
+                f'`pip install "sail-kd[pysr]"`. Original error: {e}'
             ) from e
         if search_state is None:
             self._model = PySRRegressor(**_regressor_kwargs(self._config))
@@ -115,8 +115,18 @@ class _PySRRegressorBackend:
 
 
 
+
+
+
+
+
+
+
+
             self._model.set_params(
-                niterations=self._config.niterations, warm_start=True
+                niterations=self._config.niterations,
+                random_state=self._config.seed,
+                warm_start=True,
             )
 
 

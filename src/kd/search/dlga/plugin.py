@@ -10,7 +10,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from kd.core.equation import Form
+from kd.core.equation import Form, LhsSpec
+from kd.core.equation.rendering import render_lhs_label
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr.executor import PythonExecutor
@@ -52,6 +53,11 @@ from kd.search.dlga.genes import (
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
+from kd.search.trajectory import (
+    active_fit_terms,
+    log_search_trajectory,
+    select_trajectory_candidates,
+)
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -148,7 +154,18 @@ class DLGAPlugin:
                 "epsilon",
                 "float",
                 "Expression-length penalty.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "mutation_rate",
@@ -215,6 +232,8 @@ class DLGAPlugin:
         self._context: SurrogateContext | None = None
         self._evaluators: dict[str, Evaluator] = {}
         self._lhs_targets: dict[str, Tensor] = {}
+        self._lhs_t_name = ""
+        self._lhs_tt_name = ""
         self._executor: PythonExecutor | None = None
         self._registry: FunctionRegistry | None = None
         self._dataset: PDEDataset | None = None
@@ -344,6 +363,9 @@ class DLGAPlugin:
         self._build_evaluators(dataset)
 
 
+        self._reprice_best()
+
+
 
 
 
@@ -399,6 +421,7 @@ class DLGAPlugin:
         if genomes is None or len(genomes) != len(results):
             genomes = [None] * len(results)
         self._log_generation_metrics(results)
+        self._log_search_trajectory(results)
         valid = [
             (result, genome)
             for result, genome in zip(results, genomes, strict=True)
@@ -419,6 +442,30 @@ class DLGAPlugin:
 
 
         self._last_fitness = [_fitness(result) for result in results]
+
+    def _log_search_trajectory(self, results: list[EvaluationResult]) -> None:
+        recorder = self._recorder
+        if recorder is None or not recorder.enabled or recorder.trajectory_top_k == 0:
+            return
+
+        def project(index: int) -> tuple[str, tuple[str, ...], str]:
+            result = results[index]
+
+            assert result.terms is not None
+            assert result.coefficients is not None
+            assert result.lhs_name is not None
+            terms = active_fit_terms(
+                result.terms, result.coefficients, result.selected_indices
+            )
+            return result.expression, terms, result.lhs_name
+
+        candidates = select_trajectory_candidates(
+            [_fitness(result) if result.is_valid else None for result in results],
+            project,
+            top_k=recorder.trajectory_top_k,
+            direction=self.score_direction,
+        )
+        log_search_trajectory(recorder, candidates)
 
     def _log_generation_metrics(self, results: list[EvaluationResult]) -> None:
         recorder = self._recorder
@@ -447,8 +494,12 @@ class DLGAPlugin:
             _N_VALID_KEY: len(valid_results),
             _N_UNIQUE_KEY: len({result.expression for result in results}),
             _GEN_MEAN_COMPLEXITY_KEY: gen_mean_complexity,
-            _LHS_UT_KEY: sum(1 for r in valid_results if r.lhs_name == "u_t"),
-            _LHS_UTT_KEY: sum(1 for r in valid_results if r.lhs_name == "u_tt"),
+            _LHS_UT_KEY: sum(
+                1 for r in valid_results if r.lhs_name == self._lhs_t_name
+            ),
+            _LHS_UTT_KEY: sum(
+                1 for r in valid_results if r.lhs_name == self._lhs_tt_name
+            ),
         }
         log_whitelisted_metrics(recorder, _LOGGED_METRICS, metrics)
 
@@ -457,6 +508,14 @@ class DLGAPlugin:
         if self._population is None or self._last_fitness is None:
             return
         self._evolve_population(self._population, self._last_fitness)
+
+    def _reprice_best(self) -> None:
+        if self._best_genome is None:
+            return
+        result = self._evaluate_one(self._best_expression, self._best_genome)
+        self._best_score = _fitness(result)
+        self._best_lhs_name = result.lhs_name
+        self._best_result = result
 
     def _evolve_population(
         self,
@@ -542,11 +601,10 @@ class DLGAPlugin:
             )
 
     def build_result_target(self) -> Tensor:
-        if self._best_lhs_name and self._best_lhs_name in self._lhs_targets:
-            return self._lhs_targets[self._best_lhs_name].detach().clone()
-        if "u_t" in self._lhs_targets:
-            return self._lhs_targets["u_t"].detach().clone()
-        raise RuntimeError("build_result_target called before prepare()")
+        if not self._lhs_targets:
+            raise RuntimeError("build_result_target called before prepare()")
+        lhs_name = self._best_lhs_name or self._lhs_t_name
+        return self._lhs_targets[lhs_name].detach().clone()
 
 
 
@@ -626,14 +684,20 @@ class DLGAPlugin:
         if self._provider is None or self._context is None or self._executor is None:
             raise RuntimeError("DLGA internals not prepared")
         solver = self._make_solver()
+        self._lhs_t_name = render_lhs_label(
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, 1)
+        )
+        self._lhs_tt_name = render_lhs_label(
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, 2)
+        )
 
 
         lhs_t = self._provider.get_derivative(
             dataset.lhs_field, dataset.lhs_axis, 1
         ).detach()
-        self._lhs_targets = {"u_t": lhs_t.flatten().detach()}
+        self._lhs_targets = {self._lhs_t_name: lhs_t.flatten().detach()}
         self._evaluators = {
-            "u_t": Evaluator(
+            self._lhs_t_name: Evaluator(
                 self._executor,
                 solver,
                 self._context,
@@ -646,8 +710,8 @@ class DLGAPlugin:
                 dataset.lhs_axis,
                 2,
             ).detach()
-            self._lhs_targets["u_tt"] = lhs_tt.flatten().detach()
-            self._evaluators["u_tt"] = Evaluator(
+            self._lhs_targets[self._lhs_tt_name] = lhs_tt.flatten().detach()
+            self._evaluators[self._lhs_tt_name] = Evaluator(
                 self._executor,
                 self._make_solver(),
                 self._context,
@@ -688,7 +752,10 @@ class DLGAPlugin:
             return replace(choices[0], score=_INVALID_FITNESS)
         return min(
             valid,
-            key=lambda result: (result.nmse, 0 if result.lhs_name == "u_tt" else 1),
+            key=lambda result: (
+                result.nmse,
+                0 if result.lhs_name == self._lhs_tt_name else 1,
+            ),
         )
 
     def _mutate(self, genome: Genome) -> Genome:

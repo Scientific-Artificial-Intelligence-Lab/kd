@@ -40,6 +40,7 @@ from kd.search.llm4ed.config import (
 )
 from kd.search.llm4ed.fd import build_operand_columns
 from kd.search.llm4ed.filter_score import filter_score
+from kd.search.llm4ed.parse import parse_equation
 from kd.search.llm4ed.pool import ElitePool, PoolItem
 from kd.search.llm4ed.prompts import (
     EVOLUTION,
@@ -64,6 +65,12 @@ from kd.search.llm4ed.score import (
 )
 from kd.search.recorder import log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
+from kd.search.term_utils import fold_add
+from kd.search.trajectory import (
+    active_fit_terms,
+    log_search_trajectory,
+    select_trajectory_candidates,
+)
 from kd.viz.gap_notes import NO_MEASUREMENT
 
 if TYPE_CHECKING:
@@ -187,6 +194,15 @@ def _dataset_columns(
             f"axis {lhs_axis!r}; dataset has axes {axis_order!r}."
         )
     spatial_axis = spatial_axes[0]
+    if lhs_field != "u":
+        raise ValueError(
+            f"Llm4edPlugin requires field 'u'; dataset has lhs_field={lhs_field!r}."
+        )
+    if spatial_axis != "x":
+        raise ValueError(
+            "Llm4edPlugin requires spatial axis 'x'; "
+            f"dataset has spatial axis {spatial_axis!r}."
+        )
     u = dataset.fields[lhs_field].values.detach().cpu().numpy().astype(np.float64)
     if axis_order[0] == lhs_axis:
         u = np.ascontiguousarray(u.T)
@@ -245,17 +261,36 @@ class Llm4edPlugin:
                 "reward_limit",
                 "float",
                 "Minimum admitted sparse reward.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "pool_size",
                 "int",
                 "Elite-pool capacity.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
         ),
         segmentation=Segmentation(
-            archive="progress", unit="rounds", reseed=False
+            archive="progress", unit="rounds", reseed=True
         ),
         identity_breaking_fields=frozenset(),
 
@@ -276,6 +311,7 @@ class Llm4edPlugin:
         self._provider_self_built = False
         self._prepared = False
         self._restore_pending = False
+        self._reseed_pending = False
         self._pending_state: dict[str, Any] | None = None
 
         self._components: PlatformComponents | None = None
@@ -405,9 +441,17 @@ class Llm4edPlugin:
         if is_restore:
             assert self._pending_state is not None
             self._apply_state(self._pending_state)
+            if self._reseed_pending:
+
+
+
+
+                self._rng = random.Random(self._config.seed)
+                self._llm_seed_counter = 0
         else:
             self._reset_search_state()
         self._restore_pending = False
+        self._reseed_pending = False
         self._pending_state = None
         self._prepared = True
 
@@ -546,6 +590,35 @@ class Llm4edPlugin:
             },
         )
 
+        self._log_search_trajectory(results)
+
+    def _log_search_trajectory(self, results: list[EvaluationResult]) -> None:
+        recorder = self._recorder
+        if recorder is None or not recorder.enabled or recorder.trajectory_top_k == 0:
+            return
+        assert self._features is not None
+        operands = tuple(self._features)
+
+        def project(index: int) -> tuple[str, tuple[str, ...], str]:
+            result = results[index]
+            assert result.terms is not None and result.coefficients is not None
+            assert result.lhs_name is not None
+            terms = active_fit_terms(
+                result.terms, result.coefficients, result.selected_indices
+            )
+            parsed = parse_equation(result.expression, operands)
+            expression = fold_add([term.ir for term in parsed.terms])
+            return expression, terms, result.lhs_name
+
+        candidates = select_trajectory_candidates(
+            [result.score if result.is_valid else None for result in results],
+            project,
+            top_k=recorder.trajectory_top_k,
+            direction=self.score_direction,
+        )
+        log_search_trajectory(recorder, candidates)
+
+
 
     def build_final_result(self) -> EvaluationResult:
         self._require_prepared()
@@ -681,6 +754,9 @@ class Llm4edPlugin:
         self._pending_state = dict(value)
         self._restore_pending = True
 
+    def reseed(self) -> None:
+        self._reseed_pending = True
+
 
     def _build_default_provider(self, *, initial_calls: int = 0) -> LLMProvider:
         if self._config.base_url is None:
@@ -730,6 +806,17 @@ class Llm4edPlugin:
         self._round_llm_calls = 0
 
     def _apply_state(self, state: dict[str, Any]) -> None:
+        limit = self._config.reward_limit
+        pool_state = state["elite_pool"]
+        population_entries = [
+            entry for entry in state["population"] if float(entry["score"]) > limit
+        ]
+        pool_entries = [
+            entry for entry in pool_state["items"] if float(entry["score"]) > limit
+        ][: self._config.pool_size]
+        organize_entries = [
+            entry for entry in state["organize_pool"] if float(entry["score"]) > limit
+        ][: self._config.pool_size]
         self._population = [
             _Member(
                 score=float(entry["score"]),
@@ -737,14 +824,13 @@ class Llm4edPlugin:
                 permutation=str(entry["permutation"]),
                 terms=tuple(entry["terms"]),
             )
-            for entry in state["population"]
+            for entry in population_entries
         ]
-        pool_state = state["elite_pool"]
         self._pool = ElitePool.from_state(
             self._config.pool_size,
             [
                 PoolItem(score=float(entry["score"]), expression=entry["expression"])
-                for entry in pool_state["items"]
+                for entry in pool_entries
             ],
             [float(score) for score in pool_state["scores"]],
         )
@@ -753,13 +839,13 @@ class Llm4edPlugin:
 
         self._organize_pool = [
             PoolItem(score=float(entry["score"]), expression=entry["expression"])
-            for entry in state["organize_pool"]
+            for entry in organize_entries
         ]
         display: dict[str, tuple[str, tuple[str, ...]]] = {
             member.expression: (member.permutation, member.terms)
             for member in self._population
         }
-        for entry in [*pool_state["items"], *state["organize_pool"]]:
+        for entry in [*pool_entries, *organize_entries]:
             display[entry["expression"]] = (
                 str(entry["permutation"]),
                 tuple(entry["terms"]),

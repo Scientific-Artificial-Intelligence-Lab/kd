@@ -9,6 +9,8 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import Form
+from kd.core.equation.rendering import render_lhs_label
+from kd.core.equation.types import LhsSpec
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.schema import DataTopology
@@ -41,6 +43,7 @@ from kd.search.series_keys import (
     PARETO_LOSS_KEY,
     PARETO_SCALE_KEY,
 )
+from kd.search.trajectory import log_search_trajectory
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -265,13 +268,30 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 "max_length",
                 "int",
                 "Maximum generated expression length.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "epsilon",
                 "float",
                 "Risk-seeking reward quantile: the top-epsilon fraction of a "
                 "batch's rewards feeds the policy-gradient update.",
+
 
 
 
@@ -319,6 +339,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         self._evaluator: _ExpressionEvaluator | None = None
         self._engine: DiscoverEngine | None = None
         self._recorder: VizRecorder | None = None
+        self._trajectory_lhs = ""
         self._restore_pending: bool = False
         self._pending_state: EngineState | None = None
         self._front = ParetoTracker()
@@ -363,6 +384,16 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 lhs_name=components.dataset.lhs_field,
             )
         self._recorder = components.recorder
+        self._trajectory_lhs = ""
+        if self._enabled_trajectory_recorder() is not None:
+            dataset = components.dataset
+            self._trajectory_lhs = (
+                dataset.lhs_field
+                if dataset.lhs_order == 0
+                else render_lhs_label(
+                    LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+                )
+            )
         if self._restore_pending and restore_state is not None:
             self._engine.state = restore_state
             if self._mode == "tabular":
@@ -370,6 +401,9 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
 
                 self._log_front()
+
+
+            self._engine.gate_best_by_length()
 
 
             self._engine.rebase_best(self._evaluator)
@@ -390,6 +424,14 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     def update(self, results: list[EvaluationResult]) -> None:
         engine = self._require_engine()
         engine.receive_results(results)
+        trajectory_recorder = self._enabled_trajectory_recorder()
+        trajectory = (
+            engine.snapshot_pending_candidates(
+                top_k=trajectory_recorder.trajectory_top_k, lhs=self._trajectory_lhs
+            )
+            if trajectory_recorder is not None
+            else []
+        )
         engine.update()
         if self._mode == "tabular":
             result_filter = _make_magnitude_filter(
@@ -409,6 +451,14 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         )
         if self._mode == "tabular":
             self._log_front()
+        if trajectory_recorder is not None:
+            log_search_trajectory(trajectory_recorder, trajectory)
+
+    def _enabled_trajectory_recorder(self) -> VizRecorder | None:
+        recorder = self._recorder
+        if recorder is None or not recorder.enabled or recorder.trajectory_top_k == 0:
+            return None
+        return recorder
 
     def between_iterations(self) -> None:
         pass
@@ -615,10 +665,20 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         raw = extras.get(_TABULAR_FRONT, [])
         if not isinstance(raw, list):
             raise TypeError("tabular_front checkpoint extra must be a list.")
+
+
+
+
+
+
+
+
+        max_length = self._config.max_length
+        kept = [row for row in raw if cast(int, row["complexity"]) <= max_length]
         if not self._config.magnitude_filter:
-            return ParetoTracker.from_state(raw)
+            return ParetoTracker.from_state(kept)
         tracker = ParetoTracker()
-        for row in raw:
+        for row in kept:
             scale = cast(float, row["scale"])
             if (
                 magnitude_rejection(

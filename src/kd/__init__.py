@@ -1,19 +1,36 @@
 """kd - Symbolic regression platform for PDE discovery."""
 
 from kd.api import Model, instrument_schemas
-from kd.core.equation import Sketch, law_signature
+from kd.core.equation import LhsSpec, Sketch, law_signature
+from kd.core.equation.rendering import render_lhs_label
 from kd.core.evaluator import EvaluationResult
+from kd.core.expr.sympy_bridge import FormattedEquation, format_pde
 from kd.core.interrupt import SearchInterrupted
-from kd.core.verify import VerificationReport, VerifyPolicy, verify_equation
+from kd.core.rates import RateSummary, paired_exact_test, rate_summary, wilson_interval
+from kd.core.recovery import (
+    RecoveryVerdict,
+    judge_recovery,
+    load_bearing_recall,
+    span_floor,
+    term_set_jaccard,
+)
+from kd.core.verify import (
+    SKETCH_EXIT_VERIFY,
+    VerificationReport,
+    VerifyPolicy,
+    verify_equation,
+)
 from kd.data import (
     DATASET_CATALOG,
     AxisInfo,
+    DatasetSource,
     DatasetSpec,
     DataTopology,
     FieldData,
     PDEDataset,
     TabularDataset,
     TaskType,
+    add_noise,
     generate_advection_data,
     generate_burgers_data,
     generate_diffusion_data,
@@ -21,6 +38,7 @@ from kd.data import (
     list_datasets,
     list_datasets_answer_blind,
     list_remote_datasets,
+    load,
     load_allen_cahn,
     load_burgers,
     load_burgers_2d,
@@ -48,9 +66,12 @@ from kd.evaluate import (
     validate_terms,
 )
 from kd.inspect import (
+    ArrayReport,
     AxisReport,
     DatasetReport,
     FieldReport,
+    SourceReport,
+    inspect_file,
     preview,
     preview_report,
 )
@@ -60,6 +81,12 @@ from kd.search.checkpoint_manifest import (
     CheckpointManifestEntry,
     CheckpointManifestError,
     load_checkpoint_manifest,
+)
+from kd.search.checkpoint_select import (
+    CheckpointSelectionError,
+    ResolvedCheckpoint,
+    eligible_checkpoint_iterations,
+    resolve_checkpoint,
 )
 from kd.search.discover import DiscoverConfig
 from kd.search.dlga import DLGAConfig
@@ -71,7 +98,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.7.5"
+__version__ = "0.8.0"
 
 
 
@@ -80,14 +107,17 @@ __version__ = "0.7.5"
 
 
 __all__ = [
+    "ArrayReport",
     "AxisInfo",
     "AxisReport",
     "CheckpointManifestEntry",
     "CheckpointManifestError",
+    "CheckpointSelectionError",
     "DATASET_CATALOG",
     "DLGAConfig",
     "DataTopology",
     "DatasetReport",
+    "DatasetSource",
     "DatasetSpec",
     "DiscoverConfig",
     "EqGPTConfig",
@@ -97,16 +127,23 @@ __all__ = [
     "FINAL_STATUS_COMPLETED",
     "FieldData",
     "FieldReport",
+    "FormattedEquation",
     "InvalidTermsError",
     "KIND_FINAL",
+    "LhsSpec",
     "Llm4edConfig",
     "Model",
     "PDEDataset",
     "PySINDyConfig",
     "PySRConfig",
+    "RateSummary",
+    "RecoveryVerdict",
+    "ResolvedCheckpoint",
     "SGAConfig",
+    "SKETCH_EXIT_VERIFY",
     "SearchInterrupted",
     "Sketch",
+    "SourceReport",
     "TabularDataset",
     "TaskType",
     "TermRejection",
@@ -115,17 +152,24 @@ __all__ = [
     "VerifyPolicy",
     "VizEngine",
     "__version__",
+    "add_noise",
+    "eligible_checkpoint_iterations",
     "evaluate_terms",
+    "format_pde",
     "generate_advection_data",
     "generate_burgers_data",
     "generate_diffusion_data",
     "get_dataset",
+    "inspect_file",
     "instrument_schemas",
+    "judge_recovery",
     "law_signature",
     "list_datasets",
     "list_datasets_answer_blind",
     "list_remote_datasets",
+    "load",
     "load_allen_cahn",
+    "load_bearing_recall",
     "load_burgers",
     "load_burgers_2d",
     "load_chafee_infante",
@@ -143,8 +187,15 @@ __all__ = [
     "load_tlc_cc",
     "load_wave",
     "load_wave_breaking",
+    "paired_exact_test",
     "preview",
     "preview_report",
+    "rate_summary",
+    "render_lhs_label",
+    "resolve_checkpoint",
+    "span_floor",
+    "term_set_jaccard",
     "validate_terms",
     "verify_equation",
+    "wilson_interval",
 ]

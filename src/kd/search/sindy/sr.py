@@ -141,7 +141,14 @@ class _NoDerivativeProvider(DerivativeProvider):
     def get_derivative(self, field: str, axis: str, order: int) -> torch.Tensor:
         raise NotImplementedError(_NO_DERIVATIVE_MESSAGE)
 
-    def diff(self, expression: torch.Tensor, axis: str, order: int) -> torch.Tensor:
+    def diff(
+        self,
+        expression: torch.Tensor,
+        axis: str,
+        order: int,
+        *,
+        is_periodic: bool | None = None,
+    ) -> torch.Tensor:
         raise NotImplementedError(_NO_DERIVATIVE_MESSAGE)
 
     def available_derivatives(self) -> list[tuple[str, str, int]]:

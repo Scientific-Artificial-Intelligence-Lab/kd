@@ -1,8 +1,7 @@
 """Example 15 - On-demand remote datasets (HuggingFace).
 
 Some kd datasets are fetched on demand from HuggingFace, cached locally,
-checksum-verified, and pinned to a revision. REQUIREMENTS: network access
-and the optional hub extra, installed with ``uv sync --extra hub``.
+checksum-verified, and pinned to a revision. REQUIREMENT: network access.
 This is not part of the offline quick start and is not run in CI.
 
 Run: python examples/15_remote_dataset.py
@@ -32,7 +31,7 @@ def main() -> None:
     model.fit(ds)
 
     print()
-    print(f"Discovered: {model.best_expr_}")
+    print(f"Discovered: {model.result_.equation}")
     print(f"Ground truth: {ds.ground_truth}")
 
 

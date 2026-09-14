@@ -359,11 +359,27 @@ def _pinned_verdicts(
 
 def _anchored_verdicts(
     sketch: Sketch, active: dict[str, float]
-) -> tuple[AnchoredVerdict, ...]:
+) -> tuple[tuple[AnchoredVerdict, ...], set[str]]:
     verdicts: list[AnchoredVerdict] = []
+    reserved: set[str] = set()
     for anchor in sketch.anchored:
         key = law_term_key(anchor.term_ir)
-        observed = active.get(key)
+        fingerprint = column_fingerprint(analyze_term(key, sketch.vocabulary))
+        observed_keys: list[str] = []
+        for observed_key in active:
+            try:
+                features = analyze_term(observed_key, sketch.vocabulary)
+            except ValueError:
+
+                continue
+            if column_fingerprint(features) == fingerprint:
+                observed_keys.append(observed_key)
+        observed = (
+            math.fsum(active[observed_key] for observed_key in observed_keys)
+            if observed_keys
+            else None
+        )
+        reserved.update(observed_keys)
         verdicts.append(
             AnchoredVerdict(
                 term_ir=anchor.term_ir,
@@ -372,7 +388,7 @@ def _anchored_verdicts(
                 matched=observed is not None,
             )
         )
-    return tuple(verdicts)
+    return tuple(verdicts), reserved
 
 
 def _assign_holes(
@@ -413,10 +429,8 @@ def _match_sketch(sketch: Sketch, eq: Equation) -> SketchVerdict:
         raise TypeError("kd-sketch-v1 matches EVOLUTION equations only")
     active = _aggregate_law(eq, sketch.match_policy.support_threshold)
     pinned = _pinned_verdicts(sketch, active)
-    anchored = _anchored_verdicts(sketch, active)
-    reserved = {entry.law_key for entry in pinned} | {
-        entry.law_key for entry in anchored
-    }
+    anchored, anchored_keys = _anchored_verdicts(sketch, active)
+    reserved = {entry.law_key for entry in pinned} | anchored_keys
     remaining = tuple(sorted(set(active) - reserved))
     holes, unassigned = _assign_holes(sketch, remaining)
     lhs_matched = eq.lhs_spec == sketch.lhs_spec

@@ -84,5 +84,5 @@ model.fit(dataset)
 
 # 4. Inspect the result.
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best reward: {model.best_score_:.4f}")

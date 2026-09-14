@@ -24,6 +24,7 @@ Note on axis naming:
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -40,7 +41,10 @@ from kd.data._factory import (
     parse_lhs_spec,
     validate_scatter_point_shapes,
 )
+from kd.data.source import DatasetSource
 from kd.data.xlsx import read_xlsx_columns
+
+logger = logging.getLogger(__name__)
 
 
 _LARGE_DATA_THRESHOLD_BYTES = 10_000_000
@@ -155,6 +159,9 @@ class PDEDataset:
             ``lhs_field`` and an empty ``lhs_axis``.
         noise_level: Amount of noise added to data
         ground_truth: Optional ground truth equation string
+        source: Provenance recorded by ``kd.load`` for a file-loaded dataset
+            (path, sha256, container, layout, hints, sample selection);
+            ``None`` otherwise. Not hashed into the fingerprint.
 
     Example:
         >>> dataset = PDEDataset(
@@ -186,6 +193,10 @@ class PDEDataset:
 
     noise_level: float = 0.0
     ground_truth: str | None = None
+
+
+
+    source: DatasetSource | None = None
 
     def __post_init__(self) -> None:
         """Validate dataset consistency."""
@@ -493,8 +504,13 @@ class PDEDataset:
                 in ``coords``. The parsed order is stored as ``lhs_order``
                 (the single source of truth). NOTE: a dataset can *carry* a
                 second-order LHS, but whether a given search algorithm can
-                *discover* it is enforced fail-loud at fit time — first-order
-                is the only order currently supported end-to-end.
+                *discover* it is enforced fail-loud at fit time
+                (``assert_dataset_supported``). DLGA is the one packaged plugin
+                whose target order is configurable —
+                ``DLGAConfig(target_lhs_order=2)``, or the ``wave_preset()`` /
+                ``kg_preset()`` factories — so ``u_tt`` is supported end-to-end
+                there; every other plugin fixes its target order per mode (see
+                each plugin's ``InstrumentDescriptor.modes``).
             periodic: Iterable of axis names that are periodic.
             name: Dataset identifier (printed in repr).
             ground_truth: Optional ground-truth equation string.
@@ -687,6 +703,16 @@ class PDEDataset:
             valid_rows = np.ones(len(next(iter(arrays.values()))), dtype=bool)
             for values in arrays.values():
                 valid_rows &= ~np.isnan(values)
+            n_raw = len(valid_rows)
+            n_kept = int(valid_rows.sum())
+            n_dropped = n_raw - n_kept
+            if n_dropped:
+                logger.info(
+                    "from_xlsx: n_raw=%d, n_kept=%d, n_dropped=%d",
+                    n_raw,
+                    n_kept,
+                    n_dropped,
+                )
             arrays = {
                 column_name: values[valid_rows]
                 for column_name, values in arrays.items()

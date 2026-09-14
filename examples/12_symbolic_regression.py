@@ -19,6 +19,7 @@ Run: python examples/12_symbolic_regression.py
 """
 
 from kd import Model, load_tlc_cc
+from kd.core.expr import to_sympy
 
 dataset = load_tlc_cc(target="start")
 
@@ -41,7 +42,7 @@ pysr_model = Model(
 
 print()
 print("[pysr]")
-print(f"Best expr: {pysr_model.best_expr_}")
+print(f"Best expr: {pysr_model.result_.equation}")
 print(f"Best NMSE: {pysr_model.best_score_:.6g}")
 
 # --- DISCOVER ---------------------------------------------------------------
@@ -66,12 +67,12 @@ discover_model = Model(
 
 print()
 print("[discover]")
-print(f"Best expr: {discover_model.best_expr_}")
+print(f"Best expr: {discover_model.result_.equation}")
 print(f"Best reward: {discover_model.best_score_:.6g}")
 print("Pareto front (loss = NMSE of the scale-fitted candidate):")
 for entry in discover_model.result_.pareto_front():
     scale = "-" if entry.scale is None else f"{entry.scale:.4g}"
     print(
         f" complexity={entry.complexity:2d} loss={entry.loss:.4g} "
-        f"scale={scale} {entry.expression}"
+        f"scale={scale} {to_sympy(entry.expression)}"
     )

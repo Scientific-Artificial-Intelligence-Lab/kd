@@ -335,6 +335,17 @@ def build_consensus(
     declared_kind = getattr(factory, "provider_kind", None)
     if not isinstance(declared_kind, str):
         declared_kind = None
+    if factory is default_verify_context_factory:
+        declared_kinds = {
+            default_verify_context_factory.provider_kind_for(dataset)
+            for dataset in provided.values()
+        }
+        if len(declared_kinds) > 1:
+            raise ValueError(
+                "verifier provider_kind disagreement across datasets "
+                f"({sorted(declared_kinds)!r}): a report promises one provider_kind"
+            )
+        declared_kind = next(iter(declared_kinds), None)
 
     verifier = None
     if provided:

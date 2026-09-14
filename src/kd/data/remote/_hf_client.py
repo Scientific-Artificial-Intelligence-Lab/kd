@@ -2,41 +2,21 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
 import logging
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Final
 
 logger = logging.getLogger(__name__)
+
+
+
+KD_HUB_REPO_ID: Final[str] = "timeoutHao/KD-data"
 
 _HASH_CHUNK_SIZE = 1024 * 1024
 
 
-class _HuggingFaceHubModule(Protocol):
-
-    def hf_hub_download(
-        self,
-        *,
-        repo_id: str,
-        filename: str,
-        revision: str,
-        repo_type: str,
-        cache_dir: str | None,
-        local_files_only: bool,
-    ) -> str: ...
 
 
-def _import_huggingface_hub() -> _HuggingFaceHubModule:
-    try:
-        module = importlib.import_module("huggingface_hub")
-    except ModuleNotFoundError as exc:
-        if exc.name == "huggingface_hub":
-            raise ImportError(
-                "Remote dataset fetching requires the optional dependency "
-                "`huggingface_hub`; install it with `uv sync --extra hub`."
-            ) from exc
-        raise
-    return cast(_HuggingFaceHubModule, module)
 
 
 def _sha256(path: Path) -> str:
@@ -56,6 +36,11 @@ def _delete_corrupt_cache_file(path: Path) -> None:
         logger.warning("Failed to delete corrupt cache file %s: %s", path, exc)
 
 
+def _require_revision(revision: str) -> None:
+    if not revision.strip():
+        raise ValueError("revision is required for reproducible hub downloads")
+
+
 def fetch_hub_file(
     repo_id: str,
     filename: str,
@@ -65,10 +50,9 @@ def fetch_hub_file(
     expected_sha256: str | None = None,
     offline: bool = False,
 ) -> Path:
-    if revision is None or not revision.strip():
-        raise ValueError("revision is required for reproducible hub downloads")
+    _require_revision(revision)
+    from huggingface_hub import hf_hub_download
 
-    hub = _import_huggingface_hub()
     cache_dir_arg = str(cache_dir) if cache_dir is not None else None
 
     logger.debug(
@@ -80,7 +64,7 @@ def fetch_hub_file(
         offline,
     )
     try:
-        downloaded = hub.hf_hub_download(
+        downloaded = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
             revision=revision,
@@ -107,3 +91,29 @@ def fetch_hub_file(
             )
 
     return path
+
+
+def fetch_hub_tree(repo_id: str, subdir: str, *, revision: str) -> Path:
+    _require_revision(revision)
+    from huggingface_hub import snapshot_download
+
+    logger.debug(
+        "Fetching Hugging Face dataset tree repo_id=%s subdir=%s revision=%s",
+        repo_id,
+        subdir,
+        revision,
+    )
+    snapshot = snapshot_download(
+        repo_id=repo_id,
+        repo_type="dataset",
+        revision=revision,
+        allow_patterns=[f"{subdir}/**"],
+    )
+    tree = Path(snapshot) / subdir
+    if not tree.is_dir():
+        raise FileNotFoundError(
+            f"Hub tree {repo_id}/{subdir}@{revision} is not present at {tree}: "
+            "the download did not happen (Hub unreachable?) or the directory "
+            "does not exist in the repository."
+        )
+    return tree

@@ -15,12 +15,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_API_KEY_ENV_VAR: Final[str] = "OPENAI_API_KEY"
 
-_MISSING_SDK_MESSAGE: Final[str] = (
-    "The OpenAI-compatible LLM provider requires the optional `openai` SDK; "
-    "install it with `uv sync --extra llm4ed` (or `pip install kd[llm4ed]`). "
-    "CI runs entirely on offline providers instead."
-)
-
 
 
 _RETRYABLE_SDK_ERROR_NAMES: Final[tuple[str, ...]] = (
@@ -36,12 +30,7 @@ _BUILTIN_RETRYABLE: Final[tuple[type[BaseException], ...]] = (
 
 
 def _import_sdk() -> Any:
-    try:
-        return importlib.import_module("openai")
-    except ModuleNotFoundError as exc:
-        if exc.name == "openai":
-            raise ImportError(_MISSING_SDK_MESSAGE) from exc
-        raise
+    return importlib.import_module("openai")
 
 
 def _retryable_exceptions_from_sdk(sdk: Any) -> tuple[type[BaseException], ...]:
@@ -51,14 +40,6 @@ def _retryable_exceptions_from_sdk(sdk: Any) -> tuple[type[BaseException], ...]:
         if isinstance(candidate := getattr(sdk, name, None), type)
     )
     return resolved or _BUILTIN_RETRYABLE
-
-
-def _default_retryable_exceptions() -> tuple[type[BaseException], ...]:
-    try:
-        sdk = importlib.import_module("openai")
-    except ModuleNotFoundError:
-        return _BUILTIN_RETRYABLE
-    return _retryable_exceptions_from_sdk(sdk)
 
 
 class OpenAICompatProvider:
@@ -111,7 +92,7 @@ class OpenAICompatProvider:
             if self._retryable_exceptions is None:
                 self._retryable_exceptions = _retryable_exceptions_from_sdk(sdk)
         elif self._retryable_exceptions is None:
-            self._retryable_exceptions = _default_retryable_exceptions()
+            self._retryable_exceptions = _retryable_exceptions_from_sdk(_import_sdk())
         self._prepared = True
 
     def complete(self, request: LLMRequest) -> LLMResponse:
@@ -132,9 +113,7 @@ class OpenAICompatProvider:
                 last_exc = exc
                 if attempt == self._max_retries_per_call:
                     break
-                delay = self._backoff_initial_seconds * (
-                    self._backoff_factor**attempt
-                )
+                delay = self._backoff_initial_seconds * (self._backoff_factor**attempt)
                 logger.warning(
                     "LLM call failed (attempt %d/%d): %s; backing off %.2fs",
                     attempt + 1,

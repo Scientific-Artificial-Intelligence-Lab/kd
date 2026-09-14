@@ -1,5 +1,6 @@
 """kd data module: PDE dataset schema and synthetic data generation."""
 
+from kd.data._load import load
 from kd.data.catalog import (
     DATASET_CATALOG,
     DatasetSpec,
@@ -9,6 +10,7 @@ from kd.data.catalog import (
 )
 from kd.data.noise import (
     NoiseScale,
+    add_noise,
     discover_unnormalized,
     xu2020_relative,
 )
@@ -24,6 +26,7 @@ from kd.data.remote import (
     load_llm4ed_fisher_nonlinear,
     load_llm4ed_heat,
 )
+from kd.data.resample import resample_to_grid
 from kd.data.schema import (
     AxisInfo,
     DataTopology,
@@ -32,6 +35,8 @@ from kd.data.schema import (
     TaskType,
     compute_dataset_fingerprint,
 )
+from kd.data.source import DatasetSource
+from kd.data.subsample import ratio_subsample, stride_subsample
 from kd.data.synthetic import (
     generate_advection_data,
     generate_burgers_data,
@@ -56,6 +61,7 @@ __all__ = [
     "AxisInfo",
     "DATASET_CATALOG",
     "DataTopology",
+    "DatasetSource",
     "DatasetSpec",
     "FieldData",
     "NoiseScale",
@@ -71,6 +77,7 @@ __all__ = [
     "list_datasets",
     "list_datasets_answer_blind",
     "list_remote_datasets",
+    "load",
     "load_allen_cahn",
     "load_burgers",
     "load_burgers_2d",
@@ -91,5 +98,9 @@ __all__ = [
     "load_tlc_cc",
     "load_wave",
     "load_wave_breaking",
+    "add_noise",
+    "ratio_subsample",
+    "resample_to_grid",
+    "stride_subsample",
     "xu2020_relative",
 ]

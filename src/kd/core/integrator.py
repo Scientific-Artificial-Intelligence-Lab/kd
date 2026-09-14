@@ -90,7 +90,14 @@ class _UnusedDerivativeProvider(DerivativeProvider):
             f"get_derivative({field!r}, {axis!r}, {order}) requested"
         )
 
-    def diff(self, expression: Tensor, axis: str, order: int) -> Tensor:
+    def diff(
+        self,
+        expression: Tensor,
+        axis: str,
+        order: int,
+        *,
+        is_periodic: bool | None = None,
+    ) -> Tensor:
         raise RuntimeError(
             "derivative-free RHS classification violated: "
             f"diff(..., {axis!r}, {order}) requested"

@@ -48,6 +48,9 @@ class VerifyPolicy:
             raise ValueError("verification policy thresholds must be finite")
 
 
+SKETCH_EXIT_VERIFY = VerifyPolicy(nmse_max=0.05)
+
+
 @dataclass(frozen=True)
 class VerificationReport:
 
@@ -316,6 +319,7 @@ def write_verification_artifact(
 
 
 __all__ = [
+    "SKETCH_EXIT_VERIFY",
     "VERIFICATION_ARTIFACT_TAG",
     "VerificationReport",
     "VerifyPolicy",

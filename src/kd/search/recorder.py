@@ -89,8 +89,11 @@ BEST_SCORE_KEY = "_best_score"
 
 class VizRecorder:
 
-    def __init__(self, enabled: bool = True) -> None:
+    def __init__(self, enabled: bool = True, *, trajectory_top_k: int = 10) -> None:
+        if type(trajectory_top_k) is not int or trajectory_top_k < 0:
+            raise ValueError("trajectory_top_k must be a non-negative integer")
         self.enabled = enabled
+        self.trajectory_top_k = trajectory_top_k
         self._store: defaultdict[str, list[Any]] = defaultdict(list)
 
     def log(self, key: str, value: Any) -> None:

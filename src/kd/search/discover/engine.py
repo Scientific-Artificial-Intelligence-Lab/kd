@@ -32,9 +32,15 @@ from kd.search.discover.engine_types import (
 )
 from kd.search.discover.evaluation.dedup import Deduplicator
 from kd.search.discover.ir.conversion import tokens_to_ir
+from kd.search.discover.tabular import count_tokens
 from kd.search.discover.tokens.library import Library
 from kd.search.discover.tokens.validator import CandidateValidator
 from kd.search.discover.training.strategy import BaselineState, RSPGStrategy
+from kd.search.trajectory import (
+    SearchTrajectoryCandidate,
+    active_fit_terms,
+    select_trajectory_candidates,
+)
 
 DEFAULT_BATCH_SIZE = 256
 INITIAL_BEST_REWARD = 0.0
@@ -168,6 +174,34 @@ class DiscoverEngine:
         )
         self._last_metrics = self._make_metrics(loss_info, rewards, pending)
         self._pending = None
+
+    def snapshot_pending_candidates(
+        self, *, top_k: int, lhs: str
+    ) -> list[SearchTrajectoryCandidate]:
+        pending = self._require_received()
+        rewards = pending.unique_rewards
+        valid = pending.unique_eval_valid_mask
+        results = pending.unique_results
+        assert rewards is not None and valid is not None and results is not None
+
+        def project(index: int) -> tuple[str, tuple[str, ...], str]:
+            result = results[index]
+            if result.terms is None or result.coefficients is None:
+                raise ValueError(
+                    "DISCOVER trajectory requires fitted terms and coefficients"
+                )
+            terms = active_fit_terms(
+                result.terms, result.coefficients, result.selected_indices
+            )
+            return pending.unique_irs[index], terms, lhs
+
+        scores = [
+            float(reward) if is_valid else None
+            for reward, is_valid in zip(rewards, valid, strict=True)
+        ]
+        return select_trajectory_candidates(
+            scores, project, top_k=top_k, direction="max"
+        )
 
     def run_iteration(self, evaluator: Evaluator) -> dict[str, float]:
         try:
@@ -485,6 +519,23 @@ class DiscoverEngine:
                 self._best_result = self._strip_result(
                     unique_results[best_idx],
                 )
+
+    def gate_best_by_length(self) -> None:
+        if not self._best_expression:
+            return
+        try:
+            length = count_tokens(self._best_expression)
+        except ValueError:
+
+
+
+
+            length = self._validator.max_length + 1
+        if length <= self._validator.max_length:
+            return
+        self._best_reward = INITIAL_BEST_REWARD
+        self._best_expression = INITIAL_BEST_EXPRESSION
+        self._best_result = None
 
     def rebase_best(self, evaluator: Evaluator) -> None:
         if not self._best_expression:

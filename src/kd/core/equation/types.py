@@ -80,6 +80,11 @@ class Evolution:
     attrs: EquationAttrs
     active_indices: tuple[int, ...] | None = None
 
+    def __str__(self) -> str:
+        from kd.core.equation.rendering import equation_text
+
+        return equation_text(self)
+
     @property
     def form(self) -> Form:
         return Form.EVOLUTION
@@ -104,6 +109,11 @@ class Homogeneous:
     attrs: EquationAttrs
     active_indices: tuple[int, ...] | None = None
 
+    def __str__(self) -> str:
+        from kd.core.equation.rendering import equation_text
+
+        return equation_text(self)
+
     @property
     def form(self) -> Form:
         return Form.HOMOGENEOUS
@@ -127,6 +137,11 @@ class Regression:
     terms: tuple[Term, ...]
     attrs: EquationAttrs
     active_indices: tuple[int, ...] | None = None
+
+    def __str__(self) -> str:
+        from kd.core.equation.rendering import equation_text
+
+        return equation_text(self)
 
     @property
     def form(self) -> Form:

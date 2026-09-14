@@ -49,7 +49,7 @@ fd = kd.Model(
     seed=0,
     verbose=False,
 ).fit(dataset)
-print(f"Discovered: {fd.best_expr_}")
+print(f"Discovered: {fd.result_.equation}")
 print(f"Best AIC: {fd.best_score_:.4f}")
 
 print("\n--- Autograd (NN surrogate) derivatives ---")
@@ -67,7 +67,7 @@ ag = kd.Model(
     seed=0,
     verbose=False,
 ).fit(dataset)
-print(f"Discovered: {ag.best_expr_}")
+print(f"Discovered: {ag.result_.equation}")
 print(f"Best AIC: {ag.best_score_:.4f}")
 
 print(f"\nGround truth: {dataset.ground_truth}")

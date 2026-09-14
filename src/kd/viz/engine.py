@@ -22,6 +22,7 @@ from kd.viz.plots.comparison import (
 )
 from kd.viz.plots.convergence import plot_convergence
 from kd.viz.plots.equation import plot_equation
+from kd.viz.plots.equation_card import plot_equation_card
 from kd.viz.plots.equation_tree import plot_equation_tree
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 from kd.viz.plots.field import plot_field_comparison
@@ -29,8 +30,17 @@ from kd.viz.plots.pareto_table import plot_pareto_table
 from kd.viz.plots.parity import plot_parity
 from kd.viz.plots.pde_residual import plot_pde_residual_field
 from kd.viz.plots.residual import plot_residual
+from kd.viz.plots.search_trajectory import (
+    plot_search_score_distribution,
+    plot_term_presence,
+)
 from kd.viz.plots.time_slices import plot_time_slices
-from kd.viz.report import FigureSpec, ReportResult, generate_report
+from kd.viz.report import (
+    FigureSpec,
+    ReportResult,
+    _universal_figure_spec,
+    generate_report,
+)
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -195,6 +205,14 @@ class VizEngine:
             result, field_shape=field_shape, infer_grid=not no_grid
         )
 
+        if dataset is not None:
+            path, warnings = self._render_tier2(
+                "equation_card", plot_equation_card, result=result, dataset=dataset
+            )
+            if path is not None:
+                report.figures.insert(0, path)
+            self._merge_warnings(report, warnings)
+
 
 
 
@@ -223,7 +241,7 @@ class VizEngine:
             self._merge_warnings(report, notes)
 
 
-        universal_figures = list(report.figures)
+        universal_figures = [_universal_figure_spec(path) for path in report.figures]
 
         if algorithm is None:
             self._merge_warnings(report, [_NO_ALGORITHM_NOTE])
@@ -258,7 +276,8 @@ class VizEngine:
         """Render universal plots from an ExperimentResult.
 
         Tier 1 (engine creates fig+ax): convergence, parity, equation.
-        Tier 2 (plot creates its own figure): residual (histogram + heatmap).
+        Tier 2 (plot creates its own figure): residual (histogram + heatmap)
+        and recorded search trajectory (term presence + native score distribution).
 
         ``coefficient_bar`` and field-comparison Tier 2 plots require an
         explicit dataset and are handled by ``render_all``.
@@ -302,6 +321,9 @@ class VizEngine:
                 report.figures.append(path)
             self._merge_warnings(report, warnings)
 
+            if name == "convergence" and result.has_search_trajectory():
+                self._render_search_trajectory(result, report)
+
 
         path, warnings = self._render_tier2(
             "residual",
@@ -315,6 +337,19 @@ class VizEngine:
         self._merge_warnings(report, warnings)
 
         return report
+
+    def _render_search_trajectory(
+        self, result: ExperimentResult, report: ReportResult
+    ) -> None:
+        """Render recorded history without a live plugin or checkpoint payload."""
+        for name, plot in [
+            ("term_presence", plot_term_presence),
+            ("search_score_distribution", plot_search_score_distribution),
+        ]:
+            path, warnings = self._render_tier2(name, plot, result=result)
+            if path is not None:
+                report.figures.append(path)
+            self._merge_warnings(report, warnings)
 
     def render_comparison(
         self,
@@ -509,6 +544,7 @@ class VizEngine:
                 fig, ax = plt.subplots(
                     figsize=_PLUGIN_FIGSIZE,
                     dpi=_DEFAULT_DPI,
+                    subplot_kw={"projection": plot_info.projection},
                 )
             try:
                 with style_context(self._style):
@@ -588,9 +624,7 @@ class VizEngine:
 
 
         try:
-            integration_result, prune_notes = build_integration_result(
-                result, dataset
-            )
+            integration_result, prune_notes = build_integration_result(result, dataset)
         except ValueError as exc:
 
 

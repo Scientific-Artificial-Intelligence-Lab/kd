@@ -8,6 +8,7 @@ from typing import Final, cast
 
 from torch import Tensor
 
+from kd.core.equation.canonical import canonicalize_expression
 from kd.core.equation.gauge import regression_term_gauge
 from kd.core.equation.types import (
     Equation,
@@ -45,6 +46,21 @@ def build_equation(
     if coefficients is None:
         logger.debug("Skipping equation derivation: missing coefficients")
         return None
+
+
+
+
+    if lhs_spec.order > 0:
+        for term_ir in term_irs:
+            try:
+                canonicalize_expression(term_ir)
+            except ValueError as exc:
+                logger.warning(
+                    "Skipping equation derivation: term %r is not canonicalizable: %s",
+                    term_ir,
+                    exc,
+                )
+                return None
 
     coefficient_values = _coefficient_values(coefficients)
     if len(term_irs) != len(coefficient_values):

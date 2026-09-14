@@ -21,6 +21,7 @@ class RewardResult:
     r2: float
     coefficients: np.ndarray
     n_terms: int
+    keep_indices: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -31,12 +32,13 @@ class ColumnDeduplication:
     provenance: np.ndarray
 
 
-def _invalid(n_terms: int) -> RewardResult:
+def _invalid(n_terms: int, keep_indices: tuple[int, ...]) -> RewardResult:
     return RewardResult(
         reward=INVALID_REWARD,
         r2=float("nan"),
         coefficients=np.empty(0, dtype=np.float64),
         n_terms=n_terms,
+        keep_indices=keep_indices,
     )
 
 
@@ -82,29 +84,31 @@ def _drop_inf_rows(matrix: np.ndarray) -> np.ndarray:
 def compute_reward(A: np.ndarray, *, sparsity_alpha: float) -> RewardResult:
     A = np.asarray(A, dtype=np.float64)
     if A.ndim != 2 or A.shape[1] == 0:
-        return _invalid(0)
+        return _invalid(0, ())
 
-    deduped = deduplicate_columns(A).matrix
+    deduplication = deduplicate_columns(A)
+    deduped = deduplication.matrix
+    keep_indices = tuple(int(index) for index in deduplication.keep_indices)
     n_terms = deduped.shape[1]
 
     filtered = _drop_inf_rows(deduped)
     if filtered.shape[0] == 0:
-        return _invalid(n_terms)
+        return _invalid(n_terms, keep_indices)
 
     if np.isnan(filtered).any():
-        return _invalid(n_terms)
+        return _invalid(n_terms, keep_indices)
 
     lhs = -filtered[:, 0]
     centered_denominator = float(np.sum((lhs - lhs.mean()) ** 2))
     if centered_denominator == 0.0:
-        return _invalid(n_terms)
+        return _invalid(n_terms, keep_indices)
 
     try:
         coefficients, _residuals, _rank, _singular_values = np.linalg.lstsq(
             filtered[:, 1:], lhs, rcond=None
         )
     except np.linalg.LinAlgError:
-        return _invalid(n_terms)
+        return _invalid(n_terms, keep_indices)
 
     rhs = filtered[:, 1:] @ coefficients
     r2 = 1.0 - float(np.sum((lhs - rhs) ** 2)) / centered_denominator
@@ -116,12 +120,20 @@ def compute_reward(A: np.ndarray, *, sparsity_alpha: float) -> RewardResult:
 
 
     if np.isnan(reward):
-        return _invalid(n_terms)
+        return _invalid(n_terms, keep_indices)
 
     if reward > _REWARD_OVERFLOW_CLAMP:
         return RewardResult(
-            reward=INVALID_REWARD, r2=r2, coefficients=coefficients, n_terms=n_terms
+            reward=INVALID_REWARD,
+            r2=r2,
+            coefficients=coefficients,
+            n_terms=n_terms,
+            keep_indices=keep_indices,
         )
     return RewardResult(
-        reward=reward, r2=r2, coefficients=coefficients, n_terms=n_terms
+        reward=reward,
+        r2=r2,
+        coefficients=coefficients,
+        n_terms=n_terms,
+        keep_indices=keep_indices,
     )

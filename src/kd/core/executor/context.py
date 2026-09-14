@@ -78,8 +78,17 @@ class ExecutionContext:
             raise KeyError(f"Constant '{name}' not found in context")
         return self.constants[name]
 
-    def diff(self, expression: torch.Tensor, axis: str, order: int = 1) -> torch.Tensor:
-        return self.derivative_provider.diff(expression, axis, order)
+    def diff(
+        self,
+        expression: torch.Tensor,
+        axis: str,
+        order: int = 1,
+        *,
+        is_periodic: bool | None = None,
+    ) -> torch.Tensor:
+        return self.derivative_provider.diff(
+            expression, axis, order, is_periodic=is_periodic
+        )
 
     @property
     def spatial_axes(self) -> list[str]:

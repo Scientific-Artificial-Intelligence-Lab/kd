@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import torch
 from torch import Tensor
 
-from kd.core.equation import Form
+from kd.core.equation import Form, LhsSpec
+from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.signature import law_term_entry, law_term_key
 from kd.core.equation.sketch import Sketch, constraint_admits
 from kd.core.evaluator import EvaluationResult
@@ -46,6 +47,11 @@ from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde, execut
 from kd.search.sga.pde import PDE
 from kd.search.sga.sketch_backend import SGACompiled, compile_for_sga
 from kd.search.sga.train import CandidateResult, TrainResult, evaluate_candidate
+from kd.search.trajectory import (
+    active_fit_terms,
+    log_search_trajectory,
+    select_trajectory_candidates,
+)
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
@@ -276,9 +282,6 @@ class SGAPlugin:
 
 
 
-
-
-
                 resume_tier="resume_safe",
             ),
             Knob(
@@ -293,25 +296,62 @@ class SGAPlugin:
                 "depth",
                 "int",
                 "Maximum term-tree depth.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "width",
                 "int",
                 "Maximum terms per candidate equation.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "aic_ratio",
                 "float",
                 "AIC complexity-penalty ratio.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "lam",
                 "float",
                 "Internal STRidge ridge strength.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
         ),
         segmentation=Segmentation(
@@ -363,6 +403,7 @@ class SGAPlugin:
         self._pending_population: list[PDE] | None = None
         self._pending_scores: list[float] | None = None
         self._recorder: VizRecorder | None = None
+        self._trajectory_lhs_label: str = ""
         self._autograd_provider: AutogradProvider | None = None
 
         self._surrogate_training_result: TrainingResult | None = None
@@ -488,6 +529,9 @@ class SGAPlugin:
                 "lookup); got None (a provider_kind='none' light bundle)."
             )
         self._recorder = components.recorder
+        self._trajectory_lhs_label = render_lhs_label(
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+        )
 
 
         self._validate_naming(dataset)
@@ -620,6 +664,14 @@ class SGAPlugin:
                 )
             self._rng.manual_seed(self._config.seed)
             self._init_population()
+        else:
+
+
+
+
+
+            self._enforce_structure_caps(self._population)
+            self._reprice_population()
 
         self._prepared = True
 
@@ -889,6 +941,7 @@ class SGAPlugin:
         self._best_expression = ""
         self._best_formatted_cache = None
         self._pde_lib = set()
+        self._trajectory_lhs_label = ""
         self._repeat_cross = 0
         self._repeat_change = 0
         self._sketch_predicate_checked = 0
@@ -1392,80 +1445,148 @@ class SGAPlugin:
             delta[axis_name] = first_diff
         return delta
 
-    def _init_population(self) -> None:
+    def _draw_scored_individual(self) -> tuple[float, PDE]:
         from kd.search.sga.genetic import random_pde
 
+        pde = random_pde(
+            self._config,
+            self._vars,
+            self._ops,
+            self._root,
+            self._den,
+            self._rng,
+        )
+        if self._sketch_compiled is not None and not self._sketch_admissible(pde):
+            return _INVALID_AIC, pde
+        return _safe_evaluate_aic(
+            pde,
+            self._data_dict,
+            self._default_terms,
+            self._y,
+            self._config,
+            self._diff_ctx,
+        )
+
+    def _sample_valid_individual(self, slot: int) -> tuple[float, PDE]:
+        aic, pruned = self._draw_scored_individual()
+        retries = 0
+        while not _is_valid_aic(aic) and retries < _MAX_RESAMPLE_PER_INDIVIDUAL:
+            logger.debug(
+                "Init individual %d: AIC=%s, resampling (retry %d/%d)",
+                slot,
+                aic,
+                retries + 1,
+                _MAX_RESAMPLE_PER_INDIVIDUAL,
+            )
+            aic, pruned = self._draw_scored_individual()
+            retries += 1
+
+        if not _is_valid_aic(aic):
+            suspect = (
+                "the sketch's admissibility constraints (holes/anchors "
+                "against SGA's grammar), then data, derivative quality, "
+                "or STRidge config"
+                if self._sketch_compiled is not None
+                else "data, derivative quality, or STRidge config"
+            )
+            raise RuntimeError(
+                f"Init population failed: individual {slot} still has "
+                f"invalid AIC after {_MAX_RESAMPLE_PER_INDIVIDUAL} resample "
+                f"retries. All random candidates are pathological — "
+                f"check {suspect}."
+            )
+
+        return aic, pruned
+
+    def _enforce_structure_caps(self, population: list[PDE]) -> None:
+        from kd.search.sga.genetic import max_generated_depth
+
+        max_depth = max_generated_depth(self._config.depth)
+        kept: list[tuple[float, PDE]] = [
+            (score, pde)
+            for score, pde in zip(
+                self._current_scores(len(population)), population, strict=True
+            )
+            if pde.width <= self._config.width
+            and all(term.depth <= max_depth for term in pde.terms)
+        ]
+        culled = len(population) - len(kept)
+        if culled == 0:
+            return
+
+        kept_population = [pde for _, pde in kept]
+        kept_scores = [score for score, _ in kept]
+        first_refill = len(kept_population)
+
+
+
+        for slot in range(first_refill, min(len(population), self._config.num)):
+            aic, pde = self._sample_valid_individual(slot)
+            kept_population.append(pde)
+            kept_scores.append(aic)
+        logger.info(
+            "Restored population culled to live structure caps "
+            "(depth<=%d, width<=%d): %d dropped, %d resampled.",
+            self._config.depth,
+            self._config.width,
+            culled,
+            len(kept_population) - first_refill,
+        )
+
+
+
+
+
+
+
+
+
+        self._population, self._scores = kept_population, kept_scores
+
+    def _reprice_population(self) -> None:
+        population = self._population or []
+        if not population:
+            return
+        scored = [
+            _safe_evaluate_aic(
+                pde,
+                self._data_dict,
+                self._default_terms,
+                self._y,
+                self._config,
+                self._diff_ctx,
+            )
+            for pde in population
+        ]
+
+
+
+
+
+
+
+
+
+
+
+        paired = sorted(
+            (
+                (aic if _is_valid_aic(aic) else _INVALID_AIC, pde)
+                for aic, pde in scored
+            ),
+            key=lambda item: item[0],
+        )
+        self._scores = [score for score, _ in paired]
+        self._population = [pde for _, pde in paired]
+        self._best_score = self._scores[0]
+        self._best_expression = pde_to_kd_expr(self._population[0])
+        self._best_formatted_cache = None
+
+    def _init_population(self) -> None:
         population: list[PDE] = []
         scores: list[float] = []
         for i in range(self._config.num):
-            pde = random_pde(
-                self._config,
-                self._vars,
-                self._ops,
-                self._root,
-                self._den,
-                self._rng,
-            )
-            if self._sketch_compiled is not None and not self._sketch_admissible(pde):
-                aic, pruned = _INVALID_AIC, pde
-            else:
-                aic, pruned = _safe_evaluate_aic(
-                    pde,
-                    self._data_dict,
-                    self._default_terms,
-                    self._y,
-                    self._config,
-                    self._diff_ctx,
-                )
-
-            retries = 0
-            while not _is_valid_aic(aic) and retries < _MAX_RESAMPLE_PER_INDIVIDUAL:
-                logger.debug(
-                    "Init individual %d: AIC=%s, resampling (retry %d/%d)",
-                    i,
-                    aic,
-                    retries + 1,
-                    _MAX_RESAMPLE_PER_INDIVIDUAL,
-                )
-                pde = random_pde(
-                    self._config,
-                    self._vars,
-                    self._ops,
-                    self._root,
-                    self._den,
-                    self._rng,
-                )
-                if self._sketch_compiled is not None and not self._sketch_admissible(
-                    pde
-                ):
-                    aic, pruned = _INVALID_AIC, pde
-                else:
-                    aic, pruned = _safe_evaluate_aic(
-                        pde,
-                        self._data_dict,
-                        self._default_terms,
-                        self._y,
-                        self._config,
-                        self._diff_ctx,
-                    )
-                retries += 1
-
-            if not _is_valid_aic(aic):
-                suspect = (
-                    "the sketch's admissibility constraints (holes/anchors "
-                    "against SGA's grammar), then data, derivative quality, "
-                    "or STRidge config"
-                    if self._sketch_compiled is not None
-                    else "data, derivative quality, or STRidge config"
-                )
-                raise RuntimeError(
-                    f"Init population failed: individual {i} still has "
-                    f"invalid AIC after {_MAX_RESAMPLE_PER_INDIVIDUAL} resample "
-                    f"retries. All random candidates are pathological — "
-                    f"check {suspect}."
-                )
-
-
+            aic, pruned = self._sample_valid_individual(i)
             population.append(pruned)
             scores.append(aic)
 
@@ -1731,8 +1852,37 @@ class SGAPlugin:
 
 
             self._log_generation_metrics(self._offspring_results or [])
+            self._log_search_trajectory(self._offspring_results or [], self._recorder)
 
         self._clear_pending_generation()
+
+    def _log_search_trajectory(
+        self, results: list[EvaluationResult], recorder: VizRecorder
+    ) -> None:
+        if not recorder.enabled or recorder.trajectory_top_k == 0:
+            return
+        offspring = self._offspring
+        assert offspring is not None
+
+        def project(index: int) -> tuple[str, tuple[str, ...], str]:
+            result = results[index]
+
+
+            assert result.coefficients is not None
+            terms = active_fit_terms(
+                self._build_term_list(offspring[index]),
+                result.coefficients,
+                result.selected_indices,
+            )
+            return result.expression, terms, self._trajectory_lhs_label
+
+        candidates = select_trajectory_candidates(
+            [_aic_of(result) if result.is_valid else None for result in results],
+            project,
+            top_k=recorder.trajectory_top_k,
+            direction=self.score_direction,
+        )
+        log_search_trajectory(recorder, candidates)
 
     def _log_generation_metrics(self, results: list[EvaluationResult]) -> None:
         recorder = self._recorder

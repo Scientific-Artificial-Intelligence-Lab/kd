@@ -228,3 +228,56 @@ class DatasetReport:
 def _optional_float(value: float | None) -> float | None:
     """Sanitize an optional float, keeping ``None`` for "no such step"."""
     return None if value is None else sanitize_float(value)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ArrayReport:
+    """One array inside a file, as ``kd.inspect_file`` describes it.
+
+    ``min`` / ``max`` are over the finite subset and ``None`` when the array is
+    non-numeric or holds no finite value; the NaN / Inf counts say why.
+    """
+
+    key: str
+    shape: tuple[int, ...]
+    dtype: str
+    min: float | None
+    max: float | None
+    nan_count: int
+    inf_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe dict (MCP-boundary contract)."""
+        return {
+            "key": self.key,
+            "shape": list(self.shape),
+            "dtype": self.dtype,
+            "min": _optional_float(self.min),
+            "max": _optional_float(self.max),
+            "nan_count": self.nan_count,
+            "inf_count": self.inf_count,
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
+class SourceReport:
+    """What a data file holds before any interpretation.
+
+    This is what ``kd.inspect_file`` returns, so a caller (a person or an
+    agent) can write the ``coords=`` / ``fields=`` mapping ``kd.load`` needs.
+    It is deliberately not a :class:`DatasetReport`: a raw file has no axes, no
+    LHS and no spacing verdict until a layout or a mapping has named the
+    arrays, so those facts are absent here rather than fabricated.
+    """
+
+    path: str
+    container: str
+    arrays: list[ArrayReport]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe dict (MCP-boundary contract)."""
+        return {
+            "path": self.path,
+            "container": self.container,
+            "arrays": [array.to_dict() for array in self.arrays],
+        }

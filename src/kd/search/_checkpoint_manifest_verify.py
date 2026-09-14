@@ -76,9 +76,7 @@ _CKPTMAN_V1_FIELD_SET: Final[frozenset[str]] = frozenset(_CKPTMAN_V1_FIELDS)
 _CKPTMAN_HEADER_KEYS_V1: Final[frozenset[str]] = frozenset(
     {"scheme", "schema_version", "entries"}
 )
-_CKPTMAN_HEADER_KEYS_V2: Final[frozenset[str]] = _CKPTMAN_HEADER_KEYS_V1 | {
-    "lineage"
-}
+_CKPTMAN_HEADER_KEYS_V2: Final[frozenset[str]] = _CKPTMAN_HEADER_KEYS_V1 | {"lineage"}
 _CKPTMAN_HEADER_KEYS_BY_VERSION: Final[dict[int, frozenset[str]]] = {
     1: _CKPTMAN_HEADER_KEYS_V1,
     2: _CKPTMAN_HEADER_KEYS_V2,
@@ -131,8 +129,7 @@ class CheckpointManifestEntry:
 
         if not isinstance(self.kind, str) or self.kind not in KIND_VOCABULARY:
             raise CheckpointManifestError(
-                f"kind must be one of {sorted(KIND_VOCABULARY)!r}; "
-                f"got {self.kind!r}"
+                f"kind must be one of {sorted(KIND_VOCABULARY)!r}; got {self.kind!r}"
             )
 
         if self.kind == KIND_PERIODIC:

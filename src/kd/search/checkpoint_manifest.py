@@ -117,9 +117,7 @@ def build_manifest_entry(
 
     raw_expression = payload.get("best_expression")
     best_expression = (
-        raw_expression
-        if isinstance(raw_expression, str) and raw_expression
-        else None
+        raw_expression if isinstance(raw_expression, str) and raw_expression else None
     )
 
     raw_algorithm = payload.get("algorithm")
@@ -218,8 +216,7 @@ class CheckpointManifestWriter:
             existing.kind == KIND_FINAL for existing in self._entries
         ):
             raise CheckpointManifestError(
-                "a final entry already exists in the manifest (one run per "
-                "directory)"
+                "a final entry already exists in the manifest (one run per directory)"
             )
         self._entries.append(entry)
         self._persist()
@@ -230,9 +227,7 @@ class CheckpointManifestWriter:
         if excess <= 0:
             return
         remove_names = {e.filename for e in periodic[:excess]}
-        self._entries = [
-            e for e in self._entries if e.filename not in remove_names
-        ]
+        self._entries = [e for e in self._entries if e.filename not in remove_names]
         self._persist()
         for name in remove_names:
             try:

@@ -5,7 +5,9 @@ import ast
 import math
 from typing import TYPE_CHECKING
 
+from kd.core.equation import Evolution, LhsSpec, render_lhs_label
 from kd.core.expr.registry import PROTECTED_OPERATORS
+from kd.viz._result_data import _NO_SKETCH_SOLUTION, _equation_data
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -78,8 +80,7 @@ def _assemble_integration_rhs(
     non_finite = [i for i in keep if not math.isfinite(coefficients[i])]
     if non_finite:
         detail = ", ".join(
-            f"term '{terms[i]}' has coefficient {coefficients[i]!r}"
-            for i in non_finite
+            f"term '{terms[i]}' has coefficient {coefficients[i]!r}" for i in non_finite
         )
         raise ValueError(
             f"Cannot assemble integration RHS: non-finite coefficient(s) — "
@@ -106,8 +107,32 @@ def _protected_semantics_note(rhs: str) -> str | None:
     }
     if not found:
         return None
-    return _PROTECTED_SEMANTICS_NOTE_TEMPLATE.format(
-        operators=", ".join(sorted(found))
+    return _PROTECTED_SEMANTICS_NOTE_TEMPLATE.format(operators=", ".join(sorted(found)))
+
+
+def _integration_lhs_warning(
+    result: ExperimentResult,
+    dataset: PDEDataset,
+) -> str | None:
+    equation = result.equation
+    expected = LhsSpec(dataset.lhs_field, dataset.lhs_axis, 1)
+    if equation is not None:
+        if not isinstance(equation, Evolution):
+            return (
+                "Time integration requires an EVOLUTION equation, "
+                f"got {equation.form.value}"
+            )
+        if equation.lhs_spec == expected:
+            return None
+        actual_label = render_lhs_label(equation.lhs_spec)
+    else:
+        actual_label = result.lhs_label
+        if actual_label == render_lhs_label(expected):
+            return None
+    return (
+        "Time integration supports only first-order evolution with the "
+        f"dataset's field and axis ({render_lhs_label(expected)}); "
+        f"the result LHS is {actual_label}."
     )
 
 
@@ -117,8 +142,9 @@ def build_integration_result(
 ) -> tuple[IntegrationResult, list[str]]:
     from kd.core.integrator import IntegrationResult, integrate_pde
 
-    terms = result.final_eval.terms
-    coeffs = result.final_eval.coefficients
+    if result.equation is None and result.config.get("sketch") is not None:
+        return IntegrationResult(success=False, warning=_NO_SKETCH_SOLUTION), []
+    terms, coeffs, selected = _equation_data(result)
     if terms is None or coeffs is None:
         return (
             IntegrationResult(
@@ -128,7 +154,6 @@ def build_integration_result(
             [],
         )
     coeff_values = [float(c) for c in coeffs]
-    selected = result.final_eval.selected_indices
     active = list(selected) if selected is not None else list(range(len(terms)))
     keep, notes = _prune_near_zero_terms(terms, coeff_values, active)
     rhs = _assemble_integration_rhs(terms, coeff_values, keep)
@@ -136,6 +161,9 @@ def build_integration_result(
     if protected_note is not None:
         notes = [*notes, protected_note]
     try:
+        lhs_warning = _integration_lhs_warning(result, dataset)
+        if lhs_warning is not None:
+            return IntegrationResult(success=False, warning=lhs_warning), notes
         return integrate_pde(rhs, dataset), notes
     except Exception as exc:
         return (

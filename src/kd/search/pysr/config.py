@@ -22,7 +22,8 @@ _DEFAULT_TERMS: tuple[str, ...] = ("u", "u_x", "u_xx", "mul(u, u_x)")
 
 
 _DEFAULT_BINARY_OPERATORS: tuple[str, ...] = ("+", "-", "*", "/")
-_DEFAULT_UNARY_OPERATORS: tuple[str, ...] = ("sin", "cos", "exp", "log")
+_DEFAULT_UNARY_OPERATORS: tuple[str, ...] = ()
+TABULAR_UNARY_OPERATORS: tuple[str, ...] = ("sin", "cos", "exp", "log")
 
 
 
@@ -69,7 +70,9 @@ class PySRConfig:
     - ``population_size`` / ``populations`` / ``maxsize``: PySR GP knobs
       (per-population members, number of populations, max expression size).
     - ``binary_operators`` / ``unary_operators``: operator sets exposed to
-      PySR. Defaults are the kd-IR-convertible subset; adding ``"^"`` or a
+      PySR. PDE defaults omit unary operators to avoid fitted constants
+      nested inside structural terms; tabular defaults retain sin/cos/exp/log.
+      Explicit operator sets are preserved. Adding ``"^"`` or a
       custom operator may cause the downstream ``from_sympy`` conversion to
       fail hard.
     - ``extra_pysr_kwargs``: a pass-through seam splatted into the underlying

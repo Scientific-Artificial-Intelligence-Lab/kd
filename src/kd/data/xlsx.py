@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import warnings
-from collections import Counter
 from collections.abc import Sequence
 from numbers import Real
 from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+
+from kd.data._columns import column_indices
 
 
 def read_xlsx_columns(
@@ -44,23 +45,7 @@ def read_xlsx_columns(
         )
         if header is None:
             raise ValueError(f"XLSX file has no header row {header_row}: {path}")
-        header_counts = Counter(
-            value for value in header if isinstance(value, str)
-        )
-        ambiguous = [
-            name for name in dict.fromkeys(column_names) if header_counts[name] > 1
-        ]
-        if ambiguous:
-            raise ValueError(f"ambiguous XLSX columns: {ambiguous}")
-        header_to_index = {
-            value: index for index, value in enumerate(header) if isinstance(value, str)
-        }
-        missing = [name for name in column_names if name not in header_to_index]
-        if missing:
-            available = ", ".join(repr(name) for name in header_to_index)
-            raise ValueError(
-                f"missing XLSX columns: {missing}; available headers: {available}"
-            )
+        header_to_index = column_indices(header, column_names, kind="XLSX")
 
         columns: dict[str, list[float]] = {name: [] for name in column_names}
         for row_index, row in enumerate(

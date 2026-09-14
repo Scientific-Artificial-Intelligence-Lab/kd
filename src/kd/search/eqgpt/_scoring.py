@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.search.eqgpt.gates import should_zero_reward
-from kd.search.eqgpt.reward import compute_reward
+from kd.search.eqgpt.reward import RewardResult, compute_reward
 from kd.search.eqgpt.vocab import E_ID, PAD_ID, S_ID
 from kd.search.result import invalid_evaluation_result
 
@@ -95,9 +95,7 @@ def score_candidate(
 
 
     coeffs = (
-        None
-        if is_free_pivot
-        else torch.as_tensor(-rr.coefficients, dtype=torch.float32)
+        _aligned_coefficients(rr, len(terms), free_pivot=is_free_pivot)
         if valid
         else None
     )
@@ -116,6 +114,21 @@ def score_candidate(
         expression=candidate,
         form=Form.HOMOGENEOUS if is_free_pivot else Form.EVOLUTION,
     )
+
+
+def _aligned_coefficients(
+    result: RewardResult, n_terms: int, *, free_pivot: bool
+) -> Tensor:
+    coefficients = torch.zeros(n_terms, dtype=torch.float64)
+    indices = result.keep_indices[1:]
+    if free_pivot:
+        coefficients[0] = 1.0
+        values = result.coefficients
+    else:
+        indices = tuple(index - 1 for index in indices)
+        values = -result.coefficients
+    coefficients[list(indices)] = torch.as_tensor(values, dtype=torch.float64)
+    return coefficients
 
 
 def gate_zero_result(candidate: str, terms: list[str]) -> EvaluationResult:

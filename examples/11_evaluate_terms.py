@@ -23,6 +23,7 @@ Run: python examples/11_evaluate_terms.py
 import json
 
 import kd
+from kd.core.expr import to_sympy
 
 # 1. Generate synthetic data with a known ground truth.
 dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
@@ -57,7 +58,7 @@ result = kd.evaluate_terms(dataset, report.valid)
 assert result.terms is not None and result.coefficients is not None
 print("\nLeast-squares fit on the valid terms (target: u_t):")
 for term, coef in zip(result.terms, result.coefficients.tolist(), strict=True):
-    print(f" {coef:+.4f} * {term}")
+    print(f" {coef:+.4f} * {to_sympy(term)}")
 print(f"NMSE = {result.nmse:.3e} R^2 = {result.r2:.6f}")
 
 # 5. Results serialize for agent / MCP boundaries too.

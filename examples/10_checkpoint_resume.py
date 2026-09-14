@@ -72,7 +72,7 @@ model = kd.Model(
 model.fit(dataset)
 
 print("\n--- an internal milestone: 8 generations, checkpointed ---")
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best AIC: {model.best_score_:.4f}")
 
 # 3. Read the ledger to see what the run left behind. load_checkpoint_manifest
@@ -86,25 +86,17 @@ for entry in entries:
         f"status={entry.final_status or '-':<10} iter={entry.iteration}"
     )
 
-# 4. Select the resume point from those recorded facts. Prefer the final
-# checkpoint of a COMPLETED run; if the ledger has none (it crashed, or the
-# process was hard-killed before the finally-block ran), fall back to the
-# newest periodic checkpoint. A filename glob cannot make this distinction.
-resume_entry: kd.CheckpointManifestEntry | None = next(
-    (
-        entry
-        for entry in entries
-        if entry.kind == kd.KIND_FINAL
-        and entry.final_status == kd.FINAL_STATUS_COMPLETED
-    ),
-    None,
-)
-if resume_entry is None:
-    periodic = [entry for entry in entries if entry.kind != kd.KIND_FINAL]
-    if not periodic:
-        raise SystemExit("no resumable checkpoint recorded in the manifest")
-    resume_entry = periodic[-1]
-print(f"Resume point: {resume_entry.filename} (iteration {resume_entry.iteration})")
+# 4. Select the resume point from those recorded facts. kd.resolve_checkpoint
+# takes the latest eligible archive: a periodic checkpoint, or the final of
+# a COMPLETED run. A final stamped "crashed" (the run unwound on an
+# exception, or was hard-killed before the finally-block ran) is never
+# selected, and a ledger with nothing eligible is refused with kd's own
+# sentence. A filename glob cannot make this distinction.
+try:
+    resume_point = kd.resolve_checkpoint(CKPT_DIR)
+except kd.CheckpointSelectionError as exc:
+    raise SystemExit(f"{CKPT_DIR}: {exc}") from exc
+print(f"Resume point: {resume_point.path.name} (iteration {resume_point.iteration})")
 
 # 5. an internal milestone - resume from the selected checkpoint with a FRESH Model (think:
 # a new process after the crash). The algorithm must match the checkpoint;
@@ -124,10 +116,10 @@ resumed = kd.Model(
     checkpoint_dir=CKPT_DIR_PHASE2,
     checkpoint_every=4,
 )
-resumed.fit(dataset, resume_from=CKPT_DIR / resume_entry.filename)
+resumed.fit(dataset, resume_from=resume_point.path)
 
 print("\n--- an internal milestone: resumed, +15 generations ---")
-print(f"Discovered: {resumed.best_expr_}")
+print(f"Discovered: {resumed.result_.equation}")
 print(f"Best AIC: {resumed.best_score_:.4f}")
 
 # 6. The restored best-so-far is the resumed run's starting ratchet, so

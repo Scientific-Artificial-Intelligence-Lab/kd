@@ -28,7 +28,7 @@ model = kd.Model(
     seed=0,
     verbose=False,
 ).fit(dataset)
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best AIC: {model.best_score_:.4f}")
 
 # 2. Save the full result (best expression, AIC trace, residuals, recorder data).
@@ -39,7 +39,7 @@ print(f"Saved: {out_path}")
 
 # 3. Round-trip: load it back and verify.
 restored = kd.ExperimentResult.load(out_path)
-print(f"Loaded back: best={restored.best_expression!r} AIC={restored.best_score:.4f}")
+print(f"Loaded back: best={restored.equation} AIC={restored.best_score:.4f}")
 
 assert restored.best_expression == model.best_expr_, "Round-trip failed!"
 print("Round-trip OK.")

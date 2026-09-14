@@ -243,7 +243,8 @@ class PythonExecutor:
 
             inner = self._execute_with_diff(node.args[0], context, depth + 1)
             axis, order = _parse_diff_name(func_name)
-            return context.diff(inner, axis, order)
+            override = _stencil_override(node.args[0], axis, context)
+            return context.diff(inner, axis, order, is_periodic=override)
 
         if _is_special_operator(func_name):
             return self._dispatch_special_operator(func_name, node, context, depth)
@@ -283,10 +284,21 @@ class PythonExecutor:
                     "ensure dataset.lhs_axis is set and axis_order has spatial axes"
                 )
 
-            inner = self._execute_with_diff(node.args[0], context, depth + 1)
-            result = context.diff(inner, spatial_axes[0], 2)
+            argument = node.args[0]
+            inner = self._execute_with_diff(argument, context, depth + 1)
+            result = context.diff(
+                inner,
+                spatial_axes[0],
+                2,
+                is_periodic=_stencil_override(argument, spatial_axes[0], context),
+            )
             for axis in spatial_axes[1:]:
-                result = result + context.diff(inner, axis, 2)
+                result = result + context.diff(
+                    inner,
+                    axis,
+                    2,
+                    is_periodic=_stencil_override(argument, axis, context),
+                )
             return result
 
         raise ValueError(f"Unknown special operator: {name}")
@@ -465,6 +477,29 @@ def _try_parse_terminal_derivative(
         return result
     except (AttributeError, KeyError, NotImplementedError, ValueError):
         return None
+
+
+def _value_leaf_names(node: ast.expr) -> set[str]:
+    call_heads = {id(sub.func) for sub in ast.walk(node) if isinstance(sub, ast.Call)}
+    return {
+        sub.id
+        for sub in ast.walk(node)
+        if isinstance(sub, ast.Name) and id(sub) not in call_heads
+    }
+
+
+def _stencil_override(
+    argument: ast.expr,
+    axis: str,
+    context: ExecutionContext,
+) -> bool | None:
+    axes = context.dataset.axes
+    if axes is None or axis not in axes or not axes[axis].is_periodic:
+        return None
+    fields = context.dataset.fields or {}
+    if axis in fields or axis not in _value_leaf_names(argument):
+        return None
+    return False
 
 
 def _context_name_sets(

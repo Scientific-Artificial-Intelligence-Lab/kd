@@ -6,7 +6,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from kd.search.recorder import BEST_SCORE_KEY
-from kd.viz.axes import integer_ticks
+from kd.viz.axes import _get_axes, integer_ticks
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -28,9 +28,7 @@ _FLAT_REL_TOL = 1e-9
 
 def flat_value(values: Sequence[float]) -> float | None:
     finite = [
-        float(v)
-        for v in values
-        if isinstance(v, (int, float)) and math.isfinite(v)
+        float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(v)
     ]
     if len(finite) < 2:
         return None
@@ -42,10 +40,11 @@ def flat_value(values: Sequence[float]) -> float | None:
 
 def plot_convergence(
     result: ExperimentResult,
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
     scores = result.recorder.get(BEST_SCORE_KEY)
 

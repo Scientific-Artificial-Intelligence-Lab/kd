@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use KD in your work, please cite it as below."
+type: software
+title: "KD: symbolic regression platform for PDE discovery"
+authors:
+  - family-names: Mao
+    given-names: Hao
+    affiliation: Scientific Artificial Intelligence Lab
+version: 0.8.0
+license: Apache-2.0
+repository-code: "https://github.com/Scientific-Artificial-Intelligence-Lab/kd"
+url: "https://scientific-artificial-intelligence-lab.github.io/kd/"

@@ -109,23 +109,26 @@
   <tr><th>Algorithm</th><td>{{ algorithm_name }}</td></tr>
   <tr><th>Dataset</th><td>{{ dataset_name }}</td></tr>
   <tr><th>Expression</th><td>
-    {%- if best_expression_is_math -%}
+  {%- if best_expression_is_math -%}
     \( {{ best_expression_latex }} \)
-    {%- else -%}
+  {%- else -%}
     {{ best_expression_latex }}
-    {%- endif -%}
-    {%- if best_expression_note %}
+  {%- endif -%}
+  {%- if best_expression_note %}
     <span class="expression-note">({{ best_expression_note }})</span>
-    {%- endif -%}
+  {%- endif -%}
   </td></tr>
   <tr><th>Best {{ score_label | default("Score") }}</th><td>{{ best_score }}</td></tr>
   <tr><th>R&sup2;</th><td>{{ r2 }}</td></tr>
   <tr><th>NMSE</th><td>{{ nmse }}</td></tr>
+{% if fit_note %}
+  <tr><th>Metric domain</th><td>{{ fit_note }}</td></tr>
+{% endif %}
   <tr><th>Iterations</th><td>{{ iterations }}</td></tr>
   <tr><th>Early Stopped</th><td>{{ early_stopped }}</td></tr>
-  {% for key, value in config.items() %}
+{% for key, value in config.items() %}
   <tr><th>config.{{ key }}</th><td>{{ value }}</td></tr>
-  {% endfor %}
+{% endfor %}
 </table>
 
 {% for fig in figures %}

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 import sympy
 
 from kd.core.expr.sympy_bridge import to_sympy
+from kd.viz._result_data import _NO_SKETCH_SOLUTION, _equation_data
+from kd.viz.axes import _get_axes
 from kd.viz.style import style_context
 from kd.viz.tree_layout import RenderNode, draw_tree, forest_to_render
 
@@ -75,7 +77,9 @@ def sympy_to_render(expr: sympy.Basic) -> RenderNode:
 def _build_render(result: ExperimentResult) -> tuple[RenderNode | None, list[str]]:
     warnings: list[str] = []
     final_eval = result.final_eval
-    terms = final_eval.terms
+    if result.equation is None and result.config.get("sketch") is not None:
+        return None, [_NO_SKETCH_SOLUTION]
+    terms, _coefficients, selected = _equation_data(result)
 
 
 
@@ -84,11 +88,11 @@ def _build_render(result: ExperimentResult) -> tuple[RenderNode | None, list[str
 
 
     if terms is not None:
-        if final_eval.selected_indices is not None:
-            indices = [i for i in final_eval.selected_indices if 0 <= i < len(terms)]
+        if selected is not None:
+            indices = [i for i in selected if 0 <= i < len(terms)]
 
 
-            dropped = len(final_eval.selected_indices) - len(indices)
+            dropped = len(selected) - len(indices)
             if dropped:
                 warnings.append(
                     f"{dropped} selected term index(es) out of range for "
@@ -119,10 +123,11 @@ def _draw_placeholder(ax: Axes, message: str) -> None:
 
 def plot_equation_tree(
     result: ExperimentResult,
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     root, warnings = _build_render(result)
     if root is None:
         warnings.append("Empty expression; skipping equation tree")

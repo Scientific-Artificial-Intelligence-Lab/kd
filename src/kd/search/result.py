@@ -34,7 +34,9 @@ from kd.search.series_keys import (
     PARETO_EXPRESSIONS_KEY,
     PARETO_LOSS_KEY,
     PARETO_SCALE_KEY,
+    SEARCH_TRAJECTORY_KEYS,
 )
+from kd.search.trajectory import SearchTrajectoryCandidate, read_search_trajectory
 
 if TYPE_CHECKING:
     from kd.search.sketch_outcome import SketchOutcome
@@ -418,6 +420,19 @@ class ExperimentResult(RunResult):
 
 
     sketch_outcome: SketchOutcome | None = None
+
+    def search_trajectory(self) -> list[list[SearchTrajectoryCandidate]]:
+        """Return distinct fitted-structure observations by recorded iteration.
+
+        Only iterations observed by this recorder are included; a checkpoint
+        resume does not reconstruct earlier history. Scores are native to the
+        instrument and describe these representatives, not the full population.
+        """
+        return read_search_trajectory(self.recorder)
+
+    def has_search_trajectory(self) -> bool:
+        """Whether any trajectory column exists, including an incomplete family."""
+        return bool(set(SEARCH_TRAJECTORY_KEYS) & self.recorder.keys())
 
     def pareto_front(self) -> list[ParetoEntry]:
         """Return the last complete recorder-backed Pareto front."""

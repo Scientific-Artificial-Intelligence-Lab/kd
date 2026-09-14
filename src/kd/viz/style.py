@@ -22,11 +22,11 @@ DEFAULT_STYLE: dict[str, Any] = {
 def style_context(
     extra_style: dict[str, Any] | None = None,
 ) -> Generator[None, None, None]:
-    original = matplotlib.rcParams.copy()
+    combined: dict[str, Any] = dict(DEFAULT_STYLE)
+    if extra_style:
+        combined.update(extra_style)
+    original = {key: matplotlib.rcParams[key] for key in combined}
     try:
-        combined: dict[str, Any] = dict(DEFAULT_STYLE)
-        if extra_style:
-            combined.update(extra_style)
         matplotlib.rcParams.update(combined)
         yield
     finally:

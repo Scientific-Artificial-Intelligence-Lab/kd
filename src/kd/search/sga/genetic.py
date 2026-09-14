@@ -151,6 +151,10 @@ def _fill_children(
         )
 
 
+def max_generated_depth(depth: int) -> int:
+    return max(1, depth - 1)
+
+
 
 
 

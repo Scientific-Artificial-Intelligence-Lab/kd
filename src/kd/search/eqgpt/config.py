@@ -47,7 +47,11 @@ class EqGPTConfig:
     """Random seed of candidate sampling: it seeds the generator that hands every
     sampling call its own sub-seed, exploration draws included. A run resumed from a
     checkpoint restores the saved generator state instead, and falls back to this
-    value only when the checkpoint carries none.
+    value when the checkpoint carries none. A run resumed with ``reseed=True``
+    branches: it keeps the checkpoint's search state but re-derives the generator
+    from this value, so the branch draws the stream a fresh run on this seed would
+    draw, from the checkpoint's fine-tuned model and elite pool rather than a cold
+    one.
     """
     samples_per_epoch: int = 400
     """Number of candidate sentences drawn from the model per iteration; the platform
@@ -110,8 +114,8 @@ class EqGPTConfig:
     """Directory holding the pretrained GPT checkpoint at
     ``gpt_model/PDEGPT_wave_breaking.pt``, consulted when ``weights_path`` is unset.
     With both unset the directory is read from the ``KD_EQGPT_ASSET_DIR`` environment
-    variable; the weights are not distributed with the package, so a run with none of
-    the three given raises ``FileNotFoundError``.
+    variable, and with that unset too the checkpoint is downloaded once from the KD
+    Hub mirror (``kd.data.remote.fetch_eqgpt_weights``) into the Hugging Face cache.
     """
 
 
@@ -139,8 +143,9 @@ class EqGPTConfig:
     """Directory holding the pretrained per-case surrogate checkpoints used to evaluate
     candidate terms in multi-case wave mode; one checkpoint is loaded per selected
     case. When ``None`` (default), the directory is taken from the
-    ``KD_V1_WAVE_ASSETS`` environment variable, and if neither is set preparation
-    raises ``FileNotFoundError``.
+    ``KD_V1_WAVE_ASSETS`` environment variable, and if neither is set the tree is
+    downloaded once from the KD Hub mirror
+    (``kd.data.remote.fetch_wave_surrogate_tree``).
     """
     reward_points_per_window: int = 50
     """Number of ``x`` sample points per camera window on the grid used to score

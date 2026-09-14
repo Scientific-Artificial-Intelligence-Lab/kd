@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from kd.viz.axes import _get_axes
 from kd.viz.equation_display import latex_display
 from kd.viz.style import style_context
 
@@ -30,10 +31,11 @@ def _ensure_math_mode(text: str) -> str:
 
 def plot_equation(
     result: ExperimentResult,
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
     expr = result.best_expression
 

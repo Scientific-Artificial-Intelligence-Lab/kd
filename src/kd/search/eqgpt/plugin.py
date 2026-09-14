@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal
 import torch
 from torch import Tensor
 
-from kd.core.equation import Form
+from kd.core.equation import HOMOGENEOUS_LHS_LABEL, Form, LhsSpec, render_lhs_label
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.term_cache import TermColumnCache
@@ -48,6 +48,12 @@ from kd.search.eqgpt.sampling import (
 from kd.search.eqgpt.vocab import VOCAB_SHA256, Vocab, load_vocab
 from kd.search.protocol import PlatformComponents
 from kd.search.recorder import log_whitelisted_metrics
+from kd.search.term_utils import fold_add
+from kd.search.trajectory import (
+    active_fit_terms,
+    log_search_trajectory,
+    select_trajectory_candidates,
+)
 from kd.viz.extension import PlotInfo
 from kd.viz.gap_notes import NO_MEASUREMENT
 
@@ -126,9 +132,7 @@ class EqGPTPlugin:
             InstrumentMode(
                 name="wave_multicase",
                 forms=frozenset({Form.EVOLUTION}),
-                topologies=frozenset(
-                    {DataTopology.GRID, DataTopology.SCATTERED}
-                ),
+                topologies=frozenset({DataTopology.GRID, DataTopology.SCATTERED}),
                 provider_kind="none",
                 description="Private multi-case wave evaluation path.",
                 lhs_orders=frozenset({1}),
@@ -152,14 +156,39 @@ class EqGPTPlugin:
             Knob(
                 "top_k",
                 "int",
-                "Elite-pool and fine-tune slice size.",
-                resume_tier="init_only",
+                "Elite-pool and fine-tune slice size; on a resume a smaller "
+                "value truncates the restored pool, while a larger one does "
+                "not widen it (the merge never grows a non-empty pool).",
+
+
+
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "sparsity_alpha",
                 "float",
                 "Problem-specific sparsity weight.",
-                resume_tier="init_only",
+
+
+
+
+
+
+
+
+
+
+                resume_tier="resume_safe",
             ),
             Knob(
                 "finetune_lr",
@@ -178,9 +207,7 @@ class EqGPTPlugin:
                 resume_tier="resume_safe",
             ),
         ),
-        segmentation=Segmentation(
-            archive="progress", unit="epochs", reseed=False
-        ),
+        segmentation=Segmentation(archive="progress", unit="epochs", reseed=True),
         identity_breaking_fields=frozenset(
             {"variables", "start_words", "masked_tokens", "steady_constant_column"}
         ),
@@ -201,6 +228,7 @@ class EqGPTPlugin:
         self._backend_self_built = False
         self._prepared = False
         self._restore_pending = False
+        self._reseed_pending = False
         self._pending_state: dict[str, Any] | None = None
 
         self._components: PlatformComponents | None = None
@@ -355,6 +383,7 @@ class EqGPTPlugin:
 
 
 
+
             self._steady = SteadyEvaluator.from_components(
                 dataset,
                 components.executor,
@@ -384,6 +413,17 @@ class EqGPTPlugin:
 
         if self._restore_pending and self._pending_state is not None:
             self._apply_state(self._pending_state)
+
+
+            self._reprice_pool()
+
+
+
+
+
+
+            self._pool_rewards = self._pool_rewards[: self._config.top_k]
+            self._pool_sentences = self._pool_sentences[: self._config.top_k]
         else:
             self._reset_search_state()
 
@@ -404,6 +444,14 @@ class EqGPTPlugin:
 
         self._restore_pending = False
         self._pending_state = None
+
+
+
+
+
+
+
+        self._reseed_pending = False
         self._prepared = True
 
     def propose(self, n: int) -> list[str]:
@@ -438,13 +486,27 @@ class EqGPTPlugin:
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
         self._require_prepared()
+        return self._score_pairs(
+            [
+                (candidate, self._pending_cache.get(candidate))
+                for candidate in candidates
+            ]
+        )
+
+    def _score_pairs(
+        self, pairs: list[tuple[str, list[int] | None]]
+    ) -> list[EvaluationResult]:
         assert self._vocab is not None
         if self._multicase is not None:
 
 
-            return [self._score_wave(candidate) for candidate in candidates]
+            return [
+                self._score_wave(candidate, sentence) for candidate, sentence in pairs
+            ]
         if self._steady is not None:
-            return [self._score_steady(candidate) for candidate in candidates]
+            return [
+                self._score_steady(candidate, sentence) for candidate, sentence in pairs
+            ]
         assert self._lhs_flat is not None and self._components is not None
         context = self._components.context
 
@@ -453,7 +515,7 @@ class EqGPTPlugin:
         return [
             _scoring.score_candidate(
                 candidate=candidate,
-                sentence=self._pending_cache.get(candidate),
+                sentence=sentence,
                 vocab=self._vocab,
                 variables=self._variables,
                 executor=self._components.executor,
@@ -462,13 +524,14 @@ class EqGPTPlugin:
                 sparsity_alpha=self._config.sparsity_alpha,
                 term_cache=self._term_cache,
             )
-            for candidate in candidates
+            for candidate, sentence in pairs
         ]
 
-    def _score_wave(self, candidate: str) -> EvaluationResult:
+    def _score_wave(
+        self, candidate: str, sentence: list[int] | None
+    ) -> EvaluationResult:
         assert self._vocab is not None and self._multicase is not None
         terms = candidate.split(" + ") if candidate else []
-        sentence = self._pending_cache.get(candidate)
         if sentence is None:
             return _scoring.invalid_result(
                 candidate, terms, "candidate not found in propose() cache"
@@ -478,10 +541,11 @@ class EqGPTPlugin:
             return _scoring.gate_zero_result(candidate, terms)
         return self._multicase.score_candidate(candidate=candidate, terms=terms)
 
-    def _score_steady(self, candidate: str) -> EvaluationResult:
+    def _score_steady(
+        self, candidate: str, sentence: list[int] | None
+    ) -> EvaluationResult:
         assert self._vocab is not None and self._steady is not None
         terms = candidate.split(" + ") if candidate else []
-        sentence = self._pending_cache.get(candidate)
         if sentence is None:
             result = _scoring.invalid_result(
                 candidate, terms, "candidate not found in propose() cache"
@@ -532,6 +596,50 @@ class EqGPTPlugin:
 
 
         self._n_dropped = None
+        self._record_search_trajectory(results)
+
+    def _record_search_trajectory(self, results: list[EvaluationResult]) -> None:
+        recorder = self._recorder
+        if (
+            recorder is None
+            or not recorder.enabled
+            or recorder.trajectory_top_k == 0
+            or self._config.is_wave_multicase
+        ):
+            return
+        assert self._components is not None
+        dataset = self._components.dataset
+        if self._config.is_steady:
+            lhs = HOMOGENEOUS_LHS_LABEL
+        else:
+            assert dataset.lhs_field is not None and dataset.lhs_axis is not None
+            lhs = render_lhs_label(
+                LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+            )
+
+        def project(index: int) -> tuple[str, tuple[str, ...], str]:
+            result = results[index]
+            assert result.terms is not None and result.coefficients is not None
+            return (
+                fold_add(result.expression.split(" + ")),
+                active_fit_terms(
+                    result.terms, result.coefficients, result.selected_indices
+                ),
+                lhs,
+            )
+
+        candidates = select_trajectory_candidates(
+            [
+                result.score
+                if result.is_valid and result.coefficients is not None
+                else None
+                for result in results
+            ],
+            project,
+            top_k=recorder.trajectory_top_k,
+            direction=self.score_direction,
+        )
+        log_search_trajectory(recorder, candidates)
 
 
     def build_final_result(self) -> EvaluationResult:
@@ -643,6 +751,9 @@ class EqGPTPlugin:
             return
         self._pending_state = dict(value)
         self._restore_pending = True
+
+    def reseed(self) -> None:
+        self._reseed_pending = True
 
 
     @property
@@ -796,10 +907,39 @@ class EqGPTPlugin:
         self._reward_history = [list(h) for h in state.get("reward_history", [])]
         rng_state = state.get("rng_state")
         self._rng = torch.Generator()
-        if rng_state is not None:
+        if rng_state is not None and not self._reseed_pending:
             self._rng.set_state(rng_state)
         else:
+
+
             self._rng.manual_seed(self._config.seed)
+
+    def _reprice_pool(self) -> None:
+        if not self._pool_sentences:
+            return
+        assert self._vocab is not None
+        pairs: list[tuple[str, list[int] | None]] = [
+            (
+                " + ".join(
+                    sentence_to_rhs_terms(
+                        self._vocab, sentence, start_len=self._start_len_no_s
+                    )
+                ),
+                sentence,
+            )
+            for sentence in self._pool_sentences
+        ]
+        rewards = [
+            float(result.score) if result.score is not None else 0.0
+            for result in self._score_pairs(pairs)
+        ]
+
+        repriced = sorted(
+            zip(rewards, self._pool_sentences, strict=True),
+            key=lambda item: -item[0],
+        )
+        self._pool_rewards = [reward for reward, _ in repriced]
+        self._pool_sentences = [sentence for _, sentence in repriced]
 
     def _epoch_metrics(self, finetune_loss: float | None) -> dict[str, float]:
         if not self._pool_rewards:
@@ -859,20 +999,14 @@ class EqGPTPlugin:
         if self._config.is_steady and self._steady is not None:
             fingerprints["steady_activation"] = self._config.steady_activation
             fingerprints["steady_train_points"] = self._config.steady_train_points
-            fingerprints["steady_validate_points"] = (
-                self._config.steady_validate_points
-            )
+            fingerprints["steady_validate_points"] = self._config.steady_validate_points
             fingerprints["steady_train_iters"] = self._config.steady_train_iters
-            fingerprints["steady_surrogate_seed"] = (
-                self._config.steady_surrogate_seed
-            )
+            fingerprints["steady_surrogate_seed"] = self._config.steady_surrogate_seed
             fingerprints["steady_boundary_delete_num"] = (
                 self._config.steady_boundary_delete_num
             )
             fingerprints["steady_polar_eval"] = self._config.steady_polar_eval
-            fingerprints["steady_constant_column"] = (
-                self._config.steady_constant_column
-            )
+            fingerprints["steady_constant_column"] = self._config.steady_constant_column
             fingerprints["steady_dataset_fingerprint"] = (
                 self._steady.dataset_fingerprint
             )

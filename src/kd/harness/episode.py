@@ -28,6 +28,7 @@ from kd.search.sketch_outcome import write_sketch_artifact
 
 if TYPE_CHECKING:
     from kd.core.equation.sketch import Sketch
+    from kd.core.verify import VerifyPolicy
     from kd.data.schema import PDEDataset
     from kd.search.callbacks import RunnerCallback
     from kd.search.records import RunRecord
@@ -147,6 +148,7 @@ def run_episode(
     resume_from: Path | str | None = None,
     reseed: bool = False,
     sketch: Sketch | None = None,
+    verify: VerifyPolicy | None = None,
     recording: RecordingOptions | None = None,
     record_ref: str | None = None,
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
@@ -194,6 +196,8 @@ def run_episode(
         fit_kwargs: dict[str, Any] = {}
         if sketch is not None:
             fit_kwargs["sketch"] = sketch
+        if verify is not None:
+            fit_kwargs["verify"] = verify
         if reseed:
 
 

@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 from numpy.typing import NDArray
@@ -32,6 +33,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DPI = 150
+
+
+def save_field_animation(
+    dataset: PDEDataset,
+    integration_result: IntegrationResult,
+    output_path: str | Path,
+    *,
+    fps: int = 8,
+    max_frames: int = 24,
+) -> list[str]:
+    if not integration_result.success:
+        raise ValueError(
+            f"Cannot animate failed integration: {integration_result.warning}"
+        )
+    animation, notes = plot_field_animation(
+        dataset, integration_result, fps=fps, max_frames=max_frames
+    )
+    if animation is None:
+        raise ValueError("; ".join(notes))
+    figure = plt.gcf()
+    try:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        animation.save(path, writer=PillowWriter(fps=fps))
+    finally:
+        plt.close(figure)
+    return notes
 
 
 def plot_field_animation(
@@ -68,8 +96,7 @@ def plot_field_animation(
 
         suptitle = f"Showing {n_shown} of {n_t} time steps"
         warnings.append(
-            f"Animation shows {n_shown} of {n_t} time steps "
-            f"(max_frames={max_frames})"
+            f"Animation shows {n_shown} of {n_t} time steps (max_frames={max_frames})"
         )
     t_coords = np.asarray(
         dataset.get_coords(time_axis).detach().cpu().numpy(),

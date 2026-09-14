@@ -12,11 +12,12 @@ Unlike the other algorithms, EqGPT needs TWO things a bare install lacks:
 
 1. A per-problem ``sparsity_alpha`` (decision D5: there is no universal
    default). ``EqGPTConfig.burgers_preset()`` pins the probe-verified 0.02.
-2. The pretrained GPT weights (``PDEGPT_wave_breaking.pt``), which are NOT
-   vendored -- they come from the EqGPT authors. This script checks for them
-   BEFORE fitting and exits with an install hint if absent. Point
-   ``KD_EQGPT_ASSET_DIR`` at the directory that holds
-   ``gpt_model/PDEGPT_wave_breaking.pt``.
+2. The pretrained GPT weights (``PDEGPT_wave_breaking.pt``) from the EqGPT
+   authors. They are too large for the wheel, so the first run downloads them
+   (151.7 MB) from the KD Hub mirror into the Hugging Face cache; a local
+   copy under ``$KD_EQGPT_ASSET_DIR/gpt_model/`` is used instead when that
+   variable is set. This script resolves them BEFORE fitting and exits with
+   the reason if neither route works.
 
 Run: python examples/16_eqgpt.py
 """
@@ -27,17 +28,18 @@ import kd
 from kd import EqGPTConfig
 from kd.search.eqgpt import ASSET_ENV_VAR, resolve_asset_path
 
-# 0. Fail fast if the pretrained weights are missing: reuse the SAME resolution
-# logic the plugin/backend uses (weights_path -> asset_dir ->
-# $KD_EQGPT_ASSET_DIR), so this check cannot drift from the real load.
+# 0. Resolve the pretrained weights before fitting, with the SAME resolution
+# the plugin/backend uses (weights_path -> asset_dir -> $KD_EQGPT_ASSET_DIR
+# -> Hub download), so this check cannot drift from the real load.
 try:
     weights_path = resolve_asset_path()
 except FileNotFoundError as exc:
     print(
         "EqGPT pretrained weights are not available, so this example cannot "
         f"run.\n\n{exc}\n\n"
-        "Fix: place PDEGPT_wave_breaking.pt under a 'gpt_model/' directory, "
-        f"then set {ASSET_ENV_VAR} to that directory's parent."
+        "Either the Hub download failed (no network?) or a local tree was "
+        f"named but is incomplete: {ASSET_ENV_VAR} must point at a directory "
+        "holding gpt_model/PDEGPT_wave_breaking.pt."
     )
     sys.exit(1)
 print(f"Using pretrained EqGPT weights: {weights_path}")
@@ -60,5 +62,5 @@ model.fit(dataset)
 
 # 4. Inspect the result.
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best reward: {model.best_score_:.4f}")

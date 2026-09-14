@@ -27,7 +27,7 @@ VerificationStatus = Literal["verified", "failed", "not_evaluated"]
 
 
 _DEFAULT_MAX_ATOMIC_ORDER: int = MAX_SUPPORTED_ORDER
-_DEFAULT_PROVIDER_KIND: str = "finite_diff"
+_DEFAULT_PROVIDER_KIND: Literal["finite_diff"] = "finite_diff"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,17 +53,23 @@ class MemberVerification:
 
 class _DefaultVerifyContextFactory:
 
-    provider_kind: str = _DEFAULT_PROVIDER_KIND
+    def provider_kind_for(self, dataset: PDEDataset) -> Literal["finite_diff", "none"]:
+        return (
+            "none"
+            if dataset.topology is DataTopology.TABULAR
+            else _DEFAULT_PROVIDER_KIND
+        )
 
     def __call__(self, dataset: PDEDataset) -> VerifyExecution:
-        if dataset.topology is DataTopology.TABULAR:
+        provider_kind = self.provider_kind_for(dataset)
+        if provider_kind == "none":
 
 
 
 
 
             reqs = DerivativeReqs(
-                provider_kind="none",
+                provider_kind=provider_kind,
                 lhs_order=0,
                 lhs_source="field",
                 supported_topologies=frozenset({DataTopology.TABULAR}),
@@ -78,7 +84,7 @@ class _DefaultVerifyContextFactory:
             return VerifyExecution(
                 executor=components.executor,
                 context=context,
-                provider_kind="none",
+                provider_kind=provider_kind,
             )
         components = PlatformBuilder(
             dataset, DerivativeReqs(max_atomic_order=_DEFAULT_MAX_ATOMIC_ORDER)
@@ -92,7 +98,7 @@ class _DefaultVerifyContextFactory:
         return VerifyExecution(
             executor=components.executor,
             context=context,
-            provider_kind=_DEFAULT_PROVIDER_KIND,
+            provider_kind=provider_kind,
         )
 
 

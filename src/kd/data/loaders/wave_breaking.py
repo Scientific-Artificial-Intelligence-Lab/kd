@@ -14,6 +14,8 @@ import torch
 from numpy.typing import NDArray
 from torch import Tensor
 
+from kd.data.remote._eqgpt_assets import fetch_wave_surrogate_tree
+
 if TYPE_CHECKING:
     from kd.data.schema import PDEDataset
 
@@ -63,10 +65,10 @@ def default_wave_pkl_path() -> Path:
 _V1_WAVE_ASSETS_ENV: str = "KD_V1_WAVE_ASSETS"
 
 _MISSING_V1_ASSETS_HINT: str = (
-    "v1 wave surrogate asset tree not found. Pass an explicit v1_asset_dir "
-    "(EqGPTConfig.v1_asset_dir) or set the KD_V1_WAVE_ASSETS environment "
-    "variable to the EqGPT_wave_breaking directory (it must contain "
-    "model_save/wave_breaking/95_0_<case>(Non_unit)/Net_Sin_*.pkl)."
+    "v1 wave surrogate checkpoint not found. The asset tree must contain "
+    "model_save/wave_breaking/95_0_<case>(Non_unit)/Net_Sin_*.pkl; it is "
+    "resolved from EqGPTConfig.v1_asset_dir, else the KD_V1_WAVE_ASSETS "
+    "environment variable, else downloaded from the KD Hub mirror."
 )
 
 
@@ -76,7 +78,7 @@ def resolve_v1_wave_asset_dir(asset_dir: str | Path | None = None) -> Path:
     env = os.environ.get(_V1_WAVE_ASSETS_ENV)
     if env:
         return Path(env)
-    raise FileNotFoundError(_MISSING_V1_ASSETS_HINT)
+    return fetch_wave_surrogate_tree()
 
 
 def wave_surrogate_checkpoint_path(
@@ -138,12 +140,27 @@ def load_wave_breaking_cases(
     for key, raw in payload.items():
         if not isinstance(key, str):
             raise ValueError(
-                f"WaveBreaking.pkl case keys must be strings, got "
-                f"{type(key).__name__}."
+                f"WaveBreaking.pkl case keys must be strings, got {type(key).__name__}."
             )
         array = _validate_case_array(key, raw)
         cases[key] = _case_from_array(key, array)
     return cases
+
+
+def load_wave_breaking_datasets(
+    path: str | Path | None = None,
+    *,
+    case_filter: str = "",
+) -> dict[str, PDEDataset]:
+    cases = load_wave_breaking_cases(path)
+    datasets = {
+        name: wave_breaking_case_to_dataset(cases[name])
+        for name in sorted(cases)
+        if case_filter in name
+    }
+    if not datasets:
+        raise ValueError(f"case_filter={case_filter!r} matches no wave-tank cases")
+    return datasets
 
 
 def _validate_case_array(name: str, raw: object) -> NDArray[np.float64]:
@@ -214,6 +231,7 @@ __all__ = [
     "WaveBreakingCase",
     "default_wave_pkl_path",
     "load_wave_breaking_cases",
+    "load_wave_breaking_datasets",
     "resolve_v1_wave_asset_dir",
     "wave_breaking_case_to_dataset",
     "wave_dataset_name",

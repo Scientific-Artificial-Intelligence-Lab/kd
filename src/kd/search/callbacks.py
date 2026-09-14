@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "CheckpointCallback",
     "EarlyStoppingCallback",
+    "EvaluationBudgetCallback",
     "LoggingCallback",
     "RunnerCallback",
     "VizDataCollector",
@@ -292,6 +294,60 @@ class WallClockBudgetCallback:
         results: list[Any],
     ) -> None:
         pass
+
+    def on_experiment_end(self, algorithm: Any) -> None:
+        pass
+
+
+
+
+
+
+
+class EvaluationBudgetCallback:
+
+    def __init__(self, max_evaluations: int) -> None:
+
+
+        if isinstance(max_evaluations, bool) or not isinstance(
+            max_evaluations, Integral
+        ):
+            raise ValueError(
+                f"max_evaluations must be an integer, got {max_evaluations!r}"
+            )
+        if max_evaluations <= 0:
+            raise ValueError(f"max_evaluations must be > 0, got {max_evaluations}")
+
+
+        self._max_evaluations: int = int(max_evaluations)
+        self._evaluations: int = 0
+
+    @property
+    def should_stop(self) -> bool:
+        return self._evaluations >= self._max_evaluations
+
+    @property
+    def max_evaluations(self) -> int:
+        return self._max_evaluations
+
+    @property
+    def evaluations(self) -> int:
+        return self._evaluations
+
+    def on_experiment_start(self, algorithm: Any) -> None:
+        self._evaluations = 0
+
+    def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
+        pass
+
+    def on_iteration_end(
+        self,
+        iteration: int,
+        algorithm: Any,
+        candidates: list[str],
+        results: list[Any],
+    ) -> None:
+        self._evaluations += len(results)
 
     def on_experiment_end(self, algorithm: Any) -> None:
         pass

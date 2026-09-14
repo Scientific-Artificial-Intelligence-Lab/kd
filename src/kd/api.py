@@ -9,7 +9,7 @@ Example:
     >>> import kd
     >>> m = kd.Model(algorithm="sga", generations=50, population=20)
     >>> m.fit(dataset)
-    >>> print(m.best_expr_, m.best_score_)
+    >>> print(m.result_.equation, m.best_score_)
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from kd.core.equation.sketch import Sketch
 from kd.core.equation.types import LhsSpec
 from kd.core.platform.requirements import resolve_derivative_requirements
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
+from kd.core.verify import VerifyPolicy
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, compute_dataset_fingerprint
 from kd.data.tabular_bridge import dataset_from_tabular
@@ -69,13 +70,16 @@ from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
 from kd.search.protocol import DiscoveryTask, FacadeWiringContract, PlatformComponents
 from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.plugin import PySINDyPlugin
-from kd.search.pysr.config import PySRConfig
+from kd.search.pysr.config import TABULAR_UNARY_OPERATORS, PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
 from kd.search.result import DEFAULT_SCORE_KIND
 from kd.search.resume_policy import check_resume_config
 from kd.search.run_dir import CHECKPOINTS_DIRNAME, run_id_of_run_dir
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
+from kd.viz.engine import VizEngine
+from kd.viz.equation_display import expression_display
+from kd.viz.report import ReportResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -386,7 +390,7 @@ class _ProgressPrinter:
         self._emit(
             f"{_PROGRESS_PREFIX} Generation {gen:>3}/{self._total} | "
             f"best {label}={algorithm.best_score:.4g} | "
-            f"expr={algorithm.best_expression}"
+            f"expr={expression_display(algorithm.best_expression).text}"
         )
 
     def on_experiment_end(self, algorithm: SearchAlgorithm) -> None:
@@ -408,7 +412,8 @@ class _ProgressPrinter:
             return
         label = _score_label(algorithm)
         self._emit(
-            f"{_PROGRESS_PREFIX} Done. Best: {algorithm.best_expression} "
+            f"{_PROGRESS_PREFIX} Done. Best: "
+            f"{expression_display(algorithm.best_expression).text} "
             f"({label}={algorithm.best_score:.4g})"
         )
 
@@ -821,6 +826,7 @@ class Model:
         self._fitted: bool = False
         self._result: ExperimentResult | None = None
         self._algorithm: SearchAlgorithm | None = None
+        self._dataset: PDEDataset | None = None
 
 
 
@@ -1415,6 +1421,7 @@ class Model:
         *,
         sketch: Sketch | None = None,
         reseed: bool = False,
+        verify: VerifyPolicy | None = None,
     ) -> Model:
         """Run the search and populate post-fit attributes.
 
@@ -1556,9 +1563,9 @@ class Model:
                 regression target and restored with their exact coefficients,
                 and the run's result carries a sound ``SketchOutcome``
                 (``result_.sketch_outcome``) whose ``solution`` is only filled
-                when the discovered law satisfies every sketch clause. The
-                sketch is part of the run's scientific identity (RunSpec /
-                checkpoint / resume).
+                when the discovered law satisfies every sketch clause AND fits
+                the data within ``verify`` (see below). The sketch is part of
+                the run's scientific identity (RunSpec / checkpoint / resume).
             reseed: Turn the resume into a BRANCH (K4). A plain resume keeps
                 the checkpoint's random streams and continues one trajectory;
                 ``reseed=True`` keeps the restored search state (population /
@@ -1567,15 +1574,33 @@ class Model:
                 branches off one checkpoint explore differently. The new seed
                 travels through the ordinary seed channel (``Model(seed=...)``
                 / ``config.seed``); this flag only declares the intent, and
-                branching to the SAME seed is legal — it is a deterministic
-                re-throw of the stream, not a replay of the archived one.
+                branching to the SAME seed is legal — it re-throws the stream
+                from that seed rather than replaying the archived one (how
+                tightly a seed pins a run is the instrument's own property;
+                PySR's is statistical under its defaults, see ``PySRConfig``).
                 Requires ``resume_from``, and only for an algorithm whose
-                declaration says it can branch
-                (``segmentation.reseed`` on the instrument schema: sga, dlga,
-                discover today). Both refusals are ``ValueError`` raised before
-                any expensive build. With ``reseed=True`` a changed ``seed`` is
-                the one config difference the resume gate accepts; every other
-                field keeps its tier.
+                declaration says it can branch (``segmentation.reseed`` on
+                the instrument schema: every instrument except pysindy today,
+                whose one-shot fit archives a conclusion rather than search
+                progress). Both refusals are ``ValueError`` raised before any
+                expensive build. With ``reseed=True`` a changed ``seed`` is the
+                one config difference the resume gate accepts; every other field
+                keeps its tier.
+            verify: Residual gate the sketch exit judges the lifted law with.
+                ``None`` resolves to ``kd.SKETCH_EXIT_VERIFY``
+                (``nmse_max=0.05``), so a sketch fit certifies only a law that
+                also fits the data on the platform's own footing; a law that
+                honours every clause and misses the data leaves ``solution``
+                empty and publishes the measured report plus the reason.
+                Passing ``kd.VerifyPolicy()`` is the auditable opt-out: it
+                carries no ``nmse_max``, so the residual threshold alone is
+                dropped and the report stays report-only; an unavailable
+                verification still withholds the solution. The sketch sidecar
+                records the relaxed policy it was certified under. The
+                policy is a judgement parameter, not a search one — it stays
+                out of the run's identity, so it is not a resume difference.
+                Illegal without ``sketch``: a sketch-less fit has no exit to
+                gate.
 
         Returns:
             ``self`` for sklearn-style chaining.
@@ -1598,7 +1623,8 @@ class Model:
                 (``CheckpointManifestError``, a ``ValueError``); or if
                 ``reseed=True`` without ``resume_from`` / for an algorithm
                 declaring no branch support; or if ``resume_from`` records a
-                dataset fingerprint differing from this fit's dataset (K4).
+                dataset fingerprint differing from this fit's dataset (K4); or
+                if ``verify`` is given without a ``sketch``.
             FileNotFoundError: If ``resume_from`` does not exist.
             IsADirectoryError: If ``resume_from`` points at a directory.
             RuntimeError: If a LEGACY ``resume_from`` (no config snapshot) was
@@ -1617,6 +1643,7 @@ class Model:
         self._fitted = False
         self._result = None
         self._algorithm = None
+        self._dataset = None
         self._tabular_feature_names = None
 
         if isinstance(dataset, TabularDataset):
@@ -1673,6 +1700,14 @@ class Model:
                 dataset_name=dataset.name,
             )
 
+
+
+
+        if verify is not None and sketch is None:
+            raise ValueError(
+                "verify requires a sketch: there is no sketch exit to gate"
+            )
+
         task: DiscoveryTask | None = None
         if sketch is not None:
             from kd.core.platform.builder import resolve_lhs_defaults
@@ -1687,6 +1722,7 @@ class Model:
                 plugin_cls.descriptor,
                 sketch,
                 algorithm=self.algorithm,
+                sketch_lower_owner=plugin_cls.sketch_lower_owner,
             )
             if dataset.lhs_order == 0:
                 raise ValueError("sketch requires an evolution dataset")
@@ -1701,7 +1737,7 @@ class Model:
                     "sketch LHS does not match the resolved dataset LHS: "
                     f"sketch={sketch.lhs_spec!r}, dataset={dataset_lhs!r}"
                 )
-            task = DiscoveryTask.from_sketch(sketch)
+            task = DiscoveryTask.from_sketch(sketch, verify=verify)
 
 
 
@@ -1852,6 +1888,7 @@ class Model:
             components,
             preprocessing_seconds=preprocessing_seconds,
         )
+        self._dataset = components.dataset
         self._fitted = True
         return self
 
@@ -2045,7 +2082,7 @@ class Model:
             terms=feature_names,
             niterations=self.generations,
             seed=self.seed,
-            **self._extra_kwargs,
+            **{"unary_operators": TABULAR_UNARY_OPERATORS, **self._extra_kwargs},
         )
 
     def _build_pysindy_config(self) -> PySINDyConfig:
@@ -2154,13 +2191,37 @@ class Model:
 
 
         algo_label = self._result.config.get("algorithm", self._result.algorithm_name)
+        display = (
+            str(self._result.equation)
+            if self._result.equation is not None
+            else expression_display(self._result.best_expression).text
+        )
         return (
             f"Model(algorithm={algo_label!r}, fitted=True, "
-            f"best_expr={self._result.best_expression!r}, "
+            f"best_expr={display!r}, "
             f"best_score={self._result.best_score:.4g})"
         )
 
 
+
+    def report(self, output_dir: str | Path, *, animate: bool = False) -> ReportResult:
+        """Render every figure this fit supports and one HTML page into ``output_dir``.
+
+        The same pass as ``kd.VizEngine(output_dir).render_all(...)`` with the
+        result, the algorithm and the dataset of this fit wired in. The
+        returned ``ReportResult`` lists the figure paths, the page path and
+        the figure families that were skipped; in a notebook it displays the
+        page inline.
+        """
+        self._check_fitted()
+        if self._dataset is None:
+            raise RuntimeError(_FIT_REQUIRED_MSG)
+        return VizEngine(output_dir=Path(output_dir)).render_all(
+            self._require_result(),
+            algorithm=self.algorithm_,
+            dataset=self._dataset,
+            animate=animate,
+        )
 
     def _check_fitted(self) -> None:
         """Raise ``RuntimeError`` if ``.fit()`` has not been called."""

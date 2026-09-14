@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.io as sio
 import torch
+
+from kd.data.layouts.kd_npz import read_kd_npz
 
 
 
@@ -71,9 +73,6 @@ _PDE_DIVIDE_NX = 100
 _PDE_DIVIDE_NT = 251
 _PDE_DIVIDE_X_RANGE = (1.0, 2.0)
 _PDE_DIVIDE_T_RANGE = (0.0, 1.0)
-_AXIS_ORDER_KEY = "axis_order"
-_UNIFORM_RTOL = 1e-6
-_AXIS_ENDPOINT_ATOL = 1e-5
 
 
 def load_chafee_infante_npy(directory: str | Path) -> PDEDataset:
@@ -394,18 +393,10 @@ def _build_pde_dataset_from_npz(
     if not resolved.exists():
         raise FileNotFoundError(f"Data file not found: {resolved}")
 
-    with np.load(resolved, allow_pickle=False) as data:
-        axis_order = _decode_axis_order(_required_array(data, _AXIS_ORDER_KEY))
-        required_keys = {lhs_field, _AXIS_ORDER_KEY, *axis_order}
-        missing = required_keys - set(data.files)
-        if missing:
-            raise ValueError(f"{resolved} missing required keys: {sorted(missing)}")
-
-        axes_np = {
-            axis: _regularize_axis(axis, _required_array(data, axis))
-            for axis in axis_order
-        }
-        field_np = _load_field_array(data, lhs_field)
+    arrays = read_kd_npz(resolved, field=lhs_field)
+    axis_order = arrays.axis_order
+    axes_np = arrays.axes
+    field_np = arrays.fields[lhs_field]
 
     expected_shape = tuple(axes_np[axis].shape[0] for axis in axis_order)
     if field_np.shape != expected_shape:
@@ -451,80 +442,3 @@ def _axis_tensor(
     if dtype == torch.float32:
         return tensor
     return tensor.to(dtype=dtype)
-
-
-def _required_array(data: np.lib.npyio.NpzFile, key: str) -> npt.NDArray[Any]:
-    if key not in data.files:
-        raise ValueError(f"npz file missing required keys: {[key]}")
-    return np.asarray(data[key])
-
-
-def _decode_axis_order(raw: npt.NDArray[Any]) -> list[str]:
-    if raw.ndim != 1:
-        raise ValueError(f"axis_order must be 1D, got shape {raw.shape}")
-    axis_order: list[str] = []
-    for item in raw.tolist():
-        if isinstance(item, bytes):
-            axis_order.append(item.decode("utf-8"))
-        else:
-            axis_order.append(str(item))
-    if len(axis_order) != len(set(axis_order)):
-        raise ValueError(f"axis_order contains duplicate axes: {axis_order}")
-    return axis_order
-
-
-def _load_field_array(
-    data: np.lib.npyio.NpzFile,
-    field_name: str,
-) -> npt.NDArray[np.floating[Any]]:
-    field = np.asarray(data[field_name])
-    if not np.issubdtype(field.dtype, np.floating):
-        raise ValueError(f"field '{field_name}' must be floating-point")
-    if not np.isfinite(field).all():
-        raise ValueError(f"field '{field_name}' must contain only finite values")
-    return cast(npt.NDArray[np.floating[Any]], field)
-
-
-def _regularize_axis(
-    axis_name: str,
-    values: npt.NDArray[Any],
-) -> npt.NDArray[np.float64]:
-    axis = np.asarray(values, dtype=np.float64).reshape(-1)
-    if axis.ndim != 1 or axis.size < 2:
-        raise ValueError(f"axis '{axis_name}' must be a 1D array with >=2 values")
-    if not np.isfinite(axis).all():
-        raise ValueError(f"axis '{axis_name}' must contain only finite values")
-    diffs = np.diff(axis)
-    if np.any(diffs <= 0.0):
-        raise ValueError(f"axis '{axis_name}' must be strictly increasing")
-    if _is_uniform_spacing(diffs):
-        return axis
-    return _reconstruct_uniform_axis(axis_name, axis, diffs)
-
-
-def _is_uniform_spacing(diffs: npt.NDArray[np.float64]) -> bool:
-    dx = float(diffs[0])
-    return float(diffs.max() - diffs.min()) <= abs(dx) * _UNIFORM_RTOL
-
-
-def _reconstruct_uniform_axis(
-    axis_name: str,
-    axis: npt.NDArray[np.float64],
-    diffs: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    step = float(np.median(diffs))
-    expected = np.linspace(
-        axis[0],
-        axis[0] + step * axis.size,
-        axis.size,
-        endpoint=False,
-    )
-    if (
-        abs(float(axis[0] - expected[0])) > _AXIS_ENDPOINT_ATOL
-        or abs(float(axis[-1] - expected[-1])) > _AXIS_ENDPOINT_ATOL
-    ):
-        raise ValueError(
-            f"axis '{axis_name}' is not uniformly spaced and endpoints disagree "
-            f"with endpoint=False reconstruction"
-        )
-    return expected

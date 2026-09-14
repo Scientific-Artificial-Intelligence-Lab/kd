@@ -105,6 +105,38 @@ def _exclude_pinned(
     return remaining, dropped
 
 
+def _assert_operator_clauses_representable(
+    sketch: Sketch, config_terms: tuple[str, ...]
+) -> None:
+    operator_sets: list[frozenset[str]] = []
+    for term in config_terms:
+        try:
+            features = analyze_term(term, sketch.vocabulary)
+        except ValueError:
+            continue
+        if features.operators:
+            operator_sets.append(features.operators)
+    library_features = frozenset().union(*operator_sets)
+    for hole in sketch.holes:
+        clause = hole.constraint.operators
+        if not clause:
+            continue
+        unknown = clause - library_features
+        if unknown:
+            raise ValueError(
+                f"PySINDy hole {hole.id!r} operator clause names "
+                f"{sorted(unknown)!r}, which no column in config.terms carries "
+                f"as a law feature (library operator features "
+                f"{sorted(library_features)!r}; write division as mul+recip); "
+                "an empty clause means terminal-only"
+            )
+        if not any(operators <= clause for operators in operator_sets):
+            raise ValueError(
+                f"PySINDy hole {hole.id!r} operator clause {sorted(clause)!r} "
+                "admits no operator-bearing column in config.terms as a whole"
+            )
+
+
 def _filter_for_holes(
     sketch: Sketch,
     remaining: list[tuple[str, str | None]],
@@ -191,6 +223,7 @@ def compile_for_pysindy(
     pin_fingerprints = pinned_fingerprints(sketch)
     config_keys = _config_law_keys(config_terms)
     anchor_keys = _assert_anchors_representable(sketch, config_keys)
+    _assert_operator_clauses_representable(sketch, config_terms)
     remaining, dropped = _exclude_pinned(
         sketch, config_terms, config_keys, pin_fingerprints
     )

@@ -38,13 +38,11 @@ model.fit(dataset)
 
 # 4. Inspect the result.
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best reward: {model.best_score_:.4f}")
 
 # 5. Visualize (universal + DISCOVER reward/entropy_loss/baseline plots)
 
 out_dir = Path(__file__).parent / "out" / "07_discover"
-report = kd.VizEngine(output_dir=out_dir).render_all(
-    model.result_, algorithm=model.algorithm_, dataset=dataset
-)
+report = model.report(out_dir)
 print(f"Report: {report.report}")

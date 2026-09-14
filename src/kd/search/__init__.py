@@ -33,10 +33,15 @@ direct-import-sanctioned at its own module path.
 
 from __future__ import annotations
 
-from kd.core.platform.sketch_compile import SketchClauseLevels
+from kd.core.platform.sketch_compile import (
+    SKETCH_CLAUSES,
+    SketchClauseLevels,
+    used_clauses,
+)
 from kd.search.callbacks import (
     CheckpointCallback,
     EarlyStoppingCallback,
+    EvaluationBudgetCallback,
     LoggingCallback,
     RunnerCallback,
     VizDataCollector,
@@ -48,6 +53,12 @@ from kd.search.checkpoint_manifest import (
     CheckpointManifestEntry,
     CheckpointManifestError,
     load_checkpoint_manifest,
+)
+from kd.search.checkpoint_select import (
+    CheckpointSelectionError,
+    ResolvedCheckpoint,
+    eligible_checkpoint_iterations,
+    resolve_checkpoint,
 )
 from kd.search.descriptor import (
     InstrumentDescriptor,
@@ -111,6 +122,7 @@ from kd.search.run_dir import (
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 from kd.search.sketch_outcome import SketchOutcome, write_sketch_artifact
+from kd.search.trajectory import SearchTrajectoryCandidate
 
 __all__ = [
     "BEST_SCORE_KEY",
@@ -120,6 +132,7 @@ __all__ = [
     "CheckpointCallback",
     "CheckpointManifestEntry",
     "CheckpointManifestError",
+    "CheckpointSelectionError",
     "DEFAULT_RUNS_ROOT",
     "DISCOVERPlugin",
     "DLGAConfig",
@@ -129,6 +142,7 @@ __all__ = [
     "EarlyStoppingCallback",
     "EqGPTConfig",
     "EqGPTPlugin",
+    "EvaluationBudgetCallback",
     "ExperimentResult",
     "ExperimentRunner",
     "ITEREVENT_DIAGNOSTICS_KEYS",
@@ -157,12 +171,15 @@ __all__ = [
     "PySRPlugin",
     "RUNCAT_SCHEME",
     "RUNDIR_SCHEME",
+    "ResolvedCheckpoint",
     "RunDirPaths",
     "RunRecord",
     "RunResult",
     "RunnerCallback",
+    "SearchTrajectoryCandidate",
     "SGAConfig",
     "SGAPlugin",
+    "SKETCH_CLAUSES",
     "SearchAlgorithm",
     "Segmentation",
     "SketchClauseLevels",
@@ -174,17 +191,17 @@ __all__ = [
     "WallClockBudgetCallback",
     "append_catalog_row",
     "build_mini_table",
-
-
-
     "catalog_row_from_record",
     "catalog_row_from_result",
     "create_run_dir",
     "default_final_result",
+    "eligible_checkpoint_iterations",
     "finalize_run_dir",
     "load_checkpoint_manifest",
     "new_run_id",
+    "resolve_checkpoint",
     "run_id_of_run_dir",
     "tool_schema",
+    "used_clauses",
     "write_sketch_artifact",
 ]

@@ -40,6 +40,7 @@ _NATIVE_OPERATOR_FEATURES = {
     "^2": {"n2"},
     "^3": {"n3"},
 }
+_GENERABLE_OPERATOR_FEATURES = frozenset().union(*_NATIVE_OPERATOR_FEATURES.values())
 _IR_OPERATOR_MAP = {
     "add": ("+", 2),
     "sub": ("-", 2),
@@ -268,6 +269,29 @@ def _assert_feasible(sketch: Sketch, config: SGAConfig, default_kept: bool) -> N
         )
 
 
+def _assert_operator_clauses_generable(sketch: Sketch) -> None:
+    for hole in sketch.holes:
+        clause = hole.constraint.operators
+        if not clause:
+            continue
+        unknown = clause - _GENERABLE_OPERATOR_FEATURES
+        if unknown:
+            raise ValueError(
+                f"SGA hole {hole.id!r} operator clause names {sorted(unknown)!r}, "
+                "which SGA cannot generate (its operators emit only "
+                f"{sorted(_GENERABLE_OPERATOR_FEATURES)!r}; write division as "
+                "mul+recip); an empty clause means terminal-only"
+            )
+        if not any(
+            features <= clause for features in _NATIVE_OPERATOR_FEATURES.values()
+        ):
+            raise ValueError(
+                f"SGA hole {hole.id!r} operator clause {sorted(clause)!r} admits "
+                "none of the operators SGA generates as a whole (division needs "
+                "both mul and recip)"
+            )
+
+
 def _narrow_vars(
     sketch: Sketch,
     variables: tuple[str, ...],
@@ -462,6 +486,7 @@ def compile_for_sga(
     )
     anchored_keys, anchor_features = _parse_anchors(sketch, variables, default_key)
     _assert_feasible(sketch, config, default_kept)
+    _assert_operator_clauses_generable(sketch)
 
     dropped: list[tuple[str, str]] = []
     if default_drop is not None:

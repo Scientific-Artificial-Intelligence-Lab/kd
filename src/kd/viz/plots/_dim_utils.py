@@ -7,6 +7,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
+    from matplotlib.figure import Figure
+
     from kd.data.schema import PDEDataset
 
 
@@ -76,9 +78,30 @@ def _imshow_extent_for_spatial_axes(
         dtype=np.float64,
     )
     extent = (
-        float(h_coords[0]),
-        float(h_coords[-1]),
-        float(v_coords[0]),
-        float(v_coords[-1]),
+        float(h_coords[0] - _half_cell(h_coords)),
+        float(h_coords[-1] + _half_cell(h_coords)),
+        float(v_coords[0] - _half_cell(v_coords)),
+        float(v_coords[-1] + _half_cell(v_coords)),
     )
     return extent, horizontal_axis, vertical_axis
+
+
+def _half_cell(coords: NDArray[np.floating]) -> float:
+    return float(coords[1] - coords[0]) / 2 if len(coords) > 1 else 0.5
+
+
+def _annotate_spatial_slice(fig: Figure, dataset: PDEDataset, notes: list[str]) -> None:
+    fixed = []
+    for name in dataset.spatial_axes[2:]:
+        coords = dataset.get_coords(name)
+        index = len(coords) // 2
+        fixed.append(f"{name}={float(coords[index]):.6g} (index {index})")
+    if fixed:
+        note = "Spatial slice: " + ", ".join(fixed)
+        title = fig.get_suptitle()
+        fig.suptitle(f"{title}\n{note}" if title else note)
+
+
+        if not fig.get_constrained_layout():
+            fig.tight_layout()
+        notes.append(note)

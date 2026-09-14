@@ -16,11 +16,20 @@ knowledge into a first-class task object:
                     operators, fields, axes).
 
 The exit is certified: ``result_.sketch_outcome.solution`` is only published
-when the discovered law satisfies every clause (see ``.verdict``); otherwise
-the run reports the best candidate and the reason instead of overclaiming.
+when the discovered law satisfies every clause (see ``.verdict``) AND fits the
+data on the platform's own footing within the fit's ``verify`` policy, which
+defaults to ``kd.SKETCH_EXIT_VERIFY`` (NMSE <= 0.05); otherwise the run reports
+the best candidate and the reason instead of overclaiming.
 
 Here we pin the advection term of Burgers u_t = -1.0*u*u_x + 0.1*u_xx and
-leave one order-2 hole, on SGA - the backend with a native compiler: it
+leave one order-2 hole, on SGA - one of the two backends with their own sketch
+compiler (PySINDy is the other): SGA narrows the search's variable and operator
+pools at the source, and a structural predicate rejects the composite shapes
+that still slip past the narrowed pools, so the search budget concentrates on
+the admissible space. The same Sketch object runs on PySINDy unchanged - it
+enforces the same three generation-level clauses (derivative order, operator
+set, field/axis set) by filtering its explicit term library, provided that
+library already lists the pinned term and the candidates that may fill the hole.
 narrows the search's variable and operator pools at the source, and a
 structural predicate rejects the composite shapes that still slip past the
 narrowed pools, so the search budget concentrates on the admissible space.
@@ -29,15 +38,16 @@ Run: python examples/21_sketch_discovery.py
 """
 
 import kd
-from kd.core.equation.sketch import (
+from kd.core.expr import to_sympy
+from kd.core.equation import (
     LhsSpec,
     PinnedTerm,
     Sketch,
     SketchMatchPolicy,
     TermConstraint,
     TermHole,
-    TermVocabulary,
 )
+from kd.core.expr import TermVocabulary
 from kd.data.synthetic import generate_burgers_data
 
 dataset = generate_burgers_data(nx=64, nt=51, nu=0.1, seed=0)
@@ -78,11 +88,17 @@ assert outcome is not None
 print("Sketch: u_t = -1.0*u*u_x + [1..2 terms, order <= 2]")
 print("Truth: u_t = -1.0*u*u_x + 0.1*u_xx")
 if outcome.solution is not None:
-    print(f"Discovered: {kd.law_signature(outcome.solution).terms}")
-    print(f"Certified: {outcome.verdict is not None and outcome.verdict.overall}")
+    print(f"Discovered: {outcome.solution}")
+    print(f"Certified: {outcome.solution is not None}")
+    print(" (= every sketch clause was honoured AND the whole law")
+    print(" fits the data on the platform footing, within the")
+    print(" SKETCH_EXIT_VERIFY threshold; it is still NOT a claim")
+    print(" that the pinned coefficient was the right physics)")
+    if outcome.full_verify is not None:
+        print(f"Fit NMSE: {outcome.full_verify.nmse:.3e}")
     print("Pinned coefficient restored exactly:")
     for term_ir, coefficient in outcome.solution.terms:
-        print(f" {term_ir}: {coefficient.value:+.6f}")
+        print(f" {to_sympy(term_ir)}: {coefficient.value:+.6f}")
 else:
     print(f"Not certified: {outcome.failure or 'verdict False'}")
     print("Best candidate and per-clause verdict stay available:")

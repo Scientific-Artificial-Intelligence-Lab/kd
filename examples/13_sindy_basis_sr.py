@@ -16,6 +16,7 @@ Run: python examples/13_sindy_basis_sr.py
 
 import numpy as np
 
+from kd.core.expr import to_sympy
 from kd.search.sindy import SINDyRegressor
 
 # Synthetic ground truth: y = 2.0*sin(x1) - 3.0*(x1*x2), exact (no noise).
@@ -35,9 +36,9 @@ model.fit(X, y, LIBRARY)
 y_hat = model.predict(X)
 
 print()
-print(f"Selected: {model.selected_terms_}")
+print(f"Selected: {[str(to_sympy(term)) for term in model.selected_terms_]}")
 print(f"Coefficients: {np.asarray(model.coefficients_).round(4).tolist()}")
-print(f"Expression: {model.expression_}")
+print(f"Expression: {to_sympy(model.expression_)}")
 print(f"NMSE: {model.nmse_:.6g}")
 print(f"Predictions: shape={y_hat.shape}, finite={np.isfinite(y_hat).all()}")
 

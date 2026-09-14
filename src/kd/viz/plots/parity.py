@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from kd.viz._result_data import _fit_target_label, _sketch_fit_note
+from kd.viz.axes import _get_axes
 from kd.viz.style import style_context
 
 if TYPE_CHECKING:
@@ -19,10 +21,11 @@ logger = logging.getLogger(__name__)
 
 def plot_parity(
     result: ExperimentResult,
-    ax: Axes,
+    ax: Axes | None = None,
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
+    ax = _get_axes(ax, style)
     warnings: list[str] = []
 
     actual = result.actual.detach().cpu().numpy()
@@ -68,5 +71,11 @@ def plot_parity(
         ax.set_xlabel("Actual")
         ax.set_ylabel("Predicted")
         ax.set_title("Parity Plot")
+        note = _sketch_fit_note(result)
+        if note is not None:
+            ax.set_xlabel(f"Actual ({_fit_target_label(result)})")
+            ax.set_ylabel(f"Predicted ({_fit_target_label(result)})")
+            ax.set_title("Parity Plot (search fit)")
+            warnings.append(note)
 
     return warnings

@@ -74,6 +74,9 @@ analysed in the paper above), with permission of the authors:
 The EqGPT search engine in this product is an independent
 re-implementation; only the datasets above are bundled from the EqGPT
 project. The pretrained GPT proposer weights (PDEGPT_wave_breaking.pt,
-~152 MB) are distributed separately by the authors; the `eqgpt` search
-plugin resolves them at runtime from an asset directory (see
-KD_EQGPT_ASSET_DIR in src/kd/_assets/data/DATASETS.md).
+~152 MB) and the per-case wave-breaking surrogate checkpoints are not
+part of this package: they are redistributed with permission of the
+authors on the Hugging Face Hub (timeoutHao/KD-data, pinned revision,
+sha256-verified), and the `eqgpt` search plugin downloads them on first
+use, or reads a local copy named by KD_EQGPT_ASSET_DIR /
+KD_V1_WAVE_ASSETS (see src/kd/_assets/data/DATASETS.md).

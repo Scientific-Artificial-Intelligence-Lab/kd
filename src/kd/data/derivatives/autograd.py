@@ -95,6 +95,8 @@ class AutogradProvider(DerivativeProvider):
         expression: Tensor,
         axis: str,
         order: int,
+        *,
+        is_periodic: bool | None = None,
     ) -> Tensor:
 
         if not isinstance(order, int):

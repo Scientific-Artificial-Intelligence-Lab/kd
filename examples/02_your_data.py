@@ -64,6 +64,6 @@ model = kd.Model(
 model.fit(dataset)
 
 print()
-print(f"Discovered: {model.best_expr_}")
+print(f"Discovered: {model.result_.equation}")
 print(f"Best AIC: {model.best_score_:.4f}")
 print(f"Ground truth: {dataset.ground_truth}")

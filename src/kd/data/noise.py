@@ -6,6 +6,8 @@ from typing import Literal
 
 import torch
 
+from kd.data.schema import AxisInfo, FieldData, PDEDataset
+
 
 
 NOISE_SCALE_STD = "std"
@@ -77,3 +79,41 @@ def discover_unnormalized(
     else:
         sigma = level * values.abs().max()
     return values + sigma * noise
+
+
+def add_noise(dataset: PDEDataset, level: float, *, seed: int) -> PDEDataset:
+    if dataset.axes is None or dataset.fields is None:
+        raise ValueError(
+            f"add_noise: dataset {dataset.name!r} carries no field payload"
+        )
+    axes = {
+        name: AxisInfo(
+            name=info.name,
+            values=info.values.clone(),
+            is_periodic=info.is_periodic,
+            allow_nan=info.allow_nan,
+        )
+        for name, info in dataset.axes.items()
+    }
+    fields = {
+        name: FieldData(
+            name=field.name,
+            values=xu2020_relative(field.values, level, seed=seed + k),
+            allow_nan=field.allow_nan,
+        )
+        for k, (name, field) in enumerate(dataset.fields.items())
+    }
+    return PDEDataset(
+        name=dataset.name,
+        task_type=dataset.task_type,
+        topology=dataset.topology,
+        axes=axes,
+        axis_order=None if dataset.axis_order is None else list(dataset.axis_order),
+        fields=fields,
+        lhs_field=dataset.lhs_field,
+        lhs_axis=dataset.lhs_axis,
+        lhs_order=dataset.lhs_order,
+        noise_level=level,
+        ground_truth=dataset.ground_truth,
+        source=dataset.source,
+    )

@@ -8,7 +8,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz._result_data import (
+    _fit_target_label,
+    _has_reduced_target,
+    _sketch_fit_note,
+)
 from kd.viz.axes import integer_ticks
+from kd.viz.plots._dim_utils import _annotate_spatial_slice
 from kd.viz.plots._field_panels import (
     _RESIDUAL_SIGN,
     _heatmap_panel,
@@ -53,10 +59,10 @@ def plot_pde_residual_field(
 
 
 
-
-
-
-    lhs_label = result.lhs_label
+    lhs_label = "reduced target" if _has_reduced_target(result) else result.lhs_label
+    note = _sketch_fit_note(result)
+    if note is not None:
+        warnings.append(note)
 
 
     if dataset is not None and _has_axis_info(dataset):
@@ -70,6 +76,10 @@ def plot_pde_residual_field(
                 lhs_label,
                 infer_grid=infer_grid,
             )
+            if note is not None:
+                fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
+                fig.tight_layout(rect=(0, 0, 1, 0.92))
+            _annotate_spatial_slice(fig, dataset, warnings)
         return fig, warnings
 
 
@@ -125,6 +135,9 @@ def plot_pde_residual_field(
 
         fig.tight_layout()
 
+    if note is not None:
+        fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.92))
     return fig, warnings
 
 

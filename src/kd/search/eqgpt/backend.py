@@ -9,6 +9,7 @@ from typing import Final, Protocol, cast, runtime_checkable
 import torch
 from torch import Tensor
 
+from kd.data.remote import EQGPT_WEIGHTS_FILENAME, fetch_eqgpt_weights
 from kd.search.eqgpt.gpt import EqGPT, GPTConfig, adapt_pretrained_state_dict
 
 
@@ -18,7 +19,7 @@ ASSET_ENV_VAR: Final[str] = "KD_EQGPT_ASSET_DIR"
 
 
 
-DEFAULT_WEIGHTS_FILENAME: Final[str] = "PDEGPT_wave_breaking.pt"
+DEFAULT_WEIGHTS_FILENAME: Final[str] = EQGPT_WEIGHTS_FILENAME
 
 
 @runtime_checkable
@@ -157,7 +158,7 @@ def resolve_asset_path(
     *,
     weights_path: Path | None = None,
     asset_dir: Path | None = None,
-    filename: str = DEFAULT_WEIGHTS_FILENAME,
+    offline: bool = False,
 ) -> Path:
     if weights_path is not None:
         if not weights_path.exists():
@@ -173,15 +174,10 @@ def resolve_asset_path(
     else:
         env_value = os.environ.get(ASSET_ENV_VAR)
         if not env_value:
-            raise FileNotFoundError(
-                "pretrained EqGPT weights are not distributed with kd and no "
-                f"asset source was given. Set {ASSET_ENV_VAR} to a directory "
-                f"holding gpt_model/{filename}, or pass weights_path/asset_dir "
-                "explicitly to RealGPTBackend.from_assets."
-            )
+            return fetch_eqgpt_weights(offline=offline)
         source, label = Path(env_value), f"${ASSET_ENV_VAR}"
 
-    candidate = source / "gpt_model" / filename
+    candidate = source / "gpt_model" / DEFAULT_WEIGHTS_FILENAME
     if not candidate.exists():
         raise FileNotFoundError(
             f"pretrained EqGPT weights not found at {candidate} (source: "

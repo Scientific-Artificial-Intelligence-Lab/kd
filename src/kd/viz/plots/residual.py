@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from kd.viz._result_data import _fit_target_label, _sketch_fit_note
 from kd.viz.axes import integer_ticks
 from kd.viz.plots._field_panels import (
     _RESIDUAL_PERCENTILE,
@@ -44,6 +45,12 @@ def plot_residual(
         fig, axes_arr = plt.subplots(1, 2, figsize=(12, 5), dpi=_DEFAULT_DPI)
         ax_hist: Axes = axes_arr[0]
         ax_spatial: Axes = axes_arr[1]
+        note = _sketch_fit_note(result)
+        if note is not None:
+            fig.suptitle(
+                f"Search-fit residuals: {_fit_target_label(result)}", fontsize=11
+            )
+            warnings.append(note)
 
         if residuals is None:
             warnings.append("No residuals available; skipping residual plot")

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from kd.data.remote._hf_client import KD_HUB_REPO_ID
 from kd.data.remote._loaders import (
     load_llm4ed_fisher,
     load_llm4ed_fisher_nonlinear,
@@ -44,7 +45,7 @@ _LLM4ED_REMOTE_SOURCE = (
     "via Spac1ly/KnowledgeDiscover; mirrored at timeoutHao/KD-data"
 )
 _LLM4ED_REMOTE_LICENSE = "MIT (Spac1ly/KnowledgeDiscover public dataset)"
-_LLM4ED_REMOTE_REPO_ID = "timeoutHao/KD-data"
+_LLM4ED_REMOTE_REPO_ID = KD_HUB_REPO_ID
 _LLM4ED_REMOTE_REVISION = "6c7dbe4f032e14fea2194644b09e74a4f254dd42"
 
 
@@ -139,8 +140,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         axes=_AXES_XT,
         fmt="mat",
         source=(
-            f"{_EQGPT_SOURCE}; bundled "
-            "_assets/data/eqgpt_convection_diffusion.mat"
+            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_convection_diffusion.mat"
         ),
         license=_EQGPT_LICENSE,
         tier=_BUILTIN_TIER,
@@ -167,9 +167,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         lhs=None,
         axes=("x", "y"),
         fmt="xlsx",
-        source=(
-            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_eitech.xlsx"
-        ),
+        source=(f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_eitech.xlsx"),
         license=_EQGPT_LICENSE,
         tier=_BUILTIN_TIER,
         tags=("eqgpt", "steady", "homogeneous", "scattered"),
@@ -182,9 +180,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         lhs=None,
         axes=("x", "y"),
         fmt="xlsx",
-        source=(
-            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_smile.xlsx"
-        ),
+        source=(f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_laplacian_smile.xlsx"),
         license=_EQGPT_LICENSE,
         tier=_BUILTIN_TIER,
         tags=("eqgpt", "steady", "homogeneous", "scattered"),
@@ -197,9 +193,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         lhs=None,
         axes=("x", "y"),
         fmt="xlsx",
-        source=(
-            f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_poisson_disk.xlsx"
-        ),
+        source=(f"{_EQGPT_SOURCE}; bundled _assets/data/eqgpt_poisson_disk.xlsx"),
         license=_EQGPT_LICENSE,
         tier=_BUILTIN_TIER,
         tags=("eqgpt", "steady", "homogeneous", "scattered"),

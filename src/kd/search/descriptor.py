@@ -203,16 +203,40 @@ def mode_for_topology(
     return matches[0] if matches else None
 
 
+def sketch_eligible_modes(
+    descriptor: InstrumentDescriptor,
+    sketch: Sketch,
+    *,
+    sketch_lower_owner: Literal["platform", "native"],
+) -> tuple[InstrumentMode, ...]:
+    return tuple(
+        mode
+        for mode in descriptor.modes
+        if Form.EVOLUTION in mode.forms
+        if mode.lhs_orders is None or sketch.lhs_spec.order in mode.lhs_orders
+        if not (mode.provider_kind == "none" and sketch_lower_owner == "platform")
+    )
+
+
 def assert_sketch_supported(
     descriptor: InstrumentDescriptor,
     sketch: Sketch,
     *,
     algorithm: str,
+    sketch_lower_owner: Literal["platform", "native"],
 ) -> None:
+    modes = sketch_eligible_modes(
+        descriptor, sketch, sketch_lower_owner=sketch_lower_owner
+    )
+    if not modes:
+        raise ValueError(
+            f"algorithm {algorithm!r} has no mode that can run an evolution "
+            f"sketch with LHS order {sketch.lhs_spec.order}"
+        )
     used = used_clauses(sketch)
     offending = [
         (mode.name, clause, mode.sketch.level(clause))
-        for mode in descriptor.modes
+        for mode in modes
         for clause in SKETCH_CLAUSES
         if clause in used
         if mode.sketch.level(clause) == "unsupported"

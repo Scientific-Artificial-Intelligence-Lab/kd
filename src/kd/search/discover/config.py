@@ -274,10 +274,13 @@ class DiscoverConfig:
     beforehand.
     """
     library: LibraryConfig = field(default_factory=_default_library_config)
-    """Ordered vocabulary of tokens that candidate terms are built from, defaulting to
-    ``["u", "u_x", "u_xx", "u_xxx"]``. Each term is a product of tokens drawn from
-    this list, and the ordering matters: one of the mutation operators shifts a token
-    to an adjacent entry.
+    """Operator/terminal table the controller samples expression trees from. It
+    carries three lists: ``operators`` (the function set, default ``["add",
+    "mul", "sub", "div", "sin", "cos", "diff_x", "diff2_x"]``), ``state_vars``
+    (default ``["u"]``) and ``coord_vars`` (default ``["x", "t"]``). ``Library``
+    lays the tokens out in the order coord_vars, state_vars, operators, and that
+    order fixes the token indices the controller's logits and the sampling priors
+    address.
     """
     min_length: int = DEFAULT_MIN_LENGTH
     """Minimum length of a sampled expression, in tokens. The sampler is forbidden from
@@ -285,10 +288,10 @@ class DiscoverConfig:
     out shorter is rejected before evaluation.
     """
     max_length: int = DEFAULT_MAX_LENGTH
-    """Maximum number of tokens in a sampled sentence, counting the pinned
-    ``start_words`` prefix; sampling stops there if no end token is drawn first. It
-    must exceed ``len(start_words)`` and stay below the model's context length, and
-    the default 49 is one below the pretrained context.
+    """Maximum number of tokens in a sampled expression tree, default 15. The
+    length prior forbids any operator that could not still finish the tree within
+    this budget, so a sample never exceeds it; the same bound also caps the
+    complexity of the frontier rows the plugin publishes.
     """
     batch_size: int = DEFAULT_BATCH_SIZE
     """Number of candidate expressions sampled per search iteration, and the batch the
