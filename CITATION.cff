@@ -6,7 +6,7 @@ authors:
   - family-names: Mao
     given-names: Hao
     affiliation: Scientific Artificial Intelligence Lab
-version: 0.8.0
+version: 0.8.1
 license: Apache-2.0
 repository-code: "https://github.com/Scientific-Artificial-Intelligence-Lab/kd"
 url: "https://scientific-artificial-intelligence-lab.github.io/kd/"

@@ -545,6 +545,9 @@ def load_kdv(
     Equation: u_t = -u * u_x - 0.0025 * u_xxx
     Data shape: (256, 201) — 256 spatial points, 201 time points.
 
+    The bundled PINNs benchmark uses periodic x on [-1, 1). The original
+    512-point field is sampled at every second spatial point by this loader.
+
     Loads .mat file: KdV_equation.mat
     Keys: x (spatial), tt (time), uu (solution)
 
@@ -606,7 +609,7 @@ def load_kdv(
         task_type=TaskType.PDE,
         topology=DataTopology.GRID,
         axes={
-            _AXIS_X: AxisInfo(name=_AXIS_X, values=x, is_periodic=False),
+            _AXIS_X: AxisInfo(name=_AXIS_X, values=x, is_periodic=True),
             _AXIS_T: AxisInfo(name=_AXIS_T, values=t, is_periodic=False),
         },
         axis_order=[_AXIS_X, _AXIS_T],
@@ -624,6 +627,9 @@ def load_burgers(
 
     Equation: u_t = -u * u_x + nu * u_xx (with nu typically 0.1)
     Data shape: (256, 201) — 256 spatial points, 201 time points.
+
+    The bundled Deep Hidden Physics Models sine benchmark uses periodic x
+    on [-8, 8), without a duplicated right endpoint.
 
     Loads .mat file: Burgers_equation.mat
     Keys: x (1, nx), t (1, nt), usol (nx, nt)
@@ -673,7 +679,7 @@ def load_burgers(
         task_type=TaskType.PDE,
         topology=DataTopology.GRID,
         axes={
-            _AXIS_X: AxisInfo(name=_AXIS_X, values=x, is_periodic=False),
+            _AXIS_X: AxisInfo(name=_AXIS_X, values=x, is_periodic=True),
             _AXIS_T: AxisInfo(name=_AXIS_T, values=t, is_periodic=False),
         },
         axis_order=[_AXIS_X, _AXIS_T],

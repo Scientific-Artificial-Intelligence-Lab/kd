@@ -11,6 +11,37 @@ also published on PyPI and as a GitHub Release carrying longer notes.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-15
+
+### Added
+
+- `kd-agent skill install`: copies the packaged KD workflow skill
+  (`skills/kd/SKILL.md`, a step-by-step checklist for a coding agent writing
+  Python against an installed `kd`: inspect and load the data, preview, choose
+  under the current directory; `--to` picks another directory and `--force`
+  overwrites. It works on a base install without the `agent` extra. The public
+  repository carries the same file at `skills/kd/SKILL.md`.
+
+### Fixed
+
+- **Breaking:** `load_burgers()` and `load_kdv()` now declare the periodic
+  spatial boundaries used to generate their bundled data. This corrects
+  forward reconstruction, changes boundary derivative estimates and dataset
+  fingerprints, and requires new runs when using the corrected defaults
+  instead of resuming checkpoints tied to the previous dataset identity.
+- Field-reconstruction reports now disclose periodic boundaries or endpoints
+  fixed at their initial values. Refreshed published examples retain their
+  original search equations and metrics and identify corrected reconstructions.
+
+### Documentation
+
+- Revised the SAIL README with an earlier quick start, a PyPI badge and a
+  Burgers discovery animation. Installation and controller workflows have
+  dedicated documentation pages.
+- Refreshed historical reconstruction reports while preserving their original
+  search results, and clarified the limitations of the saved PySR and DISCOVER
+  examples at their report links.
+
 ## [0.8.0] - 2026-09-15
 
 The first release on PyPI. The distribution is named `sail-kd` (`pip install sail-kd`; PyPI does not allow the name `kd`), the import name stays `kd`, and the console script stays `kd-agent`.

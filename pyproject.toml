@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sail-kd"
-version = "0.8.0"
+version = "0.8.1"
 description = "KD — An open-source platform for knowledge discovery, powered by the Scientific Artificial Intelligence Lab (SAIL)."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -151,7 +151,7 @@ where = ["src", "pdeagent/src"]
 # Kept in step with pdeagent/pyproject.toml (package-data): the controller's
 # instrument cards must ride the root wheel too, or a non-editable root install
 # assembles its first SKILL.md from an empty glob (arch-audit WIRE-02).
-"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md"]
+"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md", "_assets/skills/*/*.md"]
 
 [tool.pytest.ini_options]
 # Two roots since 2026-08-18: the controller's tests moved with it into

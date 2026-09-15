@@ -136,6 +136,21 @@ def _integration_lhs_warning(
     )
 
 
+def _boundary_notes(dataset: PDEDataset) -> list[str]:
+    assert dataset.axes is not None
+    notes = []
+    for name in dataset.spatial_axes:
+        if dataset.axes[name].is_periodic:
+            notes.append(f"Integration boundary on '{name}': periodic.")
+        else:
+            notes.append(
+                f"Integration boundary on '{name}': both endpoints are fixed "
+                "at their initial values. Time-dependent observed boundary "
+                "values are not used; Neumann and Robin boundaries are not supported."
+            )
+    return notes
+
+
 def build_integration_result(
     result: ExperimentResult,
     dataset: PDEDataset,
@@ -164,7 +179,10 @@ def build_integration_result(
         lhs_warning = _integration_lhs_warning(result, dataset)
         if lhs_warning is not None:
             return IntegrationResult(success=False, warning=lhs_warning), notes
-        return integrate_pde(rhs, dataset), notes
+        integrated = integrate_pde(rhs, dataset)
+        if integrated.predicted_field is not None:
+            notes.extend(_boundary_notes(dataset))
+        return integrated, notes
     except Exception as exc:
         return (
             IntegrationResult(

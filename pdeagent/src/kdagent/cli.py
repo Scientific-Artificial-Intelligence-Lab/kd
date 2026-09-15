@@ -8,6 +8,7 @@ import json
 import logging
 import sys
 import tempfile
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kd-agent")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("setup", help="configure a model endpoint and API key")
+    skill = commands.add_parser("skill", help="install the KD Python workflow skill")
+    _skill_parser(skill)
     run = commands.add_parser("run", help="discover an equation in one run")
     chat = commands.add_parser("chat", help="discuss discovery interactively")
     run.add_argument(
@@ -66,6 +69,36 @@ def _parser() -> argparse.ArgumentParser:
             "budget (minimum 60 seconds). This does not cap the whole conversation.",
         )
     return parser
+
+
+def _skill_parser(parser: argparse.ArgumentParser) -> None:
+    commands = parser.add_subparsers(dest="skill_command", required=True)
+    install = commands.add_parser("install", help="copy the packaged KD workflow skill")
+    install.add_argument("--to", type=Path, default=Path(".claude") / "skills")
+    install.add_argument(
+        "--force", action="store_true", help="overwrite different content"
+    )
+
+
+def _install_skill(directory: Path, *, force: bool) -> int:
+    target = directory / "kd" / "SKILL.md"
+    try:
+        content = files("kdagent").joinpath("_assets/skills/kd/SKILL.md").read_bytes()
+        if target.exists():
+            if target.read_bytes() == content:
+                sys.stdout.write(f"{target}\n")
+                return 0
+            if not force:
+                raise FileExistsError(
+                    f"{target} exists with different content; use --force to overwrite"
+                )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    except OSError as exc:
+        sys.stderr.write(f"kd-agent: {exc}\n")
+        return 2
+    sys.stdout.write(f"{target}\n")
+    return 0
 
 
 def _load_options(value: str) -> dict[str, Any]:
@@ -182,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     parser = _parser()
     args = parser.parse_args(arguments if arguments else ["chat"])
+    if args.command == "skill":
+        return _install_skill(args.to, force=args.force)
     if args.command != "setup" and args.load_options is not None and args.data is None:
         parser.error("--load-options requires --data")
     if (
