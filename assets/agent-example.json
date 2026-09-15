@@ -1,0 +1,90 @@
+{
+  "description": "Composed checkpoint/resume walkthrough. Numerical results come from direct calls to the current controller tools; no language model was called.",
+  "recorded_at": "2026-09-15T03:52:21+00:00",
+  "kd_version": "0.8.0",
+  "source_commit": "653b47ee14b06d9fd2dce950ada7b5404d0734d3",
+  "dataset": "burgers",
+  "algorithm": "sga",
+  "segments": [
+    {
+      "label": "Initial search",
+      "run_id": "sga-20260915-035117-9bbf67",
+      "parameters": {
+        "generations": 2,
+        "population": 20
+      },
+      "seed": 0,
+      "law": {
+        "support": [
+          "mul(u_x, u)",
+          "diff_x(u_x)"
+        ],
+        "coefficients": [
+          -0.9996311752441972,
+          0.10054327359696878
+        ],
+        "lhs": {
+          "field": "u",
+          "axis": "t",
+          "order": 1
+        }
+      },
+      "nmse": 0.0004169835552206567,
+      "score": -21.53861065596808,
+      "score_kind": "AIC",
+      "generation_best_nmse": [
+        0.0004169835552206567,
+        0.0004169835552206567
+      ],
+      "record_hash": "e5dcb574f3ff0da42b5f87ca096db019def5dbf83a19c586506fe920bc6bc2b8",
+      "record_file_sha256": "9223348bfb571494b2cae9edb6446a0a94ae9d0e2acd7463e0215fb96bed22c1"
+    },
+    {
+      "label": "Resumed search",
+      "run_id": "sga-20260915-035132-d3bf85",
+      "parameters": {
+        "generations": 8,
+        "population": 20
+      },
+      "seed": 0,
+      "law": {
+        "support": [
+          "mul(u_x, u)",
+          "diff2_x(u)"
+        ],
+        "coefficients": [
+          -1.0000022081597977,
+          0.10018764586861012
+        ],
+        "lhs": {
+          "field": "u",
+          "axis": "t",
+          "order": 1
+        }
+      },
+      "nmse": 1.1178326311931064e-05,
+      "score": -28.776750720652373,
+      "score_kind": "AIC",
+      "generation_best_nmse": [
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05,
+        1.1178326311931064e-05
+      ],
+      "record_hash": "32c7ce12eb5a2b2ef6fb2219c742e922c167fbc4ef15163d887101201281b971",
+      "record_file_sha256": "4d30d79acc00a0bbc6640b7f486769d86ad0119023b212a56cc5a1932d970e11"
+    }
+  ],
+  "restored_checkpoint": {
+    "filename": "checkpoint_final.pt",
+    "iteration": 1,
+    "source_run_id": "sga-20260915-035117-9bbf67",
+    "reseed": false,
+    "checkpoint_sha256": "ffd93936bfc25d0c8c04ce0c5c356147166eca7b33b6090641419b2d166b6753"
+  },
+  "restore_verified_from": "completed run manifest lineage"
+}

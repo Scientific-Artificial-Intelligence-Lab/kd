@@ -1,0 +1,29 @@
+# KD
+
+> KD is a symbolic-regression platform for equation discovery from field observations and tabular data.
+
+The linked documentation describes installation, data loading, algorithm configuration and results. Algorithm pages combine shared method descriptions with generated parameter tables and worked examples.
+
+The PyPI distribution is `sail-kd`; Python code imports `kd`. After installation, `kd.instrument_schemas()` describes the algorithms and parameters available in that environment. Read the installation and data guides before running an example on a user's file.
+
+## Entry points
+
+- [Installation](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/): Python requirements, uv and pip commands, environment activation and optional components.
+- [Getting started](https://scientific-artificial-intelligence-lab.github.io/kd/start/): Installation, a first fit and your own data.
+- [User guide](https://scientific-artificial-intelligence-lab.github.io/kd/guide/): Data, algorithms, scores, visualization, checkpoints and batch runs.
+- [Experimental controller](https://scientific-artificial-intelligence-lab.github.io/kd/guide/controller/): Endpoint setup, data files, interactive searches and reports.
+- [Agent search example](https://scientific-artificial-intelligence-lab.github.io/kd/guide/agent-example/): A checkpoint/resume demonstration, results from both search segments and interactive requests.
+- [Architecture](https://scientific-artificial-intelligence-lab.github.io/kd/design/architecture/): The complete component diagram, package layers and execution order.
+- [Data loading](https://scientific-artificial-intelligence-lab.github.io/kd/data/shape/): Array construction, kd.load, kd.inspect_file, mappings, axes and left-hand sides.
+- [Algorithm overview](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/): Algorithm capabilities and links to their reference pages.
+- [API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/): Import locations, signatures and parameters.
+
+## Algorithms
+
+- [SGA-PDE](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/sga/)
+- [DLGA-PDE](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/dlga/)
+- [DISCOVER](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/discover/)
+- [EqGPT](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/eqgpt/)
+- [LLM4ED](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/llm4ed/)
+- [PySR](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysr/)
+- [PySINDy](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysindy/)

@@ -15,9 +15,10 @@
 
   /* The two letters of the name, wherever the mark appears. Cyan is the accent
      the header and the buttons already carry; lavender is the hero's own purple
-     lifted far enough to read. Two pairs: one for dark grounds (the hero, the
-     header bar, the drawer band, the homepage sidebar -- dark whatever scheme
-     the reader is in), one for this page's own ground. Within each pair the two
+     lifted far enough to read. Two pairs: one for dark grounds (the header bar
+     and the drawer band, dark whatever scheme the reader is in), one for this
+     page's own ground, which since 2026-09-01 is what the hero and the homepage
+     sidebar take as well. Within each pair the two
      hexes are matched on relative luminance (dark .515/.499, paper .107/.111),
      so neither letter recedes at 19px; both pairs clear 4.5:1 on their ground
      by a wide margin (5.8 to 9.6). */
@@ -25,6 +26,42 @@
   --kd-mark-d-dk: #c3b1f9;
   --kd-mark-k: #0e6763;
   --kd-mark-d: #6a45c0;
+
+  /* The first screen is light (2026-09-01 ruling). Every colour it used to
+     hard-code now lives here, so the band, the run card and the homepage's own
+     sidebar follow the reader's scheme instead of staying dark under both.
+     The dark values are unchanged, they moved to the ``slate`` block below.
+
+     Two grounds, both derived from the viridis ramp the field figures are
+     drawn in: the band sweeps plum to teal at the saturation of tinted paper,
+     the run card is white on top of it. Every ink below clears 4.5:1 on both
+     (the wordmark keeps its own pair, --kd-mark-k / --kd-mark-d above). Yellow
+     is the one viridis stop with no light-ground equivalent, #d8e219 on white
+     is 1.6:1, so the value a run produced is marked in the ramp's green
+     instead, darkened until it clears 5:1 on the band and on the card. */
+  --kd-hero-bg: linear-gradient(100deg, #efeaf7 0%, #f0eef8 46%, #e6f1f2 100%);
+  --kd-hero-wash: radial-gradient(120% 140% at 12% 0%, #46256b0d 0%, transparent 62%);
+  --kd-hero-grid-a: #46256b12;
+  --kd-hero-grid-b: #46256b0c;
+  --kd-hero-ink: var(--kd-void);
+  --kd-hero-eyebrow: #0e6763;
+  --kd-hero-tag: var(--kd-plum);
+  --kd-hero-lede: #4a4660;
+
+  --kd-card-bg: #ffffff;
+  --kd-card-border: #46256b29;
+  --kd-card-shadow: 0 1px 2px #1b103510, 0 10px 28px #1b103512;
+  --kd-read-label: #5f5c76;
+  --kd-read-accent: #0e6763;
+  --kd-read-value: #2b7230;
+  --kd-read-ink: var(--kd-void);
+  --kd-read-cap: #5d5975;
+
+  --kd-btn-ghost-border: #46256b3d;
+  --kd-btn-ghost-ink: var(--kd-plum);
+  --kd-btn-ghost-ink-hover: var(--kd-void);
+  --kd-focus: var(--kd-plum);
+
 
   --md-primary-fg-color: var(--kd-plum);
   --md-primary-fg-color--light: var(--kd-teal);
@@ -45,6 +82,31 @@
   --kd-slate: #a9a4bd;
   --kd-mark-k: var(--kd-mark-k-dk);
   --kd-mark-d: var(--kd-mark-d-dk);
+
+  /* The first screen as it was before 2026-09-01, value for value. */
+  --kd-hero-bg: linear-gradient(100deg, #1b1035 0%, #241947 46%, #17303f 100%);
+  --kd-hero-wash: radial-gradient(120% 140% at 12% 0%, #4401542e 0%, transparent 62%);
+  --kd-hero-grid-a: #ffffff0a;
+  --kd-hero-grid-b: #ffffff08;
+  --kd-hero-ink: #fbfaff;
+  --kd-hero-eyebrow: #8fd8d3;
+  --kd-hero-tag: #d5d0e6;
+  --kd-hero-lede: #c3bed8;
+
+  --kd-card-bg: #0f0a1fb8;
+  --kd-card-border: #ffffff1f;
+  --kd-card-shadow: none;
+  --kd-read-label: #8b85a8;
+  --kd-read-accent: #8fd8d3;
+  --kd-read-value: var(--kd-signal);
+  --kd-read-ink: #efedf7;
+  --kd-read-cap: #9a94b6;
+
+  --kd-btn-ghost-border: #ffffff40;
+  --kd-btn-ghost-ink: #e4e0f2;
+  --kd-btn-ghost-ink-hover: #fff;
+  --kd-focus: var(--kd-signal);
+
 }
 
 /* Wherever the name is spelled out, K and D carry these two. */
@@ -85,15 +147,13 @@ body, .md-typeset {
 
 .kd-hero {
   position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-top: -2.5rem;
+  width: auto;
+  margin: 0;
+  border-radius: .5rem;
   padding: 4.4rem 1.2rem 3.6rem;
   z-index: 1;
-  background:
-    radial-gradient(120% 140% at 12% 0%, #4401542e 0%, transparent 62%),
-    linear-gradient(100deg, #1b1035 0%, #241947 46%, #17303f 100%);
-  color: #efedf7;
+  background: var(--kd-hero-wash), var(--kd-hero-bg);
+  color: var(--kd-hero-ink);
   overflow: hidden;
 }
 
@@ -111,8 +171,8 @@ body, .md-typeset {
   position: absolute;
   inset: 0;
   background-image:
-    repeating-linear-gradient(90deg, #ffffff0a 0 1px, transparent 1px 46px),
-    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 46px);
+    repeating-linear-gradient(90deg, var(--kd-hero-grid-a) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(0deg, var(--kd-hero-grid-b) 0 1px, transparent 1px 46px);
   pointer-events: none;
 }
 
@@ -127,7 +187,7 @@ body, .md-typeset {
   font-size: .66rem;
   letter-spacing: .19em;
   text-transform: uppercase;
-  color: #8fd8d3;
+  color: var(--kd-hero-eyebrow);
   margin-bottom: 1.1rem;
 }
 
@@ -141,7 +201,7 @@ body, .md-typeset {
   line-height: 1.05;
   letter-spacing: -0.03em;
   margin: 0 0 .85rem;
-  color: #fbfaff;
+  color: var(--kd-hero-ink);
 }
 
 .kd-hero__mark {
@@ -149,10 +209,10 @@ body, .md-typeset {
   font-size: clamp(3rem, 6.5vw, 4.6rem);
 }
 
-/* The hero is dark under either colour scheme, so it takes the dark-ground
-   pair. The two letters are kerned tighter than the rest of the wordmark's
-   tracking so they read as one mark rather than as two initials. */
-.kd-hero { --kd-mark-k: var(--kd-mark-k-dk); --kd-mark-d: var(--kd-mark-d-dk); }
+/* The hero takes the ground pair of whichever scheme it is in, which is what
+   :root and the slate block already carry -- it needs no pair of its own. The
+   two letters are kerned tighter than the rest of the wordmark's tracking so
+   they read as one mark rather than as two initials. */
 .kd-hero__mark .kd-k { letter-spacing: -0.05em; }
 
 .kd-hero__tag {
@@ -162,23 +222,24 @@ body, .md-typeset {
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.3;
-  color: #d5d0e6;
+  color: var(--kd-hero-tag);
 }
 
 .md-typeset .kd-hero__lede {
   max-width: 38rem;
   font-size: .82rem;
   line-height: 1.75;
-  color: #c3bed8;
+  color: var(--kd-hero-lede);
   margin: 0 0 2.2rem;
 }
 
 /* the readout: one instrument resolving one equation */
 
 .kd-readout {
-  border: 1px solid #ffffff1f;
+  border: 1px solid var(--kd-card-border);
   border-radius: .55rem;
-  background: #0f0a1fb8;
+  background: var(--kd-card-bg);
+  box-shadow: var(--kd-card-shadow);
   backdrop-filter: blur(2px);
   padding: 1.15rem 1.3rem 1.25rem;
   max-width: 46rem;
@@ -196,7 +257,7 @@ body, .md-typeset {
   font-size: .64rem;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: #8b85a8;
+  color: var(--kd-read-label);
   margin-bottom: .85rem;
 }
 .kd-readout__bar > span {
@@ -209,8 +270,8 @@ body, .md-typeset {
   .kd-readout__bar > span { white-space: normal; }
 }
 
-.kd-readout__metric { color: #8fd8d3; }
-.kd-readout__metric b { color: var(--kd-signal); font-weight: 500; }
+.kd-readout__metric { color: var(--kd-read-accent); }
+.kd-readout__metric b { color: var(--kd-read-value); font-weight: 500; }
 
 /* The equation is what the strip is for, so it is set at heading scale rather
    than at the size of the run line above it. The lower bound keeps it inside an
@@ -219,7 +280,7 @@ body, .md-typeset {
   font-family: var(--kd-mono);
   font-size: clamp(1.1rem, 3.2vw, 1.9rem);
   line-height: 1.4;
-  color: #efedf7;
+  color: var(--kd-read-ink);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -227,10 +288,10 @@ body, .md-typeset {
   margin: .45rem 0 .2rem;
 }
 
-.kd-eq__lhs { color: #8fd8d3; }
-.kd-eq__op { color: #8b85a8; }
-.kd-eq__coef { color: var(--kd-signal); }
-.kd-eq__times { color: #8b85a8; margin: 0 .1em; }
+.kd-eq__lhs { color: var(--kd-read-accent); }
+.kd-eq__op { color: var(--kd-read-label); }
+.kd-eq__coef { color: var(--kd-read-value); }
+.kd-eq__times { color: var(--kd-read-label); margin: 0 .1em; }
 
 .kd-eq__term {
   animation: kd-term-in .55s cubic-bezier(.2, .7, .3, 1) backwards;
@@ -271,24 +332,12 @@ body, .md-typeset {
 .kd-readout__cap {
   font-size: .7rem;
   line-height: 1.65;
-  color: #9a94b6;
+  color: var(--kd-read-cap);
   margin-top: .55rem;
   max-width: 42rem;
 }
 
 .kd-hero__actions { margin-top: 2rem; display: flex; gap: .7rem; flex-wrap: wrap; }
-
-.kd-hero__cue {
-  position: absolute;
-  left: 50%;
-  bottom: 1.1rem;
-  transform: translateX(-50%);
-  font-family: var(--kd-mono);
-  font-size: .58rem;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: #6f6890;
-}
 
 .md-typeset .kd-btn {
   font-family: var(--kd-body);
@@ -303,180 +352,95 @@ body, .md-typeset {
 }
 .md-typeset .kd-btn--primary { background: var(--kd-teal); color: #06231f; }
 .md-typeset .kd-btn--primary:hover { background: #2ba9a3; transform: translateY(-1px); }
-.md-typeset .kd-btn--ghost { border-color: #ffffff40; color: #e4e0f2; }
-.md-typeset .kd-btn--ghost:hover { border-color: var(--kd-teal); color: #fff; }
-.md-typeset .kd-btn:focus-visible { outline: 2px solid var(--kd-signal); outline-offset: 3px; }
-
-/* ---------- homepage choreography ------------------------------------ */
-/* The first screen is the run and nothing else: no header, no sidebar, nothing
-   to read past. Scrolling dissolves it in place while the page below comes up
-   over it, and the navigation arrives with the page.
-
-   Everything here is behind a class ``home.js`` adds. The default -- no script,
-   or a reader who asked for less motion -- is the same page, static: the hero
-   scrolls away like any other block and the navigation is there from the start.
-   Nothing below may be the only thing making content visible. */
-
-html.kd-home--fx { --kd-p: 0; --kd-q: 0; }
-html.kd-home { --kd-bleed: 0px; --kd-bleed-right: 0px; }
-
-/* The page runs edge to edge here, so the sidebar sits against the left of the
-   window the way it does on the sites this layout follows, rather than at the
-   left of a centred 61rem grid with a white gutter beside it. The reading
-   width comes back below, per block. */
-html.kd-home .md-main__inner { max-width: none; margin: 0; }
-html.kd-home .md-content { min-width: 0; }
-html.kd-home .md-content__inner { max-width: none; padding: 0; }
-html.kd-home .md-content__inner::before { display: none; }
-
-html.kd-home .kd-hero { margin-top: 0; }
-
-/* Reach back across the sidebar column, which ``home.js`` measures. The
-   fallback is the ordinary breakout, correct whenever that column is zero. */
-html.kd-home .kd-hero {
-  width: auto;
-  margin-left: calc(-1 * var(--kd-bleed));
-  margin-right: calc(-1 * var(--kd-bleed-right));
-  padding-inline: 1.2rem;
+.md-typeset .kd-btn--ghost {
+  border-color: var(--kd-btn-ghost-border);
+  color: var(--kd-btn-ghost-ink);
 }
-/* Centred on the window, not on what is left of it beside the sidebar: on the
-   first screen the sidebar is not shown yet, and a hero centred behind an
-   invisible column reads as sitting off to one side. Without the choreography
-   the sidebar is there from the start, so then it does have to be allowed for. */
-html.kd-home .kd-hero__inner { max-width: 58rem; }
-html.kd-home:not(.kd-home--fx) .kd-hero { padding-left: calc(var(--kd-bleed) + 1.2rem); }
+.md-typeset .kd-btn--ghost:hover {
+  border-color: var(--kd-teal);
+  color: var(--kd-btn-ghost-ink-hover);
+}
+.md-typeset .kd-btn:focus-visible { outline: 2px solid var(--kd-focus); outline-offset: 3px; }
 
-/* Pinning the first screen only pays for itself where there is a sidebar to
-   reveal. Below that width the navigation lives behind the drawer button, and a
-   card this tall does not fit one phone screen anyway, so the hero is an
-   ordinary block that scrolls away. */
-@media screen and (min-width: 76.25em) {
-  html.kd-home--fx .kd-hero {
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding-block: 2.2rem;
-  }
+/* ---------- homepage ------------------------------------------------ */
+/* The static page keeps its card. home.js extends the same gradient across
+   the first screen and fades only that background as the reader scrolls. */
+.kd-hero:not(.kd-hero--compact) { padding: 2rem 1.4rem; }
+.kd-hero:not(.kd-hero--compact) .kd-hero__mark { font-size: 3rem; }
+.kd-hero:not(.kd-hero--compact) .kd-hero__lede {
+  margin-bottom: 1.2rem;
+  line-height: 1.6;
 }
-/* The width is explicit because the auto side margins that centre this also
-   turn off the cross-axis stretch it would otherwise get from the flex column,
-   which leaves it shrink-to-fit at its longest line -- wider than the window on
-   a narrow screen, and clipped by the hero's own overflow. */
-html.kd-home--fx .kd-hero__inner { width: 100%; will-change: opacity, transform; }
+.kd-hero:not(.kd-hero--compact) .kd-hero__actions { margin: 1.2rem 0; }
+.kd-readout--hero {
+  --kd-fig-h: 13rem;
+  max-width: min(100%, calc(var(--kd-fig-h) * var(--kd-fig-ar) + 2.6rem + 2px));
+}
+.kd-readout--hero .kd-readout__eq { font-size: clamp(1rem, 2.6vw, 1.55rem); }
+.kd-readout--hero .kd-readout__bar > span { white-space: normal; }
+.kd-hero + .kd-flow > h2:first-child { border-top: 0; }
 
-/* One screen holds the heading, the lede, the card and the buttons, so the
-   spacing between them is tighter here than in the block-in-a-page version the
-   same hero markup gets elsewhere. */
-html.kd-home .md-typeset .kd-hero__lede { margin-bottom: 1.5rem; }
-html.kd-home .kd-hero__eyebrow { margin-bottom: .8rem; }
-html.kd-home .kd-hero__actions { margin-top: 1.4rem; }
-html.kd-home .kd-readout { padding: .9rem 1.15rem 1rem; }
-html.kd-home .kd-readout__bar { margin-bottom: .55rem; }
-html.kd-home .kd-readout__eq { font-size: clamp(1rem, 2.6vw, 1.55rem); margin: .3rem 0 .15rem; }
-/* Tighter than the standalone card above: less padding, and a shorter field,
-   because here the buttons and the scroll cue have to fit under it. The card
-   width follows from both (see .kd-readout--hero). */
-html.kd-home .kd-readout--hero {
-  --kd-fig-h: min(30vh, 15rem);
-  max-width: min(58rem, calc(var(--kd-fig-h) * var(--kd-fig-ar, 2.7) + 2.3rem + 2px));
-}
-/* Below roughly 830px of window the one-screen budget stops covering the five
-   blocks at this spacing. Shrink the wordmark, close the gaps between the blocks
-   and set the lede on tighter leading rather than let the buttons fall past the
-   fold -- a 1366x768 laptop lands here, and so does a maximised browser on a
-   1440x900 screen once its own chrome is subtracted. The threshold is where the
-   full-size layout stops fitting, measured, not a round number -- and there are
-   three of them because Material scales the root font up at 100em and 125em of
-   width, which scales every rem in the hero with it. */
-@media screen and (max-height: 52em),
-       screen and (min-width: 100em) and (max-height: 60em),
-       screen and (min-width: 125em) and (max-height: 68em) {
-  html.kd-home .kd-readout--hero { --kd-fig-h: min(28vh, 15rem); }
-  /* The wordmark gives up the most here because it is the tallest block in the
-     hero and the only one whose size is decoration rather than reading. */
-  html.kd-home .kd-hero__mark { font-size: clamp(2.2rem, 4.4vw, 2.8rem); }
-  html.kd-home .kd-hero__tag { font-size: 1rem; margin-top: .3rem; }
-  html.kd-home .md-typeset .kd-hero__title { margin-bottom: .5rem; }
-  html.kd-home .md-typeset .kd-hero__lede { margin-bottom: .8rem; line-height: 1.6; }
-  html.kd-home .kd-hero__eyebrow { margin-bottom: .5rem; }
-  html.kd-home .kd-hero__actions { margin-top: .9rem; }
-  html.kd-home .kd-readout__cap { line-height: 1.5; }
-  /* Inside the card too, so the last few pixels come out of the padding rather
-     than out of the field: shrinking the figure here would narrow the card and
-     cost the caption another line, which is the opposite of a saving. */
-  html.kd-home .kd-readout { padding: .7rem 1.15rem .8rem; }
-  html.kd-home .kd-readout__bar { margin-bottom: .4rem; }
-  html.kd-home .kd-readout__eq { margin: .15rem 0 .1rem; }
-}
-
-/* The page below carries its own background out to the full width, so it hides
-   the hero as it arrives rather than sliding a narrow column over it. Both the
-   background and the content ramp with the scroll: the block comes up
-   translucent and the hero is visible dissolving underneath it. */
-html.kd-home .kd-flow {
-  position: relative;
-  z-index: 2;
-  padding: 0 1.2rem 1px;
-}
-html.kd-home .kd-flow::before {
+html.kd-home body { isolation: isolate; }
+html.kd-home body::before {
   content: "";
   position: absolute;
-  inset: 0 calc(-1 * var(--kd-bleed-right)) 0 calc(-1 * var(--kd-bleed));
-  background: var(--md-default-bg-color);
+  inset: 0 0 auto;
+  height: var(--kd-hero-end);
   z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--kd-hero-grid-a) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(0deg, var(--kd-hero-grid-b) 0 1px, transparent 1px 46px),
+    var(--kd-hero-wash), var(--kd-hero-bg);
 }
-html.kd-home--fx .kd-flow::before { opacity: calc(var(--kd-q) * 1.6); }
-html.kd-home--fx .kd-flow > * { opacity: calc((var(--kd-q) - 0.3) * 2.4); }
-/* The reading width, back inside a page that is otherwise edge to edge. */
-html.kd-home .kd-flow > * { max-width: 54rem; margin-inline: auto; }
-html.kd-home .kd-flow > .kd-figure--wide { max-width: 62rem; }
-/* The first heading would otherwise open right against the hero it replaced. */
-html.kd-home .kd-flow > h2:first-child { border-top: 0; margin-top: 0; padding-top: 3.4rem; }
-
-/* The header and the sidebar are the "more information" the scroll reveals --
-   but only where the sidebar exists. On a narrow screen the header bar carries
-   the drawer button, which is the only way to the navigation at all, so it
-   stays put and stays visible.
-
-   The sidebar itself is dark, in the hero's own palette: on this page it first
-   appears over the run card, and a paper-white panel would cut across it. */
+html.kd-home--fx body::before {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  opacity: var(--kd-hero-opacity);
+  will-change: opacity;
+}
+html.kd-home .kd-hero {
+  min-height: calc(100svh - 6.4rem);
+  display: flex;
+  align-items: center;
+  background: none;
+  border-radius: 0;
+  padding-block: 2rem;
+}
+html.kd-home .kd-hero::before,
+html.kd-home .kd-hero::after { display: none; }
+html.kd-home .kd-hero__inner { width: 100%; }
+html.kd-home .kd-hero__mark { font-size: clamp(3rem, 5vw, 4rem); }
+html.kd-home .kd-readout--hero { --kd-fig-h: min(27vh, 13rem); }
 @media screen and (min-width: 76.25em) {
-  /* Out of the flow, so the bar does not push the hero down while invisible. */
-  html.kd-home .md-header { position: fixed; inset: 0 0 auto 0; }
-  html.kd-home--fx .md-header { opacity: var(--kd-p); pointer-events: none; }
-  html.kd-home--fx.kd-home--past .md-header { pointer-events: auto; }
-
-  html.kd-home .md-sidebar--primary {
-    top: 0;
-    height: 100vh;
-    padding: 3.4rem .5rem 1rem 0;
-    background: #170f2d;
-    border-right: 1px solid #ffffff1a;
-    z-index: 6;
-  }
-  /* Material paints the sidebar title on the page background, to hide the
-     links scrolling under it. That background is the paper colour. */
-  html.kd-home .md-sidebar--primary .md-nav__title {
-    color: #efedf7;
-    background: #170f2d;
+  html.kd-home .md-nav--primary > .md-nav__title {
+    background: transparent;
     box-shadow: none;
   }
-  html.kd-home .md-sidebar--primary .md-nav__link {
-    color: #cfc9e4;
+  html.kd-home .kd-hero { padding-block: .8rem; }
+  html.kd-home .kd-hero__mark { font-size: 2.8rem; }
+  html.kd-home .kd-hero__eyebrow { margin-bottom: .7rem; }
+  html.kd-home .kd-hero__lede { max-width: 44rem; }
+  html.kd-home .kd-hero__actions { margin: .9rem 0; }
+  html.kd-home .kd-readout { padding: .75rem 1.15rem .85rem; }
+  html.kd-home .kd-readout--hero {
+    --kd-fig-h: min(23vh, 11rem);
+    max-width: min(100%, calc(var(--kd-fig-h) * var(--kd-fig-ar) + 2.3rem + 2px));
   }
-  html.kd-home .md-sidebar--primary .md-nav__link:is(:hover, :focus),
-  html.kd-home .md-sidebar--primary .md-nav__link--active { color: #8fd8d3; }
-  html.kd-home--fx .md-sidebar--primary {
-    opacity: calc(var(--kd-p) * var(--kd-p));
-    pointer-events: none;
-  }
-  html.kd-home--fx.kd-home--past .md-sidebar--primary { pointer-events: auto; }
+  html.kd-home .kd-readout__eq { font-size: 1.35rem; }
+}
+@media screen and (max-width: 44.9375em) {
+  html.kd-home .kd-hero { padding: 1.5rem .4rem 2rem; }
+  html.kd-home .kd-hero__eyebrow { letter-spacing: .1em; }
 }
 
 /* ---------- quick start ---------------------------------------------- */
+
+.md-typeset .kd-agent-prompt pre code {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
 
 .kd-step {
   font-family: var(--kd-mono);
@@ -567,6 +531,21 @@ html.kd-home .kd-flow > h2:first-child { border-top: 0; margin-top: 0; padding-t
   margin-bottom: .4rem;
 }
 .kd-card__body { font-size: .76rem; line-height: 1.7; color: var(--md-default-fg-color--light); }
+
+.kd-card__thumb--command {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  background: var(--kd-hero-wash), var(--kd-hero-bg);
+}
+.kd-card__thumb--command code {
+  padding: 0;
+  background: none;
+  color: var(--kd-hero-ink);
+  font-size: .7rem;
+  line-height: 1.8;
+  white-space: normal;
+}
 
 /* ---------- spec strip (generated from the descriptor) --------------- */
 
@@ -727,10 +706,10 @@ html.kd-home .kd-flow > h2:first-child { border-top: 0; margin-top: 0; padding-t
   .md-nav--primary > .md-nav__title::after { font-size: 1.5rem; }
 }
 
-/* The header is dark on every page, and so is the sidebar on the homepage, so
-   both take the light pair whatever colour scheme the reader is in. */
-.md-header,
-html.kd-home .md-sidebar--primary {
+/* The header is dark on every page, so it takes the light pair whatever colour
+   scheme the reader is in. The homepage sidebar is no longer in that list: it
+   carries the hero's ground now, which is the scheme's own. */
+.md-header {
   --kd-mark-k: var(--kd-mark-k-dk);
   --kd-mark-d: var(--kd-mark-d-dk);
 }
@@ -828,79 +807,7 @@ html.kd-home .md-sidebar--primary {
 .kd-api table:not([class]) th:first-child { width: 50%; }
 .kd-api table:not([class]) td:first-child { overflow-x: auto; }
 
-/* ---------- Layered architecture diagram -------------------------------- */
-/* HTML rather than SVG or ASCII: the diagram is entirely text that has to be
-   read. Text inside an SVG does not reflow, so on a narrow screen the band names
-   overlap the items; an ASCII version has to be aligned with hand-typed spaces
-   and breaks on any edit. */
-
-.kd-layers {
-  display: grid;
-  gap: .4rem;
-  margin: 1.5rem 0 2rem;
-}
-.kd-layer {
-  display: grid;
-  grid-template-columns: 7rem 1fr;
-  gap: .35rem 1rem;
-  align-items: baseline;
-  padding: .7rem .9rem .75rem;
-  border: 1px solid color-mix(in srgb, var(--kd-plum) 16%, transparent);
-  border-left: 2px solid color-mix(in srgb, var(--kd-teal) 55%, transparent);
-  border-radius: .45rem;
-}
-.kd-layer__name {
-  font-family: var(--kd-mono);
-  font-size: .58rem;
-  letter-spacing: .13em;
-  text-transform: uppercase;
-  color: var(--kd-slate);
-}
-.kd-layer__items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .3rem .9rem;
-  font-family: var(--kd-mono);
-  font-size: .76rem;
-  line-height: 1.6;
-}
-.kd-layer--plugins .kd-layer__items { color: var(--kd-teal); }
-
-/* ---------- Pipeline diagram for a single fit --------------------------- */
-/* Reuses the layer boxes (.kd-layer) with two changes: a downward arrow between
-   boxes, marking this diagram as execution order rather than dependency order;
-   and a __lead line per box, set in the body font, describing what that stage
-   does, with the item row falling back to monospace for the names involved. */
-
 .kd-flow { margin: 1.5rem 0 2rem; }
-.kd-flow .kd-layer {
-  border-left-color: color-mix(in srgb, var(--kd-plum) 42%, transparent);
-}
-/* An explicit arrow div rather than ::before: a pseudo-element has to be placed
-   by absolute positioning and then re-tuned whenever the parent's padding
-   changes. A few extra lines of markup buy a position that stays put. */
-.kd-flow__arrow {
-  font-family: var(--kd-mono);
-  font-size: .8rem;
-  line-height: 1;
-  color: color-mix(in srgb, var(--kd-slate) 70%, transparent);
-  padding: .45rem 0 .45rem 1.9rem;
-}
-.kd-layer__lead,
-.kd-flow .kd-layer__items { grid-column: 2; }
-.kd-layer__lead {
-  font-size: .84rem;
-  line-height: 1.6;
-}
-
-@media (max-width: 44em) {
-  .kd-layer { grid-template-columns: 1fr; }
-  /* In the single-column layout the second column does not exist; without this
-     reset an empty implicit column appears */
-  .kd-layer__lead,
-  .kd-flow .kd-layer__items { grid-column: 1; }
-  .kd-flow__arrow { padding-left: .9rem; }
-}
 
 /* ---------- about page ------------------------------------------------ */
 
