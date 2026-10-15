@@ -2,16 +2,18 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from torch import Tensor
 
-from kd.core.equation import Equation, Scalar
+from kd.core.equation import Equation, Form, Scalar
 from kd.core.equation import to_dict as equation_to_dict
 from kd.core.equation.library import TermLibrarySpec
 from kd.core.equation.projection import active_law
 from kd.core.evaluator import EvaluationResult
 from kd.core.jsonsafe import sanitize_float
+from kd.core.small_terms import small_term_indices
 from kd.search.records import (
     EVIDENCE_HASH_SCHEME,
     RECORD_HASH_SCHEME,
@@ -99,6 +101,29 @@ def active_support_and_coefficients(
     if coeff_values is not None:
         coefficients = [coeff_values[i] for i in indices]
     return support, coefficients
+
+
+def drop_small_terms(result: EvaluationResult, rtol: float) -> EvaluationResult:
+    if not result.is_valid or result.coefficients is None or result.terms is None:
+        return result
+    coefficients = result.coefficients.detach().cpu().flatten().tolist()
+    if len(coefficients) != len(result.terms):
+        return result
+    active = (
+        list(range(len(result.terms)))
+        if result.selected_indices is None
+        else list(result.selected_indices)
+    )
+    if any(not 0 <= index < len(result.terms) for index in active):
+        return result
+
+    pinned = {0} if result.form is Form.HOMOGENEOUS else set()
+    fitted = [index for index in active if index not in pinned]
+    kept_fitted = set(small_term_indices(coefficients, fitted, rtol))
+    kept = [index for index in active if index in pinned or index in kept_fitted]
+    if kept == active:
+        return result
+    return replace(result, selected_indices=kept)
 
 
 def active_support_and_coefficients_from_equation(

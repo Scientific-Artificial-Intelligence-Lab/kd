@@ -720,18 +720,13 @@ class VizEngine:
     def _maybe_autograd_domain_note(result: ExperimentResult) -> str | None:
         """Return the autograd-domain note, or ``None`` if not applicable.
 
-        The note applies when result config says the fit used an autograd
-        provider (``provider_kind == "autograd"``) or the SGA-specific internal
-        autograd path (``use_autograd is True``). The latter remains necessary
-        because SGA builds its own internal provider while its platform-level
-        derivative requirement stays finite-difference.
+        The note applies when the result config says the fit searched on
+        autograd derivatives (``provider_kind == "autograd"``). The Runner
+        records there the source an algorithm declares for itself, so a plugin
+        that builds its own autograd provider (SGA under ``use_autograd``,
+        DISCOVER under ``pinn``) is covered by the same key.
         """
-        config = result.config
-        uses_autograd_domain = (
-            config.get("provider_kind") == "autograd"
-            or config.get("use_autograd") is True
-        )
-        if not uses_autograd_domain:
+        if result.config.get("provider_kind") != "autograd":
             return None
         return _AUTOGRAD_DOMAIN_NOTE
 

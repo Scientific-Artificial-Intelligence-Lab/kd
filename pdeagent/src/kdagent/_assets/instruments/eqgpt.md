@@ -2,7 +2,7 @@
 
 EqGPT samples equations from a fixed vocabulary of terms, then fits their
 coefficients against data. The single-case evolution path uses one field `u`,
-a time axis and one to three spatial axes named `x`, `y` or `z`. In evolution mode the prefix `S ut +` fixes the
+time axis `t` and one to three spatial axes named `x`, `y` or `z`. In evolution mode the prefix `S ut +` fixes the
 left-hand side, and right-hand-side terms combine atoms by multiplication,
 division and addition. The vocabulary comes with KD; no candidate-term library
 is supplied by the caller.
@@ -27,16 +27,11 @@ For a steady problem on scattered `(x, y)` coordinates, configure `steady`,
 `steady_activation` and `start_words=["S"]` together. This mode trains its own
 surrogate before search. `sparsity_alpha` is required because the appropriate
 penalty depends on the problem; the packaged presets supply explicit values.
-
-### Pretrained model
-
-The checkpoint is downloaded from the KD Hub mirror on first use and cached.
-An uncached run needs network access. `KD_EQGPT_ASSET_DIR` can point to a local
-directory containing `gpt_model/PDEGPT_wave_breaking.pt`; the Python API also
-accepts `EqGPTConfig(weights_path=...)` or `asset_dir`. The mirror is
-`timeoutHao/KD-data`, with a pinned revision and SHA-256 verification.
-Multi-case wave mode also needs `WaveBreaking.pkl` and per-case surrogates;
-`KD_V1_WAVE_ASSETS` selects local assets instead of the Hub copy.
+Boundary deletion (`steady_boundary_delete_num`) counts cells on a grid that by
+default consists of the distinct coordinate values in the data, so a grid row
+or column without data points is missing from it. `steady_boundary_grid` gives
+the grid explicitly, and the presets that enable boundary deletion set it; the
+dataset name does not affect the grid.
 
 ## Method
 
@@ -77,6 +72,21 @@ A low reward warrants checking whether the required atoms and combinations
 are expressible before increasing the sample budget. Because the prior was
 trained on named textbook equations, a familiar law can be proposed from that
 prior as well as selected by its fit to data.
+
+## Python setup
+
+### Pretrained model
+
+The checkpoint is downloaded from the KD Hub mirror on first use and cached.
+An uncached run needs network access. `KD_EQGPT_ASSET_DIR` can point to a local
+directory containing `gpt_model/PDEGPT_wave_breaking.pt`; the Python API also
+accepts `EqGPTConfig(weights_path=...)` or `asset_dir`. The mirror is
+`timeoutHao/KD-data`, with a pinned revision and SHA-256 verification.
+Multi-case wave mode also needs `WaveBreaking.pkl` and per-case surrogates;
+`KD_V1_WAVE_ASSETS` selects local assets instead of the Hub copy.
+The dataset passed to `fit` in this mode must equal the data of the primary
+case (`primary_case`): axis order, field names and every coordinate and field
+value are compared, and only the name may differ.
 
 ## References
 

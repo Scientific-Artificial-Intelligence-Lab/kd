@@ -188,12 +188,23 @@ def _f0_entries(eq: Equation) -> tuple[list[tuple[str, float]], Form, LhsSpec | 
     raise TypeError(f"unsupported equation type: {type(eq).__name__}")
 
 
-def _sorted_unique(entries: list[tuple[str, float]]) -> list[tuple[str, float]]:
-    ordered = sorted(entries, key=lambda entry: entry[0])
-    for previous, current in zip(ordered, ordered[1:], strict=False):
-        if previous[0] == current[0]:
-            raise ValueError(f"duplicate canonical term: {current[0]}")
-    return ordered
+def _merge_repeats(
+    entries: list[tuple[str, float]], form: Form
+) -> list[tuple[str, float]]:
+    head, *rest = entries
+    grouped: dict[str, list[float]] = {}
+    for key, coefficient in rest:
+        grouped.setdefault(key, []).append(coefficient)
+    if head[0] in grouped:
+        raise ValueError(f"duplicate canonical term: {head[0]}")
+    repeated = [key for key, values in grouped.items() if len(values) > 1]
+    if form is Form.REGRESSION and repeated:
+        raise ValueError(f"duplicate canonical term: {repeated[0]}")
+    merged = [
+        (key, values[0] if len(values) == 1 else math.fsum(values))
+        for key, values in grouped.items()
+    ]
+    return sorted([head, *merged], key=lambda entry: entry[0])
 
 
 def _normalize(coefficients: tuple[float, ...]) -> tuple[float, ...]:
@@ -222,7 +233,7 @@ def _structure_key(terms: tuple[str, ...]) -> str:
 def law_signature(eq: Equation) -> LawSignature:
     projected = active_law(eq)
     entries, native_form, native_lhs = _f0_entries(projected)
-    ordered = _sorted_unique(entries)
+    ordered = _merge_repeats(entries, native_form)
     terms = tuple(term for term, _coefficient in ordered)
     coefficients = _normalize(
         tuple(coefficient for _term, coefficient in ordered)

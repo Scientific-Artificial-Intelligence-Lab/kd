@@ -1,14 +1,12 @@
-### PySINDy observations
+Supply `terms` for any grid other than one-field `u(x,t)`. Include every field
+and axis the law may need; extra data dimensions do not expand the library.
+`mul` and `add` are binary; nest multiplication for a cube. Atomic derivatives
+stop at order three; use `diff_x(u_xxx)` to compose a higher derivative.
+Tabular input uses `degree` and refuses `terms`; its library is polynomial only.
 
-The tool's display contains structural terms without coefficients; read
-primary.law. The sealed catalog fit retains all candidate columns, zero
-coefficients for dropped ones, active_indices and lhs_spec. Empty support
-raises an error naming the active threshold. The old card recommended
-threshold=0 as a least-squares floor. That probe removes threshold pruning,
-but an OLS interpretation also depends on unbias or the ridge setting; use
-`kd.evaluate_terms` for a direct platform fit instead of assuming all optimizer
-settings produce OLS. Repeating a deterministic solve with the same settings
-adds no independent search evidence. The four typed defaults were checked
-against PySINDy 2.1.0, and direct/plugin coefficients were bit-identical in the
-integration test. The atomic derivative precompute rejects u_xxxx as order 4;
-the open form diff_x(u_xxx) differentiates during execution.
+Choose `threshold` together with `normalize_columns` and `relative_threshold`.
+An absolute threshold can remove small but necessary coefficients; relative
+thresholding uses the target norm and requires normalized columns. Empty
+support raises an error naming the active threshold. One solve gives one
+evaluation; changing `generations` cannot add search, and repeating the same
+settings adds no independent evidence. Read `primary.law` for coefficients.

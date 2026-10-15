@@ -7,7 +7,9 @@ Shaping = every tool returns the same envelope, with fixed field names:
 
     status success | partial | failure
     primary display (the human-readable expression) + law (structured
-                 terms, coefficients and the LHS the record names)
+                 terms, coefficients and the LHS the record names) + equation
+                 (that law term by term on one line with signed coefficients,
+                 present only when its LHS and every coefficient are known)
     diagnostics quantities the fit produced
     provenance which dataset, which instrument, which parameters
     failures fixable failures, with the fix
@@ -68,12 +70,12 @@ from kd.harness import SKETCH_SIDECAR_FILENAME, PlanEntry
 from kd.search import (
     CATALOG_FILENAME,
     DEFAULT_RUNS_ROOT,
-    RunDirPaths,
     new_run_id,
 )
-from kdagent import criteria, priors, surrogate_training
+from kdagent import criteria, experience, priors, surrogate_training
 from kdagent.episode_worker import run_isolated_episode
-from kdagent.lineage import PLATFORM_FRAME, TREE_FILENAME, SegmentEntry, SegmentSummary
+from kdagent.cards import DEFAULT_GENERATIONS, DEFAULT_SEED
+from kdagent.lineage import PLATFORM_FRAME, SegmentEntry, SegmentSummary
 from kdagent.resume import (
     _ResolvedResume,
     _ResolvedSurrogate,
@@ -91,21 +93,15 @@ from kdagent.resume import (
     _sketch_failure,
     schema_of,
 )
-from kdagent.segment_report import build_segment_report, law_from_evidence
+from kdagent.segment_report import (
+    build_segment_report,
+    law_from_evidence,
+    sealed_equation_line,
+)
 from kdagent.session import Session
 from kdagent.data_source import is_file_ref, resolve_input
 from kdagent.state import ANSWER, Answer
 from kdagent.surrogates import file_sha256
-
-DEFAULT_SEED = 0
-DEFAULT_GENERATIONS = 10
-"""The budget this tool applies for a caller that omitted ``generations``.
-
-Smaller than kd's own facade default of 50, to bound the cost of one call.
-**The card must report this number**: that table is about `run_discovery`'s
-``params``, and reporting 50 would have the model planning against five times
-the budget.
-"""
 
 
 def _law_shape_failure(law: dict[str, Any]) -> dict[str, Any] | None:
@@ -114,10 +110,11 @@ def _law_shape_failure(law: dict[str, Any]) -> dict[str, Any] | None:
 
     The shape is defined by `run_discovery`'s `success` envelope: `support` is a
     non-empty list of term names; `lhs` (the sealed record's LHS, or null) is
-    passed through and not checked; `coefficients` is either absent (kd drops it
-    entirely when coefficients and support do not line up, with `is_valid` still
-    true -- `record_assembly.active_support_and_coefficients`) or the same
-    length as `support`, each position a finite number or null. This is tighter
+    not judged here but against the search it names (`_lhs_failure`);
+    `coefficients` is either absent (kd drops it entirely when coefficients and
+    support do not line up, with `is_valid` still true --
+    `record_assembly.active_support_and_coefficients`) or the same length as
+    `support`, each position a finite number or null. This is tighter
     than kd's `EvidenceRecord` in exactly one place: kd allows `support` to be
     None or empty and this does not -- but `_outcome_envelope` reports such a
     record as `partial`, so "a law handed out under `success` always passes
@@ -166,6 +163,31 @@ def _law_shape_failure(law: dict[str, Any]) -> dict[str, Any] | None:
             "passing run_discovery's primary.law through unchanged is enough",
         )
     return None
+
+
+def _lhs_failure(
+    law: dict[str, Any], sealed: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Say what is wrong when `law` does not carry `sealed`, the left-hand side
+    of the search it is submitted on; `None` when it does.
+
+    The left-hand side is a fact of the sealed search, not a choice of the
+    model's: `law_from_evidence` puts it on every law (null for a homogeneous
+    form, an empty axis and order 0 for a regression), and whoever reads the
+    answer takes the law's form from it. A submission that drops the key or
+    retypes the value (`axis: null` for a table's empty axis, the target's
+    name as a string) ends the run with an answer whose form cannot be read,
+    and there is no next turn to fix it in.
+    """
+    if "lhs" in law and law["lhs"] == sealed:
+        return None
+    given = json.dumps(law["lhs"]) if "lhs" in law else "no lhs key"
+    return _failure(
+        "unstructured_answer",
+        f"law.lhs has to be the left-hand side that search sealed, "
+        f"{json.dumps(sealed)}; this law has {given}. Pass primary.law.lhs "
+        "through unchanged",
+    )
 
 
 def _entry_provenance(entry: SegmentEntry) -> dict[str, Any]:
@@ -287,6 +309,27 @@ def _segment_report(
     return report, summary, []
 
 
+def _equation_line(
+    law: dict[str, Any], catalog_fit: dict[str, Any] | None
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """`primary.equation` is a side channel like the segment report: a law kd's
+    parser cannot render is reported in `failures`, and the sealed law is still
+    handed out and recorded.
+
+    `_outcome_envelope` runs inside the same `try` as the search in
+    `run_discovery`, so an exception escaping here would turn a sealed valid
+    result into a crashed envelope, returned before the ledger row and the
+    catalog row are written and without registering the run for an answer.
+    The detail names the field, because the envelope's status stays `success`.
+    """
+    try:
+        return sealed_equation_line(law, catalog_fit), []
+    except Exception as exc:
+        return None, [
+            _failure(type(exc).__name__, f"primary.equation was not rendered: {exc}")
+        ]
+
+
 def _outcome_envelope(
     outcome: Any,
     params: dict[str, Any],
@@ -302,6 +345,7 @@ def _outcome_envelope(
     platform_coefficients: list[float] | None,
     platform_eval_error: str | None,
     platform_eval_dropped: int | None,
+    unavailable_reason: str | None,
     sketch: dict[str, Any] | None,
     surrogate: str | None,
 ) -> tuple[dict[str, Any], SegmentSummary | None]:
@@ -399,6 +443,7 @@ def _outcome_envelope(
         "platform_frame": PLATFORM_FRAME,
         "platform_coefficients": platform_coefficients,
         "platform_eval_dropped": platform_eval_dropped,
+        "unavailable_reason": unavailable_reason,
         "mse": evidence.mse,
         "complexity": evidence.complexity,
         "search_seconds": round(cost.search_seconds, 3),
@@ -476,20 +521,53 @@ def _outcome_envelope(
                 *report_failures,
             ],
         ), summary
+    if evidence.catalog_fit is None:
+        return envelope(
+            "partial",
+            budget=budget,
+            primary={"display": evidence.expression, "law": None},
+            diagnostics=diagnostics,
+            provenance=provenance,
+            failures=[
+                _failure(
+                    "uncatalogued_law",
+                    f"Expression {evidence.expression!r} has no catalog_fit: "
+                    "kd's expression IR does not accept numeric constants inside "
+                    "terms. Search with another expression or instrument to "
+                    "obtain a submittable law",
+                ),
+                *report_failures,
+            ],
+        ), summary
+    law = law_from_evidence(evidence)
+    primary: dict[str, Any] = {
+        "display": evidence.expression,
+
+
+
+
+        "law": law,
+    }
+
+
+
+
+
+    equation, equation_failures = _equation_line(
+
+
+        cast(dict[str, Any], law),
+        evidence.catalog_fit,
+    )
+    if equation is not None:
+        primary["equation"] = equation
     return envelope(
         "success",
         budget=budget,
-        primary={
-            "display": evidence.expression,
-
-
-
-
-            "law": law_from_evidence(evidence),
-        },
+        primary=primary,
         diagnostics=diagnostics,
         provenance=provenance,
-        failures=report_failures,
+        failures=[*report_failures, *equation_failures],
     ), summary
 
 
@@ -634,279 +712,6 @@ def _parameter_provenance(
     }
 
 
-_PARAM_TABLE_HEAD = (
-    "| Parameter | Type | Default | Allowed | Resume | Notes |",
-    "|---|---|---|---|---|---|",
-)
-_EFFECT_NOTES = {
-    "max_iterations": "search-loop length (the runner's max_iterations)",
-    "unused": "**this algorithm consumes it nowhere** -- do not pass it",
-}
-
-
-def _cell(value: Any) -> str:
-    """Render one JSON value for a markdown cell."""
-    return "" if value is None else f"`{json.dumps(value)}`"
-
-
-def _tier_cell(tier: str | None) -> str:
-    """Render a knob's resume tier; empty when kd classifies that name nowhere.
-
-    Empty is the honest cell, not a gap to be filled here: only some of each
-    algorithm's parameter surface is a descriptor knob (9 of sga's 20 rows), and
-    inventing a tier for the rest would be this layer asserting something kd has
-    not decided.
-    """
-    return "" if tier is None else f"`{tier}`"
-
-
-def _text_cell(text: str) -> str:
-    """Escape a markdown cell's separator.
-
-    Union annotations carry a literal ``|`` (``dict[str, Any] | None``), which
-    silently splits the row into an extra column.
-    """
-    return text.replace("|", r"\|")
-
-
-def _parameters_markdown(schema: dict[str, Any]) -> str:
-    """Render one algorithm's ``params`` surface as a markdown table.
-
-    Two halves, because config field names alone do not describe the surface:
-    the facade's own parameters (``generations`` is not a config field for six
-    of seven algorithms; ``population`` is spelled ``num`` in the config), then
-    the config fields JSON can reach. ``seed`` is dropped -- it is a separate
-    ``run_discovery`` argument and the plan layer rejects it inside
-    ``model_kwargs``, so listing it here would only invite a hard failure.
-
-    The ``Resume`` column is kd's own per-knob classification, read off the
-    schema like the rest of the table. Half of it already reached the model
-    after the fact -- ``provenance.params.identity_breaking`` is computed from
-    the same schema on every ``run_discovery`` -- so withholding the column only
-    meant the model learned which parameters break a run's identity *after*
-    spending a search on it.
-    """
-    lines = list(_PARAM_TABLE_HEAD)
-
-
-
-    tiers = {knob["name"]: knob["resume_tier"] for knob in schema["knobs"]}
-
-
-
-
-
-
-
-
-
-    for name in schema["identity_breaking_fields"]:
-        tiers.setdefault(name, "identity_breaking")
-    for row in schema["facade_params"]:
-        if row["name"] == "seed":
-            continue
-        note = _EFFECT_NOTES.get(row["effect"], f"config field `{row['config_field']}`")
-        default = row["default"]
-        if row["name"] == "generations" and row["effect"] != "unused":
-
-
-            default = DEFAULT_GENERATIONS
-            note = f"{note}; this tool applies {DEFAULT_GENERATIONS} if you omit it"
-        lines.append(
-            f"| `{row['name']}` | `{row['kind']}` | {_cell(default)} "
-            f"| {_cell(row['literal_values'])} "
-            f"| {_tier_cell(tiers.get(row['config_field']))} | {note} |"
-        )
-    for row in schema["fields"]:
-        if row["settable_from"] != "json":
-            continue
-        default = "**required**" if row["required"] else _cell(row["default"])
-        lines.append(
-            f"| `{row['name']}` | `{_text_cell(row['type'])}` | {default} "
-            f"| {_cell(row['literal_values'])} "
-            f"| {_tier_cell(tiers.get(row['name']))} "
-            f"| {_text_cell(row['description'])} |"
-        )
-    return "\n".join(lines)
-
-
-_SKETCH_LEVEL_LEGEND = (
-    "What the levels mean. `lowered`: the clause is compiled into the search "
-    "arithmetic itself, as a pinned term deducted from the regression target "
-    "before the fit. `generation_enforced`: the clause filters which "
-    "candidates the search may generate, which decides how fast a compliant "
-    "law is found rather than whether it is compliant. `exit_checked`: the "
-    "search itself is not constrained by that "
-    "clause at all, and compliance is judged only at the exit.\n\n"
-    "There are two exit gates. First, every used clause is judged whatever "
-    "its level; `diagnostics.sketch.satisfied` reports that clause verdict. "
-    "Second, the full law must pass the exit residual verification policy "
-    "on the platform footprint (by default NMSE <= 0.05). "
-    "`diagnostics.sketch.certified` reports whether kd delivered a solution "
-    "after both gates. A law can satisfy every clause yet fail the residual "
-    "gate: `satisfied` true, `certified` false and a null `primary.law`; "
-    "`diagnostics.sketch.failure` explains the refusal. kd never delivers "
-    "a law that fails either gate, but the search may find no certified law. "
-    "A false `certified` and a null `primary.law` are expected outcomes, and "
-    "clause failure is likelier when more used clauses sit at `exit_checked`."
-)
-
-
-def _sketch_markdown(schema: dict[str, Any]) -> str:
-    """Render one algorithm's sketch support: the clause levels per mode, read
-    off `tool_schema`'s per-mode `sketch` block rather than written by hand.
-
-    An instrument that declares every clause `unsupported` on every mode gets
-    the sentence saying so, since `run_discovery(sketch=...)` refuses it and
-    the model should learn that from the card rather than from the refusal.
-    """
-    modes = schema["modes"]
-    if not criteria.sketch_supported(modes):
-        return (
-            "This instrument declares every sketch clause `unsupported` on every "
-            "mode, so it cannot narrow: `run_discovery(sketch=...)` refuses it "
-            "(`sketch_unsupported`)."
-        )
-    clauses = list(modes[0]["sketch"])
-    lines = [
-        "| Clause | " + " | ".join(f"`{mode['name']}`" for mode in modes) + " |",
-        "|---|" + "---|" * len(modes),
-    ]
-    for clause in clauses:
-        cells = " | ".join(f"`{mode['sketch'][clause]}`" for mode in modes)
-        lines.append(f"| `{clause}` | {cells} |")
-    return (
-        "Pass a `kd-sketch-v1` payload as `run_discovery(sketch=...)` to narrow "
-        "the search (pinned terms, anchored terms, and holes over a vocabulary; "
-        "the tool description shows the payload). Each clause is enforced at "
-        "the level kd declares for the mode the search runs in; a clause the "
-        "sketch actually uses must be at least `exit_checked` on that mode, "
-        "or kd refuses the fit naming the clause.\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        + _SKETCH_LEVEL_LEGEND
-    )
-
-
-def _surrogate_markdown(schema: dict[str, Any]) -> str:
-    """Render how a trained surrogate reaches this algorithm, or "" when it
-    takes none.
-
-    The parameter table never lists the injection key (`field_model` /
-    `surrogate_model` are not settable from JSON), so the channel has to be
-    said in prose: trained by `train_surrogate` with only the instrument's
-    `surrogate_fields`, injected by `run_discovery(surrogate=<id>)`, under
-    which key, and under which mode when the instrument has one that does not
-    consult a surrogate (read off the modes' `provider_kind`, not the name).
-    """
-    keys = schema["config_artifact_keys"]
-    if not keys:
-        return ""
-    (key,) = keys
-    fields = ", ".join(f"`{name}`" for name in schema["surrogate_fields"])
-    mode_note = ""
-    if any(mode["provider_kind"] != "autograd" for mode in schema["modes"]):
-        mode_note = (
-            ' under `params={"derivatives": "autograd"}`, the only mode that '
-            "consults it (the call is refused otherwise)"
-        )
-    return (
-        "This instrument fits a neural derivative surrogate before it searches, "
-        "a long stretch with no progress and no early stop. Train it once with "
-        f"`train_surrogate` (which accepts only {fields}, plus `seed`; the same "
-        "recipe is trained once and reused) and inject the registered file with "
-        f"`run_discovery(surrogate=<surrogate_id>)`{mode_note}. It enters under "
-        f"the config key `{key}`, which the table above does not list because "
-        "it is not settable from JSON. A lineage keeps one surrogate: a resumed "
-        "segment inherits it, and a different id is a new lineage."
-    )
-
-
-def run_record_layout() -> dict[str, str]:
-    """What the records a search leaves behind are called and where they live --
-    the run directory and catalog names taken from kd, the lineage ledger name
-    from `lineage`, none written out by hand in the prompt.
-
-    `orchestration` has to put these into the system prompt, but by the division
-    of labor it does not touch kd's surface (the mechanical gate only blocks the
-    `kd` imports `kdagent` direction; this one is a convention). The cost of a
-    hand-written copy is a prompt that expires silently when kd renames
-    something, while the model, told "there is no such file", just works around
-    it -- it has no second channel to learn that we wrote it wrong.
-    """
-    runs_root = Path(DEFAULT_RUNS_ROOT)
-    paths = RunDirPaths(root=runs_root)
-    return {
-        "runs_root": str(runs_root),
-        "catalog": str(runs_root / CATALOG_FILENAME),
-        "tree": TREE_FILENAME,
-        "record": paths.record.name,
-        "events": paths.events.name,
-        "phases": paths.phases.name,
-    }
-
-
-def _capabilities_markdown(schema: dict[str, Any]) -> str:
-    """Render the mode input contracts removed from the handwritten cards."""
-    lines = [
-        "| Mode | Form | Data layout | Derivatives | LHS orders |",
-        "|---|---|---|---|---|",
-    ]
-    for mode in schema["modes"]:
-        cells = [
-            f"`{mode['name']}`",
-            ", ".join(mode["forms"]),
-            ", ".join(mode["topologies"]),
-            mode["provider_kind"],
-            ", ".join(str(order) for order in mode["lhs_orders"]),
-        ]
-        lines.append("| " + " | ".join(cells) + " |")
-    lines.append(
-        f"\nNative score: `{schema['score_kind']}` "
-        f"(direction: `{schema['score_direction']}`). "
-        f"Cost class: `{schema['cost_class']}`."
-    )
-    return "\n".join(lines)
-
-
-def instrument_briefs() -> list[dict[str, str]]:
-    """One entry per algorithm: name, one-line summary, rendered parameter table.
-
-    The table is rendered from kd's schema at call time rather than written into
-    the card by hand. A hand-written copy goes stale the next time a config
-    gains a field, and the model has no second channel telling it so.
-    """
-    return [
-        {
-            "algorithm": schema["algorithm"],
-            "summary": schema["summary"],
-
-
-
-
-
-
-
-            "cost_class": schema["cost_class"],
-
-
-
-
-
-
-            "segmentation_archive": schema["segmentation"]["archive"],
-            "capabilities": _capabilities_markdown(schema),
-            "parameters": _parameters_markdown(schema),
-
-
-
-            "narrowing": _sketch_markdown(schema),
-            "surrogate": _surrogate_markdown(schema),
-        }
-        for schema in instrument_schemas()
-    ]
-
-
 def prime_prior(session: Session, prior_path: Path) -> dict[str, str]:
     """Load one prior document for this run and post its annotation to `session`.
 
@@ -962,13 +767,11 @@ def prime_prior(session: Session, prior_path: Path) -> dict[str, str]:
             "is read against one dataset's features, and an unpinned run picks "
             "its dataset later and from several"
         )
-    if prior_path.resolve().is_relative_to(session.workspace.resolve()):
-        raise ValueError(
-            f"{prior_path} sits under the workspace {session.workspace}, the "
-            "one directory this run points the model at; a prior reaches this "
-            "run as one annotated row per instrument, and keeping the document "
-            "outside the workspace is what holds it to that"
-        )
+    _refuse_document_in_workspace(
+        session,
+        prior_path,
+        "a prior reaches this run as one annotated row per instrument",
+    )
     prior = priors.load_prior(prior_path)
     priors.assert_serves(prior, pinned)
     excluded = prior.get("excluded")
@@ -993,6 +796,66 @@ def prime_prior(session: Session, prior_path: Path) -> dict[str, str]:
 
 
         "prior_sha256": file_sha256(prior_path),
+    }
+
+
+def _refuse_document_in_workspace(session: Session, path: Path, reach: str) -> None:
+    """Refuse a document filed under the workspace root (ruling 8-D5).
+
+    The workspace is the one directory a run points the model at, so a
+    document inside it is readable in full; `reach` names the narrower channel
+    the document is meant to arrive on. `prime_prior` and `prime_experience`
+    share this one judgement, and each passes its own channel.
+    """
+    if path.resolve().is_relative_to(session.workspace.resolve()):
+        raise ValueError(
+            f"{path} sits under the workspace {session.workspace}, the "
+            f"one directory this run points the model at; {reach}, and keeping "
+            "the document outside the workspace is what holds it to that"
+        )
+
+
+def prime_experience(
+    session: Session, memory_path: Path
+) -> tuple[dict[str, str], experience.Retrieval | None]:
+    """Load a v2 document and retrieve rows plus their input readings.
+
+    The document stays outside the model-readable workspace. Its declaration
+    digest must match installed kd; the stored input summary supplies the
+    report and task kind, without loading the dataset again.
+    """
+    import kd
+
+    _refuse_document_in_workspace(
+        session,
+        memory_path,
+        "an experience document reaches this run as the rows retrieved for its input",
+    )
+    document = experience.load_experience(memory_path)
+    if document["instrument_schema_sha256"] != kd.instrument_schema_digest():
+        raise ValueError(
+            "instrument_schema_sha256 differs from installed kd; rebuild the experience document"
+        )
+    summary = cast(dict[str, Any], session.input_source)["summary"]
+    report, kind = summary["report"], summary["task_kind"]
+    vocabulary = document["features_vocabulary"][kind]
+    features = experience.features_of(report, kind, vocabulary, document["bins"])
+    rows = experience.retrieve(document, kind, features, k=2)
+    record = {
+        "memory_path": str(memory_path),
+        "memory_sha256": file_sha256(memory_path),
+    }
+    if not rows:
+        return record, None
+    return record, {
+        "rows": rows,
+        "readings": experience.readings(report, kind, vocabulary, document["bins"]),
+        "vocabulary": vocabulary,
+        "templates": document["templates"][kind],
+        "bins": document["bins"],
+        "min_support": document["min_support"],
+        "rules_version": document["rules_version"],
+        "task_kind": kind,
     }
 
 
@@ -1045,8 +908,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
 
     def list_datasets() -> dict[str, Any]:
-        """List the datasets available here: id, axes, left-hand side, layout,
-        tier and tags. The governing equation is never included.
+        """List the datasets available here. A file input is listed as id, task
+        kind, target, the data report and the file's array inventory. A catalog
+        dataset is listed as id, axes, lhs, fmt, tier and tags, with no report.
+        The governing equation is never included.
 
         When this run is pinned to one dataset, only that dataset is listed, and
         it is the only id the other tools accept.
@@ -1158,7 +1023,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
     def run_discovery(
         dataset_id: str,
         tool_call_id: Annotated[str, InjectedToolCallId],
-        algorithm: str = "sga",
+        algorithm: str,
         params: dict[str, Any] | None = None,
         seed: int | None = None,
         max_search_seconds: int | None = None,
@@ -1246,36 +1111,6 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 it (sga: `params={"derivatives": "autograd"}`). Inherited on a
                 resumed call like `sketch`; a different id is a new lineage.
 
-        The sketch payload, for a field `h(t, x)` (the field and coordinate
-        names are the dataset's own, the ones `list_datasets` reports as
-        `lhs` and `axes`): pin one third-order term and leave one hole for a
-        term of order two or less, e.g. `{"schema": "kd-sketch-v1",
-        "lhs_spec": {"field": "h", "axis": "t", "order": 1}, "vocabulary":
-        {"fields": ["h"], "coordinates": ["t", "x"]}, "pinned": [{"term_ir":
-        "mul(h,h_xxx)", "value": -0.5}], "anchored": [], "holes": [{"id":
-        "rest", "min_count": 1, "max_count": 1, "constraint":
-        {"max_deriv_order": 2, "operators": null, "fields": null, "axes":
-        null}}], "match_policy": {"coeff_atol": 1e-9, "coeff_rtol": 1e-9,
-        "support_threshold": 0.0, "term_identity": "kd-lawsig-v2",
-        "hole_assignment": "disjoint", "derivative_order":
-        "total-effective"}}`. A payload kd cannot decode is refused with kd's
-        own message.
-
-        A hole caps, it never requires. Its four `constraint` dimensions are a
-        ceiling (`max_deriv_order`) and whitelists (`operators`, `fields`,
-        `axes`), so the hole above admits any term of order two or less and
-        cannot ask that a second derivative appear; `min_count` bounds how
-        many terms land in the hole, not which kind. The `id` is an unchecked
-        label: `h_t = -0.5*h*h_xxx + 0.3*h` satisfies that same sketch, and
-        naming the hole `diffusion` instead of `rest` would not make a second
-        derivative appear.
-
-        A sketch describes an evolution law: `lhs_spec` is the time-derivative
-        side and has to equal the dataset's resolved LHS, and kd refuses a
-        sketch on a homogeneous (`lhs_order=0`) dataset. Every instrument that
-        declares sketch support runs evolution-form modes only, so this tool
-        adds no separate refusal for that combination.
-
         On a resumed call, the generation count in `params` is the additional
         budget for this new segment, not a cumulative target. Parameters kd
         classifies `resume_safe` may change; every other `params` entry has to
@@ -1289,29 +1124,18 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         Returns an envelope whose `primary.law` holds the discovered structure
         as `support` (coefficient-free terms), `coefficients` and `lhs` (the
         left-hand side the sealed record names, or null), whose
-        `diagnostics` holds `nmse`, `score`, `search_seconds` and a
+        `primary.equation` is that same law written out term by term on one
+        line, each support term once and in order with its signed coefficient
+        and nothing combined or cancelled (for example
+        `u_t = -0.5*u*u_x + 0.1*u_xx`), present only when its left-hand side
+        (`0` for a homogeneous law, the target column for a regression) and
+        every coefficient are known -- it is for reading, and `submit_answer`
+        takes `primary.law`, which holds the coefficients at full precision --
+        whose `diagnostics` holds `nmse`, `score`, `search_seconds` and a
         `segment_report` block (score trend, two improvement numbers, plateau
         counters, diversity, validity, structure diff, cost) computed from the
         sealed run, and whose `provenance` holds `run_id` -- the value
         `submit_answer` asks for.
-
-        The numbers in that block do not share one basis, so take the basis
-        with the number. `improvement.vs_parent` measures this segment's
-        best against the baseline segment's own best, while
-        `improvement.vs_lineage_best` measures it against the best reached
-        anywhere in the lineage; `improvement.baseline_run_id` names the
-        segment both were measured from, which is the direct parent unless
-        that parent sealed no report of its own, in which case it is the
-        nearest ancestor that did. The `plateau` counters are cumulative along
-        the whole lineage, not this segment's own. Every checkpoint iteration
-        number is the opposite -- within-segment, counted from 0 at the start
-        of each segment -- which covers `resume_iteration`, the available
-        iterations quoted in a refusal, and the one in `provenance.lineage`.
-        `cost` is this segment's alone. `diagnostics.evaluations` is this
-        segment's candidate-evaluation spend (the compute-neutral unit; the
-        inherited prefix of a resumed run is summed on the tree, not here),
-        and `diagnostics.stopped_by_evaluation_cap` says whether
-        `max_evaluations` ended it.
 
         This call waits for the search, which runs in its own worker process
         under the cap. `diagnostics.stopped_by_time_cap` true means the cap
@@ -1321,21 +1145,14 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         one-shot fit, or one whose preparation phase eats the whole cap) is
         killed instead and returns a failure whose detail may quote the best
         expression seen so far -- that quote is a plain string, not a
-        submittable law. Every envelope also carries a `budget` block
+        submittable law. pysr is the exception among one-shot fits: kd passes
+        the cap to PySR as its own time limit, so its fit ends near the cap
+        and returns a sealed record. That fit can end a few seconds before the
+        cap, so for pysr `stopped_by_time_cap` false does not mean the search
+        ran all its iterations. Every envelope also carries a `budget` block
         reporting the wall-clock this whole run has used and, when a limit was
         set for it, how much of that limit is left.
 
-        `diagnostics.prior` is there only when this run was started with a
-        prior document, and it says what that document holds about **this**
-        instrument on data shaped like this dataset's. `capability` is one of
-        four words: `capable` (measured to work on data of this shape),
-        `unproven` (the silence word, meaning nobody measured it, never a
-        guess), `topology_mismatch` and `form_mismatch` (kd's own declarations
-        say this instrument does not take this layout, or this left-hand side).
-        `matched` lists the features of the data that put that word there. The
-        annotation is a fact about the menu, not a verdict: the call stays
-        legal whatever it says, nothing here filters on it, and kd's own
-        refusal at fit time is unchanged.
         """
         lineage = _lineage_provenance(
             None, session.workspace, requested_parent=resume_from_run_id
@@ -1491,7 +1308,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
 
 
-            sketch_failure = _sketch_failure(algorithm, sketch, schema_of(algorithm))
+
+            sketch_failure = _sketch_failure(
+                algorithm, sketch, schema_of(algorithm), params=params or {}
+            )
             if sketch_failure is not None:
                 return envelope(
                     "failure",
@@ -1663,6 +1483,22 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
 
             input_source = resolve_input(session.workspace, dataset_id)
+            if (
+                effective_sketch is not None
+                and input_source is not None
+                and input_source["load_options"]["layout"] == "kd-tabular-npz"
+            ):
+                return envelope(
+                    "failure",
+                    budget=session.budget(),
+                    diagnostics=prior_diagnostics,
+                    failures=[
+                        _failure(
+                            "sketch_unsupported",
+                            "Tabular input does not accept sketch; omit sketch",
+                        )
+                    ],
+                )
             entry = PlanEntry(
                 instrument=algorithm,
                 dataset_ref=dataset_id,
@@ -1720,6 +1556,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 platform_coefficients=isolated.platform_coefficients,
                 platform_eval_error=isolated.platform_eval_error,
                 platform_eval_dropped=isolated.platform_eval_dropped,
+                unavailable_reason=isolated.unavailable_reason,
                 sketch=effective_sketch,
                 surrogate=effective_surrogate,
             )
@@ -1778,6 +1615,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 surrogate=effective_surrogate,
                 cost=segment_cost(
                     outcome,
+                    time_cap_seconds=time_cap_seconds,
+                    stopped_by_time_cap=isolated.stopped_by_time_cap,
                     evaluation_cap=max_evaluations,
                     stopped_by_evaluation_cap=isolated.stopped_by_evaluation_cap,
                 ),
@@ -1817,6 +1656,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             "nmse": result["diagnostics"]["nmse"],
         }
         session.successful_runs[provenance["run_id"]] = own_provenance
+        session.sealed_lhs[provenance["run_id"]] = result["primary"]["law"]["lhs"]
         answer_law, answer_provenance = _selected_answer(session, dataset_id)
         if answer_law is None:
 
@@ -1905,9 +1745,11 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             algorithm: Which instrument the surrogate is for. Only an
                 instrument whose skill card has a "Surrogate" section takes
                 one; the refusal names the instruments that do.
-            params: Only the instrument's surrogate parameters, the ones its
+            params: The instrument's surrogate parameters, the ones its
                 skill card's "Surrogate" section lists (epochs, learning rate,
-                patience, validation ratio; the network shape for dlga).
+                patience, validation ratio; the network shape for dlga), plus
+                its declared LHS-order parameters. For u_tt with dlga, pass
+                target_lhs_order=2.
                 Search parameters are refused here: they do not shape the
                 network.
             seed: Random seed of the training. Omitted, it is 0. The seed is
@@ -2002,7 +1844,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                     _failure(
                         "invalid_argument",
                         f"params {extra} are not surrogate parameters of "
-                        f"{algorithm}; train_surrogate takes only {fields} (plus "
+                        f"{algorithm}; train_surrogate takes {fields} and mode "
+                        "order_params (plus "
                         "seed), the parameters that shape the network. Search "
                         "parameters go to run_discovery",
                     )
@@ -2424,6 +2267,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
 
 
+
+
     def submit_answer(
         law: dict[str, Any],
         run_id: str,
@@ -2442,7 +2287,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 and the eligible ones are listed. The law itself need not match
                 that search's output term for term -- dropping a negligible
                 term is fine -- but the answer must rest on a search that
-                actually ran and succeeded.
+                actually ran and succeeded, and `lhs` must be that search's
+                `primary.law.lhs`, passed through unchanged.
 
         A successful submission ends this run: no further model turn happens
         after it. Any other tool you called in the same turn still runs, because
@@ -2493,6 +2339,9 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                     )
                 ],
             )
+        lhs_failure = _lhs_failure(law, session.sealed_lhs[run_id])
+        if lhs_failure is not None:
+            return envelope("failure", budget=session.budget(), failures=[lhs_failure])
         result = envelope(
             "success",
             budget=session.budget(),

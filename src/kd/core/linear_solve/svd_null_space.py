@@ -17,10 +17,13 @@ _SELECT_EPS = 1e-14
 
 class SVDNullSpaceSolver(SparseSolver):
 
-    def __init__(self, eps: float = 1e-8) -> None:
+    def __init__(
+        self, eps: float = 1e-8, *, compute_condition_number: bool = False
+    ) -> None:
         if eps <= 0.0:
             raise ValueError(f"eps must be positive, got {eps}")
         self.eps = eps
+        self.compute_condition_number = compute_condition_number
 
     def solve(self, theta: torch.Tensor, y: torch.Tensor) -> SolveResult:
         self._validate_shape(theta, y)
@@ -59,9 +62,11 @@ class SVDNullSpaceSolver(SparseSolver):
                 coefficients=coefficients.detach(),
                 residual=residual,
                 r2=r2_score(y_pred_64, y_solve),
-
-
-                condition_number=compute_condition_number(augmented),
+                condition_number=(
+                    compute_condition_number(augmented)
+                    if self.compute_condition_number
+                    else None
+                ),
                 selected_indices=selected_indices,
             )
 
@@ -97,7 +102,6 @@ class SVDNullSpaceSolver(SparseSolver):
             ),
             residual=float("inf"),
             r2=-float("inf"),
-            condition_number=float("inf"),
             selected_indices=[],
             is_valid=False,
             error_message=message,

@@ -9,15 +9,21 @@ from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
     constraint_admits,
-    pinned_fingerprints,
+    pinned_monomials,
 )
 
 
 
 
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
+from kd.core.expr.jet import Monomial
 from kd.core.expr.naming import parse_compound_derivative
-from kd.core.expr.term_features import ColumnFingerprint, TermFeatures, analyze_term
+from kd.core.expr.term_features import (
+    ColumnFingerprint,
+    TermFeatures,
+    analyze_term,
+    column_fingerprint,
+)
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.search.sga.config import OperatorPool, SGAConfig
 from kd.search.sga.convert import tree_to_kd_expr
@@ -67,8 +73,8 @@ class SGACompiled:
     op2: OperatorPool
     pinned: tuple[tuple[str, float, Tree], ...]
     pinned_keys: frozenset[str]
-    pinned_fingerprints: frozenset[ColumnFingerprint]
-    anchored_keys: frozenset[str]
+    pinned_monomials: frozenset[Monomial]
+    anchor_fingerprints: frozenset[ColumnFingerprint]
     default_kept: bool
     default_hole_id: str | None
     report: CompileReport
@@ -218,8 +224,7 @@ def _operator_rooted_hint(term_ir: str, tree: Tree, sketch: Sketch) -> str:
 
 def _parse_anchors(
     sketch: Sketch, variables: tuple[str, ...], default_key: str | None
-) -> tuple[frozenset[str], tuple[TermFeatures, ...]]:
-    keys: list[str] = []
+) -> tuple[TermFeatures, ...]:
     features: list[TermFeatures] = []
     for anchor in sketch.anchored:
         key = law_term_key(anchor.term_ir)
@@ -231,9 +236,8 @@ def _parse_anchors(
                 f"operator-rooted spelling "
                 f"{_operator_rooted_hint(anchor.term_ir, tree, sketch)!r}"
             )
-        keys.append(key)
         features.append(analyze_term(anchor.term_ir, sketch.vocabulary))
-    return frozenset(keys), tuple(features)
+    return tuple(features)
 
 
 def _default_decision(
@@ -412,8 +416,21 @@ def _notes(
         f"default column kept={default_kept}; hole seat={seat}",
         "pinned columns use SGA execute_tree footing; full verification uses "
         "the platform footing",
-        "pin reservation is syntactic (law key + feature fingerprint); "
-        "algebraically equal neutral wrappers are outside it (charter S-B-2)",
+        "pin reservation refuses a term on a pin's law key or whose expansion "
+        "into jet monomials (total derivatives by the chain rule, symbol-free "
+        "factors stripped as coefficients, division by or log of an "
+        "identically zero column read as the constant kd's protected operators "
+        "produce) contains a pinned monomial, so a composite that carries a "
+        "pinned monomial beside another one is refused by design",
+        "pin reservation leaves open: the expansion cancels no common factor "
+        "between a numerator and a denominator, so a rational respelling of a "
+        "pin ((u*u*u_x - u*u_x*u_x)/(u - u_x) for a pinned u*u_x) is admitted "
+        "(that tree needs depth 4; the default depth is 3); terms are judged "
+        "one at a time, so several admitted terms can add up to the pinned "
+        "column, and SGA reaches such a pair at its default depth with / and + "
+        "(u*u*u_x/(u+x) + x*u*u_x/(u+x)); function identities (sin or cos "
+        "squared, log of exp) would respell a pin too, but SGA's pools carry "
+        "no function operator",
     ]
     notes.extend(f"dropped {element!r}: {reason}" for element, reason in dropped)
     return tuple(notes)
@@ -439,8 +456,8 @@ def _closed_compilation(
         op2=op2,
         pinned=(),
         pinned_keys=frozenset(law_term_key(pin.term_ir) for pin in sketch.pinned),
-        pinned_fingerprints=frozenset(),
-        anchored_keys=frozenset(),
+        pinned_monomials=frozenset(),
+        anchor_fingerprints=frozenset(),
         default_kept=default_term_name is not None,
         default_hole_id=None,
         report=CompileReport(
@@ -480,11 +497,14 @@ def compile_for_sga(
         )
 
     pinned, pinned_keys = _parse_pins(sketch, variables)
-    pin_fingerprints = pinned_fingerprints(sketch)
+    pin_monomials = pinned_monomials(sketch)
     default_kept, default_key, default_hole_id, default_drop = _default_decision(
         sketch, default_term_name, pinned_keys
     )
-    anchored_keys, anchor_features = _parse_anchors(sketch, variables, default_key)
+    anchor_features = _parse_anchors(sketch, variables, default_key)
+    anchor_fingerprints = frozenset(
+        column_fingerprint(features) for features in anchor_features
+    )
     _assert_feasible(sketch, config, default_kept)
     _assert_operator_clauses_generable(sketch)
 
@@ -520,8 +540,8 @@ def compile_for_sga(
         op2=narrowed_op2,
         pinned=pinned,
         pinned_keys=pinned_keys,
-        pinned_fingerprints=pin_fingerprints,
-        anchored_keys=anchored_keys,
+        pinned_monomials=pin_monomials,
+        anchor_fingerprints=anchor_fingerprints,
         default_kept=default_kept,
         default_hole_id=default_hole_id,
         report=CompileReport(

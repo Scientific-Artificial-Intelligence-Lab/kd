@@ -7,6 +7,7 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import torch
 from torch import Tensor
 
 from kd.core.equation.construct import PIVOT_UNITY_RTOL
@@ -29,6 +30,7 @@ from kd.core.equation.types import (
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr.executor import PythonExecutor
 from kd.core.interrupt import SearchInterrupted
+from kd.core.oom import is_cpu_alloc_failure
 from kd.data.schema import compute_dataset_fingerprint
 
 
@@ -141,6 +143,18 @@ def _execute_column(
 
 
         raise
+    except torch.cuda.OutOfMemoryError:
+
+
+
+        raise
+    except RuntimeError as exc:
+        if is_cpu_alloc_failure(exc):
+
+
+
+            raise
+        raise ValueError(f"failed to execute verification term {term_ir!r}") from exc
     except Exception as exc:
         raise ValueError(f"failed to execute verification term {term_ir!r}") from exc
 

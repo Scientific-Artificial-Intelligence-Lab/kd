@@ -8,23 +8,14 @@ The prompts specify `+`, `-`, `*`, `/`, squares and cubes; the parser also
 accepts integer powers through five. Explicit spatial dependence is
 expressible. Extra fields, other-axis derivatives, mixed space-time derivatives,
 higher spatial derivatives, trigonometric functions, exponentials, square roots
-and standalone constants require a different symbol library.
+and standalone constants are outside this route's symbol library.
+Extra fields and other spatial axes are refused before proposal generation.
 
 Operand construction needs at least four spatial and three time points.
 Spacing is taken from `x[2] - x[1]` and `t[1] - t[0]`, so use uniform axes.
-The method differentiates the observations directly without smoothing or a
-surrogate; the accuracy of higher derivatives therefore depends on measurement
-noise and resolution.
-
-### Endpoint configuration
-
-Set an OpenAI-compatible `base_url` and `OPENAI_API_KEY` for the default
-client; the OpenAI SDK is installed with KD. This is the algorithm that calls
-an external language-model service during search. Alternatively, pass a
-`provider=` implementing `kd.llm.LLMProvider`: a prompt goes in and text comes
-out. A custom client can set timeouts and headers, use `BudgetedProvider` for
-metering, or use `TapeRecordingProvider` to save a JSONL tape for offline replay.
-The authors' mirrored datasets download on first load.
+The method itself does not smooth or train a surrogate; the platform's
+`savgol_window` applies before differentiation. Higher derivatives therefore
+depend on measurement noise and resolution.
 
 ## Method
 
@@ -39,7 +30,7 @@ Each proposal is parsed with SymPy, expanded into additive terms, and executed
 as design-matrix columns over second-order finite-difference operands. Division
 allows reciprocals, but a zero denominator that makes a column non-finite
 rejects that candidate. STRidge sweeps a tolerance ladder to fit coefficients;
-out-of-range fitted coefficients also reject a candidate.
+fitted coefficient magnitudes outside `[1e-4, 1e4]` also reject a candidate.
 
 A round resamples until enough distinct-scoring survivors arrive or its call
 budget is exhausted. Scores at or below `reward_limit` and scores already kept
@@ -77,6 +68,18 @@ counts dropped scoring events, broken down into eight series:
 They sum to the total in each round; unused causes record zero, and `other`
 collects labels outside those named categories. Pool progress and admissions
 help distinguish proposal failures from valid but poorly fitting equations.
+
+## Python setup
+
+### Endpoint configuration
+
+Set an OpenAI-compatible `base_url` and `OPENAI_API_KEY` for the default
+client; the OpenAI SDK is installed with KD. This is the algorithm that calls
+an external language-model service during search. Alternatively, pass a
+`provider=` implementing `kd.llm.LLMProvider`: a prompt goes in and text comes
+out. A custom client can set timeouts and headers, use `BudgetedProvider` for
+metering, or use `TapeRecordingProvider` to save a JSONL tape for offline replay.
+The authors' mirrored datasets download on first load.
 
 ## References
 

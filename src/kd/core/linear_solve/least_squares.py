@@ -9,6 +9,7 @@ from kd.core.linear_solve._helpers import (
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
+from kd.core.linear_solve.lstsq import deterministic_lstsq
 
 
 class LeastSquaresSolver(SparseSolver):
@@ -39,12 +40,12 @@ class LeastSquaresSolver(SparseSolver):
                 else None
             )
 
-            result = torch.linalg.lstsq(
+            solution = deterministic_lstsq(
                 theta_solve,
                 y_solve.unsqueeze(1),
                 rcond=self.rcond,
             )
-            coefficients = result.solution.squeeze()
+            coefficients = solution.squeeze()
 
             if coefficients.dim() == 0:
                 coefficients = coefficients.unsqueeze(0)

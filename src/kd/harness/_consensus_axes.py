@@ -263,12 +263,17 @@ def _member_flags(
     return tuple(flags)
 
 
-def _adjacency(classes: Sequence[ConsensusClass]) -> tuple[ClassAdjacency, ...]:
+def _adjacency(
+    classes: Sequence[ConsensusClass], lhs_term: str | None
+) -> tuple[ClassAdjacency, ...]:
     adjacency: list[ClassAdjacency] = []
     for i in range(len(classes)):
-        terms_a = set(classes[i].terms)
         for j in range(i + 1, len(classes)):
+            terms_a = set(classes[i].terms)
             terms_b = set(classes[j].terms)
+            if lhs_term and lhs_term in terms_a and lhs_term in terms_b:
+                terms_a.discard(lhs_term)
+                terms_b.discard(lhs_term)
             intersection = terms_a & terms_b
             union = terms_a | terms_b
             if terms_a < terms_b:

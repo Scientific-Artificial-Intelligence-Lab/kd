@@ -5,6 +5,7 @@ import os
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from kd.harness._verify import distinct_source_values
 from kd.harness.plan import ExperimentPlan
 from kd.search.mini_table import build_mini_table
 from kd.search.mini_table import escape_cell as _escape_cell
@@ -22,6 +23,64 @@ _FAILURE_HEADER = (
     "| entry_index | instrument | dataset_ref | seed | status | error_type |"
 )
 _FAILURE_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
+_SOURCES_HEADER = (
+    "| source | plan | plan_hash | entries | kd_version | git_sha | root |"
+)
+_SOURCES_SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- |"
+
+
+def _kd_version_label(kd_version: str, sources: Sequence[Mapping[str, Any]]) -> str:
+    kd_versions = distinct_source_values(sources, "kd_version")
+    if len(kd_versions) > 1:
+        listed = ", ".join(_escape_cell(str(value)) for value in kd_versions)
+        return f"kd versions: {listed} (mixed)"
+    if len(distinct_source_values(sources, "git_sha")) > 1:
+        return f"kd {kd_version} (mixed git_sha)"
+    return f"kd {kd_version}"
+
+
+def _sources_lines(
+    sources: Sequence[Mapping[str, Any]], version_note: str | None
+) -> list[str]:
+    lines: list[str] = []
+    if version_note is not None:
+        lines.append(f"version note: {_escape_cell(version_note)}")
+    lines.append(_SOURCES_HEADER)
+    lines.append(_SOURCES_SEPARATOR)
+    for position, row in enumerate(sources):
+        first = row["entry_offset"]
+        env = row["env"]
+        cells = (
+            str(position),
+            _escape_cell(row["plan_name"]),
+            _escape_cell(row["plan_hash"][:10]),
+            f"{first}-{first + row['n_entries'] - 1}",
+            _escape_cell(str(env.get("kd_version"))),
+            _escape_cell(str(env.get("git_sha"))),
+            _escape_cell(row["root"]),
+        )
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+def _failure_lines(attempts: Sequence[dict[str, Any]]) -> list[str]:
+    failures = [a for a in attempts if a.get("status") != _COMPLETED]
+    if not failures:
+        return []
+    lines = ["### failures", _FAILURE_HEADER, _FAILURE_SEPARATOR]
+    for attempt in failures:
+        error_type = attempt.get("error_type")
+        cells = (
+            _escape_cell(str(attempt.get("entry_index"))),
+            _escape_cell(str(attempt.get("instrument"))),
+            _escape_cell(str(attempt.get("dataset_ref"))),
+            _escape_cell(str(attempt.get("seed"))),
+            _escape_cell(str(attempt.get("status"))),
+            _escape_cell("" if error_type is None else str(error_type)),
+        )
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
 
 
 def _instrument_order(plan: ExperimentPlan) -> list[str]:
@@ -60,12 +119,15 @@ def build_plan_report(
     env: dict[str, str],
     attempts: Sequence[dict[str, Any]],
     records: Mapping[int, RunRecord],
+    sources: Sequence[Mapping[str, Any]] = (),
+    version_note: str | None = None,
 ) -> str:
     kd_version = env.get("kd_version", "unknown")
     lines: list[str] = []
 
 
-    lines.append(f"# {plan.name} ({plan_hash[:10]}, kd {kd_version})")
+    label = _kd_version_label(kd_version, sources)
+    lines.append(f"# {plan.name} ({plan_hash[:10]}, {label})")
     lines.append("")
 
 
@@ -77,6 +139,12 @@ def build_plan_report(
         f"{raised} raised / {no_record} no_record"
     )
     lines.append("")
+
+
+    if sources:
+        lines.append("### sources")
+        lines.extend(_sources_lines(sources, version_note))
+        lines.append("")
 
 
     for instrument in _instrument_order(plan):
@@ -95,23 +163,7 @@ def build_plan_report(
         lines.append("")
 
 
-    failures = [a for a in attempts if a.get("status") != _COMPLETED]
-    if failures:
-        lines.append("### failures")
-        lines.append(_FAILURE_HEADER)
-        lines.append(_FAILURE_SEPARATOR)
-        for attempt in failures:
-            error_type = attempt.get("error_type")
-            cells = (
-                _escape_cell(str(attempt.get("entry_index"))),
-                _escape_cell(str(attempt.get("instrument"))),
-                _escape_cell(str(attempt.get("dataset_ref"))),
-                _escape_cell(str(attempt.get("seed"))),
-                _escape_cell(str(attempt.get("status"))),
-                _escape_cell("" if error_type is None else str(error_type)),
-            )
-            lines.append("| " + " | ".join(cells) + " |")
-        lines.append("")
+    lines.extend(_failure_lines(attempts))
 
     return "\n".join(lines).rstrip() + "\n"
 
@@ -123,6 +175,8 @@ def build_store_report(store: EvidenceStore) -> str:
         env=store.env,
         attempts=store.attempts,
         records=store.records,
+        sources=store.sources,
+        version_note=store.version_note,
     )
 
 

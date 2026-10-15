@@ -5,6 +5,8 @@ import math
 
 import torch
 
+from kd.core.oom import is_cpu_alloc_failure
+
 SOLVE_DTYPE = torch.float64
 
 
@@ -56,17 +58,6 @@ def squared_residual(
     coef_64 = upcast_for_solve(coef)
     lhs_64 = upcast_for_solve(lhs_1d)
     return float(((lhs_64 - theta_64 @ coef_64) ** 2).sum().item())
-
-
-
-
-
-
-_CPU_ALLOC_FRAGMENT = "DefaultCPUAllocator"
-
-
-def is_cpu_alloc_failure(exc: RuntimeError) -> bool:
-    return _CPU_ALLOC_FRAGMENT in str(exc)
 
 
 def compute_condition_number(matrix: torch.Tensor) -> float:

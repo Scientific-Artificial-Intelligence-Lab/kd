@@ -12,6 +12,7 @@ from kd.core.linear_solve._helpers import (
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
+from kd.core.linear_solve.lstsq import deterministic_lstsq
 
 logger = logging.getLogger(__name__)
 
@@ -193,16 +194,14 @@ def _normalize_columns(
 
 def _lstsq(mat: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     b_2d = b.unsqueeze(1) if b.dim() == 1 else b
-    sol: torch.Tensor = torch.linalg.lstsq(mat, b_2d).solution
-    return sol
+    return deterministic_lstsq(mat, b_2d)
 
 
 def _ridge_solve(x: torch.Tensor, y: torch.Tensor, lam: float, d: int) -> torch.Tensor:
     y_2d = y.unsqueeze(1) if y.dim() == 1 else y
     xtx = x.T @ x + lam * torch.eye(d, dtype=x.dtype, device=x.device)
     xty = x.T @ y_2d
-    sol: torch.Tensor = torch.linalg.lstsq(xtx, xty).solution
-    return sol
+    return deterministic_lstsq(xtx, xty)
 
 
 def _initial_solve(

@@ -2,7 +2,8 @@
 
 This module provides the shared ``DiscoverConfig`` used by both the
 standalone entry point and the kd plugin adapter. It includes the
-standalone-only ``n_iterations`` field for outer-loop control.
+``n_iterations`` field: the standalone outer-loop length, and in the PINN mode
+the generation the first PINN phase follows.
 """
 
 from __future__ import annotations
@@ -77,7 +78,7 @@ DEFAULT_USE_EMBEDDING = False
 DEFAULT_ATTENTION = False
 DEFAULT_ATTN_LENGTH = 10
 DEFAULT_INITIALIZER: Literal["xavier", "zeros"] = "xavier"
-DEFAULT_EPSILON = 0.05
+DEFAULT_EPSILON = 0.10
 DEFAULT_BASELINE = "R_e"
 DEFAULT_ENTROPY_WEIGHT = 0.005
 DEFAULT_GAMMA = 0.5
@@ -95,6 +96,7 @@ DEFAULT_USE_DIFF_CHILD_PRIOR = True
 DEFAULT_SOFT_LENGTH_LOC: float | None = None
 DEFAULT_SOFT_LENGTH_SCALE = 5.0
 DEFAULT_STABILITY_SELECTION = 0
+DEFAULT_PINN_N_CYCLES = 2
 DEFAULT_STABILITY_QUEUE_CAPACITY = 10
 
 
@@ -127,59 +129,140 @@ DEFAULT_COORD_VARS = ["x", "t"]
 
 @dataclass(frozen=True, slots=True)
 class PINNConfig:
-    """PINN hyperparameters (defaults from config_pde_pinn.json)."""
+    """PINN hyperparameters; a ``DiscoverConfig.pinn`` value selects the PINN mode.
+
+    The network and budget defaults are from ``config_pde_pinn.json``. The
+    research settings explicitly set the
+    values of ``coef_pde``, ``obs_ratio`` and ``local_sample`` (``1.0``,
+    ``1.0`` and ``False`` here); callers can pass their recorded values.
+
+    Two paths read this config. ``kd.Model`` runs the PINN mode inside its own
+    loop of ``generations`` search generations. The standalone
+    ``PINNCycleRunner`` runs ``n_cycles`` cycles and receives ready-made
+    observations and collocation points. A field that only one of the two
+    reads says so.
+    """
 
     number_layer: int = 8
+    """Number of hidden layers of the network."""
     n_hidden: int = 20
+    """Width of every hidden layer of the network."""
     activation: Literal["tanh", "sin", "relu"] = "tanh"
+    """Activation function of the hidden layers."""
     pretrain_epoch: int = 200_000
+    """Maximum number of full-batch Adam epochs of the pretraining on the observations,
+    which runs once before the search. With a validation split
+    (``pretrain_val_ratio``) it stops early after ``early_stop_patience`` epochs
+    without improvement and keeps the weights of the best validation loss.
+    """
     pinn_epoch: int = 1_000
+    """Maximum number of full-batch Adam epochs of one PINN phase, which retrains the
+    network on the best equation found so far. The time of a phase grows with this
+    number times the number of residual points (collocation points plus local
+    samples).
+    """
     lr: float = 0.001
+    """Adam learning rate of the pretraining and of every PINN phase."""
 
 
 
 
 
 
+    coef_pde: float = 1.0
+    """Weight of the physics residual in the PINN-phase loss ``data_loss + coef_pde *
+    (physics_loss + local_loss)``. The default ``1.0`` couples the network to the
+    best equation, the R-DISCOVER cotraining (Du et al. 2024, PoF). The exact value
+    used by the original DISCOVER paper is not verified.
 
+    ``0.0`` is the setting without physics-loss coupling between the network
+    and the symbolic search (the original DISCOVER architecture, Du et al.
+    2024, PRR 6, 013182, and kd1 MODE1). Caveats with ``0.0``:
 
+    - The physics gradient is zeroed, but data-MSE backprop still updates
+      ``FieldModel`` in every phase. A true ``fit -> freeze`` pipeline
+      (``FieldModel`` frozen after pretraining) requires a deeper refactor.
+    - The residual is then not computed at all: the short-circuit guard in
+      ``_chunked_backward_residual_loss`` skips it.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    coef_pde: float = 0.0
-    n_cycles: int = 2
+    The ``ScaffoldPrior`` hot path is unrelated to this coefficient; it is
+    controlled by ``diagnostic_scaffold`` in :class:`DiscoverConfig`.
+    """
+    n_cycles: int = DEFAULT_PINN_N_CYCLES
+    """Number of search-plus-PINN cycles the standalone ``PINNCycleRunner`` runs before
+    its final search; ``kd.Model`` does not read it and warns on a non-default value.
+    There ``Model(generations=...)`` is the total search length, and
+    ``generations = n_iterations + n_cycles * cycle length`` reproduces the
+    standalone schedule.
+    """
     n_collocation: int = 50_000
-    local_sample: bool = True
+    """Number of collocation points sampled over the data's axis ranges, before
+    ``collocation_cut_ratio`` trims the ends of every axis. The search evaluates
+    its candidates on the points that remain, and every PINN phase computes the
+    physics residual on them.
+    """
+    local_sample: bool = False
+    """Whether a PINN phase also computes the residual on points sampled around the
+    observations (``local_multiplier`` per observation, plus the observations
+    themselves). Set it to ``True`` when the observations are a subsample of the
+    grid (``obs_ratio`` below ``1.0``); with every grid point observed it would
+    add ``local_multiplier + 1`` residual points per grid point.
+    """
     local_multiplier: int = 20
+    """Number of points sampled around each observation when ``local_sample`` is
+    ``True``.
+    """
     early_stop_patience: int = 500
-
-
-
-
-
+    """Number of epochs without improvement after which a training loop stops early,
+    once the warmup (``early_stop_warmup``) has passed.
+    """
 
     early_stop_warmup: int | None = None
+    """Number of warmup epochs before early stopping may fire. ``None`` auto-computes
+    ``max(50, early_stop_patience * 10)`` capped by the loop length.
+
+    Dormancy: at PINN-training defaults this saturates to ``pinn_epoch``
+    (``500*10`` capped by ``1000``) -> PINN early-stop is a no-op; set an
+    explicit value ``< pinn_epoch`` to enable it. Pretrain early-stop works
+    normally (``5000 < 200000``).
+    """
     pretrain_val_ratio: float = 0.2
+    """Share of the observations held out as the validation split of the pretraining,
+    in ``[0, 1)``. With no validation rows the pretraining runs all
+    ``pretrain_epoch`` epochs and keeps the final weights.
+    """
     grad_clip_norm: float | None = 1.0
+    """Maximum gradient norm of a PINN-phase step; ``None`` turns clipping off."""
     max_nan_recoveries: int = 3
+    """Number of consecutive epochs with a non-finite loss or gradient a PINN phase
+    recovers from by restoring its best weights; one more ends the phase.
+    """
     cycle_n_iterations: int | None = None
+    """Number of search generations between two PINN phases after the first phase;
+    ``None`` reuses ``DiscoverConfig.n_iterations``. Both paths read it, and on
+    both the first phase follows generation ``n_iterations``.
+    """
     colloc_chunk_size: int | None = None
+    """Number of residual points a PINN phase evaluates per chunk. ``None`` evaluates
+    up to 65,536 points in one batch and switches to chunks of 16,384 above that.
+    """
+    obs_ratio: float = 1.0
+    """Share of the grid points the network is trained on, in ``(0, 1]``; at least
+    10 points are kept. Only ``kd.Model`` reads the field, to draw this
+    subsample. ``PINNCycleRunner`` receives ready-made observations, and the
+    research driver subsamples at its own constant and records that value here.
+    Below ``1.0``, set ``local_sample`` to ``True``.
+    """
+    collocation_cut_ratio: float = 0.05
+    """Share of the collocation points trimmed at each end of every axis, in
+    ``[0, 0.5)``. Only ``kd.Model`` reads the field, when it samples the
+    collocation points. ``PINNCycleRunner`` receives ready-made points, and the
+    research driver trims by its own tier setting and records that value here.
+    """
 
     def __post_init__(self) -> None:
+        if not 0.0 < self.obs_ratio <= 1.0:
+            raise ValueError(f"obs_ratio must be in (0.0, 1.0], got {self.obs_ratio}")
         if self.cycle_n_iterations is not None and self.cycle_n_iterations <= 0:
             raise ValueError(
                 f"cycle_n_iterations must be positive or None, "
@@ -244,13 +327,13 @@ class DiscoverConfig:
       exploration bonus (raise ``entropy_weight`` if it converges prematurely).
     - ``pinn``: set a ``PINNConfig`` to enable the PINN surrogate (MODE2); its
       ``pretrain_epoch`` is the main speed/accuracy knob there. Leave ``None``
-      for MODE1 (finite-diff derivatives). **MODE2 runs only on the standalone
-      path — the kd.Model facade rejects a non-None pinn (it would silently
-      run MODE1 instead).**
+      for MODE1 (finite-diff derivatives). MODE2 runs through ``kd.Model`` and
+      on the standalone ``PINNCycleRunner`` path.
 
     FACADE GOTCHA: via ``kd.Model(algorithm="discover")`` the search length
-    comes from ``Model(generations=...)``, NOT from ``n_iterations`` here
-    (that field only drives the standalone runner — see the note below).
+    comes from ``Model(generations=...)``, NOT from ``n_iterations`` here.
+    Under MODE1 that field only drives the standalone runner; under MODE2 it
+    places the first PINN phase (see the note below).
 
     Remaining fields (controller architecture, reward shaping, structural
     priors, diagnostic scaffolds) have validated defaults and rarely change.
@@ -261,10 +344,16 @@ class DiscoverConfig:
 
 
 
+
     n_iterations: int = DEFAULT_N_ITERATIONS
-    """Number of search iterations the standalone entry point runs, one controller batch
-    per iteration. Ignored when the search is driven through ``kd.Model``, where
-    ``Model(generations=...)`` sets the loop length.
+    """With ``pinn`` set, the number of search generations before the first PINN phase,
+    which must be smaller than ``Model(generations=...)`` for any PINN phase to run;
+    without ``pinn``, ``kd.Model`` ignores this field and warns on a non-default value.
+    The default 2000 is not smaller than the facade's default of 50 generations. On
+    the standalone paths, where ``Model(generations=...)`` does not exist, it is the
+    number of search iterations the entry point runs, one controller batch per
+    iteration, and the length of a ``PINNCycleRunner`` cycle unless
+    ``PINNConfig.cycle_n_iterations`` sets the later cycles.
     """
     seed: int = DEFAULT_SEED
     """Random seed of the search: ``torch.manual_seed`` is called with this value when
@@ -295,8 +384,10 @@ class DiscoverConfig:
     """
     batch_size: int = DEFAULT_BATCH_SIZE
     """Number of candidate expressions sampled per search iteration, and the batch the
-    policy-gradient update is computed from. Larger values give a steadier training
-    signal at more compute per iteration.
+    policy-gradient update is computed from; larger batches give a steadier signal at
+    more compute per iteration. On tabular data, ``kd.Model`` defaults to 500 with
+    ``epsilon=0.05`` to retain multiple reward-bearing samples after invalid candidates
+    are removed.
     """
 
     num_units: int = DEFAULT_NUM_UNITS
@@ -358,8 +449,13 @@ class DiscoverConfig:
     or above the ``1 - epsilon`` quantile (``RSPGStrategy``), so a smaller value is a
     greedier update off fewer samples. Ties at the quantile are all kept, so the
     retained share can exceed ``epsilon`` (an all-equal batch keeps everything). Must
-    lie in ``(0, 1]``. The packaged PDE presets use 0.01-0.02; the delta registry
-    records the lineage of the ``0.05`` default in.
+    lie in ``(0, 1]``. With the ``R_e`` baseline the advantage is ``reward - quantile``,
+    so ``batch_size * epsilon`` must exceed 1 or the quantile is the batch maximum and
+    the reward term of the loss is identically zero. The default ``0.10`` is sized for
+    the default batch of 16; the packaged PDE presets pair 0.01-0.02 with batches of
+    500-1000. On tabular data, ``kd.Model`` defaults to 0.05 with a batch of 500 so
+    multiple samples can have nonzero advantage after invalid candidates are removed.
+    The ``batch_size * epsilon > 1`` rule applies to the remaining valid batch.
     """
     baseline: str = DEFAULT_BASELINE
     """Value subtracted from the rewards in the policy-gradient loss. ``"R_e"`` (the
@@ -451,16 +547,17 @@ class DiscoverConfig:
     ``soft_length_loc`` is set.
     """
     stability_selection: int = DEFAULT_STABILITY_SELECTION
-    """Number of distinct top-reward candidates from the final search cycle that enter
-    bootstrap stability selection, which re-fits each candidate on resampled rows and
-    keeps the one that wins the most resamples. ``0`` (the default) skips the step
-    and keeps the best-reward candidate; only a run driven by the PINN surrogate
-    applies it.
+    """With ``pinn`` set, the number of distinct top-reward candidates from the final
+    search cycle that enter bootstrap stability selection, which re-fits each candidate
+    on resampled rows and keeps the one that wins the most resamples; without
+    ``pinn``, no selection runs and ``kd.Model`` warns on a non-default value. ``0``
+    (the default) skips the step and keeps the best-reward candidate.
     """
     stability_queue_capacity: int = DEFAULT_STABILITY_QUEUE_CAPACITY
-    """Maximum number of distinct candidates kept in the reward-ordered per-cycle pool
-    that stability selection draws from. Read only when ``stability_selection`` is
-    greater than 0, and must be at least as large as it.
+    """With ``pinn`` set and ``stability_selection`` greater than 0, the maximum number
+    of distinct candidates kept in the reward-ordered per-cycle pool that stability
+    selection draws from; without ``pinn``, the pool is not read and ``kd.Model`` warns
+    on a non-default value. It must be at least as large as ``stability_selection``.
     """
 
 
@@ -533,8 +630,10 @@ class DiscoverConfig:
     pinn: PINNConfig | None = None
     """Settings for the optional PINN surrogate, which alternates symbolic search with
     training a network on the data and takes derivatives from that trained network.
-    ``None`` (the default) searches on finite-difference derivatives; ``kd.Model``
-    rejects a non-``None`` value because it never runs the PINN cycle.
+    ``None`` (the default) searches on finite-difference derivatives. ``kd.Model``
+    takes a ``PINNConfig`` or a JSON object of its fields; the network is retrained
+    after generation ``n_iterations`` and then every
+    ``PINNConfig.cycle_n_iterations`` generations.
     """
 
     def __post_init__(self) -> None:

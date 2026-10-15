@@ -24,6 +24,7 @@ def main(argv: list[str]) -> None:
             request["y"],
             request["variable_names"],
             search_state=request["search_state"],
+            timeout_in_seconds=request["timeout_in_seconds"],
         )
         result = {
             "best": sympy.srepr(backend.best_sympy()),

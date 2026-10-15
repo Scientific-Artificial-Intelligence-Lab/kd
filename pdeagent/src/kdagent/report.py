@@ -7,11 +7,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from kd import LhsSpec, format_pde, render_lhs_label
+from kd.core import VerifyPolicy, law_agreement
+from kd.core.equation import Equation, from_dict, law_signature
 from kd.search import RunDirPaths, RunRecord
 
 from kdagent.lineage import SegmentEntry, SegmentLedger
-from kdagent.segment_report import law_from_evidence
+from kdagent.segment_report import law_from_evidence, sealed_equation, sealed_lhs_label
+
+SEALED_COPY_POLICY = VerifyPolicy(coeff_atol=1e-12)
 
 
 def _cell(value: Any) -> str:
@@ -37,30 +40,31 @@ def _link(path: Path, workspace: Path) -> str:
     return f"[{_cell(path.name)}]({quote(relative, safe='/')})"
 
 
-def _law(law: dict[str, Any], *, homogeneous: bool, sealed: bool) -> str:
+def _law(
+    law: dict[str, Any], *, catalog_fit: dict[str, Any] | None, sealed: bool
+) -> str:
     terms = law["support"]
     coefficients = law.get("coefficients")
     lhs = law.get("lhs")
-    label = "0" if homogeneous else None
-    if lhs is not None:
-        label = render_lhs_label(LhsSpec(**lhs)) if sealed else json.dumps(lhs)
+    if sealed or lhs is None:
+        label = sealed_lhs_label(lhs, catalog_fit)
+    else:
+        label = json.dumps(lhs)
     lines = [f"LHS: `{label}`" if label is not None else "LHS: not reported."]
 
 
-    if (
-        sealed
-        and label is not None
-        and coefficients is not None
-        and None not in coefficients
-    ):
-        equation = format_pde(terms, coefficients, lhs=label, sig_figs=0)
+
+    equation = sealed_equation(law, catalog_fit) if sealed else None
+    if equation is not None:
         lines.append(f"\n$$\n{equation.latex}\n$$\n")
     elif sealed:
         lines.append(
             "\nEquation display unavailable: LHS or coefficients not reported.\n"
         )
     else:
-        lines.append("\nTerms are listed as submitted; the equation image belongs to the sealed law.\n")
+        lines.append(
+            "\nTerms are listed as submitted; the equation image belongs to the sealed law.\n"
+        )
     lines.extend(["| Term | Coefficient (full precision) |", "|---|---|"])
     for index, term in enumerate(terms):
         coefficient = None if coefficients is None else coefficients[index]
@@ -71,15 +75,11 @@ def _law(law: dict[str, Any], *, homogeneous: bool, sealed: bool) -> str:
 def _sealed_section(record: RunRecord, run_dir: Path, workspace: Path) -> str:
     evidence = record.evidence
     law = law_from_evidence(evidence)
-    homogeneous = (
-        evidence.catalog_fit is not None
-        and evidence.catalog_fit["form"] == "HOMOGENEOUS"
-    )
     lines = ["## Cited sealed law\n"]
     lines.append(
         "No submittable sealed law.\n"
         if law is None
-        else _law(law, homogeneous=homogeneous, sealed=True)
+        else _law(law, catalog_fit=evidence.catalog_fit, sealed=True)
     )
     lines.extend(
         [
@@ -135,24 +135,19 @@ def _answer_sections(
     run_dir = workspace / provenance["run_dir"]
     record = RunRecord.load(RunDirPaths(root=run_dir).record)
     sealed = law_from_evidence(record.evidence)
-    homogeneous = (
-        record.evidence.catalog_fit is not None
-        and record.evidence.catalog_fit["form"] == "HOMOGENEOUS"
-    )
+    catalog_fit = record.evidence.catalog_fit
     title = (
         "Submitted law" if result["answer_source"] == "submitted" else "Selected law"
     )
+    is_sealed = _is_sealed_law(answer, sealed, catalog_fit)
     lines = [
         f"## {title}\n",
-        _law(
-            answer,
-            homogeneous=homogeneous and answer.get("lhs") is None,
-            sealed=answer == sealed,
-        ),
+        _law(answer, catalog_fit=catalog_fit, sealed=is_sealed),
     ]
     lines.append(
-        "\nThis law matches the cited sealed law exactly; its native measurements are below.\n"
-        if answer == sealed
+        "\nThis law matches the cited sealed law: the same LHS and terms, and coefficients "
+        "that kd's law comparison reads as the same law. Its native measurements are below.\n"
+        if is_sealed
         else "\nUnevaluated: this law differs from the cited sealed law. The measurements below "
         "do not evaluate the submitted law.\n"
     )
@@ -174,7 +169,7 @@ def _answer_sections(
             "No ledger entry for the cited search; platform refit and lineage cost are not reported.\n"
         )
     else:
-        lines.append(_platform_section(entry, sealed, homogeneous=homogeneous))
+        lines.append(_platform_section(entry, sealed, catalog_fit=catalog_fit))
         lines.extend(
             [
                 "### Cited archive lineage cost\n",
@@ -184,11 +179,62 @@ def _answer_sections(
     return "\n".join(lines)
 
 
+def _is_sealed_law(
+    answer: dict[str, Any],
+    sealed: dict[str, Any] | None,
+    catalog_fit: dict[str, Any] | None,
+) -> bool:
+    if (
+        sealed is None
+        or answer.keys() != sealed.keys()
+        or answer["lhs"] != sealed["lhs"]
+        or answer["support"] != sealed["support"]
+    ):
+        return False
+    submitted = answer["coefficients"]
+    native = sealed["coefficients"]
+    if submitted == native:
+        return True
+    if (
+        catalog_fit is None
+        or submitted is None
+        or native is None
+        or None in submitted
+        or None in native
+    ):
+        return False
+    submitted_law = _equation(answer, catalog_fit)
+    sealed_law = _equation(sealed, catalog_fit)
+    try:
+        signatures = law_signature(submitted_law), law_signature(sealed_law)
+    except ValueError:
+
+
+
+
+
+
+
+
+
+        return False
+    agreement = law_agreement(*signatures, policy=SEALED_COPY_POLICY)
+    return agreement.coefficient is True
+
+
+def _equation(law: dict[str, Any], catalog_fit: dict[str, Any]) -> Equation:
+    terms = [
+        [term, {"kind": "Scalar", "value": value}]
+        for term, value in zip(law["support"], law["coefficients"], strict=True)
+    ]
+    return from_dict({**catalog_fit, "terms": terms, "active_indices": None})
+
+
 def _platform_section(
     entry: SegmentEntry,
     sealed: dict[str, Any] | None,
     *,
-    homogeneous: bool,
+    catalog_fit: dict[str, Any] | None,
 ) -> str:
     lines = [
         "These are separately fitted coefficients on the cited support, not the native or submitted coefficients.\n",
@@ -198,7 +244,7 @@ def _platform_section(
         lines.append(
             _law(
                 {**sealed, "coefficients": entry.platform_coefficients},
-                homogeneous=homogeneous,
+                catalog_fit=catalog_fit,
                 sealed=True,
             )
         )
@@ -282,7 +328,9 @@ def _tool_outcomes(trace_path: Path) -> str:
             continue
         lines.append(f"### `{row['name']}` — `{row['id']}`\n")
         output = row["outputs"]
-        if output is None:
+        if not output:
+
+
             lines.append(_code(str(row["error"])))
             continue
         message = output["output"]

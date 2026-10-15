@@ -38,9 +38,10 @@ force a third-order *terminal* token to resolve, raise ``max_order`` — and a
 terminal token beyond the current ``max_order`` is rejected with an actionable
 hint telling the agent which ``max_order`` to retry with.
 
-Pure constants / scalars (e.g. ``"1"``) are rejected: Theta carries no intercept
-column, so a scalar that broadcasts to the wrong length would detonate the fit
-unattributed. They surface as a ``shape`` rejection naming the term.
+Pure constants / scalars (e.g. ``"1"``) are rejected: a numeric literal is a
+scalar, not a column, so it would broadcast to the wrong length and detonate the
+fit unattributed. They surface as a ``shape`` rejection naming the term. The
+constant column is spelled ``one``.
 
 Rejection categories (applied in order)
 ---------------------------------------
@@ -89,10 +90,15 @@ to the user's instance. Repeated calls with the same inputs are deterministic.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+import numpy as np
+import torch
+from scipy.linalg import norm
 
 from kd._evaluate_classify import (
     TermRejection,
@@ -103,9 +109,12 @@ from kd._evaluate_classify import (
 from kd.core.equation import Evolution, LhsSpec, active_law, render_lhs_label
 from kd.core.platform.builder import PlatformBuilder, resolve_lhs_defaults
 from kd.core.platform.requirements import DerivativeReqs
+from kd.data import interface_mask
 from kd.data.schema import DataTopology
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from kd.core.evaluator import EvaluationResult
     from kd.data.schema import PDEDataset
     from kd.search.protocol import PlatformComponents
@@ -119,14 +128,35 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ComparisonResult",
     "EvaluationFailedError",
+    "ForwardError",
     "InvalidTermsError",
     "TermRejection",
     "TermValidation",
     "TermValidationReport",
+    "block_dispersion",
     "evaluate_terms",
     "compare_results",
+    "forward_error",
     "validate_terms",
 ]
+
+
+@dataclass(frozen=True)
+class ForwardError:
+    """Outcome of ``forward_error``.
+
+    Attributes:
+        value: ``||pred - u||_2 / ||u||_2`` over the full grid, or None when
+            the equation could not be integrated.
+        reason: None when ``value`` is set; otherwise ``"diverged"``,
+            ``"solve-failed"`` (scipy ``solve_ivp`` failed) or ``"refused"``
+            (the equation or dataset is unsupported).
+        warning: Why integration was refused or failed, empty on a clean run.
+    """
+
+    value: float | None
+    reason: str | None
+    warning: str
 
 
 @dataclass
@@ -226,6 +256,10 @@ _DEFAULT_MAX_ORDER = 2
 
 
 
+CV_DENOM_EPS = 1e-12
+
+
+
 
 
 
@@ -320,6 +354,7 @@ def evaluate_terms(
     skip_invalid: bool = False,
     max_order: int = _DEFAULT_MAX_ORDER,
     lhs_order: int | None = None,
+    rows: Tensor | None = None,
 ) -> EvaluationResult:
     """Evaluate candidate terms against a dataset, fail-loud.
 
@@ -340,6 +375,11 @@ def evaluate_terms(
             DERIVES from ``dataset.lhs_order`` (single source of truth); an
             explicit value is a deliberate OVERRIDE (request semantics, may
             differ from ``dataset.lhs_order``).
+        rows: Grid-shaped boolean mask or flat int32/int64 sample indices.
+            Derivatives and term validation run on the complete grid first;
+            fitting, residuals and metrics use only selected rows. Indices
+            preserve order and duplicates. An empty selection is an error.
+            ``None`` uses the original full-grid fit. The dataset is unchanged.
 
     Returns:
         An ``EvaluationResult`` with ``is_valid is True`` (honest metrics).
@@ -380,12 +420,147 @@ def evaluate_terms(
         raise TypeError(
             "evaluate() requires components.evaluator (term fit); got None."
         )
-    result = evaluator.evaluate_terms(report.valid, skip_invalid=False)
+    result = evaluator.evaluate_terms(report.valid, skip_invalid=False, rows=rows)
     if not result.is_valid:
         raise EvaluationFailedError(
             result.error_message or "Evaluation produced an invalid result"
         )
     return result
+
+
+def block_dispersion(
+    dataset: PDEDataset,
+    terms: Sequence[str],
+    *,
+    n_blocks: int = 4,
+    axis: str | None = None,
+    max_order: int = _DEFAULT_MAX_ORDER,
+    lhs_order: int | None = None,
+) -> float:
+    """Refit the terms on separate grid blocks and measure coefficient spread.
+
+    Two grid points are trimmed at both ends of every axis. The remaining
+    indices along the block axis are split into ``n_blocks`` contiguous runs
+    (``numpy.array_split``), each block is fitted with ``evaluate_terms``
+    (``rows=`` the block), and the result is the mean over terms of
+    ``|std(c, correction=0) / max(|mean(c)|, CV_DENOM_EPS)|``, where
+    ``CV_DENOM_EPS = 1e-12`` and ``c`` holds one term's coefficients across
+    the blocks. A law that holds on the whole grid keeps similar coefficients
+    on every block.
+
+    Args:
+        dataset: A GRID ``PDEDataset`` (never mutated).
+        terms: Candidate term strings (canonical funcall IR).
+        n_blocks: Number of blocks; ``1`` gives ``0.0``.
+        axis: Axis name to split along; default ``dataset.spatial_axes[0]``.
+        max_order: As in ``evaluate_terms``.
+        lhs_order: As in ``evaluate_terms``.
+
+    Returns:
+        The mean coefficient of variation across blocks.
+
+    Raises:
+        ValueError: If the dataset is not GRID, the resolved LHS field/axis
+            is absent, or the result is non-finite.
+        InvalidTermsError: Propagated from ``evaluate_terms``.
+        EvaluationFailedError: Propagated from ``evaluate_terms`` when the
+            fit on any block is invalid.
+    """
+    if dataset.topology is not DataTopology.GRID:
+        raise ValueError("block_dispersion requires a GRID dataset")
+    dataset = resolve_lhs_defaults(dataset)
+    values = dataset.get_field(dataset.lhs_field)
+    axis = dataset.spatial_axes[0] if axis is None else axis
+    block_axis = cast(list[str], dataset.axis_order).index(axis)
+    interior = interface_mask(
+        values, axis=0, width=0, trim={d: 2 for d in range(values.ndim)}
+    )
+    n = values.shape[block_axis]
+    shape = [1] * values.ndim
+    shape[block_axis] = n
+    indices = torch.arange(n, device=values.device).reshape(shape)
+    coefficients: list[Tensor] = []
+    for run in np.array_split(np.arange(2, n - 2), n_blocks):
+        block = interior & torch.isin(
+            indices, torch.as_tensor(run, device=values.device)
+        )
+        fit = evaluate_terms(
+            dataset, terms, rows=block, max_order=max_order, lhs_order=lhs_order
+        )
+        assert fit.coefficients is not None
+        coefficients.append(fit.coefficients)
+    stacked = torch.stack(coefficients)
+    denom = stacked.mean(dim=0).abs().clamp_min(CV_DENOM_EPS)
+    value = float((stacked.std(dim=0, correction=0) / denom).abs().mean().item())
+    if not math.isfinite(value):
+        raise ValueError(f"block_dispersion: non-finite measurement {value}")
+    return value
+
+
+def forward_error(
+    dataset: PDEDataset,
+    terms: Sequence[str],
+    coefficients: Sequence[float],
+    *,
+    method: str = "Radau",
+    max_step: float | None = None,
+) -> ForwardError:
+    """Integrate the equation from the data's first time slice and compare.
+
+    The RHS is ``kd.core.assemble_rhs`` of all terms (exactly-zero
+    coefficients are omitted), integrated with ``kd.core.integrate_pde``
+    over the dataset's grid. The value is ``||pred - u||_2 / ||u||_2`` over
+    the full grid in float64, with ``u`` the dataset's LHS field. GRID datasets
+    whose ``lhs_order`` is not 1 are refused before integration. No time limit
+    is applied; a caller that needs one runs this in a subprocess.
+
+    Args:
+        dataset: The dataset providing the grid, initial field and target
+            (never mutated).
+        terms: RHS term strings of a first-order evolution law.
+        coefficients: One coefficient per term.
+        method: ``scipy.integrate.solve_ivp`` method.
+        max_step: Maximum solver step; None lets the solver choose.
+
+    Returns:
+        A ``ForwardError`` with ``value`` set, or with ``reason`` set when the
+        equation diverged, the solver failed, or integration was refused
+        (for example a non-GRID dataset, unsupported LHS order or a
+        time-derivative term).
+
+    Raises:
+        ValueError: If ``terms`` and ``coefficients`` differ in length, a
+            coefficient is non-finite, the error is non-finite, or the
+            resolved LHS field/axis is absent from a GRID dataset.
+    """
+    from kd.core.integrator import assemble_rhs, integrate_pde
+
+    if len(terms) != len(coefficients):
+        raise ValueError("terms and coefficients must have equal lengths")
+    rhs = assemble_rhs(terms, coefficients, range(len(terms)))
+    if dataset.topology is DataTopology.GRID:
+        dataset = resolve_lhs_defaults(dataset)
+        if dataset.lhs_order != 1:
+            return ForwardError(
+                None,
+                "refused",
+                "forward_error supports only first-order evolution; "
+                f"got dataset lhs_order={dataset.lhs_order}.",
+            )
+    result = integrate_pde(rhs, dataset, method=method, max_step=max_step)
+    if result.diverged_at_t is not None:
+        return ForwardError(None, "diverged", result.warning)
+    if result.warning.startswith("solve_ivp"):
+        return ForwardError(None, "solve-failed", result.warning)
+    if not result.success:
+        return ForwardError(None, "refused", result.warning)
+    assert result.predicted_field is not None
+    pred = result.predicted_field.detach().cpu().numpy().astype(np.float64)
+    u = dataset.get_field(dataset.lhs_field).detach().cpu().numpy().astype(np.float64)
+    value = float(norm((pred - u).ravel()) / norm(u.ravel()))
+    if not math.isfinite(value):
+        raise ValueError(f"forward_error: non-finite measurement {value}")
+    return ForwardError(value, None, result.warning)
 
 
 

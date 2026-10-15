@@ -1,7 +1,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
+from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Literal, cast
@@ -33,6 +35,7 @@ class Estimator:
     provider_kind: Literal["finite_diff", "autograd"] = "finite_diff"
     surrogate_model: torch.nn.Module | None = None
     surrogate_max_order: int | None = None
+    needs_surrogate: bool = False
 
     def __post_init__(self) -> None:
         if self.provider_kind == "autograd" and self.surrogate_model is None:
@@ -61,9 +64,26 @@ class Estimator:
                     f"no order at all is the finite-difference estimator), got "
                     f"{self.surrogate_max_order}"
                 )
+        if self.needs_surrogate:
+            if self.provider_kind != "autograd":
+                raise ValueError(
+                    "Estimator(needs_surrogate=True) reads the field leaf from the "
+                    f"network, so it needs provider_kind='autograd', got "
+                    f"{self.provider_kind!r}: there is no network to read it from"
+                )
+            if self.surrogate_max_order is not None:
+                raise ValueError(
+                    "Estimator(needs_surrogate=True) cannot be combined with "
+                    "surrogate_max_order: the mixed provider's finite-difference "
+                    "half differentiates the RAW field, so the leaf would come "
+                    "from the network and its higher derivatives from the data -- "
+                    "a footprint no arm has, and an ambiguous one"
+                )
 
     @property
     def name(self) -> str:
+        if self.needs_surrogate:
+            return "autograd+surrogate_field"
         if self.surrogate_max_order is None:
             return self.provider_kind
         return f"autograd-o{self.surrogate_max_order}+finite_diff"
@@ -88,8 +108,9 @@ def _normalize_symbol_name(name: str) -> str:
     if match is None:
         return name
     base, suffixes = match.groups()
-    axes = sorted(suffixes.replace("_", ""))
-    return f"{base}_{''.join(axes)}"
+    orders = Counter(suffixes.replace("_", ""))
+    segments = "_".join(axis * orders[axis] for axis in sorted(orders))
+    return f"{base}_{segments}"
 
 
 def _coordinate_substitutions(expr: sympy.Expr) -> sympy.Expr:
@@ -221,15 +242,6 @@ class _DatasetJudge:
     context: Any
 
     def column(self, monomial: sympy.Expr) -> Tensor:
-        if not monomial.free_symbols:
-
-
-
-
-            raise JudgeError(
-                f"the constant term {monomial} has no corresponding column in "
-                "kd's Theta; it cannot be judged"
-            )
 
 
 
@@ -248,7 +260,9 @@ class _DatasetJudge:
         if exact:
             monomial = monomial.subs(exact)
         try:
-            code = from_sympy(monomial)
+
+
+            code = "one" if monomial == sympy.Integer(1) else from_sympy(monomial)
         except ValueError as exc:
             raise JudgeError(
                 f"the monomial {monomial} cannot be written back to kd IR: {exc}"
@@ -331,6 +345,20 @@ def _grid_shape(dataset: kd.PDEDataset) -> tuple[int, ...]:
     return tuple(dataset.fields[dataset.lhs_field].values.shape)
 
 
+def _surrogate_field_dataset(
+    dataset: kd.PDEDataset, provider: Any, shape: tuple[int, ...]
+) -> kd.PDEDataset:
+
+
+    fields = cast("dict[str, Any]", dataset.fields)
+    field = fields[dataset.lhs_field]
+    forward = provider.get_field(dataset.lhs_field).detach().reshape(shape)
+    return dataclasses.replace(
+        dataset,
+        fields={**fields, field.name: dataclasses.replace(field, values=forward)},
+    )
+
+
 def _finite_diff_provider(dataset: kd.PDEDataset) -> Any:
     components = PlatformBuilder(
         dataset,
@@ -378,6 +406,9 @@ def _foundation(
 
 
         provider: Any = context.derivative_provider
+        shape = _grid_shape(dataset)
+        if estimator.needs_surrogate:
+            context.dataset = _surrogate_field_dataset(dataset, provider, shape)
         if estimator.surrogate_max_order is not None:
             provider = _MixedProvider(
                 provider,
@@ -385,7 +416,7 @@ def _foundation(
                 estimator.surrogate_max_order,
             )
         context.derivative_provider = _GridShapedProvider(
-            provider, _grid_shape(dataset)
+            provider, shape
         )
     truth = _truth_term_map(spec)
     truth_columns: dict[str, Tensor] = {}

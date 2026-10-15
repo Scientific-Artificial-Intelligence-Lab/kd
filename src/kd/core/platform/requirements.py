@@ -28,8 +28,7 @@ class DerivativeReqs:
         if self.lhs_source == "field":
             if self.lhs_order != 0:
                 raise ValueError(
-                    "lhs_source='field' requires lhs_order=0, got "
-                    f"{self.lhs_order}"
+                    f"lhs_source='field' requires lhs_order=0, got {self.lhs_order}"
                 )
             if self.provider_kind != "none":
                 raise ValueError(
@@ -109,9 +108,8 @@ def assert_dataset_supported(
 
 
         order2_hint = (
-            " DLGA is the only packaged plugin with a configurable target "
-            "order: set DLGAConfig(target_lhs_order=2) (or use the "
-            "wave_preset()/kg_preset() factories) to fit a u_tt dataset."
+            " DLGA is the only packaged instrument that targets order 2: "
+            "set target_lhs_order=2."
             if dataset_lhs_order == 2
             else ""
         )

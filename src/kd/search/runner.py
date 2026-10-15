@@ -46,8 +46,8 @@ from kd.search.descriptor import (
     assert_sketch_supported,
     mode_for_topology,
 )
-from kd.search.lifecycle import SearchLifecycle
 from kd.search.protocol import (
+    DerivativeSourceAlgorithm,
     DiscoveryTask,
     IterativeSearchAlgorithm,
     PlatformComponents,
@@ -55,7 +55,11 @@ from kd.search.protocol import (
     SearchAlgorithm,
     TerminatingSearchAlgorithm,
 )
-from kd.search.record_assembly import assemble_run_record, cpu_seconds_now
+from kd.search.record_assembly import (
+    assemble_run_record,
+    cpu_seconds_now,
+    drop_small_terms,
+)
 from kd.search.recorder import VizRecorder
 from kd.search.records import RecordSchemaError, RunCost
 from kd.search.result import (
@@ -128,10 +132,13 @@ class ExperimentRunner:
         max_iterations: int = 100,
         batch_size: int = 20,
         callbacks: list[RunnerCallback] | None = None,
+        *,
+        small_term_rtol: float = 0.0,
     ) -> None:
         self._algorithm = algorithm
         self._max_iterations = max_iterations
         self._batch_size = batch_size
+        self._small_term_rtol = small_term_rtol
         self._callbacks: list[RunnerCallback] = (
             callbacks if callbacks is not None else []
         )
@@ -140,10 +147,6 @@ class ExperimentRunner:
         self._boundary_invalid_results = 0
         self._run_started = 0.0
         self._cpu_started: float | None = None
-
-
-
-        self._lifecycle: SearchLifecycle | None = None
 
 
 
@@ -157,10 +160,6 @@ class ExperimentRunner:
 
 
         self._task: DiscoveryTask | None = None
-
-    @property
-    def lifecycle(self) -> SearchLifecycle | None:
-        return self._lifecycle
 
     def run(
         self,
@@ -186,16 +185,7 @@ class ExperimentRunner:
         self._cpu_started = cpu_seconds_now()
 
 
-
-        lifecycle = SearchLifecycle()
-        self._lifecycle = lifecycle
-        pending_restore = self._pending_restore_state
-
-
-
-        self._resumed = bool(pending_restore)
-        if pending_restore is not None:
-            lifecycle.restore(pending_restore)
+        self._resumed = bool(self._pending_restore_state)
 
 
 
@@ -207,20 +197,18 @@ class ExperimentRunner:
 
         recorder_before = components.recorder
         try:
-            return self._run_search(components, lifecycle, preprocessing_seconds)
+            return self._run_search(components, preprocessing_seconds)
         finally:
             components.recorder = recorder_before
 
     def _run_search(
         self,
         components: PlatformComponents,
-        lifecycle: SearchLifecycle,
         preprocessing_seconds: float | None,
     ) -> ExperimentResult:
         recorder = self._ensure_recorder(components)
         callbacks = self._callbacks_for_run(recorder)
         self._algorithm.prepare(components)
-        lifecycle.prepare()
 
 
 
@@ -270,7 +258,6 @@ class ExperimentRunner:
         try:
             for iteration in range(self._max_iterations):
                 self._run_iteration(iteration, callbacks)
-                lifecycle.iterate()
                 self._current_iteration = iteration + 1
                 if any(cb.should_stop for cb in callbacks) or (
                     terminating_alg is not None and terminating_alg.is_done
@@ -285,9 +272,6 @@ class ExperimentRunner:
         finally:
             finalize_failures = self._finalize_callbacks(callbacks, crashed=crashed)
 
-
-
-        lifecycle.finish()
 
 
 
@@ -352,6 +336,7 @@ class ExperimentRunner:
             self._task.sketch,
             algorithm=descriptor.algorithm,
             sketch_lower_owner=sketch_lower_owner,
+            config=self._algorithm.config,
         )
 
     def _assert_run_identity_serializable(self) -> None:
@@ -383,6 +368,13 @@ class ExperimentRunner:
             1 for result in results if not result.is_valid
         )
         self._algorithm.update(results)
+
+        for cb in callbacks:
+            if _implements_member(cb, "on_iteration_updated"):
+
+
+                handler = getattr(cb, "on_iteration_updated")
+                handler(iteration, self._algorithm)
 
         for cb in callbacks:
             cb.on_iteration_end(iteration, self._algorithm, candidates, results)
@@ -477,6 +469,8 @@ class ExperimentRunner:
         finalize_failures: list[str],
     ) -> ExperimentResult:
         final_eval = self._final_eval()
+        if self._drops_small_terms():
+            final_eval = drop_small_terms(final_eval, self._small_term_rtol)
         actual = self._actual()
         predicted = self._predicted(actual, final_eval)
         score_kind = DEFAULT_SCORE_KIND
@@ -765,11 +759,21 @@ class ExperimentRunner:
         field, axis, order = parsed
         return LhsSpec(field, axis, order)
 
+    def _drops_small_terms(self) -> bool:
+        return self._small_term_rtol > 0 and self._task is None
+
     def _result_config(self) -> dict[str, Any]:
         config = dict(self._algorithm.config)
-        config["provider_kind"] = resolve_derivative_requirements(
-            self._algorithm
-        ).provider_kind
+        if _implements_member(self._algorithm, "derivative_source"):
+            config["provider_kind"] = cast(
+                DerivativeSourceAlgorithm, self._algorithm
+            ).derivative_source
+        else:
+            config["provider_kind"] = resolve_derivative_requirements(
+                self._algorithm
+            ).provider_kind
+        if self._drops_small_terms():
+            config["small_term_rtol"] = self._small_term_rtol
         if self._task is not None:
 
 
@@ -925,8 +929,6 @@ class ExperimentRunner:
 
 
             getattr(self._algorithm, "reseed")()
-
-
 
 
         self._pending_restore_state = data["algorithm_state"]

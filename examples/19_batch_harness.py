@@ -138,12 +138,15 @@ print(f"\nWrote {markdown} and {artifact.name}")
 # same data recovers the same law, so the equality is checkable rather
 # than only asserted here. (The two columns are not bit-identical: a
 # coordinate leaf under diff_x forces the non-periodic stencil, which
-# costs accuracy on the two boundary rows per side.) The adjacency
-# line is what tells you the two classes are related; read it before
+# costs accuracy on the two boundary rows per side.) The adjacency line
+# compares the term sets literally, with the shared u_t left out, so it
+# reports these two classes as disjoint: it cannot see that two spellings
+# are the same column. Fit both term sets with kd.evaluate_terms before
 # concluding that an engine is unstable.
 print(
     "\nA class split can be a notation difference rather than a real "
-    "disagreement.\nCheck the adjacency relation before drawing conclusions."
+    "disagreement.\nFit both term sets with kd.evaluate_terms before drawing "
+    "conclusions."
 )
 
 # Widening the matrix is a plan edit. To compare engines, or to add a
@@ -160,3 +163,15 @@ print(
 # Give each engine a budget it can actually work with: a cross-engine table
 # built from budgets that suit one engine is a statement about the budgets,
 # not about the engines.
+#
+# run_plan runs the entries one after another in this process, so the batch
+# ends if the process dies; the store keeps the outcomes written before that.
+# To run a large matrix in parallel, split the entries in order into several
+# plans with the same name, run each plan in its own process with its own
+# store_root, and combine the stores in that order under that name:
+#
+# merge_stores([root_a, root_b], root=..., name=plan.name)
+#
+# merge_stores refuses an entry that was attempted in two of its sources. An
+# entry that failed in one batch and was run again in another therefore
+# cannot be merged back; an entry that a batch never reached can be.

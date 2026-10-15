@@ -10,7 +10,7 @@ import torch
 from kd.search.eqgpt.backend import GPTBackend
 from kd.search.eqgpt.vocab import DIV_ID, E_ID, FIRST_TERM_ID, MUL_ID, PLUS_ID, Vocab
 
-_OPERATOR_IDS: Final[tuple[int, ...]] = (E_ID, PLUS_ID, MUL_ID, DIV_ID)
+OPERATOR_IDS: Final[tuple[int, ...]] = (E_ID, PLUS_ID, MUL_ID, DIV_ID)
 
 
 DEFAULT_START_WORDS: Final[tuple[str, ...]] = ("S", "ut", "+")
@@ -82,7 +82,7 @@ class Sampler:
 
     def _legal_ids(self, *, term_position: bool) -> list[int]:
         candidates: range | tuple[int, ...] = (
-            range(FIRST_TERM_ID, self.vocab.size) if term_position else _OPERATOR_IDS
+            range(FIRST_TERM_ID, self.vocab.size) if term_position else OPERATOR_IDS
         )
         return [tok for tok in candidates if tok not in self.config.masked_tokens]
 

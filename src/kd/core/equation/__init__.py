@@ -14,11 +14,6 @@ from kd.core.equation.library import (
     TermLibrarySpec,
     term_fingerprint,
 )
-from kd.core.equation.lowering import (
-    PivotRegressionForm,
-    RegressionForm,
-    lower_to_regression,
-)
 from kd.core.equation.projection import active_law
 from kd.core.equation.rendering import (
     DEFAULT_LHS_LABEL,
@@ -52,9 +47,10 @@ from kd.core.equation.sketch import (
     TermHole,
     UnassignedTerm,
     constraint_admits,
-    pinned_fingerprints,
+    pinned_monomials,
     sketch_from_dict,
     sketch_to_dict,
+    term_admission,
 )
 from kd.core.equation.structure import (
     StructureFingerprint,
@@ -91,9 +87,7 @@ __all__ = [
     "LhsSpec",
     "PinnedTerm",
     "PinnedVerdict",
-    "PivotRegressionForm",
     "Regression",
-    "RegressionForm",
     "Scalar",
     "Sketch",
     "SKETCH_SCHEMA_TAG",
@@ -119,17 +113,17 @@ __all__ = [
     "law_signature_from_evidence",
     "law_term_entry",
     "law_term_key",
-    "lower_to_regression",
     "make_evolution",
     "make_homogeneous",
     "make_regression",
-    "pinned_fingerprints",
+    "pinned_monomials",
     "render_homogeneous_label",
     "render_lhs_label",
     "residual_program",
     "sketch_from_dict",
     "sketch_to_dict",
     "structure",
+    "term_admission",
     "term_diff",
     "term_fingerprint",
     "to_dict",

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,8 +72,6 @@ def _catalog_row_for_outcome(
     run_dir: Path,
     run_id: str,
     plan_hash: str,
-    global_index: int,
-    resume_source: str | None,
 ) -> dict[str, Any]:
     record_path: str | None = None
     if outcome.record is not None:
@@ -89,9 +87,6 @@ def _catalog_row_for_outcome(
         fingerprint = compute_dataset_fingerprint(dataset)
 
 
-    parent_run_id = (
-        None if outcome.lineage is None else outcome.lineage["source_run_id"]
-    )
     return catalog_row_from_record(
         outcome.record,
         run_id=run_id,
@@ -105,10 +100,8 @@ def _catalog_row_for_outcome(
         dataset_cache_fingerprint=fingerprint,
         seed=outcome.entry.seed,
         record_path=record_path,
-        parent_run_id=parent_run_id,
-        resume_from=resume_source,
         plan_hash=plan_hash,
-        entry_index=global_index,
+        entry_index=outcome.entry_index,
     )
 
 
@@ -121,9 +114,6 @@ def run_plan(
     device: str | None = None,
     recording: RecordingOptions | None = None,
     catalog_path: Path | None = None,
-    entry_indices: Sequence[int] | None = None,
-    resume_from: Mapping[int, Path | str] | None = None,
-    plan_hash: str | None = None,
 ) -> PlanRunResult:
 
 
@@ -141,18 +131,12 @@ def run_plan(
         raise ValueError(
             "catalog_path requires recording (rows point at episode run dirs)"
         )
-    if entry_indices is not None and len(entry_indices) != len(plan.entries):
-        raise ValueError(
-            f"entry_indices length {len(entry_indices)} != plan length "
-            f"{len(plan.entries)}"
-        )
 
     store = EvidenceStore.create(
         Path(store_root),
         plan=plan,
         env=environment_fingerprint(),
     )
-    catalog_plan_hash = store.plan_hash if plan_hash is None else plan_hash
     logger.info(
         "run_plan: executing %d entries of plan %r into %s",
         len(plan.entries),
@@ -162,9 +146,6 @@ def run_plan(
 
     outcomes: list[EpisodeOutcome] = []
     for entry_index, entry in enumerate(plan.entries):
-        global_index = (
-            entry_indices[entry_index] if entry_indices is not None else entry_index
-        )
         episode_kwargs: dict[str, Any] = {}
         if recording is not None:
             episode_kwargs["run_dir"] = (
@@ -172,9 +153,6 @@ def run_plan(
             )
             episode_kwargs["recording"] = recording
             episode_kwargs["record_ref"] = f"../../{record_relpath(entry_index)}"
-        resume_path = (
-            resume_from.get(global_index) if resume_from is not None else None
-        )
 
 
 
@@ -187,7 +165,6 @@ def run_plan(
             dataset=normalized[entry.dataset_ref],
             model_factory=model_factory,
             device=device,
-            resume_from=resume_path,
 
 
             persist_outcome=store.add_outcome,
@@ -208,11 +185,7 @@ def run_plan(
                     catalog_path=catalog_path,
                     run_dir=outcome.run_dir,
                     run_id=outcome.run_id,
-                    plan_hash=catalog_plan_hash,
-                    global_index=global_index,
-                    resume_source=(
-                        str(resume_path) if resume_path is not None else None
-                    ),
+                    plan_hash=store.plan_hash,
                 ),
             )
 

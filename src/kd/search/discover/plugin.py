@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
@@ -13,26 +14,41 @@ from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.types import LhsSpec
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
-from kd.data.schema import DataTopology
+from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
+from kd.data.schema import DataTopology, PDEDataset
 from kd.search.descriptor import (
     SCORE_FRAME_PLATFORM_FULL_GRID,
+    SCORE_FRAME_SURROGATE_FIELD,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ModeSelector,
     Segmentation,
 )
 from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
-from kd.search.discover.config import DiscoverConfig
+from kd.search.discover.config import DiscoverConfig, PINNConfig
 from kd.search.discover.engine import DiscoverEngine, EngineState
 from kd.search.discover.evaluation.magnitude import magnitude_rejection
+from kd.search.discover.sketch_backend import (
+    DiscoverCompiled,
+    SketchGatedEvaluator,
+    _ExpressionEvaluator,
+    compile_for_discover,
+    narrowed_config,
+)
 from kd.search.discover.tabular import (
     ParetoTracker,
     TabularCandidateScorer,
     TabularDeduplicator,
 )
+from kd.search.discover.tokens.library import (
+    _DIFF_OPERATORS,
+    _SPECIAL_DIFF_OPERATORS,
+)
 from kd.search.discover.training.strategy import BaselineState
 from kd.search.protocol import (
+    DiscoveryTask,
     IterativeSearchAlgorithm,
     PlatformComponents,
 )
@@ -48,6 +64,8 @@ from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+    from kd.search.discover.pinn.plugin_run import PinnRun
 
 ALGORITHM_NAME = "discover"
 MIN_PROPOSAL_COUNT = 1
@@ -67,6 +85,21 @@ EWMA_REWARD_KEY = "ewma_reward"
 N_UPDATES_KEY = "n_updates"
 _STATE_MODE = "mode"
 _TABULAR_FRONT = "tabular_front"
+
+
+_MODE2_STATE_KEY = "mode2"
+
+
+
+
+_SKETCH_LEVELS = SketchClauseLevels(
+    fixed_terms="lowered",
+    anchors="exit_checked",
+    hole_count="exit_checked",
+    derivative_order="generation_enforced",
+    operator_set="generation_enforced",
+    field_axis_set="generation_enforced",
+)
 
 
 
@@ -107,16 +140,6 @@ _LOGGED_METRICS: tuple[str, ...] = (
     "n_invalid_in_topk",
     "n_unique",
 )
-
-
-class _ExpressionEvaluator(Protocol):
-
-    @property
-    def lhs_target(self) -> Tensor:
-        pass
-
-    def evaluate_expression(self, expr: str) -> EvaluationResult:
-        pass
 
 
 class _TabularEvaluator(Protocol):
@@ -212,29 +235,76 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="discover",
-        summary="Risk-seeking reinforcement-learning search over PDE expressions.",
+        summary=(
+            "Risk-seeking reinforcement-learning search over PDE "
+            "terms (grid) or tabular expressions"
+        ),
         cost_class="heavy",
         modes=(
             InstrumentMode(
                 name="mode1",
+                field_names=("u",),
+                spatial_axes=("x",),
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
-                description="Facade-reachable finite-difference search mode.",
+                description=(
+                    "Grid search with default vocabulary u, x, t, diff_x, diff2_x."
+                ),
                 lhs_orders=frozenset({1}),
 
 
 
                 score_frame=SCORE_FRAME_PLATFORM_FULL_GRID,
+                sketch=_SKETCH_LEVELS,
+                selector=ModeSelector("pinn", present=False),
+            ),
+
+
+            InstrumentMode(
+                name="mode2",
+
+
+
+                required_params=frozenset({"pinn"}),
+                field_names=("u",),
+                spatial_axes=("x",),
+                forms=frozenset({Form.EVOLUTION}),
+                topologies=frozenset({DataTopology.GRID}),
+                provider_kind="autograd",
+                description=(
+                    "PINN surrogate mode that pretrains a network on the "
+                    "observations, searches on its autograd derivatives, and "
+                    "retrains the network on the best equation at every cycle "
+                    "boundary."
+                ),
+                lhs_orders=frozenset({1}),
+                score_frame=SCORE_FRAME_SURROGATE_FIELD,
+
+
+
+                selector=ModeSelector("pinn", present=True),
             ),
             InstrumentMode(
                 name="tabular",
+                default_overrides={"batch_size": 500, "epsilon": 0.05},
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
                 description="Facade-reachable tabular regression mode.",
                 lhs_orders=frozenset({0}),
             ),
+        ),
+
+
+        facade_inert_fields=frozenset(
+            {
+                "diagnostic_scaffold",
+                "diagnostic_scaffold_diffusion_tokens",
+                "diagnostic_scaffold_reaction_tokens",
+                "diagnostic_scaffold_root_tokens",
+                "diagnostic_scaffold_neutral_tokens",
+            }
         ),
         knobs=(
             Knob(
@@ -318,9 +388,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 resume_tier="resume_safe",
             ),
         ),
-        segmentation=Segmentation(
-            archive="progress", unit="iterations", reseed=True
-        ),
+        segmentation=Segmentation(archive="progress", unit="iterations", reseed=True),
         identity_breaking_fields=frozenset({"library", "max_diff_order", "pinn"}),
         config_artifact_keys=frozenset(),
         surrogate_fields=frozenset(),
@@ -335,25 +403,93 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if mode not in {"default", "tabular"}:
             raise ValueError(f"Unknown DISCOVER mode: {mode!r}.")
         self._config = config or DiscoverConfig()
+
+
+        self._engine_config = self._config
+        self._sketch_compiled: DiscoverCompiled | None = None
         self._mode = mode
         self._evaluator: _ExpressionEvaluator | None = None
         self._engine: DiscoverEngine | None = None
+        self._pinn_run: PinnRun | None = None
+
+        self._deadline: float | None = None
         self._recorder: VizRecorder | None = None
         self._trajectory_lhs = ""
         self._restore_pending: bool = False
         self._pending_state: EngineState | None = None
+
+
+        self._pending_mode2: dict[str, Any] | None = None
         self._front = ParetoTracker()
         self._tabular_deduplicator: TabularDeduplicator | None = None
         torch.manual_seed(self._config.seed)
 
+    @property
+    def _active_pinn(self) -> PINNConfig | None:
+        return self._config.pinn if self._mode == "default" else None
+
+    def refuse_unsupported_names(self, dataset: PDEDataset) -> None:
+        if self._mode == "tabular":
+            return
+        library = self._config.library
+        fields = set(dataset.fields or {})
+        axes = set(dataset.spatial_axes)
+        operators = set(library.operators)
+        derivative_axes = (
+            axes
+            if operators & _SPECIAL_DIFF_OPERATORS
+            else {
+                operator.split("_", 1)[1]
+                for operator in operators & _DIFF_OPERATORS
+                if "_" in operator
+            }
+        )
+        if (
+            fields != set(library.state_vars)
+            or not axes <= set(library.coord_vars) | derivative_axes
+        ):
+            raise NotImplementedError(
+                f"DISCOVER dataset fields {sorted(fields)} and spatial "
+                f"axes {sorted(axes)} "
+                f"are not covered by library state_vars={library.state_vars}, "
+                f"coord_vars={library.coord_vars}, operators={library.operators}. "
+                "Set library through a typed DiscoverConfig to cover this input."
+            )
+
     def prepare(self, components: PlatformComponents) -> None:
+        self.refuse_unsupported_names(components.dataset)
+        self._deadline = None
         restore_state = self._pending_state
-        if self._restore_pending and self._engine is not None:
+        if (
+            self._restore_pending
+            and self._pending_mode2 is None
+            and self._engine is not None
+        ):
             restore_state = self._engine.state
+        task = components.task
+        self._compile_task(task)
         torch.manual_seed(self._config.seed)
         platform_evaluator = self._coerce_evaluator(components.evaluator)
-        self._engine = build_engine(self._config, mode=self._mode)
+        self._engine = build_engine(self._engine_config, mode=self._mode)
         self._evaluator = platform_evaluator
+        self._pinn_run = None
+        pinn = self._active_pinn
+        mode2_block = self._pending_mode2
+        if pinn is not None:
+
+
+            from kd.search.discover.pinn.plugin_run import PinnRun
+
+
+
+
+
+            self._pinn_run = (
+                PinnRun.start(self._config, pinn, self._engine, components)
+                if mode2_block is None
+                else PinnRun.restore(self._config, pinn, components, mode2_block)
+            )
+            self._evaluator = self._pinn_run.evaluator
         if not self._restore_pending:
 
 
@@ -383,6 +519,17 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 tabular_evaluator,
                 lhs_name=components.dataset.lhs_field,
             )
+        if (
+            task is not None
+            and self._sketch_compiled is not None
+            and not task.compiled.closed
+        ):
+            self._evaluator = SketchGatedEvaluator(
+                self._evaluator,
+                sketch=task.sketch,
+                compiled=self._sketch_compiled,
+                registry=components.registry,
+            )
         self._recorder = components.recorder
         self._trajectory_lhs = ""
         if self._enabled_trajectory_recorder() is not None:
@@ -407,8 +554,21 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
 
             self._engine.rebase_best(self._evaluator)
+            if self._pinn_run is not None and mode2_block is not None:
+
+
+                self._pinn_run.resume_cycle(self._engine, mode2_block)
+                self._evaluator = self._pinn_run.evaluator
         self._restore_pending = False
         self._pending_state = None
+        self._pending_mode2 = None
+
+    def _compile_task(self, task: DiscoveryTask | None) -> None:
+        self._sketch_compiled = None
+        self._engine_config = self._config
+        if task is not None:
+            self._sketch_compiled = compile_for_discover(task.sketch, self._config)
+            self._engine_config = narrowed_config(self._config, self._sketch_compiled)
 
     def propose(self, n: int) -> list[str]:
         if n < MIN_PROPOSAL_COUNT:
@@ -423,36 +583,48 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
     def update(self, results: list[EvaluationResult]) -> None:
         engine = self._require_engine()
-        engine.receive_results(results)
-        trajectory_recorder = self._enabled_trajectory_recorder()
-        trajectory = (
-            engine.snapshot_pending_candidates(
-                top_k=trajectory_recorder.trajectory_top_k, lhs=self._trajectory_lhs
+        evaluator = self._require_evaluator()
+        try:
+            engine.receive_results(results)
+            trajectory_recorder = self._enabled_trajectory_recorder()
+            trajectory = (
+                engine.snapshot_pending_candidates(
+                    top_k=trajectory_recorder.trajectory_top_k,
+                    lhs=self._trajectory_lhs,
+                )
+                if trajectory_recorder is not None
+                else []
             )
-            if trajectory_recorder is not None
-            else []
-        )
-        engine.update()
-        if self._mode == "tabular":
-            result_filter = _make_magnitude_filter(
-                enabled=self._config.magnitude_filter
+            engine.update()
+            if self._pinn_run is not None:
+                self._pinn_run.completed_generations += 1
+            if self._mode == "tabular":
+                result_filter = _make_magnitude_filter(
+                    enabled=self._config.magnitude_filter
+                )
+                front_results = (
+                    [result_filter(result) for result in results]
+                    if result_filter is not None
+                    else results
+                )
+                self._update_front(front_results)
+            log_whitelisted_metrics(
+                self._recorder,
+                _LOGGED_METRICS,
+                engine.last_metrics,
+                skip_missing=True,
             )
-            front_results = (
-                [result_filter(result) for result in results]
-                if result_filter is not None
-                else results
-            )
-            self._update_front(front_results)
-        log_whitelisted_metrics(
-            self._recorder,
-            _LOGGED_METRICS,
-            engine.last_metrics,
-            skip_missing=True,
-        )
-        if self._mode == "tabular":
-            self._log_front()
-        if trajectory_recorder is not None:
-            log_search_trajectory(trajectory_recorder, trajectory)
+            if self._mode == "tabular":
+                self._log_front()
+            if trajectory_recorder is not None:
+                log_search_trajectory(trajectory_recorder, trajectory)
+        finally:
+
+
+
+
+
+            evaluator.invalidate_term_cache()
 
     def _enabled_trajectory_recorder(self) -> VizRecorder | None:
         recorder = self._recorder
@@ -461,7 +633,16 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         return recorder
 
     def between_iterations(self) -> None:
-        pass
+        if self._pinn_run is None:
+            return
+        self._pinn_run.between_generations(
+            self._require_engine(), deadline=self._deadline
+        )
+        self._evaluator = self._pinn_run.evaluator
+
+    def set_wall_clock_deadline(self, deadline: float) -> None:
+        if self._deadline is None or deadline < self._deadline:
+            self._deadline = deadline
 
     @property
     def best_score(self) -> float:
@@ -486,6 +667,18 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     def runner_batch_size(self) -> int:
         return self._config.batch_size
 
+    @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        if self._sketch_compiled is None:
+            return None
+        return self._sketch_compiled.report
+
+    @property
+    def surrogate_train_seconds(self) -> float | None:
+        if self._pinn_run is None:
+            return None
+        return self._pinn_run.train_seconds
+
 
 
     @property
@@ -504,7 +697,16 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             needs_surrogate=False,
         )
 
+    @property
+    def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+        if self._mode == "tabular":
+            return "none"
+        return "autograd" if self._config.pinn is not None else "finite_diff"
+
     def build_final_result(self) -> EvaluationResult:
+        if self._pinn_run is not None:
+            engine = self._require_engine()
+            engine.state = self._pinn_run.finalize(engine)
         result = self._require_evaluator().evaluate_expression(self.best_expression)
         result_filter = _make_magnitude_filter(enabled=self._config.magnitude_filter)
         if result_filter is not None:
@@ -554,23 +756,43 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             payload[BEST_RESULT_COEFFICIENTS_KEY] = list(
                 engine_state.best_result_coefficients,
             )
-        return {
+        state: dict[str, Any] = {
             "algorithm": ALGORITHM_NAME,
             ENGINE_STATE_KEY: payload,
         }
+        if self._pinn_run is not None:
+            state[_MODE2_STATE_KEY] = self._pinn_run.state_block(self._require_engine())
+        elif self._pending_mode2 is not None:
+            state[_MODE2_STATE_KEY] = copy.deepcopy(self._pending_mode2)
+        return state
 
     @state.setter
     def state(self, value: dict[str, Any]) -> None:
+        pinn_mode = self._active_pinn is not None
         if not value:
             self._pending_state = None
+            self._pending_mode2 = None
             self._restore_pending = False
             self._front = ParetoTracker()
-            if self._engine is not None:
+            if pinn_mode:
+                self._drop_prepared_run()
+            elif self._engine is not None:
                 torch.manual_seed(self._config.seed)
-                self._engine = build_engine(self._config, mode=self._mode)
+                self._engine = build_engine(self._engine_config, mode=self._mode)
                 if self._tabular_deduplicator is not None:
                     self._engine.set_deduplicator(self._tabular_deduplicator)
             return
+        if pinn_mode and _MODE2_STATE_KEY not in value:
+            raise ValueError(
+                "DISCOVER checkpoint carries no mode2 state, and config.pinn is "
+                "set: the PINN mode cannot resume without its network."
+            )
+        if not pinn_mode and _MODE2_STATE_KEY in value:
+            raise ValueError(
+                "DISCOVER checkpoint carries a mode2 state, and this plugin does "
+                "not run the PINN mode: the checkpoint's search ran on a network "
+                "this plugin does not have."
+            )
         raw_engine_state = value.get(ENGINE_STATE_KEY)
         if not isinstance(raw_engine_state, Mapping):
             raise TypeError("state must contain an engine_state mapping.")
@@ -585,8 +807,16 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             self._front = self._front_from_extras(parsed.extras)
         self._pending_state = parsed
         self._restore_pending = True
-        if self._engine is not None:
+        if pinn_mode:
+            self._pending_mode2 = copy.deepcopy(value[_MODE2_STATE_KEY])
+            self._drop_prepared_run()
+        elif self._engine is not None:
             self._engine.state = parsed
+
+    def _drop_prepared_run(self) -> None:
+        self._engine = None
+        self._pinn_run = None
+        self._evaluator = None
 
     def reseed(self) -> None:
         pass

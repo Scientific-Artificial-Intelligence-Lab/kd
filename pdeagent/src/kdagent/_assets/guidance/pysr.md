@@ -1,21 +1,24 @@
-### PySR tool configuration
+Supply `terms` for grids other than one-field `u(x,t)`. Tabular mode derives
+its inputs from feature columns, preserves constants inside the whole
+expression and fits one outer coefficient without a separate outer intercept;
+a pure-constant expression is refused. The default tabular unary operators
+are `sin`, `cos`, `exp`, `log`.
 
-An omitted generations budget is short for PySR: it controls internal search
-iterations. `resume_from_run_id` restores populations and the hall of fame;
-the new generation budget is additional. The tool's seed maps to random_state.
-The optional PySR backend must be installed in the worker environment before
-running; a missing backend otherwise fails after the term-matrix build.
-The supported package range is pysr>=1.5,<2.
+`generations` sets `niterations`; a resumed run adds that budget to restored
+populations and the hall of fame. Every call and resume incurs Julia startup
+before search timing. With a wall limit, the backend gets that limit minus
+50 seconds, with a 15-second minimum. `max_evaluations` does not bound PySR's
+search; reported evaluations count re-scored hall-of-fame entries.
 
-### PySR observations
+A seed alone gives weak reproducibility. For deterministic execution use
+`extra_pysr_kwargs={"deterministic": true, "parallelism": "serial"}`; serial
+search is slower. Do not repeat typed configuration keys inside that mapping.
+The selected expression is in the envelope; inspect `recorder.json` for the
+front. A linear fit over the supplied columns does not test all nonlinear
+combinations PySR can form.
 
-One recorded refit comparison gave NMSE 2.9e-5 for a correct structure and
-8.5e-1 for a wrong structure. Near-one NMSE indicates little improvement over
-the mean on that domain. `kd.evaluate_terms` over the whole supplied library
-tests its linear span, not all nonlinear combinations PySR can form. A large
-linear-span NMSE therefore cannot prove that PySR's search space is inadequate.
-The envelope gives the selected point; inspect recorder.json for the full
-front. PDE display is coefficient-free, for example
-add(u_x, mul(u, u_x)); read primary.law for coefficients. In tabular Python
-runs, numeric constants stay inside the expression and the recorded outer
-scale is separate. Tabular input is not offered by this controller.
+### Narrowing with a sketch
+
+With a sketch hole constrained by `fields`, a
+candidate's constant additive tail currently prevents a law from being
+returned; account for this limitation when narrowing.

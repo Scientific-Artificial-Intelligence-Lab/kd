@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -11,6 +12,7 @@ from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan, PlanEntry
 from kd.search.records import RunRecord
 
 INDEX_SCHEMA_VERSION: Final[int] = 1
+SOURCES_INDEX_SCHEMA_VERSION: Final[int] = 2
 INDEX_FILENAME: Final[str] = "index.json"
 RECORDS_DIRNAME: Final[str] = "records"
 
@@ -34,6 +36,17 @@ _INDEX_FIELDS: Final[frozenset[str]] = frozenset(
         "records",
     }
 )
+_INDEX_FIELDS_BY_VERSION: Final[dict[int, frozenset[str]]] = {
+    INDEX_SCHEMA_VERSION: _INDEX_FIELDS,
+    SOURCES_INDEX_SCHEMA_VERSION: _INDEX_FIELDS | {"sources", "version_note"},
+}
+
+
+_SOURCE_FIELDS: Final[frozenset[str]] = frozenset(
+    {"root", "plan_name", "plan_hash", "entry_offset", "n_entries", "env"}
+)
+
+VERSION_FIELDS: Final[tuple[str, ...]] = ("kd_version", "git_sha")
 
 
 _ATTEMPT_FIELDS: Final[frozenset[str]] = frozenset(
@@ -83,6 +96,8 @@ class VerifiedIndex:
     attempts: list[dict[str, Any]]
     records: dict[int, RunRecord]
     records_index: dict[str, dict[str, str]]
+    sources: tuple[dict[str, Any], ...]
+    version_note: str | None
 
 
 def _decode_index(root: Path) -> dict[str, Any]:
@@ -100,15 +115,16 @@ def _decode_index(root: Path) -> dict[str, Any]:
         raise EvidenceStoreError("evidence index must be a JSON object")
 
     version = data.get("index_schema_version")
-    if type(version) is not int or version != INDEX_SCHEMA_VERSION:
+    if type(version) is not int or version not in _INDEX_FIELDS_BY_VERSION:
         raise EvidenceStoreError(
             f"unsupported index_schema_version: got {version!r}; "
-            f"supported: {[INDEX_SCHEMA_VERSION]!r}"
+            f"supported: {sorted(_INDEX_FIELDS_BY_VERSION)!r}"
         )
+    expected = _INDEX_FIELDS_BY_VERSION[version]
     actual = frozenset(data)
-    if actual != _INDEX_FIELDS:
-        unknown = sorted(actual - _INDEX_FIELDS)
-        missing = sorted(_INDEX_FIELDS - actual)
+    if actual != expected:
+        unknown = sorted(actual - expected)
+        missing = sorted(expected - actual)
         raise EvidenceStoreError(
             f"malformed evidence index (unknown={unknown!r}, missing={missing!r})"
         )
@@ -226,9 +242,7 @@ def _reject_orphan_records(
             raise EvidenceStoreError(f"unreferenced record file (orphan): {child}")
 
 
-def _verify_data_identity(
-    plan: ExperimentPlan, records: dict[int, RunRecord]
-) -> None:
+def verify_data_identity(plan: ExperimentPlan, records: dict[int, RunRecord]) -> None:
     by_ref: dict[str, str] = {}
     for entry_index, record in records.items():
         ref = plan.entries[entry_index].dataset_ref
@@ -343,16 +357,167 @@ def _verify_attempts(
     return verified
 
 
+def _verify_source_row(position: int, row: Any) -> None:
+    if not isinstance(row, dict):
+        raise EvidenceStoreError(f"sources[{position}] must be a JSON object")
+    actual = frozenset(row)
+    if actual != _SOURCE_FIELDS:
+        unknown = sorted(actual - _SOURCE_FIELDS)
+        missing = sorted(_SOURCE_FIELDS - actual)
+        raise EvidenceStoreError(
+            f"malformed sources[{position}] (unknown={unknown!r}, missing={missing!r})"
+        )
+    for field in ("root", "plan_name", "plan_hash"):
+
+        if not isinstance(row[field], str) or not row[field]:
+            raise EvidenceStoreError(
+                f"sources[{position}].{field} must be a non-empty string; "
+                f"got {row[field]!r}"
+            )
+    for field in ("entry_offset", "n_entries"):
+        value = row[field]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise EvidenceStoreError(
+                f"sources[{position}].{field} must be an int (bool rejected); "
+                f"got {value!r}"
+            )
+    if row["n_entries"] < 1:
+        raise EvidenceStoreError(
+            f"sources[{position}].n_entries must be at least 1; "
+            f"got {row['n_entries']!r}"
+        )
+    env = row["env"]
+    if not isinstance(env, dict) or not all(
+        isinstance(key, str) and isinstance(value, str) for key, value in env.items()
+    ):
+        raise EvidenceStoreError(
+            f"sources[{position}].env must be an object of strings"
+        )
+
+
+def _verify_source_slices(plan: ExperimentPlan, rows: list[dict[str, Any]]) -> None:
+    total = sum(row["n_entries"] for row in rows)
+    if total != len(plan.entries):
+        raise EvidenceStoreError(
+            f"sources cover {total} entries; the plan has {len(plan.entries)}"
+        )
+    offset = 0
+    for position, row in enumerate(rows):
+        if row["entry_offset"] != offset:
+            raise EvidenceStoreError(
+                f"sources[{position}].entry_offset is {row['entry_offset']}; "
+                f"expected {offset} (rows must tile the plan in order)"
+            )
+        end = offset + row["n_entries"]
+        source_plan = ExperimentPlan(
+            name=row["plan_name"], entries=plan.entries[offset:end]
+        )
+        if source_plan.plan_hash() != row["plan_hash"]:
+            raise EvidenceStoreError(
+                f"sources[{position}].plan_hash {row['plan_hash']!r} does not "
+                f"match plan entries {offset}..{end - 1} under the name "
+                f"{row['plan_name']!r}"
+            )
+        offset = end
+
+
+def agreed_env_fields(envs: Sequence[Mapping[str, str]]) -> dict[str, str]:
+    first, *rest = envs
+    return {
+        key: value
+        for key, value in first.items()
+        if all(other.get(key) == value for other in rest)
+    }
+
+
+def distinct_source_values(
+    sources: Sequence[Mapping[str, Any]], field: str
+) -> list[str | None]:
+    return list(dict.fromkeys(row["env"].get(field) for row in sources))
+
+
+def _verify_version_note(rows: list[dict[str, Any]], version_note: Any) -> None:
+    if version_note is not None and not isinstance(version_note, str):
+        raise EvidenceStoreError(
+            f"version_note must be a string or null; got {version_note!r}"
+        )
+    mixed = [
+        field
+        for field in VERSION_FIELDS
+        if len(distinct_source_values(rows, field)) > 1
+    ]
+    if mixed and not version_note:
+        raise EvidenceStoreError(
+            f"sources differ in {', '.join(mixed)}; a version note is required "
+            f"(what changed between the versions and whether it affects these "
+            f"results)"
+        )
+
+
+def verify_sources(
+    plan: ExperimentPlan, env: Mapping[str, str], sources: Any, version_note: Any
+) -> tuple[dict[str, Any], ...]:
+    if not isinstance(sources, list) or not sources:
+        raise EvidenceStoreError("sources must be a non-empty array")
+    for position, row in enumerate(sources):
+        _verify_source_row(position, row)
+    _verify_source_slices(plan, sources)
+    agreed = agreed_env_fields([row["env"] for row in sources])
+    if dict(env) != agreed:
+        raise EvidenceStoreError(
+            f"env {dict(env)!r} is not the set of fields all sources agree on "
+            f"({agreed!r})"
+        )
+    _verify_version_note(sources, version_note)
+    return tuple({**row, "env": dict(row["env"])} for row in sources)
+
+
+def verify_single_source_attempts(
+    plan: ExperimentPlan,
+    sources: Sequence[Mapping[str, Any]],
+    attempted: Iterable[int],
+) -> None:
+    row_of = [
+        position
+        for position, row in enumerate(sources)
+        for _ in range(row["n_entries"])
+    ]
+
+    seen: dict[tuple[str, str, int], list[int]] = {}
+    for index in sorted(attempted):
+        entry = plan.entries[index]
+        bucket = seen.setdefault((entry.instrument, entry.dataset_ref, entry.seed), [])
+        for other in bucket:
+            if row_of[other] != row_of[index] and plan.entries[other] == entry:
+                raise EvidenceStoreError(
+                    f"plan entry {entry.instrument} (dataset_ref "
+                    f"{entry.dataset_ref!r}, seed {entry.seed}) is attempted in "
+                    f"two sources: entry {other} from "
+                    f"{sources[row_of[other]]['root']} and entry {index} from "
+                    f"{sources[row_of[index]]['root']}"
+                )
+        bucket.append(index)
+
+
 def load_verified_index(root: Path) -> VerifiedIndex:
     data = _decode_index(root)
     plan = _decode_plan(data)
     records, clean_index = _verify_records(root, plan, data["records"])
-    _verify_data_identity(plan, records)
+    verify_data_identity(plan, records)
     attempts = _verify_attempts(plan, data["attempts"], records)
 
     env = data["env"]
     if not isinstance(env, dict):
         raise EvidenceStoreError("evidence index env must be a JSON object")
+
+    sources: tuple[dict[str, Any], ...] = ()
+    version_note = None
+    if data["index_schema_version"] == SOURCES_INDEX_SCHEMA_VERSION:
+        sources = verify_sources(plan, env, data["sources"], data["version_note"])
+        verify_single_source_attempts(
+            plan, sources, (attempt["entry_index"] for attempt in attempts)
+        )
+        version_note = data["version_note"]
 
     return VerifiedIndex(
         plan=plan,
@@ -361,4 +526,6 @@ def load_verified_index(root: Path) -> VerifiedIndex:
         attempts=attempts,
         records=records,
         records_index=clean_index,
+        sources=sources,
+        version_note=version_note,
     )

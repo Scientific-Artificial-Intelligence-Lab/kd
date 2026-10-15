@@ -1,17 +1,35 @@
 """Example 04 - Noisy real-world data: finite-difference vs autograd.
 
 When data is noisy (e.g. lab measurements), naive finite-difference
-derivatives blow up the noise: u_t and u_xx end up dominated by it.
-Autograd-based derivatives use a neural-network surrogate that smooths
-the field first - typically much more robust.
+derivatives blow up the noise: on this 5% noisy field u_x and u_xx are
+dominated by it, and the search settles on a term with no derivative in it
+at all. Autograd-based derivatives fit a neural-network surrogate to the
+samples and differentiate that instead, which is why the true law is
+recoverable here.
 
-This example takes clean Burgers data, adds 5% Gaussian noise, then
-compares ``derivatives='finite_diff'`` vs ``derivatives='autograd'``.
+This example takes clean Burgers data, adds 5% Gaussian noise, then runs
+the same SGA search twice: ``derivatives='finite_diff'`` vs
+``derivatives='autograd'``.
 
-Rule of thumb:
-  - noise < 1% -> finite_diff is fine
-  - noise 1-5% -> either, autograd if FD struggles
-  - noise > 5% -> use autograd
+What it prints at the budget below (seed 0, measured 2026-09-18):
+
+  finite_diff u_t = -1.102*u (-1.103*u under single-threaded BLAS)
+  autograd u_t = -0.9355*u*u_x + 0.09737*u_x_x
+
+against the ground truth ``u_t = -u*u_x + 0.1*u_xx``.
+
+Two measurements behind that budget, both on this dataset:
+
+  - The surrogate has to be trained far enough. At
+    ``autograd_train_epochs=500`` the autograd run returns
+    ``-1.717*x/(-u**2 + x/u)``, built from ``u`` and the coordinate ``x`` with
+    no derivative in it, so both modes are wrong; 3000 is where the true law
+    wins.
+  - Recovery is still seed-dependent: seeds 1 and 2 return ``-1.118*u`` and
+    ``-1.1*u``, and neither 5000 epochs nor a 60x30 search recovers the true
+    law on them (at 60x30 they return different wrong expressions, one of
+    them a five-term bloat). A single run on noisy data does not settle
+    whether a law is recoverable.
 
 Run: python examples/04_noisy_data.py
 """
@@ -54,16 +72,17 @@ print(f"Best AIC: {fd.best_score_:.4f}")
 
 print("\n--- Autograd (NN surrogate) derivatives ---")
 # ``autograd_train_epochs`` is an honest fixed-step budget: the surrogate trains
-# exactly this many epochs. 500 is enough for this small demo; noisier or
-# higher-resolution data wants more. To stop automatically once the surrogate
-# plateaus, add ``autograd_train_patience=...`` + ``autograd_train_val_ratio=...``
+# exactly this many epochs. 3000 is what this 5% noisy field needs (the module
+# docstring records the 500-epoch result); noisier or higher-resolution data
+# wants more. To stop automatically once the surrogate plateaus, add
+# ``autograd_train_patience=...`` + ``autograd_train_val_ratio=...``
 # (early stopping needs a validation split).
 ag = kd.Model(
     algorithm="sga",
     generations=40,
     population=15,
     derivatives="autograd",
-    autograd_train_epochs=500,
+    autograd_train_epochs=3000,
     seed=0,
     verbose=False,
 ).fit(dataset)

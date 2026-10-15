@@ -7,15 +7,13 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
+from kd.core.linear_solve import deterministic_lstsq
 from kd.core.metrics import aic_no_n
 from kd.search.sga.config import SGAConfig
 from kd.search.sga.evaluate import DiffContext, build_theta, prune_invalid_terms
 from kd.search.sga.pde import PDE
 
 _LOGGER = logging.getLogger(__name__)
-
-
-compute_aic = aic_no_n
 
 
 _ZERO_COL_EPS = 1e-14
@@ -183,10 +181,10 @@ def _stridge_no_debias(
         if len(new_biginds) == 0:
             if j == 0:
 
-                w_out = mreg * w if normalize != 0 else w
-                full_w = torch.zeros(d, dtype=theta.dtype, device=theta.device)
-                full_w[nonzero_cols] = w_out.squeeze(-1)
-                return full_w
+
+
+
+                return torch.zeros(d, dtype=theta.dtype, device=theta.device)
             else:
                 break
 
@@ -207,24 +205,13 @@ def _stridge_no_debias(
     return full_w
 
 
-def _deterministic_lstsq(a: Tensor, b: Tensor) -> Tensor:
-    prev = torch.are_deterministic_algorithms_enabled()
-    prev_warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
-    torch.use_deterministic_algorithms(True)
-    try:
-        sol: Tensor = torch.linalg.lstsq(a, b).solution
-        return sol
-    finally:
-        torch.use_deterministic_algorithms(prev, warn_only=prev_warn_only)
-
-
 def _solve(x: Tensor, y: Tensor, lam: float, d: int) -> Tensor:
     y_2d = y.unsqueeze(1) if y.dim() == 1 else y
     if lam != 0:
         xtx = x.T @ x + lam * torch.eye(d, dtype=x.dtype, device=x.device)
         xty = x.T @ y_2d
-        return _deterministic_lstsq(xtx, xty)
-    return _deterministic_lstsq(x, y_2d)
+        return deterministic_lstsq(xtx, xty)
+    return deterministic_lstsq(x, y_2d)
 
 
 def train_sweep(

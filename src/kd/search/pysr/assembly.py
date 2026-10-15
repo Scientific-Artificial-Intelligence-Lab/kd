@@ -6,7 +6,6 @@ from typing import Any
 
 import sympy
 
-from kd.core.expr.sympy_bridge import are_equivalent
 from kd.search.pysr.backend import HOFEntry, PySRBackend
 from kd.search.pysr.convert import (
     pysr_sympy_to_kd_terms,
@@ -33,11 +32,7 @@ def convert_best(
             f"(outside the supported subset): {exc}"
         ) from exc
     if not kd_terms:
-        raise RuntimeError(
-            "PySR best expression reduces to a pure constant with no "
-            "structural terms; kd Theta has no intercept column, so this "
-            "degenerate best is rejected (honest hard fail, no degrade)."
-        )
+        raise RuntimeError("PySR best expression reduces to zero and has no law term")
     return fold_add(kd_terms)
 
 
@@ -85,7 +80,7 @@ def convert_best_tabular(
     if not (best.free_symbols & feature_symbols):
         raise RuntimeError(
             "PySR tabular best is a constant model with no feature symbols; "
-            "kd has no intercept-only semantics for a tabular target"
+            "tabular mode does not accept such a model"
         )
     try:
         return pysr_sympy_to_tabular_term(best, valid_terms, feature_names)
@@ -121,14 +116,14 @@ def convert_hall_of_fame_tabular(
 
 def match_selected_entry(
     best_expression: str,
-    candidates: list[str],
-    meta: list[tuple[int, float]],
+    best: Any,
+    hall_of_fame: list[HOFEntry],
 ) -> tuple[int | None, float | None]:
     if not best_expression:
         return None, None
-    for candidate, (complexity, loss) in zip(candidates, meta, strict=True):
-        if are_equivalent(candidate, best_expression):
-            return complexity, loss
+    for entry in hall_of_fame:
+        if entry.sympy_expr == best:
+            return int(entry.complexity), float(entry.loss)
     return None, None
 
 

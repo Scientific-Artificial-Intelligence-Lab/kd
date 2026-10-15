@@ -19,6 +19,9 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
     "kd-surrogate-v1": SchemaEntry(1, "kd.models.serialize"),
 
+    "kd-tabular-npz-v1": SchemaEntry(1, "kd.data.tabular_file"),
+    "kd-scattered-npz-v1": SchemaEntry(1, "kd.data.layouts.scattered_npz"),
+
     "kd-term-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-termlib-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-lawsig-v2": SchemaEntry(2, "kd.core.equation.signature"),
@@ -49,6 +52,4 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
     "kd-consensus-v1": SchemaEntry(1, "kd.harness.consensus"),
     "kd-stratum-rules-v1": SchemaEntry(1, "kd.harness.consensus"),
     "kd-eligibility-rules-v1": SchemaEntry(1, "kd.harness.consensus"),
-    "kd-dispatch-v1": SchemaEntry(2, "kd.harness._dispatch_schema"),
-    "kd-dispatch-log-v1": SchemaEntry(1, "kd.harness.dispatch_log"),
 }

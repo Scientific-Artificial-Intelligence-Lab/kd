@@ -3,18 +3,17 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from kdagent.adapter import (
-    DEFAULT_GENERATIONS,
-    DEFAULT_SEED,
-    instrument_briefs,
-    run_record_layout,
-)
+from kdagent import cards, experience_text, model_signals
+from kdagent.advice import Advice
+from kdagent.experience import Retrieval
+from kdagent.prompt_text import render_pinned_glossary, render_task_section
+from kdagent.resume import schema_of
 from kdagent.config import ENDPOINT_PRESETS, EndpointConfig
-from kdagent.instrument_doc import instrument_doc
 from kdagent.state import (
     ANSWER,
     ANSWER_NUDGES,
@@ -59,15 +58,15 @@ STOP_TRUNCATION_CAP = "truncation_cap"
 def is_truncated(message: Any) -> bool:
     from langchain_core.messages import AIMessage
 
-    return (
-        isinstance(message, AIMessage)
-        and message.response_metadata.get("finish_reason") == "length"
+    return isinstance(message, AIMessage) and model_signals.is_truncated(
+        message.response_metadata
     )
 
 
 def classify_stop_reason(
     messages: list[Any], answer: Answer | None, error: Exception | None
 ) -> str:
+    from langchain_core.messages import AIMessage
     from langgraph.errors import GraphRecursionError
 
     if isinstance(error, GraphRecursionError):
@@ -78,38 +77,43 @@ def classify_stop_reason(
         return STOP_ANSWER_SUBMITTED
     if messages and is_truncated(messages[-1]):
         return STOP_TRUNCATION_CAP
+    if (
+        messages
+        and isinstance(messages[-1], AIMessage)
+        and model_signals.is_refusal(messages[-1].response_metadata)
+    ):
+        return "refused"
     return "model_finished"
 
 
-_RECORD = run_record_layout()
-SYSTEM_PROMPT = f"""You drive KD, a platform that discovers PDEs from data.
+_RECORD = cards.run_record_layout()
+SYSTEM_PROMPT = f"""You drive KD, a symbolic regression platform that discovers equations from data.
 
 Work out which equation governs the data you are given. You have tools to list
 the datasets, to run a search, to train a derivative surrogate, to abandon or to
 publish a search you have already run, and to submit your answer, plus a shell
 and a Python interpreter. When your searches disagree, `prune_node` gives up on
 a branch that has gone dead and `select_node` names the search to publish;
-without a submission, the search you selected is what this run ends with. An instrument that fits a
-surrogate before it searches (its skill card has a "Surrogate" section) can
-have that surrogate trained once with `train_surrogate` and injected into every
-search of a lineage with `run_discovery(surrogate=...)`, instead of retraining
-it inside each search.
+without a submission, the search you selected is what this run ends with.
 
 Your workspace holds the skills and the records of your own searches.
-`list_datasets` returns the usable IDs and data summaries. Pass the ID unchanged
-to both search and surrogate training. File inputs have content references and
-descriptions under `inputs/`; KD loads their original files in the worker.
+`list_datasets` returns the usable IDs: a file input with its task kind, target
+and data report, a catalog dataset with its axes, lhs, fmt, tier and tags and no
+report. Pass the ID unchanged to both search and surrogate training. File inputs
+have content references and descriptions under `inputs/`; KD loads their original
+files in the worker.
 Changed bytes or loading options require preparing a new input reference.
 The file tools are rooted at the workspace, so `/` is its top level; `execute` runs
 in the same directory but `pwd` prints the host path, which the file tools do
 not accept.
 
+Before the first search, read `/skills/kd-tools/SKILL.md`.
 Read the skill for an algorithm before you configure it.
 
 When a tool fails and names what to change, apply that change and call it again
-before you move on to something else. When a search finishes but fits the data
-poorly, raise how long it is allowed to search and run it again before you
-switch algorithms.
+before you move on to something else. When an iterative search ends with a
+poor fit, continue it with a larger budget before switching; the applicability
+table names each instrument's budget lever.
 
 Every search seals a directory under `{_RECORD["runs_root"]}/` in your workspace
 and files one segment row in `{_RECORD["tree"]}`, the lineage of every segment
@@ -122,14 +126,61 @@ its own directory in `provenance.run_dir`. A run directory holds
 search iteration, with the best expression and score so far) and
 `{_RECORD["phases"]}`. The catalog is append-only: re-running a configuration
 adds a row rather than replacing one, so the current row for a run is the one
-with the latest `created_at`. Nothing summarises any of this for you; the shell
-and the Python interpreter are how you read it.
+with the latest `created_at`. The `diagnostics.segment_report` in each search
+result summarizes that segment; the shell and Python interpreter let you inspect its sealed files.
 
 Finish by calling submit_answer. Prose is not an answer.
 """
 
 
-def build_model(config: EndpointConfig) -> Any:
+def render_experience(
+    summary: dict[str, Any], retrieval: Retrieval, advice: Advice | None
+) -> str:
+    return experience_text.render(
+        task_kind=retrieval["task_kind"],
+        rows=retrieval["rows"],
+        readings={key: dict(value) for key, value in retrieval["readings"].items()},
+        vocabulary=retrieval["vocabulary"],
+        templates=retrieval["templates"],
+        bins=retrieval["bins"],
+        min_support=retrieval["min_support"],
+        rules_version=retrieval["rules_version"],
+        dataset_id=summary["id"],
+        advice_id=None if advice is None else advice["advice_id"],
+        usage=[] if advice is None else advice["usage"],
+    )
+
+
+def compose_system_prompt(
+    summary: dict[str, Any] | None, retrieval: Retrieval | None, advice: Advice | None
+) -> str:
+    if summary is None:
+        return SYSTEM_PROMPT
+    schemas = [
+        cast(dict[str, Any], schema_of(brief["algorithm"]))
+        for brief in cards.instrument_briefs()
+    ]
+    prompt = (
+        SYSTEM_PROMPT
+        + render_task_section(summary, schemas, advice)
+        + "\n"
+        + render_pinned_glossary(summary["task_kind"])
+        + "\nPinned input (use its id for all data tools):\n"
+        + json.dumps(summary, ensure_ascii=False)
+    )
+    if retrieval is not None:
+        prompt += (
+            "\nRetrieved experience:\n"
+            + json.dumps(retrieval["rows"], ensure_ascii=False)
+            + "\n"
+            + render_experience(summary, retrieval, advice)
+        )
+    return prompt
+
+
+def build_model(
+    config: EndpointConfig, *, client_class: type[Any] | None = None
+) -> Any:
     from pydantic import SecretStr
 
     options: dict[str, Any] = {}
@@ -155,7 +206,10 @@ def build_model(config: EndpointConfig) -> Any:
 
 
 
-        return ChatAnthropic(
+        if config.effort is not None:
+            options["effort"] = config.effort
+        client = ChatAnthropic if client_class is None else client_class
+        return client(
             model_name=config.model,
             base_url=config.base_url,
             api_key=SecretStr(config.api_key),
@@ -177,7 +231,10 @@ def build_model(config: EndpointConfig) -> Any:
         options["http_client"] = httpx.Client(trust_env=False)
 
 
-    return ChatOpenAI(
+    if config.effort is not None:
+        options["reasoning_effort"] = config.effort
+    client = ChatOpenAI if client_class is None else client_class
+    return client(
         model=config.model,
         base_url=config.base_url,
         api_key=SecretStr(config.api_key),
@@ -188,80 +245,21 @@ def build_model(config: EndpointConfig) -> Any:
     )
 
 
-PARAMETERS_HEADING = "## Parameters"
-NARROWING_HEADING = "## Narrowing with a sketch"
-SURROGATE_HEADING = "## Surrogate"
-_PARAMETERS_PREAMBLE = (
-    "Generated from kd's instrument schema when this skill was installed; the "
-    "card prose above is hand-written, this table is not. Pass these as the "
-    "`params` mapping of `run_discovery`. `seed` is a separate argument of "
-    "that tool, not a `params` key.\n\n"
-    "`Resume` is kd's classification of changing that parameter: `resume_safe` "
-    "can take effect on a search restored from a checkpoint, `init_only` "
-    "cannot, and `identity_breaking` makes it a different run rather than the "
-    "same one continued. Blank means kd classifies that name nowhere."
-)
-_RESUMABLE_ARCHIVE = "progress"
-_PROGRESS_RESUME_SENTENCE = (
-    " Use `resume_from_run_id` without `resume_iteration` to continue from the "
-    "latest checkpoint, or add `resume_iteration` to roll back and fork; kd's "
-    "tier gate names any parameter it refuses."
-)
-_CONCLUSION_RESUME_SENTENCE = (
-    " This instrument's checkpoint archive carries a finished conclusion rather "
-    "than search state, so `run_discovery` refuses `resume_from_run_id` "
-    "pointing at one of its runs; run it again with different parameters "
-    "instead."
-)
-
-
-def _parameters_preamble(segmentation_archive: str) -> str:
-    sentence = (
-        _PROGRESS_RESUME_SENTENCE
-        if segmentation_archive == _RESUMABLE_ARCHIVE
-        else _CONCLUSION_RESUME_SENTENCE
-    )
-    return f"{_PARAMETERS_PREAMBLE}{sentence}"
-
-
-
-
-_ASSETS_DIR = Path(__file__).resolve().parent / "_assets"
-
-
-def install_skills(workspace: Path) -> None:
-    run_guidance = (
-        (_ASSETS_DIR / "run-guidance.md")
-        .read_text(encoding="utf-8")
-        .format(DEFAULT_GENERATIONS=DEFAULT_GENERATIONS, DEFAULT_SEED=DEFAULT_SEED)
-    )
-    for brief in instrument_briefs():
-        algorithm = brief["algorithm"]
-        instrument_guidance = (_ASSETS_DIR / "guidance" / f"{algorithm}.md").read_text(
-            encoding="utf-8"
-        )
-        skill_dir = workspace / SKILLS_DIR / algorithm
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        surrogate = (
-            f"\n{SURROGATE_HEADING}\n\n{brief['surrogate']}\n"
-            if brief["surrogate"]
-            else ""
-        )
-        (skill_dir / "SKILL.md").write_text(
-            f"---\nname: {algorithm}\n"
-            f"description: {brief['summary']} "
-            f"Runs synchronously; kd rates its cost {brief['cost_class']}.\n---\n\n"
-            f"## Capabilities\n\n{brief['capabilities']}\n\n"
-            f"{instrument_doc(algorithm)}\n\n"
-            f"{run_guidance}\n\n{instrument_guidance}\n\n"
-            f"{PARAMETERS_HEADING}\n\n"
-            f"{_parameters_preamble(brief['segmentation_archive'])}\n\n"
-            f"{brief['parameters']}\n\n"
-            f"{NARROWING_HEADING}\n\n"
-            f"{brief['narrowing']}\n"
-            f"{surrogate}",
-            encoding="utf-8",
-        )
+def install_skills(workspace: Path, *, experience_card: bool) -> None:
+    root = workspace / SKILLS_DIR
+    if root.exists():
+        shutil.rmtree(root)
+    texts = {
+        brief["algorithm"]: cards.algorithm_card(brief)
+        for brief in cards.instrument_briefs()
+    }
+    texts["kd-tools"] = cards.common_card()
+    if experience_card:
+        texts["experience"] = cards.experience_card()
+    for name, text in texts.items():
+        directory = root / name
+        directory.mkdir(parents=True)
+        (directory / "SKILL.md").write_text(text, encoding="utf-8")
 
 
 def _answer_ends_run_middleware() -> Any:
@@ -290,6 +288,8 @@ def _answer_nudge_middleware() -> Any:
             return None
         answer = state.get(ANSWER)
         if answer is not None and answer["source"] == "submitted":
+            return None
+        if model_signals.is_refusal(last.response_metadata):
             return None
         if is_truncated(last):
 
@@ -326,16 +326,45 @@ GENERAL_PURPOSE_DESCRIPTION = (
 )
 
 
+SKILLS_PROMPT = """## Skills
+
+Read the relevant skill before configuring a tool. Skills are available at:
+{skills_locations}{skills_load_warnings}
+
+{skills_list}"""
+
+EXECUTE_DESCRIPTION = (
+    "Run a shell command on this machine in the workspace directory, without a sandbox. "
+    "The command can read and write host files and run installed programs. "
+    "Use workspace-relative paths for files shared with the file tools."
+)
+
+
 def build_agent(
     model: Any,
     tools: list[Callable[..., Any]],
     workspace: Path,
     *,
-    data_summary: dict[str, Any] | None = None,
+    system_prompt: str,
 ) -> Any:
     from deepagents import SubAgent, create_deep_agent
     from deepagents.backends import LocalShellBackend
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
+    from deepagents.middleware.skills import SkillsMiddleware
+    from deepagents.profiles import HarnessProfile, register_harness_profile
+
+    register_harness_profile(
+        "openai",
+        HarnessProfile(tool_description_overrides={"execute": EXECUTE_DESCRIPTION}),
+    )
+    register_harness_profile(
+        "anthropic",
+        HarnessProfile(
+            tool_description_overrides={"execute": EXECUTE_DESCRIPTION},
+            excluded_middleware=frozenset({"SummarizationMiddleware"}),
+        ),
+    )
+    backend = LocalShellBackend(root_dir=str(workspace), inherit_env=True)
 
     general_purpose: SubAgent = {
         **GENERAL_PURPOSE_SUBAGENT,
@@ -345,21 +374,23 @@ def build_agent(
     return create_deep_agent(
         model=model,
         tools=tools,
-        system_prompt=SYSTEM_PROMPT
-        + (
-            ""
-            if data_summary is None
-            else "\nPinned input (use its id for all data tools):\n"
-            + json.dumps(data_summary, ensure_ascii=False)
-        ),
-        backend=LocalShellBackend(root_dir=str(workspace), inherit_env=True),
+        system_prompt=system_prompt,
+        backend=backend,
         skills=[f"/{SKILLS_DIR}/"],
 
 
 
 
 
-        middleware=[_answer_ends_run_middleware(), _answer_nudge_middleware()],
+        middleware=[
+            SkillsMiddleware(
+                backend=backend,
+                sources=[f"/{SKILLS_DIR}/"],
+                system_prompt=SKILLS_PROMPT,
+            ),
+            _answer_ends_run_middleware(),
+            _answer_nudge_middleware(),
+        ],
         subagents=[general_purpose],
         state_schema=KdAgentState,
     )

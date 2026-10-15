@@ -22,14 +22,27 @@ class ExecutionContext:
     device: torch.device = field(default_factory=lambda: torch.device("cpu"))
 
     def unity_column(self) -> torch.Tensor:
+        if self.dataset.topology is DataTopology.TABULAR:
+            target = self.dataset.get_field(self.dataset.lhs_field)
+            return torch.ones_like(target, device=self.device)
         try:
             shape = self.dataset.get_shape()
         except ValueError as exc:
             raise ValueError(
-                "unity term 'one' requires a shaped dataset (GRID or SCATTERED "
-                "with axes); it is unsupported on axes-less datasets"
+                "unity term 'one' requires axes and axis_order on a GRID or "
+                "SCATTERED dataset"
             ) from exc
-        return torch.ones(shape, device=self.device, dtype=torch.float32)
+        fields = self.dataset.fields
+        assert fields is not None
+
+
+
+        source = (
+            fields[self.dataset.lhs_field]
+            if self.dataset.lhs_field
+            else next(iter(fields.values()))
+        )
+        return torch.ones(shape, device=self.device, dtype=source.values.dtype)
 
     def get_variable(self, name: str) -> torch.Tensor:
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sail-kd"
-version = "0.8.1"
+version = "0.8.2"
 description = "KD — An open-source platform for knowledge discovery, powered by the Scientific Artificial Intelligence Lab (SAIL)."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -151,7 +151,7 @@ where = ["src", "pdeagent/src"]
 # Kept in step with pdeagent/pyproject.toml (package-data): the controller's
 # instrument cards must ride the root wheel too, or a non-editable root install
 # assembles its first SKILL.md from an empty glob (arch-audit WIRE-02).
-"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md", "_assets/skills/*/*.md"]
+"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md", "_assets/skills/*/*.md", "_assets/task/*.md", "_assets/pinned-input/*.md", "_assets/experience/*.md", "_assets/fingerprint/*.json"]
 
 [tool.pytest.ini_options]
 # Two roots since 2026-08-18: the controller's tests moved with it into
@@ -182,6 +182,7 @@ markers = [
     "pysindy: tests exercising the PySINDy backend",
     "eqgpt: tests requiring the EqGPT pretrained assets / reference source (skip gracefully when absent)",
     "exploration: open-question probes that are NOT quality gates — never run by default or nightly; run on demand with -m exploration",
+    "v1_compare: kd vs v1 oracle recovery comparison; excluded from the weekly and full slow runs, run on demand with -m v1_compare",
 ]
 
 [tool.mypy]
@@ -232,4 +233,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
 # discover subsystem tests follow ML tensor-dim naming (B, L, N, T) and
 # math-notation test names (test_R_e_*, test_baseline_R_*); idiomatic for
 # this code class.
-"tests/discover/**/*.py" = ["N806", "N802"]
+"tests/**/discover/**/*.py" = ["N806", "N802"]
+"tests/integration/test_discover_*.py" = ["N806", "N802"]
+"tests/helpers/discover_*.py" = ["N806", "N802"]
+"tests/helpers/test_discover_noise.py" = ["N806", "N802"]

@@ -4,17 +4,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from kd.core.equation.signature import law_term_key
-from kd.core.equation.sketch import Sketch, constraint_admits, pinned_fingerprints
-from kd.core.expr.term_features import (
-    ColumnFingerprint,
-    analyze_term,
-    column_fingerprint,
-)
+from kd.core.equation.sketch import Sketch, constraint_admits, pinned_monomials
+from kd.core.expr.jet import Monomial, jet_monomials
+from kd.core.expr.term_features import analyze_term
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -83,7 +80,7 @@ def _exclude_pinned(
     sketch: Sketch,
     config_terms: tuple[str, ...],
     config_keys: tuple[str | None, ...],
-    pin_fingerprints: frozenset[ColumnFingerprint],
+    pin_monomials: frozenset[Monomial],
 ) -> tuple[list[tuple[str, str | None]], list[tuple[str, str]]]:
     pinned_keys = {law_term_key(pin.term_ir) for pin in sketch.pinned}
     remaining: list[tuple[str, str | None]] = []
@@ -92,13 +89,13 @@ def _exclude_pinned(
         if key in pinned_keys:
             dropped.append((term, _PINNED))
             continue
-        if pin_fingerprints:
+        if pin_monomials:
             try:
-                features = analyze_term(term, sketch.vocabulary)
+                monomials = jet_monomials(term, sketch.vocabulary)
             except ValueError:
-                remaining.append((term, key))
+                dropped.append((term, _OUTSIDE_VOCABULARY))
                 continue
-            if column_fingerprint(features) in pin_fingerprints:
+            if monomials & pin_monomials:
                 dropped.append((term, _PINNED_ALIAS))
                 continue
         remaining.append((term, key))
@@ -208,6 +205,10 @@ def _compile_notes(
     pins = ", ".join(pin.term_ir for pin in sketch.pinned) or "none"
     notes = [
         f"anchors represented by configured law identities: {anchors}",
+        "anchor columns are protected from thresholding in every STLSQ "
+        "iteration (FWL elimination); the exit still requires "
+        "|coefficient| >= support_threshold, so with support_threshold=0 "
+        "an anchored clause fails only on an exactly zero coefficient",
         f"pinned terms are owned by lower/lift: {pins}",
     ]
     notes.extend(f"dropped {term!r}: {reason}" for term, reason in dropped)
@@ -220,12 +221,12 @@ def compile_for_pysindy(
     if not sketch.anchored and not sketch.holes:
         return _closed_compilation(sketch, config_terms)
 
-    pin_fingerprints = pinned_fingerprints(sketch)
+    pin_monomials = pinned_monomials(sketch)
     config_keys = _config_law_keys(config_terms)
     anchor_keys = _assert_anchors_representable(sketch, config_keys)
     _assert_operator_clauses_representable(sketch, config_terms)
     remaining, dropped = _exclude_pinned(
-        sketch, config_terms, config_keys, pin_fingerprints
+        sketch, config_terms, config_keys, pin_monomials
     )
     effective_terms = _filter_for_holes(sketch, remaining, anchor_keys, dropped)
     _assert_non_empty(sketch, effective_terms)

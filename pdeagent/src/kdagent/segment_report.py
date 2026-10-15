@@ -8,6 +8,7 @@ from typing import Any
 
 from copy import deepcopy
 
+from kd import FormattedEquation, LhsSpec, format_pde, render_lhs_label
 from kd.core import law_agreement
 from kd.core.equation import law_signature_from_evidence
 from kd.search import IterationEvent, RunDirPaths, RunRecord
@@ -18,17 +19,73 @@ IMPROVEMENT_EPS = 1e-9
 
 
 def law_from_evidence(evidence: Any) -> dict[str, Any] | None:
-    if not evidence.is_valid or not evidence.support:
+    if not evidence.is_valid or not evidence.support or evidence.catalog_fit is None:
         return None
     catalog_fit = evidence.catalog_fit
 
 
-    lhs = None if catalog_fit is None else deepcopy(catalog_fit["lhs_spec"])
+    lhs = deepcopy(catalog_fit["lhs_spec"])
     return {
         "support": evidence.support,
         "coefficients": evidence.coefficients,
         "lhs": lhs,
     }
+
+
+def sealed_lhs_label(
+    lhs: dict[str, Any] | None, catalog_fit: dict[str, Any] | None
+) -> str | None:
+    form = None if catalog_fit is None else catalog_fit["form"]
+    if form == "HOMOGENEOUS":
+        return "0"
+    if lhs is None:
+        return None
+    spec = LhsSpec(**lhs)
+    return spec.field if form == "REGRESSION" else render_lhs_label(spec)
+
+
+def _equation_inputs(
+    law: dict[str, Any], catalog_fit: dict[str, Any] | None
+) -> tuple[str, list[float]] | None:
+    label = sealed_lhs_label(law["lhs"], catalog_fit)
+    coefficients = law["coefficients"]
+    if label is None or coefficients is None or None in coefficients:
+        return None
+    return label, coefficients
+
+
+def sealed_equation(
+    law: dict[str, Any], catalog_fit: dict[str, Any] | None
+) -> FormattedEquation | None:
+    inputs = _equation_inputs(law, catalog_fit)
+    if inputs is None:
+        return None
+    label, coefficients = inputs
+    return format_pde(law["support"], coefficients, lhs=label, sig_figs=0)
+
+
+def sealed_equation_line(
+    law: dict[str, Any], catalog_fit: dict[str, Any] | None
+) -> str | None:
+    inputs = _equation_inputs(law, catalog_fit)
+    if inputs is None:
+        return None
+    label, coefficients = inputs
+    first, *rest = (
+        _signed_term(term, coefficient)
+        for term, coefficient in zip(law["support"], coefficients, strict=True)
+    )
+    line = f"{label} = {first}"
+    for text in rest:
+        line += f" - {text[1:]}" if text.startswith("-") else f" + {text}"
+    return line
+
+
+def _signed_term(term: str, coefficient: float) -> str:
+    if coefficient == 0.0:
+        return f"0*({format_pde([term], [1.0], sig_figs=0).rhs})"
+    rhs = format_pde([term], [coefficient], sig_figs=0).rhs
+    return f"({rhs})" if rhs.is_Add else str(rhs)
 
 
 def build_segment_report(
@@ -45,9 +102,7 @@ def build_segment_report(
 
 
 
-    scores = [
-        event.best_score for event in events if event.best_score is not None
-    ]
+    scores = [event.best_score for event in events if event.best_score is not None]
     best = _best_of(scores, direction)
     if best is None:
         best = evidence.score
@@ -143,6 +198,7 @@ def build_segment_report(
             "coefficient_close": agreement.coefficient,
             "max_abs_delta": agreement.max_abs_delta,
         }
+
 
 
 

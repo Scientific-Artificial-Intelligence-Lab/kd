@@ -36,7 +36,7 @@ Each file is self-contained.
 | 01_quickstart.py | First SGA fit on synthetic data: Hello World | ~5 s |
 | 02_your_data.py | **BYOD: wrap your numpy arrays into a PDEDataset** | ~3 s |
 | 03_visualize.py | Render a multi-figure HTML report in one `model.report(...)` call | ~30 s (slow) |
-| 04_noisy_data.py | Choose finite_diff vs autograd for noisy data | ~25 s (slow) |
+| 04_noisy_data.py | Choose finite_diff vs autograd for noisy data | ~2.5 min (slow; two searches, the autograd one trains a 3000-epoch surrogate first) |
 | 05_save_load.py | Persist and reload a fitted result | ~5 s |
 | 06_realworld.py | **Showcase: 4 real benchmarks × 2 modes (FD + NN), full viz** through `model.report(...)` for every fit | ~15-25 min |
 | 07_discover.py | **DISCOVER**: LSTM-controller symbolic regression (smoke run), with `model.report(...)` for universal and algorithm diagnostics | ~10 s |

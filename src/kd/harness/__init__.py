@@ -17,57 +17,24 @@ from kd.harness.consensus_report import (
     write_consensus_artifact,
 )
 from kd.harness.consensus_verify import MemberVerification, VerificationStatus
-from kd.harness.dispatch import (
-    DISPATCH_ARTIFACT_TAG,
-    DatasetResolverError,
-    DispatchAllocationError,
-    DispatchDatasetSpec,
-    DispatchManifest,
-    DispatchManifestError,
-    DispatchRecording,
-    build_dispatch_manifest,
-    read_dispatch_manifest,
-    resolve_dataset,
-    write_dispatch_manifest,
-)
-from kd.harness.dispatch_log import (
-    DISPATCH_LOG_ARTIFACT_TAG,
-    DispatchLog,
-    DispatchLogError,
-    WorkerLogRow,
-    decode_dispatch_log,
-    read_dispatch_log,
-    write_dispatch_log,
-)
-from kd.harness.dispatch_report import (
-    build_batch_report,
-    render_dispatch_markdown,
-    write_dispatch_report,
-)
-from kd.harness.dispatcher import (
-    DispatchResult,
-    DispatchRunError,
-    dispatch_plan,
-    run_dispatch,
-)
 from kd.harness.episode import SKETCH_SIDECAR_FILENAME, EpisodeOutcome, run_episode
-from kd.harness.merge import (
-    DispatchMergeError,
-    MergeReplayError,
-    ShardMappingError,
-    ShardMissingError,
-    merge_shards,
-)
 from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan, PlanEntry
 from kd.harness.recording import RecordingOptions
 from kd.harness.report import build_plan_report, build_store_report, write_store_report
 from kd.harness.runner import PlanRunResult, run_plan
 from kd.harness.store import EvidenceStore, EvidenceStoreError, environment_fingerprint
+from kd.harness.store_merge import merge_stores
+from kd.harness.supervise import (
+    ProcessEnding,
+    ProcessResult,
+    ProcessSupervisor,
+    build_capped_command,
+    check_memory_cap_available,
+    run_supervised,
+)
 
 __all__ = [
     "CONSENSUS_ARTIFACT_TAG",
-    "DISPATCH_ARTIFACT_TAG",
-    "DISPATCH_LOG_ARTIFACT_TAG",
     "ELIGIBILITY_RULES_VERSION",
     "PLAN_HASH_SCHEME",
     "SKETCH_SIDECAR_FILENAME",
@@ -75,52 +42,31 @@ __all__ = [
     "ConsensusArtifactError",
     "ConsensusPolicy",
     "ConsensusReport",
-    "DatasetResolverError",
-    "DispatchDatasetSpec",
-    "DispatchAllocationError",
-    "DispatchLog",
-    "DispatchLogError",
-    "DispatchManifest",
-    "DispatchManifestError",
-    "DispatchMergeError",
-    "DispatchRecording",
-    "DispatchResult",
-    "DispatchRunError",
     "EpisodeOutcome",
     "EvidenceStore",
     "EvidenceStoreError",
     "ExperimentPlan",
     "MemberVerification",
-    "MergeReplayError",
     "PlanEntry",
     "PlanRunResult",
+    "ProcessEnding",
+    "ProcessResult",
+    "ProcessSupervisor",
     "RecordingOptions",
-    "ShardMappingError",
-    "ShardMissingError",
     "VerificationStatus",
-    "WorkerLogRow",
-    "build_batch_report",
+    "build_capped_command",
     "build_consensus",
-    "build_dispatch_manifest",
     "build_plan_report",
     "build_store_report",
+    "check_memory_cap_available",
     "consensus_to_dict",
-    "decode_dispatch_log",
-    "dispatch_plan",
     "environment_fingerprint",
-    "merge_shards",
+    "merge_stores",
     "read_consensus_artifact",
-    "read_dispatch_log",
-    "read_dispatch_manifest",
     "render_consensus_markdown",
-    "render_dispatch_markdown",
-    "resolve_dataset",
-    "run_dispatch",
     "run_episode",
     "run_plan",
+    "run_supervised",
     "write_consensus_artifact",
-    "write_dispatch_log",
-    "write_dispatch_manifest",
-    "write_dispatch_report",
     "write_store_report",
 ]

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from copy import deepcopy
 from typing import Any
 
@@ -229,27 +229,18 @@ class DiscoverEngine:
     ) -> EngineState:
         if n_iterations < 0:
             raise ValueError("n_iterations must be non-negative.")
-        if cycle_idx is not None:
-            if not isinstance(cycle_idx, (int, np.integer)) or isinstance(
-                cycle_idx,
-                bool,
-            ):
-                raise TypeError(
-                    "cycle_idx must be an int or numpy integer, "
-                    f"got {type(cycle_idx).__name__}",
-                )
-            if int(cycle_idx) < 0:
-                raise ValueError(
-                    f"cycle_idx must be non-negative, got {int(cycle_idx)}",
-                )
-            self._notify_priors_cycle_start(int(cycle_idx))
-        self.rebase_best(evaluator)
-        self._reset_cycle_candidates()
+        self.begin_cycle(evaluator, cycle_idx)
         for iteration_idx in range(n_iterations):
             metrics = self.run_iteration(evaluator)
             if progress_callback is not None:
                 progress_callback(iteration_idx + 1, metrics, self)
         return self.state
+
+    def begin_cycle(self, evaluator: Evaluator, cycle_idx: int | None) -> None:
+        if cycle_idx is not None:
+            self.notify_cycle_start(cycle_idx)
+        self.rebase_best(evaluator)
+        self._reset_cycle_candidates()
 
     def run(
         self,
@@ -272,14 +263,26 @@ class DiscoverEngine:
                 between_cycles(cycle_idx, self)
         return self.state
 
-    def _notify_priors_cycle_start(self, cycle_idx: int) -> None:
+    def notify_cycle_start(self, cycle_idx: int) -> None:
+        if not isinstance(cycle_idx, (int, np.integer)) or isinstance(
+            cycle_idx,
+            bool,
+        ):
+            raise TypeError(
+                "cycle_idx must be an int or numpy integer, "
+                f"got {type(cycle_idx).__name__}",
+            )
+        if int(cycle_idx) < 0:
+            raise ValueError(
+                f"cycle_idx must be non-negative, got {int(cycle_idx)}",
+            )
         prior_system = getattr(self._generator, "prior_system", None)
         if prior_system is None:
             return
         for prior in prior_system.priors:
             hook = getattr(prior, "on_cycle_start", None)
             if callable(hook):
-                hook(cycle_idx)
+                hook(int(cycle_idx))
 
     @property
     def state(self) -> EngineState:
@@ -345,6 +348,10 @@ class DiscoverEngine:
     @property
     def cycle_top_candidates(self) -> list[CandidateSnapshot]:
         return self._cycle_candidates.snapshots
+
+    @property
+    def cycle_seen_expressions(self) -> frozenset[str]:
+        return self._cycle_candidates.seen_expressions
 
     @staticmethod
     def _strip_result(result: EvaluationResult) -> EvaluationResult:
@@ -552,6 +559,28 @@ class DiscoverEngine:
         else:
             self._best_reward = INITIAL_BEST_REWARD
         self._best_result = self._strip_result(result)
+
+    def restore_cycle_candidates(
+        self,
+        expressions: Sequence[str],
+        evaluator: Evaluator,
+        *,
+        seen: Iterable[str],
+    ) -> None:
+        kept: list[str] = []
+        results: list[EvaluationResult] = []
+        for expression in expressions:
+            if count_tokens(expression) > self._validator.max_length:
+                continue
+            (result,) = self._apply_result_filter(
+                [evaluator.evaluate_expression(expression)]
+            )
+            if result.is_valid:
+                kept.append(expression)
+                results.append(result)
+        self._cycle_candidates.restore(
+            kept, self._to_unique_rewards(results), results, seen
+        )
 
     def _reset_cycle_candidates(self) -> None:
         self._cycle_candidates.reset()

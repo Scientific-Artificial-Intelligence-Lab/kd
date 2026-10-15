@@ -57,10 +57,14 @@ class DLGAConfig:
     ``"svd_null_space"`` takes the null space of the augmented system (total least
     squares), ``"ols"`` uses ordinary least squares.
     """
-    lhs_auto_select: bool = True
-    """When True, every candidate is fitted against both the first time derivative
-    (``u_t``) and the second (``u_tt``), and the branch with the lower NMSE is kept.
-    When False, only ``u_t`` is built and used as the left-hand side.
+    lhs_auto_select: bool = False
+    """When False, every candidate is fitted against the time derivative of the order
+    ``target_lhs_order`` names (``u_t`` for 1, ``u_tt`` for 2) and no other. When True,
+    every candidate is fitted against both ``u_t`` and ``u_tt``, as the original
+    DLGA-PDE code does, and the branch with the lower NMSE is kept (the original code
+    compares raw MSE); the returned law's left-hand side can then be the order the
+    dataset does not declare. A fit given a ``sketch`` uses the left-hand side the
+    sketch states and does not read this flag.
     """
 
 
@@ -69,17 +73,13 @@ class DLGAConfig:
 
 
     target_lhs_order: int = 1
-    """Order of the time derivative this configuration targets as the left-hand side: 1
+    """Set to the dataset's left-hand-side order; 2 for u_tt.
+
+    Order of the time derivative this configuration targets as the left-hand side: 1
     for ``u_t``, 2 for ``u_tt``. It must equal the dataset's own left-hand-side order
-    or the fit is rejected before it starts, and order 2 additionally requires
-    ``lhs_auto_select=True``.
+    or the fit is rejected before it starts. Unless ``lhs_auto_select`` is set, it is
+    the only order a candidate is fitted against.
     """
-
-
-
-
-
-
 
 
 
@@ -254,14 +254,6 @@ class DLGAConfig:
                 "target_lhs_order must be 1 (u_t) or 2 (u_tt) — DLGA only "
                 f"materializes these evaluators, got {self.target_lhs_order}"
             )
-        if self.target_lhs_order == 2 and not self.lhs_auto_select:
-            raise ValueError(
-                "target_lhs_order=2 (u_tt) requires lhs_auto_select=True: the "
-                "u_tt evaluator is only built under auto-select (see "
-                "DLGAPlugin._build_evaluators), so declaring order 2 with "
-                "auto-select disabled would pass the LHS-order gate but fit "
-                "u_t — a silent wrong-order ('trusted but wrong') result"
-            )
         if self.max_modules < 1:
             raise ValueError(f"max_modules must be >= 1, got {self.max_modules}")
         if self.max_module_length < 1:
@@ -313,14 +305,11 @@ class DLGAConfig:
     def kdv_preset(cls, **overrides: Any) -> DLGAConfig:
         """DLGAConfig for the KdV equation (``epsilon=1e-6``).
 
-        KdV's small coefficients need a tight ``epsilon=1e-6`` — the default
-        ``1e-3`` lets a single-token genome win and recovery fails (validated
-        5/5 seeds under the NMSE-era selector). This is the preset's core value.
-
-        Note: ``1e-6`` was tuned in the raw-MSE era and re-validated (not
-        re-optimized) under NMSE; the plugin's NMSE recommendation table lists
-        a looser range — override if you want to explore it. Pass
-        ``**overrides`` to customize (e.g. ``surrogate_max_epochs=2000``).
+        KdV's u_xxx coefficient is small (-0.0025), so the preset uses
+        ``epsilon=1e-6``, the value the KdV recovery suite runs (5/5 seeds).
+        It was tuned in the raw-MSE era and re-validated (not re-optimized)
+        under the NMSE selector. Pass ``**overrides`` to customize (e.g.
+        ``surrogate_max_epochs=2000``).
         """
         defaults: dict[str, Any] = {"epsilon": 1e-6}
         defaults.update(overrides)
@@ -330,10 +319,10 @@ class DLGAConfig:
     def wave_preset(cls, **overrides: Any) -> DLGAConfig:
         """DLGAConfig for the wave equation (u_tt LHS, ``epsilon=1e-3``).
 
-        Uses the default ``epsilon=1e-3`` (validated 5/5 seeds). Wave exercises
-        the dual-LHS auto-select (u_t vs u_tt) and relies on the paper-grade
-        surrogate budget to pick the u_tt branch — keep ``surrogate_max_epochs``
-        high. Pass ``**overrides`` to customize.
+        Uses the default ``epsilon=1e-3`` (validated 5/5 seeds). Every candidate
+        is fitted against ``u_tt`` alone, on the surrogate's own second time
+        derivative, so keep ``surrogate_max_epochs`` high. Pass ``**overrides``
+        to customize.
         """
         defaults: dict[str, Any] = {"epsilon": 1e-3, "target_lhs_order": 2}
         defaults.update(overrides)
@@ -344,8 +333,8 @@ class DLGAConfig:
         """DLGAConfig for the Klein-Gordon equation (u_tt LHS, ``epsilon=1e-3``).
 
         Klein-Gordon is ``u_tt = 0.5*u_xx - 5*u`` — a two-term second-order
-        target. Like wave it relies on the dual-LHS auto-select picking the
-        ``u_tt`` branch, so keep ``surrogate_max_epochs`` high. ``epsilon=1e-3``
+        target. Like wave it is fitted against the surrogate's own ``u_tt``,
+        so keep ``surrogate_max_epochs`` high. ``epsilon=1e-3``
         was validated on the real EqGPT ``KG_Exp.mat`` (recovers ``u_xx`` + ``u``
         with ``lhs=u_tt``, coefficients within tolerance and the -5*u sign
         correct); it happens to match wave's epsilon but is kept a distinct

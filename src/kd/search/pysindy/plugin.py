@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import numpy as np
 from torch import Tensor
 
-from kd.core.equation import Form
+from kd.core.equation import Form, LhsSpec
 from kd.core.equation.library import TermLibrarySpec
+from kd.core.equation.rendering import render_lhs_label
+from kd.core.equation.signature import law_term_key
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
-from kd.data.schema import DataTopology
+from kd.data.schema import DataTopology, PDEDataset
 from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
@@ -82,23 +84,40 @@ class PySINDyPlugin:
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="pysindy",
-        summary="One-shot native PySINDy STLSQ over a configured kd term library.",
+        summary=(
+            "One-shot native PySINDy STLSQ over a configured kd term library "
+            "(grid mode) or a feature-derived polynomial library (tabular mode)."
+        ),
         cost_class="light",
         modes=(
             InstrumentMode(
                 name="default",
+                field_names=("u",),
+                spatial_axes=("x",),
+                names_from="terms",
+                refused_fields={"degree": "non_default"},
+                description="Grid evolution regression over explicit kd terms.",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
                 sketch=SketchClauseLevels(
                     fixed_terms="lowered",
-                    anchors="exit_checked",
+                    anchors="fit_enforced",
                     hole_count="exit_checked",
                     derivative_order="generation_enforced",
                     operator_set="generation_enforced",
                     field_axis_set="generation_enforced",
                 ),
                 lhs_orders=frozenset({1}),
+            ),
+            InstrumentMode(
+                name="tabular",
+                refused_fields={"terms": "any"},
+                forms=frozenset({Form.REGRESSION}),
+                topologies=frozenset({DataTopology.TABULAR}),
+                provider_kind="none",
+                description="Polynomial regression on tabular X -> y data.",
+                lhs_orders=frozenset({0}),
             ),
         ),
         knobs=(
@@ -120,13 +139,24 @@ class PySINDyPlugin:
                 "Normalize library columns before STLSQ.",
                 resume_tier="init_only",
             ),
+            Knob(
+                "relative_threshold",
+                "bool",
+                "Read threshold as a fraction of the target L2 norm "
+                "(requires normalize_columns).",
+                resume_tier="init_only",
+            ),
+            Knob(
+                "degree",
+                "int",
+                "Maximum total polynomial degree for tabular data.",
+                resume_tier="init_only",
+            ),
         ),
 
 
 
-        segmentation=Segmentation(
-            archive="conclusion", unit="fits", reseed=False
-        ),
+        segmentation=Segmentation(archive="conclusion", unit="fits", reseed=False),
         identity_breaking_fields=frozenset({"terms"}),
         config_artifact_keys=frozenset(),
         surrogate_fields=frozenset(),
@@ -137,12 +167,25 @@ class PySINDyPlugin:
         config: PySINDyConfig | None = None,
         *,
         task: DiscoveryTask | None = None,
-        backend_factory: Callable[
-            [PySINDyConfig], PySINDyOptimizerBackend
-        ]
+        backend_factory: Callable[[PySINDyConfig], PySINDyOptimizerBackend]
         | None = None,
+        mode: Literal["default", "tabular"] = "default",
     ) -> None:
+        if mode not in ("default", "tabular"):
+            raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
+        if task is not None and mode == "tabular":
+            raise ValueError(
+                "PySINDyPlugin(mode='tabular') does not take a task: the "
+                "descriptor declares every sketch clause unsupported on the "
+                "tabular mode"
+            )
+        self._mode = mode
+        self._lhs_name: str | None = None
         self._config = config or PySINDyConfig()
+        self._anchor_keys = frozenset(
+            law_term_key(anchor.term_ir)
+            for anchor in (() if task is None else task.sketch.anchored)
+        )
         if task is None:
             effective_terms = self._config.terms
             self._sketch_compile_report: CompileReport | None = None
@@ -170,17 +213,53 @@ class PySINDyPlugin:
         self._metrics_logged = False
         self._restore_pending = False
 
+    def refuse_lhs_terms(self, dataset: PDEDataset) -> None:
+        if self._mode == "tabular":
+            return
+        lhs = render_lhs_label(
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+        )
+
+
+        target_terms = {
+            lhs,
+            f"diff_{dataset.lhs_axis}({dataset.lhs_field})",
+            f"diff1_{dataset.lhs_axis}({dataset.lhs_field})",
+        }
+        for term in self._library.terms:
+            if term in target_terms:
+                raise ValueError(
+                    f"terms contains LHS {lhs!r} as {term!r}: tautology; "
+                    f"remove that term"
+                )
+
     def prepare(self, components: PlatformComponents) -> None:
+        self.refuse_lhs_terms(components.dataset)
         if components.evaluator is None:
             raise TypeError(
                 "PySINDyPlugin requires components.evaluator for Theta build "
                 "and kd re-scoring; got None"
             )
+        if self._mode == "tabular":
+
+
+
+
+            target = components.dataset.lhs_field
+            if target in self._library.terms:
+                raise ValueError(
+                    f"tabular term catalog contains the target column "
+                    f"{target!r}; the target must not appear among the "
+                    "feature terms (self-regression tautology)"
+                )
         if not self._restore_pending:
             self._reset_fit_state()
         self._restore_pending = False
         self._evaluator = components.evaluator
         self._recorder = components.recorder
+        self._lhs_name = (
+            components.dataset.lhs_field if self._mode == "tabular" else None
+        )
 
     def propose(self, n: int) -> list[str]:
         evaluator = self._require_evaluator()
@@ -248,9 +327,14 @@ class PySINDyPlugin:
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
-        max_order = infer_max_atomic_order(
-            [*self._library.terms, *self._pinned_terms]
-        )
+        if self._mode == "tabular":
+            return DerivativeReqs(
+                provider_kind="none",
+                lhs_order=0,
+                lhs_source="field",
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
+        max_order = infer_max_atomic_order([*self._library.terms, *self._pinned_terms])
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),
@@ -326,7 +410,9 @@ class PySINDyPlugin:
             return self._final_eval
         evaluator = self._require_evaluator()
         if not self._fitted:
-            return evaluator.evaluate_expression(self._best_expression)
+            result = evaluator.evaluate_expression(self._best_expression)
+            result.lhs_name = self._lhs_name
+            return result
         if self._terms is None or self._coefficient_values is None:
             raise RuntimeError(
                 "Restored PySINDy fit lacks terms or native coefficient_values"
@@ -348,6 +434,7 @@ class PySINDyPlugin:
             terms=valid_terms,
             expression=self._best_expression,
         )
+        self._final_eval.lhs_name = self._lhs_name
 
 
 
@@ -371,14 +458,24 @@ class PySINDyPlugin:
             evaluator.lhs_target.detach().cpu().numpy().astype(np.float64).reshape(-1)
         )
         backend = self._backend_factory(self._config)
-        backend.fit(x_matrix, y_vector)
-        xi = np.asarray(backend.coefficients(), dtype=np.float64)
+        if self._anchor_keys:
+            xi, history = self._fit_with_anchors(
+                backend, x_matrix, y_vector, valid_terms
+            )
+        else:
+            backend.fit(x_matrix, y_vector)
+            xi = np.asarray(backend.coefficients(), dtype=np.float64)
         self._validate_xi(xi, len(valid_terms))
         support = support_from_coefficients(xi)
         if not support:
             raise RuntimeError(
                 "PySINDy STLSQ selected empty support; lower threshold "
                 f"(current threshold={self._config.threshold})"
+                + (
+                    "; threshold is a fraction of the target norm"
+                    if self._config.relative_threshold
+                    else ""
+                )
             )
 
         expression = render_best_expression(valid_terms, support)
@@ -389,13 +486,81 @@ class PySINDyPlugin:
             terms=valid_terms,
             expression=expression,
         )
+        final_eval.lhs_name = self._lhs_name
         self._terms = list(valid_terms)
         self._support = support
         self._coefficient_values = [float(value) for value in xi]
-        self._stlsq_history = backend.history()
+        self._stlsq_history = history if self._anchor_keys else backend.history()
         self._best_expression = expression
         self._final_eval = final_eval
         self._best_score = final_eval.nmse
+
+    def _fit_with_anchors(
+        self,
+        backend: PySINDyOptimizerBackend,
+        theta: np.ndarray,
+        target: np.ndarray,
+        terms: list[str],
+    ) -> tuple[np.ndarray, list[list[float]]]:
+        anchor_indices = [
+            index
+            for index, term in enumerate(terms)
+            if law_term_key(term) in self._anchor_keys
+        ]
+        rest_indices = [i for i in range(len(terms)) if i not in anchor_indices]
+        anchors, rest = theta[:, anchor_indices], theta[:, rest_indices]
+        unit_anchors, scales, q = self._unit_anchor_basis(
+            anchors, [terms[index] for index in anchor_indices]
+        )
+        deflated = rest - q @ (q.T @ rest)
+        kept = self._outside_anchor_span(rest, deflated, anchors.shape)
+        fitted = [index for index, keep in zip(rest_indices, kept, strict=True) if keep]
+
+        def restore(coefficients: np.ndarray) -> np.ndarray:
+            self._validate_xi(coefficients, len(fitted))
+            xi = np.zeros(len(terms), dtype=np.float64)
+            xi[fitted] = coefficients
+
+
+            residual = target - theta[:, fitted] @ coefficients
+            unit = np.linalg.lstsq(unit_anchors, residual, rcond=None)[0]
+            xi[anchor_indices] = unit / scales
+            return xi
+
+
+        if not fitted:
+            xi = restore(np.empty(0, dtype=np.float64))
+            return xi, [xi.tolist()]
+
+        backend.fit(deflated[:, kept], target - q @ (q.T @ target))
+        xi = restore(np.asarray(backend.coefficients(), dtype=np.float64))
+        history = [
+            restore(np.asarray(row, dtype=np.float64)).tolist()
+            for row in backend.history()
+        ]
+        return xi, history
+
+    @staticmethod
+    def _outside_anchor_span(
+        rest: np.ndarray, deflated: np.ndarray, anchor_shape: tuple[int, ...]
+    ) -> np.ndarray:
+        span_tol = max(anchor_shape) * np.finfo(np.float64).eps
+        return np.asarray(
+            np.linalg.norm(deflated, axis=0) > span_tol * np.linalg.norm(rest, axis=0)
+        )
+
+    @staticmethod
+    def _unit_anchor_basis(
+        anchors: np.ndarray, names: list[str]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        scales = np.linalg.norm(anchors, axis=0)
+        if not np.all(scales > 0) or np.linalg.matrix_rank(anchors / scales) < len(
+            names
+        ):
+            raise ValueError(f"PySINDy linearly dependent anchors: {names!r}")
+        unit_anchors = anchors / scales
+        q, _r = np.linalg.qr(unit_anchors, mode="reduced")
+        return unit_anchors, scales, q
 
     @staticmethod
     def _validate_xi(xi: np.ndarray, n_terms: int) -> None:

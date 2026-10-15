@@ -8,6 +8,9 @@ Generators (analytic solutions):
 - Advection equation: u_t + c1*u_x [+ c2*u_y] = 0
 - Diffusion equation: u_t = alpha * (u_xx [+ u_yy])
 
+Generators (conservative finite differences):
+- Variable diffusion: u_t = diff_x(mul(K, u_x)), known conductivity K
+
 Data loaders (pre-computed benchmark data):
 - Allen-Cahn equation: u_t = 0.003 * u_xx + u - u^3
 - Burgers equation: u_t = -u * u_x + 0.1 * u_xx
@@ -20,6 +23,13 @@ Data loaders (pre-computed benchmark data):
 - PDE_divide (paper Eq. S4): u_t = -u_x / x + 0.25 * u_xx
 - PDE_compound (paper Eq. S5): u_t = u * u_xx + u_x^2
 - Wave equation: u_tt = u_xx
+
+Generated catalog loader: load_variable_diffusion_smooth
+(u_t = diff_x(mul(K, u_x)), smooth K).
+
+ODE trajectories (not catalog entries; they load a ``TrajectorySet``):
+- ODE_SYSTEMS: twelve systems with their answers in catalog notation
+- generate_ode_trajectories: integrate trajectories of one system
 """
 
 from kd.data.synthetic._advection import generate_advection_data
@@ -49,14 +59,29 @@ from kd.data.synthetic._loaders import (
     load_pde_divide,
     load_wave,
 )
+from kd.data.synthetic._ode import (
+    ODE_CORE_TRACK,
+    ODE_SYSTEMS,
+    OdeSystem,
+    generate_ode_trajectories,
+)
+from kd.data.synthetic._variable_diffusion import (
+    generate_variable_diffusion_data,
+    load_variable_diffusion_smooth,
+)
 from kd.data.synthetic._wave_xu2020 import generate_wave_xu2020_data
 
 __all__ = [
+    "ODE_CORE_TRACK",
+    "ODE_SYSTEMS",
+    "OdeSystem",
     "generate_advection_data",
     "generate_burgers_data",
     "generate_chaffee_infante_xu2020_data",
     "generate_diffusion_data",
     "generate_kdv_xu2020_data",
+    "generate_ode_trajectories",
+    "generate_variable_diffusion_data",
     "generate_wave_xu2020_data",
     "load_allen_cahn",
     "load_burgers",
@@ -71,5 +96,6 @@ __all__ = [
     "load_pde_compound",
     "load_pde_divide",
     "load_poisson_disk",
+    "load_variable_diffusion_smooth",
     "load_wave",
 ]

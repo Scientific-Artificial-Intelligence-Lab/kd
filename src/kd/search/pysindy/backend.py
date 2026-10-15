@@ -35,7 +35,11 @@ class _PySINDyOptimizerBackend:
 
         cfg = self._config
         kwargs: dict[str, Any] = {
-            "threshold": cfg.threshold,
+            "threshold": (
+                cfg.threshold * np.linalg.norm(y)
+                if cfg.relative_threshold
+                else cfg.threshold
+            ),
             "max_iter": cfg.max_iter,
             "normalize_columns": cfg.normalize_columns,
             "unbias": cfg.unbias,
@@ -96,8 +100,10 @@ class _PySINDyOptimizerBackend:
             atol=_INTERCEPT_ATOL,
         ):
             raise RuntimeError(
-                "PySINDy STLSQ produced a nonzero intercept; kd Theta has no "
-                "intercept column and this optimizer surface is incompatible"
+                "PySINDy STLSQ produced a nonzero intercept; kd carries the "
+                "constant in the 'one' column of Theta, so the optimizer's own "
+                "intercept must be zero. A nonzero intercept means an "
+                "incompatible optimizer surface"
             )
 
 

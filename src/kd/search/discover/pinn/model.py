@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -187,6 +188,7 @@ class PINNModel(nn.Module):
         dataset_metadata: PDEDataset,
         config: PINNConfig,
         local_coords: dict[str, Tensor] | None = None,
+        deadline: float | None = None,
     ) -> TrainResult:
         _log_memory("train_pinn_start", logger)
         dtype = _infer_dtype(observation_coords, observation_targets)
@@ -226,6 +228,7 @@ class PINNModel(nn.Module):
             config,
             best,
             local_inputs,
+            deadline,
         )
         _log_memory("train_pinn_end", logger)
         return result
@@ -479,12 +482,22 @@ def _run_pinn_training(
     config: PINNConfig,
     best: _PINNBestState,
     local_coords: dict[str, Tensor] | None,
+    deadline: float | None,
 ) -> TrainResult:
     _log_memory("_run_pinn_training_start", logger)
     epochs_without_improvement = 0
     consecutive_nan = 0
     total = config.pinn_epoch
     for epoch in range(1, total + 1):
+        if deadline is not None and time.perf_counter() >= deadline:
+            model.load_state_dict(best.state_dict)
+            logger.info(
+                "pinn_train stops at the deadline after %d of %d epochs",
+                epoch - 1,
+                total,
+            )
+            _log_memory("_run_pinn_training_end", logger)
+            return _make_train_result(best, epoch - 1, True)
         if epoch % _PINN_LOG_INTERVAL == 0 or epoch == 1:
             logger.info(
                 "pinn_train %d/%d data=%.6f phys=%.6f total=%.6f",

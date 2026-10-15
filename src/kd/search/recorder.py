@@ -9,35 +9,15 @@ from typing import Any
 
 from torch import Tensor
 
-from kd.core.jsonsafe import (
-    detach_tensor as _detach_tensor,
-)
-from kd.core.jsonsafe import (
-    is_json_serializable as _is_json_serializable,
-)
-from kd.core.jsonsafe import (
-    make_json_safe as _make_json_safe,
-)
-from kd.core.jsonsafe import (
-    sanitize_float as _sanitize_float,
-)
+from kd.core.jsonsafe import detach_tensor, make_json_safe
 
 logger = logging.getLogger(__name__)
 
 _LARGE_TENSOR_WARNING_THRESHOLD = 10_000
 
-
-
-
-
-
 __all__ = [
     "VizRecorder",
     "log_whitelisted_metrics",
-    "_detach_tensor",
-    "_is_json_serializable",
-    "_make_json_safe",
-    "_sanitize_float",
 ]
 
 
@@ -47,7 +27,7 @@ def _is_dataclass_instance(value: Any) -> bool:
 
 def _detach_field_value(value: Any) -> Any:
     if isinstance(value, Tensor):
-        return _detach_tensor(value)
+        return detach_tensor(value)
     return _detach_recursive(value)
 
 
@@ -55,7 +35,7 @@ def _detach_recursive(value: Any) -> Any:
     if isinstance(value, Tensor):
         if value.numel() == 1:
             return value.detach().item()
-        return _detach_tensor(value)
+        return detach_tensor(value)
     if isinstance(value, dict):
         return {k: _detach_recursive(v) for k, v in value.items()}
 
@@ -110,7 +90,7 @@ class VizRecorder:
             if value.numel() == 1:
                 value = value.detach().item()
             else:
-                value = _detach_tensor(value)
+                value = detach_tensor(value)
         elif isinstance(
             value, (list, tuple, dict, set, frozenset)
         ) or _is_dataclass_instance(value):
@@ -126,7 +106,7 @@ class VizRecorder:
 
     def to_dict(self) -> dict[str, list[Any]]:
         return {
-            key: [_make_json_safe(value, key=key) for value in values]
+            key: [make_json_safe(value, key=key) for value in values]
             for key, values in self._store.items()
         }
 

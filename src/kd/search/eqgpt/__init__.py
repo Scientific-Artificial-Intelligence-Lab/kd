@@ -19,7 +19,6 @@ from __future__ import annotations
 from kd.search.eqgpt.backend import (
     ASSET_ENV_VAR,
     DEFAULT_WEIGHTS_FILENAME,
-    FakeGPTBackend,
     GPTBackend,
     RealGPTBackend,
     resolve_asset_path,
@@ -69,7 +68,6 @@ __all__ = [
     "EqGPT",
     "EqGPTConfig",
     "EqGPTPlugin",
-    "FakeGPTBackend",
     "GPTBackend",
     "GPTConfig",
     "MalformedSentenceError",

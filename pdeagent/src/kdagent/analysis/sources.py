@@ -9,6 +9,8 @@ from typing import Any
 
 import kd
 
+from kdagent.model_signals import is_truncated
+
 
 
 NAMED_PARAM = re.compile(r"\b([a-z][a-z0-9_]{2,})\s*=\s*([0-9][0-9.eE+-]*)")
@@ -60,6 +62,18 @@ def tool_payload(row: dict[str, Any]) -> tuple[str, str]:
     return "", "no_output"
 
 
+ENVELOPE_VERBS = frozenset(
+    {
+        "list_datasets",
+        "run_discovery",
+        "train_surrogate",
+        "prune_node",
+        "select_node",
+        "submit_answer",
+    }
+)
+
+
 def envelope(content: str) -> dict[str, Any] | None:
     if not content.startswith("{"):
         return None
@@ -89,7 +103,9 @@ def tool_calls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "inputs": row.get("inputs") or {},
                 "content": content,
                 "status": status,
-                "envelope": envelope(content),
+                "envelope": envelope(content)
+                if row["name"] in ENVELOPE_VERBS
+                else None,
             }
         )
     return calls
@@ -129,8 +145,8 @@ def truncated_replies(rows: list[dict[str, Any]]) -> int:
             for generation in batch:
                 message = (generation.get("message") or {}).get("kwargs") or {}
                 metadata = message.get("response_metadata") or {}
-                reasons.append(metadata.get("finish_reason"))
-        if "length" in reasons:
+                reasons.append(is_truncated(metadata))
+        if any(reasons):
             truncated += 1
     return truncated
 

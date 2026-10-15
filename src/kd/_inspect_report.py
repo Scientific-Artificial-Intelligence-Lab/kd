@@ -4,13 +4,13 @@ Public surface (re-exported from ``kd``):
 
 - :class:`AxisReport` — per-axis length, range, step statistics and spacing verdict.
 - :class:`FieldReport` — per-field dtype, shape, finite-subset statistics and
-  NaN/Inf counts.
+  NaN/Inf counts, plus three per-axis diagnostics.
 - :class:`DatasetReport` — the whole-dataset report, including the warning list
   ``kd.preview`` prints.
 
 Every type is a frozen dataclass with a hand-written ``to_dict()`` returning
-JSON-native primitives, so an external caller (an agent controller, an MCP
-boundary) can consume the same facts ``kd.preview`` prints. Non-finite floats
+JSON-native primitives. The report carries the facts ``kd.preview`` prints
+plus three per-field diagnostics that ``preview`` does not print. Non-finite floats
 are sanitized to ``None`` on serialization rather than rejected at
 construction: describing dirty data is exactly this report's job, so a field of
 all-NaN values is a legal input.
@@ -69,6 +69,7 @@ class AxisReport:
             verdict is the shared ``is_uniform_grid`` predicate the
             finite-difference provider uses, so the report never disagrees with
             the FD accept/reject decision.
+        periodic: Whether the dataset declares this axis periodic.
         step_first: First difference ``values[1] - values[0]``; ``None`` when no
             step exists (single point, or SCATTERED topology).
         step_mean: Mean of all first differences; ``None`` as above.
@@ -81,6 +82,7 @@ class AxisReport:
     min: float
     max: float
     spacing: AxisSpacing
+    periodic: bool
     step_first: float | None
     step_mean: float | None
     step_min: float | None
@@ -106,6 +108,7 @@ class AxisReport:
             "min": sanitize_float(self.min),
             "max": sanitize_float(self.max),
             "spacing": self.spacing,
+            "periodic": self.periodic,
             "step_first": _optional_float(self.step_first),
             "step_mean": _optional_float(self.step_mean),
             "step_min": _optional_float(self.step_min),
@@ -126,6 +129,33 @@ class FieldReport:
         mean: Mean over the finite entries; NaN when nothing is finite.
         nan_count: Number of NaN entries.
         inf_count: Number of Inf entries (either sign).
+        noise_estimate: Robust relative noise level along each axis: the median
+            absolute deviation (MAD) of the second difference
+            ``u[i-1] - 2*u[i] + u[i+1]``, scaled by ``1.4826 / sqrt(6)`` and
+            divided by the field's population standard deviation. It is on the
+            same scale as the relative ``level`` of ``kd.add_noise``.
+        first_derivative_gap: Relative gap ``||2C - E|| / ||E||`` between the
+            second-order central first differences ``C = u[i+1] - u[i-1]``
+            (step 1) and ``E = u[i+2] - u[i-2]`` (step 2).
+        second_derivative_gap: Relative gap ``||4A - B|| / ||B||`` between the
+            second-order central second differences
+            ``A = u[i-1] - 2*u[i] + u[i+1]`` (step 1) and
+            ``B = u[i-2] - 2*u[i] + u[i+2]`` (step 2).
+
+    Here ``u[i]`` is the field value at index ``i`` (0-based) along the axis,
+    out of ``n`` points. Both gaps use the common interior ``2 <= i <= n-3``.
+    The MAD, the standard deviation and both L2 norms pool all other
+    dimensions of the field. The grid spacing cancels from both ratios. A gap
+    is 0 when step 1 and step 2 give the same derivative and grows as the two
+    results diverge (noise or unresolved structure along the axis). The gaps
+    describe the raw field, not the derivative method a fit uses. All three
+    diagnostics are computed on uniformly spaced axes with at least five
+    points, and only for a field without NaN or Inf values.
+
+    The three diagnostic dicts share eligible axis keys in ``axis_order`` order;
+    an absent key means the axis was not eligible. In these dicts a serialized
+    ``null`` means the computed value is infinite, while ``null`` in ``min``,
+    ``max`` or ``mean`` means no finite value exists.
     """
 
     name: str
@@ -136,6 +166,9 @@ class FieldReport:
     mean: float
     nan_count: int
     inf_count: int
+    noise_estimate: dict[str, float]
+    first_derivative_gap: dict[str, float]
+    second_derivative_gap: dict[str, float]
 
     def __post_init__(self) -> None:
         """Validate the field report domain."""
@@ -160,6 +193,18 @@ class FieldReport:
             "mean": sanitize_float(self.mean),
             "nan_count": self.nan_count,
             "inf_count": self.inf_count,
+            "noise_estimate": {
+                axis: sanitize_float(value)
+                for axis, value in self.noise_estimate.items()
+            },
+            "first_derivative_gap": {
+                axis: sanitize_float(value)
+                for axis, value in self.first_derivative_gap.items()
+            },
+            "second_derivative_gap": {
+                axis: sanitize_float(value)
+                for axis, value in self.second_derivative_gap.items()
+            },
         }
 
 
@@ -182,16 +227,15 @@ class DatasetReport:
             ``ExperimentResult.lhs_label`` carries, so the repository's own
             decoder (``kd.core.expr.naming.parse_derivative_name``) reads back
             the field, axis and order this report states. ``None`` when either
-            half of the LHS spec is unset. Two notes: ``kd.preview`` prints the
-            order-free ``"{lhs_field}_{lhs_axis}"`` form instead (frozen output
-            bytes), and an axis name the derivative grammar cannot encode (one
-            containing ``"_"``) falls back to that same order-free form —
-            ``lhs_order`` is authoritative in both cases.
+            half of the LHS spec is unset. One note: an axis name the derivative
+            grammar cannot encode (one containing ``"_"``) falls back to the
+            order-free ``"{lhs_field}_{lhs_axis}"`` form — ``lhs_order`` is
+            authoritative in that case.
         lhs_order: Order of the LHS derivative along ``lhs_axis``.
         warnings: Human-readable warnings in the order ``kd.preview`` prints
             them: per axis (spacing, then small grid) in ``axis_order``, then
             per field (NaN, then Inf) in insertion order, then mixed field
-            dtypes, then unset LHS.
+            dtypes, then an unset LHS on an evolution dataset (``lhs_order > 0``).
     """
 
     name: str

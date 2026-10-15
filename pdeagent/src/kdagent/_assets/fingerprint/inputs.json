@@ -1,0 +1,986 @@
+{
+  "summaries": {
+    "grid-ut": {
+      "id": "file-v1-12f19177c8ded30f7d354814243665b34d20df2f78fdedf4d11cc132152148e6",
+      "task_kind": "pde-evolution",
+      "target": "u_t",
+      "report": {
+        "name": "file-v1-12f19177c8ded30f7d354814243665b34d20df2f78fdedf4d11cc132152148e6",
+        "topology": "grid",
+        "axes": [
+          {
+            "name": "x",
+            "n": 9,
+            "min": -1.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": true,
+            "step_first": 0.25,
+            "step_mean": 0.25,
+            "step_min": 0.25,
+            "step_max": 0.25
+          },
+          {
+            "name": "t",
+            "n": 7,
+            "min": 0.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.16666666666666666,
+            "step_mean": 0.16666666666666666,
+            "step_min": 0.16666666666666663,
+            "step_max": 0.16666666666666674
+          }
+        ],
+        "fields": [
+          {
+            "name": "u",
+            "dtype": "float64",
+            "shape": [
+              9,
+              7
+            ],
+            "min": -2.2873552871788423,
+            "max": 2.2873552871788423,
+            "mean": 5.28677630773884e-18,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {
+              "x": 0.02407568686343673,
+              "t": 0.012975230320538928
+            },
+            "first_derivative_gap": {
+              "x": 0.032085023984385605,
+              "t": 0.01372993352779752
+            },
+            "second_derivative_gap": {
+              "x": 0.01578921334771648,
+              "t": 0.006912420299514913
+            }
+          }
+        ],
+        "lhs_field": "u",
+        "lhs_axis": "t",
+        "lhs_label": "u_t",
+        "lhs_order": 1,
+        "warnings": [
+          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+        ]
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "axis_order",
+            "shape": [
+              2
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "x",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "t",
+            "shape": [
+              7
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "u",
+            "shape": [
+              9,
+              7
+            ],
+            "dtype": "float64"
+          }
+        ]
+      }
+    },
+    "grid-utt": {
+      "id": "file-v1-e3416ee311db59df68d7036069394ebedbfc52556fe542d165134d984fbd017d",
+      "task_kind": "pde-evolution",
+      "target": "u_tt",
+      "report": {
+        "name": "file-v1-e3416ee311db59df68d7036069394ebedbfc52556fe542d165134d984fbd017d",
+        "topology": "grid",
+        "axes": [
+          {
+            "name": "x",
+            "n": 9,
+            "min": -1.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.25,
+            "step_mean": 0.25,
+            "step_min": 0.25,
+            "step_max": 0.25
+          },
+          {
+            "name": "t",
+            "n": 7,
+            "min": 0.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.16666666666666666,
+            "step_mean": 0.16666666666666666,
+            "step_min": 0.16666666666666663,
+            "step_max": 0.16666666666666674
+          }
+        ],
+        "fields": [
+          {
+            "name": "u",
+            "dtype": "float64",
+            "shape": [
+              9,
+              7
+            ],
+            "min": -2.2873552871788423,
+            "max": 2.2873552871788423,
+            "mean": 5.28677630773884e-18,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {
+              "x": 0.02407568686343673,
+              "t": 0.012975230320538928
+            },
+            "first_derivative_gap": {
+              "x": 0.032085023984385605,
+              "t": 0.01372993352779752
+            },
+            "second_derivative_gap": {
+              "x": 0.01578921334771648,
+              "t": 0.006912420299514913
+            }
+          }
+        ],
+        "lhs_field": "u",
+        "lhs_axis": "t",
+        "lhs_label": "u_tt",
+        "lhs_order": 2,
+        "warnings": [
+          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+        ]
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "axis_order",
+            "shape": [
+              2
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "x",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "t",
+            "shape": [
+              7
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "u",
+            "shape": [
+              9,
+              7
+            ],
+            "dtype": "float64"
+          }
+        ]
+      }
+    },
+    "grid-two-axes": {
+      "id": "file-v1-78e4e04da4bab6ab35a04362d08ee5b3e2df04bbc4e1e37e1aae047710d84b4a",
+      "task_kind": "pde-evolution",
+      "target": "u_t",
+      "report": {
+        "name": "file-v1-78e4e04da4bab6ab35a04362d08ee5b3e2df04bbc4e1e37e1aae047710d84b4a",
+        "topology": "grid",
+        "axes": [
+          {
+            "name": "x",
+            "n": 9,
+            "min": -1.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.25,
+            "step_mean": 0.25,
+            "step_min": 0.25,
+            "step_max": 0.25
+          },
+          {
+            "name": "y",
+            "n": 6,
+            "min": -0.5,
+            "max": 0.5,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.2,
+            "step_mean": 0.2,
+            "step_min": 0.19999999999999996,
+            "step_max": 0.20000000000000007
+          },
+          {
+            "name": "t",
+            "n": 7,
+            "min": 0.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.16666666666666666,
+            "step_mean": 0.16666666666666666,
+            "step_min": 0.16666666666666663,
+            "step_max": 0.16666666666666674
+          }
+        ],
+        "fields": [
+          {
+            "name": "u",
+            "dtype": "float64",
+            "shape": [
+              9,
+              6,
+              7
+            ],
+            "min": -2.2773552871788425,
+            "max": 2.5373552871788423,
+            "mean": 0.11666666666666665,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {
+              "x": 0.023966864849459677,
+              "y": 3.997593168366837e-17,
+              "t": 0.012916582328342202
+            },
+            "first_derivative_gap": {
+              "x": 0.032085023984385605,
+              "y": 1.1264577082907431e-15,
+              "t": 0.013729933527797514
+            },
+            "second_derivative_gap": {
+              "x": 0.015789213347716016,
+              "y": 1.4437017112392526e-15,
+              "t": 0.006912420299514722
+            }
+          }
+        ],
+        "lhs_field": "u",
+        "lhs_axis": "t",
+        "lhs_label": "u_t",
+        "lhs_order": 1,
+        "warnings": [
+          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
+          "axis 'y' has only 6 points (<16) — small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+        ]
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "axis_order",
+            "shape": [
+              3
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "x",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "y",
+            "shape": [
+              6
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "t",
+            "shape": [
+              7
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "u",
+            "shape": [
+              9,
+              6,
+              7
+            ],
+            "dtype": "float64"
+          }
+        ]
+      }
+    },
+    "grid-two-fields": {
+      "id": "file-v1-6b32448db73debc339c7ea85e2d95ba3f15cab0278b3a1a58b8123da5694f00f",
+      "task_kind": "pde-evolution",
+      "target": "u_t",
+      "report": {
+        "name": "file-v1-6b32448db73debc339c7ea85e2d95ba3f15cab0278b3a1a58b8123da5694f00f",
+        "topology": "grid",
+        "axes": [
+          {
+            "name": "x",
+            "n": 9,
+            "min": -1.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.25,
+            "step_mean": 0.25,
+            "step_min": 0.25,
+            "step_max": 0.25
+          },
+          {
+            "name": "t",
+            "n": 7,
+            "min": 0.0,
+            "max": 1.0,
+            "spacing": "uniform",
+            "periodic": false,
+            "step_first": 0.16666666666666666,
+            "step_mean": 0.16666666666666666,
+            "step_min": 0.16666666666666663,
+            "step_max": 0.16666666666666674
+          }
+        ],
+        "fields": [
+          {
+            "name": "u",
+            "dtype": "float64",
+            "shape": [
+              9,
+              7
+            ],
+            "min": -2.2873552871788423,
+            "max": 2.2873552871788423,
+            "mean": 5.28677630773884e-18,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {
+              "x": 0.02407568686343673,
+              "t": 0.012975230320538928
+            },
+            "first_derivative_gap": {
+              "x": 0.032085023984385605,
+              "t": 0.01372993352779752
+            },
+            "second_derivative_gap": {
+              "x": 0.01578921334771648,
+              "t": 0.006912420299514913
+            }
+          },
+          {
+            "name": "v",
+            "dtype": "float64",
+            "shape": [
+              9,
+              7
+            ],
+            "min": 0.0,
+            "max": 5.231994209785004,
+            "mean": 1.0938181577119224,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {
+              "x": 0.057214607864374586,
+              "t": 0.030854529343696882
+            },
+            "first_derivative_gap": {
+              "x": 0.1394939273245489,
+              "t": 0.053094746236502205
+            },
+            "second_derivative_gap": {
+              "x": 0.06519949673284971,
+              "t": 0.02727135598091758
+            }
+          }
+        ],
+        "lhs_field": "u",
+        "lhs_axis": "t",
+        "lhs_label": "u_t",
+        "lhs_order": 1,
+        "warnings": [
+          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+        ]
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "axis_order",
+            "shape": [
+              2
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "x",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "t",
+            "shape": [
+              7
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "u",
+            "shape": [
+              9,
+              7
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "v",
+            "shape": [
+              9,
+              7
+            ],
+            "dtype": "float64"
+          }
+        ]
+      }
+    },
+    "scattered-steady": {
+      "id": "file-v1-34d6b79225b625f659fbdb07a5c08a4d3dd0c1f7b7331395cfe80948f1a34d05",
+      "task_kind": "pde-steady",
+      "target": null,
+      "report": {
+        "name": "file-v1-34d6b79225b625f659fbdb07a5c08a4d3dd0c1f7b7331395cfe80948f1a34d05",
+        "topology": "scattered",
+        "axes": [
+          {
+            "name": "x",
+            "n": 9,
+            "min": -1.0,
+            "max": 1.0,
+            "spacing": "not_applicable",
+            "periodic": false,
+            "step_first": null,
+            "step_mean": null,
+            "step_min": null,
+            "step_max": null
+          },
+          {
+            "name": "y",
+            "n": 9,
+            "min": 0.0,
+            "max": 1.0,
+            "spacing": "not_applicable",
+            "periodic": false,
+            "step_first": null,
+            "step_mean": null,
+            "step_min": null,
+            "step_max": null
+          }
+        ],
+        "fields": [
+          {
+            "name": "u",
+            "dtype": "float64",
+            "shape": [
+              9
+            ],
+            "min": -0.8414709848078965,
+            "max": 0.8414709848078965,
+            "mean": 0.0,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {},
+            "first_derivative_gap": {},
+            "second_derivative_gap": {}
+          }
+        ],
+        "lhs_field": null,
+        "lhs_axis": null,
+        "lhs_label": null,
+        "lhs_order": 0,
+        "warnings": []
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "format",
+            "shape": [],
+            "dtype": "<U19"
+          },
+          {
+            "key": "axis_order",
+            "shape": [
+              2
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "field_names",
+            "shape": [
+              1
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "coord__x",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "coord__y",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "field__u",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          }
+        ]
+      }
+    },
+    "sr-table": {
+      "id": "file-v1-3ec789d1dec801f0caf606701e7d3f7a063e508fb587f3c3aba73dc2b3618664",
+      "task_kind": "tabular-regression",
+      "target": "y",
+      "report": {
+        "name": "file-v1-3ec789d1dec801f0caf606701e7d3f7a063e508fb587f3c3aba73dc2b3618664",
+        "topology": "tabular",
+        "axes": null,
+        "fields": [
+          {
+            "name": "x",
+            "dtype": "float64",
+            "shape": [
+              9
+            ],
+            "min": -1.0,
+            "max": 1.0,
+            "mean": 0.0,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {},
+            "first_derivative_gap": {},
+            "second_derivative_gap": {}
+          },
+          {
+            "name": "y",
+            "dtype": "float64",
+            "shape": [
+              9
+            ],
+            "min": -1.5,
+            "max": 2.5,
+            "mean": 0.5,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {},
+            "first_derivative_gap": {},
+            "second_derivative_gap": {}
+          }
+        ],
+        "lhs_field": "y",
+        "lhs_axis": null,
+        "lhs_label": "y",
+        "lhs_order": 0,
+        "warnings": []
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "format",
+            "shape": [],
+            "dtype": "<U17"
+          },
+          {
+            "key": "X",
+            "shape": [
+              9,
+              1
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "y",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "var_names",
+            "shape": [
+              1
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "target_name",
+            "shape": [],
+            "dtype": "<U1"
+          }
+        ]
+      }
+    },
+    "ode-table": {
+      "id": "file-v1-022029d03ca45f3c923b6dbb8c4843d24dcc22cc35341182ead0d4e0bc6f45c5",
+      "task_kind": "ode",
+      "target": "dx_dt",
+      "report": {
+        "name": "file-v1-022029d03ca45f3c923b6dbb8c4843d24dcc22cc35341182ead0d4e0bc6f45c5",
+        "topology": "tabular",
+        "axes": null,
+        "fields": [
+          {
+            "name": "x",
+            "dtype": "float64",
+            "shape": [
+              9
+            ],
+            "min": -1.0,
+            "max": 1.0,
+            "mean": 0.0,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {},
+            "first_derivative_gap": {},
+            "second_derivative_gap": {}
+          },
+          {
+            "name": "dx_dt",
+            "dtype": "float64",
+            "shape": [
+              9
+            ],
+            "min": -1.5,
+            "max": 2.5,
+            "mean": 0.5,
+            "nan_count": 0,
+            "inf_count": 0,
+            "noise_estimate": {},
+            "first_derivative_gap": {},
+            "second_derivative_gap": {}
+          }
+        ],
+        "lhs_field": "dx_dt",
+        "lhs_axis": null,
+        "lhs_label": "dx_dt",
+        "lhs_order": 0,
+        "warnings": []
+      },
+      "inventory": {
+        "container": "npz",
+        "arrays": [
+          {
+            "key": "format",
+            "shape": [],
+            "dtype": "<U17"
+          },
+          {
+            "key": "X",
+            "shape": [
+              9,
+              1
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "y",
+            "shape": [
+              9
+            ],
+            "dtype": "float64"
+          },
+          {
+            "key": "var_names",
+            "shape": [
+              1
+            ],
+            "dtype": "<U1"
+          },
+          {
+            "key": "target_name",
+            "shape": [],
+            "dtype": "<U5"
+          }
+        ]
+      }
+    }
+  },
+  "retrieval": {
+    "task_kind": "pde-evolution",
+    "rows": [
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "lhs_order": 1,
+          "n_axes": 2,
+          "n_fields": 1,
+          "points_bucket": 1,
+          "has_nan": false,
+          "uxx_gap_bin": 0,
+          "noise_bin": 0,
+          "ut_gap_bin": 0
+        },
+        "pipeline": {
+          "algorithm": "sga",
+          "mode": "default",
+          "config": {
+            "derivatives": "finite_diff",
+            "generations": 40,
+            "population": 10
+          }
+        },
+        "conditions": {
+          "device": "cpu",
+          "blas_threads": 1,
+          "python_hash_seed": 0,
+          "soft_seconds": 60.0
+        },
+        "result": {
+          "structure_rate": 0.5,
+          "median_max_relative_error": 0.02,
+          "median_heldout_nrmse": null
+        },
+        "cost": {
+          "median_wall_seconds": 3.0,
+          "median_evaluations": 400
+        },
+        "support": {
+          "n_runs": 6,
+          "n_problems": 3
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "lhs_order": 1,
+          "n_axes": 2,
+          "n_fields": 1,
+          "points_bucket": 1,
+          "has_nan": false
+        },
+        "pipeline": {
+          "algorithm": "pysindy",
+          "mode": "default",
+          "config": {
+            "generations": 1
+          }
+        },
+        "conditions": {
+          "device": "cpu",
+          "blas_threads": 1,
+          "python_hash_seed": 0,
+          "soft_seconds": 60.0
+        },
+        "result": {
+          "structure_rate": 0.5,
+          "median_max_relative_error": 0.02,
+          "median_heldout_nrmse": null
+        },
+        "cost": {
+          "median_wall_seconds": 3.0,
+          "median_evaluations": 400
+        },
+        "support": {
+          "n_runs": 6,
+          "n_problems": 3
+        }
+      }
+    ],
+    "readings": {
+      "task_kind": {
+        "value": "pde-evolution",
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "topology": {
+        "value": "grid",
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "lhs_order": {
+        "value": 1,
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "n_axes": {
+        "value": 2,
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "n_fields": {
+        "value": 1,
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "points_bucket": {
+        "value": 1,
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "has_nan": {
+        "value": false,
+        "status": "computed",
+        "axis": null,
+        "raw": null
+      },
+      "uxx_gap_bin": {
+        "value": 0,
+        "status": "computed",
+        "axis": "x",
+        "raw": 0.01578921334771648
+      },
+      "noise_bin": {
+        "value": 0,
+        "status": "computed",
+        "axis": "x",
+        "raw": 0.02407568686343673
+      },
+      "ut_gap_bin": {
+        "value": 0,
+        "status": "computed",
+        "axis": "t",
+        "raw": 0.01372993352779752
+      }
+    },
+    "vocabulary": [
+      "task_kind",
+      "topology",
+      "lhs_order",
+      "n_axes",
+      "n_fields",
+      "points_bucket",
+      "has_nan",
+      "uxx_gap_bin",
+      "noise_bin",
+      "ut_gap_bin"
+    ],
+    "templates": [
+      [
+        "task_kind",
+        "topology",
+        "lhs_order",
+        "n_axes",
+        "n_fields",
+        "points_bucket",
+        "has_nan",
+        "uxx_gap_bin",
+        "noise_bin",
+        "ut_gap_bin"
+      ],
+      [
+        "task_kind",
+        "topology",
+        "lhs_order",
+        "n_axes",
+        "n_fields",
+        "points_bucket",
+        "has_nan"
+      ]
+    ],
+    "bins": {
+      "uxx_gap_bin": [
+        0.05,
+        0.5,
+        2.0
+      ],
+      "noise_bin": [
+        0.05,
+        0.5,
+        2.0
+      ],
+      "ut_gap_bin": [
+        0.05,
+        0.5,
+        2.0
+      ]
+    },
+    "min_support": 3,
+    "rules_version": "j0"
+  },
+  "advice": {
+    "format": "kd-experience-advice-v1",
+    "version": 1,
+    "advice_id": "synthetic",
+    "built_at": "2026-10-12T00:00:00Z",
+    "builder": "literal fixture",
+    "basis": {
+      "matrices": [],
+      "rules_version": "j0",
+      "excluded_groups": []
+    },
+    "usage": [
+      {
+        "algorithm": "sga",
+        "mode": null,
+        "task_kind": null,
+        "text": "Compare repeated seeds under the same configuration."
+      }
+    ],
+    "cost_anchors": [
+      {
+        "algorithm": "sga",
+        "mode": "default",
+        "task_kind": "pde-evolution",
+        "text": "A synthetic 63-point grid on CPU took 3 seconds.",
+        "measured": {
+          "shape": {
+            "points": 63,
+            "n_axes": 2,
+            "lhs_order": 1,
+            "n_fields": 1
+          },
+          "device": "cpu",
+          "matrix": "synthetic"
+        }
+      }
+    ]
+  }
+}

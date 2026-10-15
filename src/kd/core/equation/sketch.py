@@ -19,6 +19,7 @@ from kd.core.equation.signature import (
     law_term_key,
 )
 from kd.core.equation.types import Equation, Evolution, LhsSpec
+from kd.core.expr.jet import Monomial, jet_monomials
 from kd.core.expr.term_features import (
     ColumnFingerprint,
     TermFeatures,
@@ -268,25 +269,35 @@ class Sketch:
         return _match_sketch(self, eq)
 
 
-def pinned_fingerprints(sketch: Sketch) -> frozenset[ColumnFingerprint]:
-    seen: dict[ColumnFingerprint, str] = {}
+def _assert_pins_disjoint(sketch: Sketch) -> dict[Monomial, str]:
+    owners: dict[Monomial, str] = {}
     for pin in sketch.pinned:
-        fp = column_fingerprint(analyze_term(pin.term_ir, sketch.vocabulary))
-        if fp in seen:
+        monomials = jet_monomials(law_term_key(pin.term_ir), sketch.vocabulary)
+        shared = sorted(str(monomial) for monomial in monomials & owners.keys())
+        if shared:
+            first = next(owners[m] for m in monomials if m in owners)
             raise ValueError(
-                f"pinned terms {seen[fp]!r} and {pin.term_ir!r} are alias "
-                "spellings of one physical column; pin it once"
+                f"pinned terms {first!r} and {pin.term_ir!r} are alias "
+                f"spellings of one physical column (shared monomials "
+                f"{shared!r}); pin it once"
             )
-        seen[fp] = pin.term_ir
+        owners.update(dict.fromkeys(monomials, pin.term_ir))
+    return owners
+
+
+def pinned_monomials(sketch: Sketch) -> frozenset[Monomial]:
+    if not sketch.pinned:
+        return frozenset()
+    owners = _assert_pins_disjoint(sketch)
     for anchor in sketch.anchored:
-        fp = column_fingerprint(analyze_term(anchor.term_ir, sketch.vocabulary))
-        if fp in seen:
+        monomials = jet_monomials(law_term_key(anchor.term_ir), sketch.vocabulary)
+        pinned = next((owners[m] for m in monomials if m in owners), None)
+        if pinned is not None:
             raise ValueError(
                 f"anchored term {anchor.term_ir!r} is an alias spelling of the "
-                f"pinned column {seen[fp]!r}; a pinned column is never "
-                "refit"
+                f"pinned column {pinned!r}; a pinned column is never refit"
             )
-    return frozenset(seen)
+    return frozenset(owners)
 
 
 def constraint_admits(constraint: TermConstraint, features: TermFeatures) -> bool:
@@ -307,6 +318,32 @@ def constraint_admits(constraint: TermConstraint, features: TermFeatures) -> boo
     for _field, multiindex in features.derivative_multiindices:
         axes_used.update(axis for axis, _order in multiindex)
     return constraint.axes is None or axes_used <= constraint.axes
+
+
+def term_admission(
+    term_ir: str,
+    sketch: Sketch,
+    *,
+    pinned_keys: frozenset[str],
+    pinned_monomials: frozenset[Monomial],
+    anchor_fingerprints: frozenset[ColumnFingerprint],
+) -> str | None:
+    try:
+        key = law_term_key(term_ir)
+        features = analyze_term(key, sketch.vocabulary)
+        pinned = key in pinned_keys or bool(
+            pinned_monomials
+            and jet_monomials(key, sketch.vocabulary) & pinned_monomials
+        )
+    except ValueError:
+        return f"term {term_ir!r} is outside the sketch vocabulary"
+    if pinned:
+        return f"term {term_ir!r} regenerates a pinned column"
+    if column_fingerprint(features) in anchor_fingerprints:
+        return None
+    if any(constraint_admits(hole.constraint, features) for hole in sketch.holes):
+        return None
+    return f"no sketch hole admits term {term_ir!r}"
 
 
 def _aggregate_law(eq: Evolution, support_threshold: float) -> dict[str, float]:
@@ -478,7 +515,8 @@ __all__ = [
     "TermHole",
     "UnassignedTerm",
     "constraint_admits",
-    "pinned_fingerprints",
+    "pinned_monomials",
     "sketch_from_dict",
     "sketch_to_dict",
+    "term_admission",
 ]

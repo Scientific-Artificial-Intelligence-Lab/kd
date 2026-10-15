@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from kd.core.executor.context import ExecutionContext
     from kd.core.expr.executor import PythonExecutor
     from kd.data.loaders.wave_breaking import WaveBreakingCase
+    from kd.data.schema import PDEDataset
     from kd.models.field_model import FieldModel
     from kd.search.eqgpt.config import EqGPTConfig
     from kd.search.eqgpt.reward import RewardResult
@@ -123,18 +124,24 @@ class MultiCaseEvaluator:
         reward_bundles: list[WaveCaseBundle],
         coeff_bundles: list[WaveCaseBundle],
         primary_case: str,
+        primary_dataset: PDEDataset,
         sparsity_alpha: float,
         cache: TermColumnCache | None = None,
     ) -> None:
         self._reward_bundles = list(reward_bundles)
         self._coeff_bundles = list(coeff_bundles)
         self._primary_case = primary_case
+        self._primary_dataset = primary_dataset
         self._sparsity_alpha = sparsity_alpha
         self._cache = cache if cache is not None else TermColumnCache()
 
     @property
     def primary_case(self) -> str:
         return self._primary_case
+
+    @property
+    def primary_dataset(self) -> PDEDataset:
+        return self._primary_dataset
 
     @classmethod
     def from_config(
@@ -145,6 +152,7 @@ class MultiCaseEvaluator:
     ) -> MultiCaseEvaluator:
         from kd.data.loaders.wave_breaking import (
             load_wave_breaking_cases,
+            wave_breaking_case_to_dataset,
             wave_surrogate_checkpoint_path,
         )
         from kd.data.loaders.wave_breaking_eval import _validate_surrogate_layout
@@ -186,6 +194,7 @@ class MultiCaseEvaluator:
             reward_bundles=reward_bundles,
             coeff_bundles=coeff_bundles,
             primary_case=primary,
+            primary_dataset=wave_breaking_case_to_dataset(cases[primary]),
             sparsity_alpha=config.sparsity_alpha,
             cache=TermColumnCache(),
         )

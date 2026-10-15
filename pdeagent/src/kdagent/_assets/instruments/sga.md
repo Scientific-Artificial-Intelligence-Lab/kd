@@ -24,8 +24,9 @@ generation. SGA needs no optional package, pretrained weights or endpoint.
 ## Method
 
 A population contains candidate equations, each a set of up to `width` trees
-of depth at most `depth`. Leaves are the field, spatial coordinates and
-first-order spatial derivatives. Internal nodes are addition, subtraction,
+of depth at most `depth`. Leaves include every field, spatial coordinates and each field's first-order
+derivatives along every non-target axis. Only the left-hand-side field is
+prepended as the default regression column. Internal nodes are addition, subtraction,
 multiplication, division, square, cube and the first- and second-derivative
 operators. Tree roots exclude addition and subtraction because the term list
 already represents a sum.
@@ -39,6 +40,22 @@ baseline is followed by adaptive `d_tol` steps, bounded by `maxit`, with
 `str_iters` ridge iterations and column normalization of order 2. The fit's AIC
 ranks candidates for selection. One generation is one KD iteration, controlled
 by `generations`.
+
+With `restart_interval` set to k, the population is re-drawn once k
+generations have been committed since the last draw. The re-draw happens when
+the next generation's proposal starts, so no draw follows the last generation
+and a value of at least `generations` leaves the run unchanged; `generations`
+remains the total across segments, and initial draws are not counted as
+evaluations. Restart j (j = 1, 2, ...) re-seeds the random generator with
+`seed + 1000 * j`, clears the history of expressions already seen, and draws a
+new population as at the start of a run. Before each re-draw, the best-ranked
+candidate of the finished segment replaces the stored best of earlier segments
+only if its AIC is strictly lower. The reported equation is the better of the
+stored best and the current population's best-ranked candidate, with ties
+going to the earlier segment. With finite differences, each segment reproduces
+an independent run of k generations at its seed. With autograd, the field
+surrogate trained before the first generation is shared by all segments, so
+the segments are not independent runs at those seeds.
 
 ## Result interpretation
 

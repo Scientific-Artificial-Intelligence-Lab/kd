@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -56,6 +56,28 @@ class CycleCandidateTracker:
     @property
     def snapshots(self) -> list[CandidateSnapshot]:
         return list(self._candidates)
+
+    @property
+    def seen_expressions(self) -> frozenset[str]:
+        return frozenset(self._seen_expressions)
+
+    def restore(
+        self,
+        expressions: Sequence[str],
+        rewards: FloatArray,
+        results: list[EvaluationResult],
+        seen: Iterable[str],
+    ) -> None:
+        self.reset()
+        if self._capacity == 0:
+            return
+        self.record(
+            expressions,
+            rewards,
+            np.ones(len(expressions), dtype=np.bool_),
+            results,
+        )
+        self._seen_expressions.update(seen)
 
     def record(
         self,

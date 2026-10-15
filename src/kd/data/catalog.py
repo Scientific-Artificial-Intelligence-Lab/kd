@@ -26,6 +26,7 @@ from kd.data.synthetic import (
     load_pde_compound,
     load_pde_divide,
     load_poisson_disk,
+    load_variable_diffusion_smooth,
     load_wave,
 )
 
@@ -40,6 +41,9 @@ _SGA_PDE_SOURCE = "Chen et al. 2022 SGA-PDE benchmark data"
 _EQGPT_SOURCE = "EqGPT benchmark data (Xu et al. 2025)"
 _SGA_PDE_LICENSE = "MIT (SGA-PDE reference repository)"
 _EQGPT_LICENSE = "EqGPT benchmark dataset"
+_VARIABLE_DIFFUSION_SOURCE = (
+    "kd-generated 1-D diffusion with a known conductivity field K"
+)
 _LLM4ED_REMOTE_SOURCE = (
     "LLM4ED (Du et al. 2024, arXiv:2405.07761; github.com/menggedu/EDL) "
     "via Spac1ly/KnowledgeDiscover; mirrored at timeoutHao/KD-data"
@@ -301,6 +305,19 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         tier=_BUILTIN_TIER,
         tags=("sga-pde", "fractional", "open-form"),
         files=("PDE_divide.npy",),
+    ),
+    "variable-diffusion-smooth": DatasetSpec(
+        id="variable-diffusion-smooth",
+        loader=load_variable_diffusion_smooth,
+        equation="u_t = diff_x(mul(K, u_x))",
+        lhs=_LHS_UT,
+        axes=_AXES_XT,
+        fmt="synthetic",
+        source=_VARIABLE_DIFFUSION_SOURCE,
+        license="Apache-2.0 (kd-generated data)",
+        tier=_BUILTIN_TIER,
+        tags=("diffusion", "variable-coefficient", "known-K", "smooth"),
+        files=(),
     ),
     "wave": DatasetSpec(
         id="wave",

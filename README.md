@@ -41,7 +41,8 @@ In an activated Python 3.11+ environment, install with [uv](https://docs.astral.
 uv pip install sail-kd --torch-backend=auto
 ```
 
-The option selects the PyTorch build for your hardware. See
+The option selects the PyTorch build for your hardware: a CUDA build the
+installed driver supports, or the CPU build. See
 [Installation](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/)
 for environment setup, pip installation, CPU/CUDA builds and optional components.
 For a source checkout, clone this repository's `trunk` branch and run `uv sync`.

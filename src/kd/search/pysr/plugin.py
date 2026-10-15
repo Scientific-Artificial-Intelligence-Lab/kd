@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
+from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from torch import Tensor
 
 from kd.core.equation import Form
 from kd.core.equation.library import TermLibrarySpec
+from kd.core.equation.sketch import Sketch
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
+from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.schema import DataTopology
 from kd.search.descriptor import (
     InstrumentDescriptor,
@@ -23,13 +27,21 @@ from kd.search.protocol import PlatformComponents
 from kd.search.pysr import assembly
 from kd.search.pysr import viz as _viz_helpers
 from kd.search.pysr.backend import PySRBackend, default_backend_factory
-from kd.search.pysr.config import TABULAR_UNARY_OPERATORS, PySRConfig
+from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.convert import build_feature_names
+from kd.search.pysr.sketch_backend import (
+    PySRCompiled,
+    candidate_refusal,
+    compile_for_pysr,
+)
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
+from kd.search.result import invalid_evaluation_result
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+    from kd.search.protocol import DiscoveryTask
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +53,43 @@ INITIAL_BEST_SCORE = float("inf")
 
 _MIN_ATOMIC_ORDER = 1
 _LHS_ORDER = 1
+
+
+
+
+
+
+
+
+
+
+
+
+PRE_CLOCK_ALLOWANCE_SECONDS = 45.0
+
+POST_ALLOWANCE_SECONDS = 5.0
+
+
+
+
+TIMEOUT_FLOOR_SECONDS = 15.0
+
+
+
+
+
+
+
+
+
+_SKETCH_LEVELS = SketchClauseLevels(
+    fixed_terms="lowered",
+    anchors="exit_checked",
+    hole_count="exit_checked",
+    derivative_order="generation_enforced",
+    operator_set="exit_checked",
+    field_axis_set="generation_enforced",
+)
 
 
 
@@ -97,13 +146,20 @@ class PySRPlugin:
         modes=(
             InstrumentMode(
                 name="default",
+                field_names=("u",),
+                spatial_axes=("x",),
+                names_from="terms",
+                description="Grid evolution search over explicit kd terms.",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                sketch=_SKETCH_LEVELS,
                 lhs_orders=frozenset({1}),
             ),
             InstrumentMode(
                 name="tabular",
+                default_overrides={"unary_operators": ["sin", "cos", "exp", "log"]},
+                refused_fields={"terms": "any"},
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
@@ -164,16 +220,36 @@ class PySRPlugin:
         *,
         backend_factory: Callable[[PySRConfig], PySRBackend] | None = None,
         mode: Literal["default", "tabular"] = "default",
+        task: DiscoveryTask | None = None,
     ) -> None:
         if mode not in ("default", "tabular"):
             raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
+        if task is not None and mode == "tabular":
+            raise ValueError(
+                "PySRPlugin(mode='tabular') does not take a task: the "
+                "descriptor declares every sketch clause unsupported on the "
+                "tabular mode"
+            )
         self._mode = mode
         self._config = config or (
-            PySRConfig(unary_operators=TABULAR_UNARY_OPERATORS)
+            PySRConfig(
+                unary_operators=tuple(
+                    next(
+                        mode.default_overrides["unary_operators"]
+                        for mode in self.descriptor.modes
+                        if mode.name == "tabular"
+                    )
+                )
+            )
             if mode == "tabular"
             else PySRConfig()
         )
-        self._library: TermLibrarySpec = TermLibrarySpec.from_terms(self._config.terms)
+        self._library: TermLibrarySpec = TermLibrarySpec.from_terms(
+            self._compile_task(task)
+        )
+
+
+        self._gate: Callable[[str], str | None] | None = None
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
         self._recorder: VizRecorder | None = None
@@ -195,6 +271,9 @@ class PySRPlugin:
         self._search_state: bytes | None = None
 
         self._segment_fitted: bool = False
+
+
+        self._deadline: float | None = None
 
 
 
@@ -221,9 +300,18 @@ class PySRPlugin:
         if not self._restore_pending:
             self._reset_fit_state()
         self._restore_pending = False
+        self._deadline = None
         self._evaluator = components.evaluator
         self._recorder = components.recorder
         self._dataset = components.dataset
+        if self._open_sketch is not None:
+            sketch, compiled = self._open_sketch
+            self._gate = partial(
+                candidate_refusal,
+                sketch=sketch,
+                compiled=compiled,
+                registry=components.registry,
+            )
 
     def propose(self, n: int) -> list[str]:
         evaluator = self._require_evaluator()
@@ -285,6 +373,10 @@ class PySRPlugin:
         )
         self._pareto_logged = True
 
+    def set_wall_clock_deadline(self, deadline: float) -> None:
+        if self._deadline is None or deadline < self._deadline:
+            self._deadline = deadline
+
 
 
     @property
@@ -298,6 +390,10 @@ class PySRPlugin:
     @property
     def mode(self) -> Literal["default", "tabular"]:
         return self._mode
+
+    @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        return self._sketch_compile_report
 
     @property
     def config(self) -> dict[str, Any]:
@@ -326,7 +422,10 @@ class PySRPlugin:
                 lhs_source="field",
                 supported_topologies=frozenset({DataTopology.TABULAR}),
             )
-        max_order = assembly.infer_max_atomic_order(list(self._library.terms))
+
+        max_order = assembly.infer_max_atomic_order(
+            [*self._library.terms, *self._pinned_terms]
+        )
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),
@@ -462,6 +561,19 @@ class PySRPlugin:
 
 
 
+    def _compile_task(self, task: DiscoveryTask | None) -> tuple[str, ...]:
+        self._sketch_compile_report: CompileReport | None = None
+        self._pinned_terms: tuple[str, ...] = ()
+        self._open_sketch: tuple[Sketch, PySRCompiled] | None = None
+        if task is None:
+            return self._config.terms
+        compiled = compile_for_pysr(task.sketch, self._config)
+        self._sketch_compile_report = compiled.report
+        self._pinned_terms = tuple(pin.term_ir for pin in task.sketch.pinned)
+        if not task.compiled.closed:
+            self._open_sketch = (task.sketch, compiled)
+        return compiled.effective_terms
+
     def _run_fit(self, evaluator: Evaluator) -> None:
         theta, valid_terms = evaluator.build_theta_matrix(list(self._library.terms))
         if self._search_state is not None and list(valid_terms) != list(
@@ -486,7 +598,13 @@ class PySRPlugin:
         )
 
         backend = self._backend_factory(self._config)
-        backend.fit(x_matrix, y_vector, feature_names, search_state=self._search_state)
+        backend.fit(
+            x_matrix,
+            y_vector,
+            feature_names,
+            search_state=self._search_state,
+            timeout_in_seconds=self._fit_timeout(),
+        )
         self._search_state = backend.search_state()
 
         if self._mode == "tabular":
@@ -506,13 +624,47 @@ class PySRPlugin:
         self._hof_candidates = candidates
         self._hof_meta = meta
         self._selected_complexity, self._selected_loss = assembly.match_selected_entry(
-            self._best_expression, candidates, meta
+            self._best_expression, backend.best_sympy(), backend.hall_of_fame()
         )
         self._best_eval = self._evaluate_candidate(evaluator, self._best_expression)
+        if (
+            self._gate is not None
+            and self._best_eval.invalid_reason == "structural_reject"
+        ):
+
+
+            logger.warning(
+                "PySR's selected expression %r scored structural_reject before "
+                "kd's refit (%s); the selection is not replaced, so this fit "
+                "reports no liftable law",
+                self._best_expression,
+                self._best_eval.error_message,
+            )
         self._best_score = (
             self._best_eval.nmse if self._best_eval.is_valid else INITIAL_BEST_SCORE
         )
         self._selected_nmse = self._resolve_selected_nmse()
+
+    def _fit_timeout(self) -> float | None:
+        configured = (self._config.extra_pysr_kwargs or {}).get("timeout_in_seconds")
+        timeout: float | None
+        if self._deadline is None:
+            timeout = configured
+            source = "config" if configured is not None else "none"
+        else:
+            timeout = max(
+                TIMEOUT_FLOOR_SECONDS,
+                self._deadline
+                - time.perf_counter()
+                - PRE_CLOCK_ALLOWANCE_SECONDS
+                - POST_ALLOWANCE_SECONDS,
+            )
+            source = "wall-clock deadline"
+            if configured is not None and configured < timeout:
+                timeout = configured
+                source = "config, below the wall-clock deadline"
+        logger.info("PySR fit timeout_in_seconds=%s (source: %s)", timeout, source)
+        return timeout
 
     def _evaluate_candidate(
         self,
@@ -527,6 +679,15 @@ class PySRPlugin:
 
             result = evaluator.evaluate_terms([expression], skip_invalid=False)
             return replace(result, lhs_name=self._dataset.lhs_field)
+        if self._gate is not None:
+            refusal = self._gate(expression)
+            if refusal is not None:
+                return invalid_evaluation_result(
+                    refusal,
+                    score=None,
+                    expression=expression,
+                    reason="structural_reject",
+                )
         return evaluator.evaluate_expression(expression)
 
     def _resolve_selected_nmse(self) -> float | None:

@@ -11,8 +11,11 @@ SECTION_HEADINGS: dict[str, str] = {
     "method": "Method",
     "results": "Result interpretation",
     "references": "References",
+    "python_setup": "Python setup",
 }
-REQUIRED_SECTIONS: tuple[str, ...] = tuple(SECTION_HEADINGS)
+REQUIRED_SECTIONS: tuple[str, ...] = tuple(
+    key for key in SECTION_HEADINGS if key != "python_setup"
+)
 
 
 def instrument_doc_path(algorithm: str) -> Path:
@@ -31,8 +34,8 @@ def available_instrument_docs() -> tuple[str, ...]:
 
 
 def instrument_doc(algorithm: str, section: str | None = None) -> str:
-    if section is not None and section not in REQUIRED_SECTIONS:
-        raise ValueError(f"unknown section {section!r}; have {list(REQUIRED_SECTIONS)}")
+    if section is not None and section not in SECTION_HEADINGS:
+        raise ValueError(f"unknown section {section!r}; have {list(SECTION_HEADINGS)}")
     body = instrument_doc_path(algorithm).read_text(encoding="utf-8")
     if section is None:
         return body

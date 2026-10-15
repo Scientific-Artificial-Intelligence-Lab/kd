@@ -2,14 +2,28 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
+from itertools import combinations_with_replacement
 
 import numpy as np
 import torch
 from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
+from kd.core.expr.executor import UNITY_TOKEN
 from kd.core.metrics import make_aic_scorer, nmse
 from kd.search.term_utils import fold_add
+
+
+def polynomial_terms(feature_names: Sequence[str], degree: int) -> tuple[str, ...]:
+    terms = [UNITY_TOKEN]
+    for total_degree in range(1, degree + 1):
+        for factors in combinations_with_replacement(feature_names, total_degree):
+            term = factors[-1]
+            for factor in reversed(factors[:-1]):
+                term = f"mul({factor}, {term})"
+            terms.append(term)
+    return tuple(terms)
 
 
 def support_from_coefficients(xi: np.ndarray) -> list[int]:
@@ -77,6 +91,7 @@ def build_native_result(
 
 __all__ = [
     "build_native_result",
+    "polynomial_terms",
     "render_best_expression",
     "support_from_coefficients",
 ]

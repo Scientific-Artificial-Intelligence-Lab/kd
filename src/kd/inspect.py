@@ -2,9 +2,9 @@
 
 Public surface:
 - :func:`preview_report` — return a typed, JSON-safe :class:`DatasetReport`
-  holding every fact the preview computes (per-axis spacing, per-field
-  statistics, LHS spec, warnings), for programmatic callers such as an agent
-  controller.
+  holding the facts ``preview`` prints (per-axis spacing, per-field statistics,
+  LHS spec, warnings) plus three per-field diagnostics that ``preview`` does
+  not print, for programmatic callers such as an agent controller.
 - :func:`preview` — pretty-print a one-shot summary of a ``PDEDataset``,
   flagging non-uniform grids, NaN/Inf, very small grids and dtype warnings.
   It builds the same report and renders it.
@@ -40,7 +40,15 @@ from kd.data.derivatives.finite_diff import (
     UNIFORM_GRID_RTOL,
     is_uniform_grid,
 )
+from kd.data.diagnostics import (
+    MIN_STENCIL_POINTS,
+    first_derivative_gap,
+    noise_estimate,
+    second_derivative_gap,
+)
+from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, PDEDataset
+from kd.data.tabular_bridge import dataset_from_tabular
 
 __all__ = [
     "ArrayReport",
@@ -126,13 +134,13 @@ _AXIS_NAME_W = 4
 _FIELD_NAME_W = 4
 
 
-def preview_report(dataset: PDEDataset) -> DatasetReport:
-    """Build a typed report of a ``PDEDataset`` without printing anything.
+def preview_report(dataset: PDEDataset | TabularDataset) -> DatasetReport:
+    """Build a typed report of PDE data or a regression table without printing.
 
-    This is the computation behind :func:`preview`: the same per-axis, per-field
-    and LHS facts, plus the same warning list in the same order, returned as a
-    JSON-dumpable :class:`~kd._inspect_report.DatasetReport` instead of a
-    formatted string.
+    This is the computation behind :func:`preview`: its per-axis, per-field
+    and LHS facts, plus the same warning list in the same order and three
+    per-field diagnostics that ``preview`` does not print, returned as a
+    JSON-dumpable :class:`~kd._inspect_report.DatasetReport`.
 
     Topology matters. On a SCATTERED dataset each ``AxisInfo.values`` holds
     per-point coordinates rather than a grid vector, so no step exists: every
@@ -151,6 +159,8 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
     Returns:
         A frozen ``DatasetReport``.
     """
+    if isinstance(dataset, TabularDataset):
+        dataset = dataset_from_tabular(dataset)
     warnings: list[str] = []
     scattered = dataset.topology is DataTopology.SCATTERED
 
@@ -165,11 +175,13 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
                 dataset.axes[axis_name].values,
                 warnings,
                 scattered=scattered,
+                periodic=dataset.axes[axis_name].is_periodic,
             )
             for axis_name in dataset.axis_order
         ]
 
 
+    diagnostic_axes = _diagnostic_axes(axes)
     fields: list[FieldReport] | None
     field_dtypes: set[torch.dtype] = set()
     if dataset.fields is None:
@@ -178,7 +190,9 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
         fields = []
         for field_name, field in dataset.fields.items():
             field_dtypes.add(field.values.dtype)
-            fields.append(_build_field_report(field_name, field.values, warnings))
+            fields.append(
+                _build_field_report(field_name, field.values, warnings, diagnostic_axes)
+            )
 
 
 
@@ -200,9 +214,13 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
         )
     else:
         lhs_label = None
-        warnings.append(
-            "lhs_field / lhs_axis not set — Model.fit() will fall back to ('u', 't')"
-        )
+
+
+        if dataset.lhs_order > 0:
+            warnings.append(
+                "lhs_field / lhs_axis not set — "
+                "Model.fit() will fall back to ('u', 't')"
+            )
 
     return DatasetReport(
         name=dataset.name,
@@ -217,14 +235,17 @@ def preview_report(dataset: PDEDataset) -> DatasetReport:
     )
 
 
-def preview(dataset: PDEDataset, *, file: TextIO | None = None) -> None:
-    """Print a sanity-check summary of a ``PDEDataset``.
+def preview(
+    dataset: PDEDataset | TabularDataset, *, file: TextIO | None = None
+) -> None:
+    """Print a sanity-check summary of PDE data or a regression table.
 
     Outputs (in order):
     - Dataset name
     - Per-axis: name, length, range, step (with uniform-spacing check)
     - Per-field: name, dtype, shape, min/max/mean, NaN/Inf count
-    - Auto-detected LHS (from ``dataset.lhs_field`` / ``lhs_axis``)
+    - Auto-detected LHS, labelled order-aware (from ``dataset.lhs_field`` /
+      ``lhs_axis`` / ``lhs_order``: ``u_t`` at order 1, ``u_tt`` at order 2)
     - Status line + warnings (non-uniform grid, NaN/Inf, small grid,
       dtype mismatch).
 
@@ -274,6 +295,7 @@ def _build_axis_report(
     warnings: list[str],
     *,
     scattered: bool,
+    periodic: bool,
 ) -> AxisReport:
     """Measure one axis and append any axis-specific warnings.
 
@@ -339,6 +361,7 @@ def _build_axis_report(
 
     return AxisReport(
         name=name,
+        periodic=periodic,
         n=n,
         min=vmin,
         max=vmax,
@@ -350,10 +373,39 @@ def _build_axis_report(
     )
 
 
+def _diagnostic_axes(axes: list[AxisReport] | None) -> list[tuple[int, str]]:
+    """Return axis positions and names with uniform spacing and enough points."""
+    if axes is None:
+        return []
+    return [
+        (index, axis.name)
+        for index, axis in enumerate(axes)
+        if axis.spacing == "uniform" and axis.n >= MIN_STENCIL_POINTS
+    ]
+
+
+def _field_diagnostics(
+    values: torch.Tensor, axes: list[tuple[int, str]]
+) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+    """Measure relative noise and derivative gaps along the supplied axes."""
+    if not axes:
+        return {}, {}, {}
+    arr = values.detach().to(torch.float64).cpu().numpy()
+    noise: dict[str, float] = {}
+    first_gap: dict[str, float] = {}
+    second_gap: dict[str, float] = {}
+    for index, name in axes:
+        noise[name] = noise_estimate(arr, axis=index)
+        first_gap[name] = first_derivative_gap(arr, axis=index)
+        second_gap[name] = second_derivative_gap(arr, axis=index)
+    return noise, first_gap, second_gap
+
+
 def _build_field_report(
     name: str,
     values: torch.Tensor,
     warnings: list[str],
+    axes: list[tuple[int, str]],
 ) -> FieldReport:
     """Measure one field and append any field-specific warnings."""
     nan_count = int(torch.isnan(values).sum().item())
@@ -384,6 +436,9 @@ def _build_field_report(
         vmax = float(values.max().item())
         vmean = float(values.mean().item())
 
+    noise, first_gap, second_gap = _field_diagnostics(
+        values, axes if nan_count == 0 and inf_count == 0 else []
+    )
     return FieldReport(
         name=name,
         dtype=str(values.dtype).replace("torch.", ""),
@@ -393,6 +448,9 @@ def _build_field_report(
         mean=vmean,
         nan_count=nan_count,
         inf_count=inf_count,
+        noise_estimate=noise,
+        first_derivative_gap=first_gap,
+        second_derivative_gap=second_gap,
     )
 
 
@@ -423,12 +481,8 @@ def _render_report(report: DatasetReport) -> str:
 
         lines.append(f"LHS: {report.lhs_label} (target column)")
     elif report.lhs_field is not None and report.lhs_axis is not None:
-
-
-
-
         lines.append(
-            f"LHS: {report.lhs_field}_{report.lhs_axis} "
+            f"LHS: {report.lhs_label} "
             f"(field='{report.lhs_field}', axis='{report.lhs_axis}')"
         )
     else:

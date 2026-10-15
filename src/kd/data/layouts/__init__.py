@@ -9,6 +9,7 @@ import torch
 from kd.data.containers import Inventory
 from kd.data.layouts.kd_npz import KD_NPZ
 from kd.data.layouts.pdebench import PDEBENCH_1D, PDEBENCH_CFD
+from kd.data.layouts.scattered_npz import SCATTERED_NPZ
 from kd.data.schema import PDEDataset
 
 
@@ -32,7 +33,7 @@ class Layout(Protocol):
         ...
 
 
-LAYOUTS: tuple[Layout, ...] = (PDEBENCH_1D, PDEBENCH_CFD, KD_NPZ)
+LAYOUTS: tuple[Layout, ...] = (PDEBENCH_1D, PDEBENCH_CFD, KD_NPZ, SCATTERED_NPZ)
 
 
 def recognize(inventory: Inventory) -> list[Layout]:

@@ -218,6 +218,8 @@ def _record_segment(
 def segment_cost(
     outcome: Any,
     *,
+    time_cap_seconds: float | None,
+    stopped_by_time_cap: bool,
     evaluation_cap: int | None,
     stopped_by_evaluation_cap: bool,
 ) -> dict[str, Any] | None:
@@ -229,6 +231,8 @@ def segment_cost(
         "evaluations": int(run_cost.boundary_results),
         "invalid_evaluations": int(run_cost.boundary_invalid_results),
         "search_seconds": round(float(run_cost.search_seconds), 3),
+        "time_cap_seconds": time_cap_seconds,
+        "stopped_by_time_cap": bool(stopped_by_time_cap),
         "evaluation_cap": evaluation_cap,
         "stopped_by_evaluation_cap": bool(stopped_by_evaluation_cap),
     }
@@ -555,6 +559,8 @@ def _sketch_failure(
     algorithm: str,
     sketch: dict[str, Any],
     schema: dict[str, Any] | None,
+    *,
+    params: dict[str, Any],
 ) -> dict[str, Any] | None:
     try:
         decoded = sketch_from_dict(sketch)
@@ -565,10 +571,31 @@ def _sketch_failure(
         )
     if schema is None:
         return None
+    order = decoded.lhs_spec.order
+    modes = [
+        mode
+        for mode in schema["modes"]
+        if "EVOLUTION" in mode["forms"]
+        if mode["lhs_orders"] is None or order in mode["lhs_orders"]
+        if not (
+            mode["provider_kind"] == "none"
+            and schema["sketch_lower_owner"] == "platform"
+        )
+        if mode["selector"] is None
+        or (params.get(mode["selector"]["field"]) is not None)
+        == mode["selector"]["present"]
+    ]
+    if not modes:
+        return _failure(
+            "sketch_unsupported",
+            f"algorithm {algorithm!r} has no mode that can run an evolution "
+            f"sketch with LHS order {order}; use an instrument whose modes "
+            "take this left-hand side",
+        )
     used = used_clauses(decoded)
     offending = [
         (mode["name"], clause, mode["sketch"][clause])
-        for mode in schema["modes"]
+        for mode in modes
         for clause in SKETCH_CLAUSES
         if clause in used
         if mode["sketch"][clause] == "unsupported"

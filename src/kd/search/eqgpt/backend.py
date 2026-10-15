@@ -104,56 +104,6 @@ class RealGPTBackend:
         return self.model.config.max_pos
 
 
-class FakeGPTBackend:
-
-    def __init__(self, vocab_size: int, *, d_model: int = 16, seed: int = 0) -> None:
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.seed = seed
-
-
-
-
-
-        config = GPTConfig(
-            vocab_size=vocab_size,
-            n_layers=2,
-            n_heads=2,
-            d_model=d_model,
-            d_head=max(d_model // 2, 1),
-            d_ff=d_model * 2,
-            max_pos=256,
-        )
-        self.model = EqGPT(config)
-        generator = torch.Generator().manual_seed(seed)
-        with torch.no_grad():
-            for param in self.model.parameters():
-                param.copy_(torch.randn(param.shape, generator=generator))
-        self.model.eval()
-
-    def forward_logits(self, tokens: Tensor) -> Tensor:
-        return cast(Tensor, self.model(tokens))
-
-    def next_token_logits(self, prefix: Sequence[int]) -> Tensor:
-        if not prefix:
-            raise ValueError("next_token_logits requires a non-empty prefix")
-        tokens = torch.tensor([list(prefix)], dtype=torch.long)
-        with torch.no_grad():
-            return self.forward_logits(tokens)[0, -1]
-
-    def state_dict(self) -> dict[str, Tensor]:
-        return {k: v.detach().clone() for k, v in self.model.state_dict().items()}
-
-    def load_state_dict(self, state: Mapping[str, Tensor]) -> None:
-        self.model.load_state_dict(state)
-
-    def parameters(self) -> Iterator[torch.nn.Parameter]:
-        return self.model.parameters()
-
-    def max_pos(self) -> int:
-        return self.model.config.max_pos
-
-
 def resolve_asset_path(
     *,
     weights_path: Path | None = None,

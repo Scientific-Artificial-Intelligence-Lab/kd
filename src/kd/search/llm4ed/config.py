@@ -12,7 +12,8 @@ Design pins:
 * The sampling params (``temperature`` / ``max_tokens``) are thin knobs the
   plugin packs into ``LLMParams`` on EVERY ``complete()`` call -- their single
   source of truth is ``LLMRequest.params`` (``OpenAICompatProvider`` has no
-  sampling params). Config just carries the defaults.
+  sampling params). Config just carries the defaults. Transport options
+  (``model`` / ``base_url`` / ``extra_body``) go to the provider constructor.
 * Guardrail split: ``max_llm_calls_per_run`` feeds the default chain's
   ``BudgetedProvider`` (whole-run budget); ``max_llm_calls_per_propose`` stays a
   plugin knob (single-propose resample bound). ``max_retries_per_call`` is NOT
@@ -68,56 +69,66 @@ class Llm4edConfig:
     """Static configuration for the LLM4ED plugin.
 
     Every field defaults to its EDL-faithful value where EDL fixes one; the
-    transport / guardrail fields (``model`` / ``base_url`` / the two call
-    bounds) carry kd-side defaults. Deliberately loop-free (the Runner owns
-    the loop).
+    transport / guardrail fields (``model`` / ``base_url`` / ``extra_body`` /
+    the two call bounds) carry kd-side defaults. Deliberately loop-free (the
+    Runner owns the loop).
 
-    Attributes:
-        temperature: LLM sampling temperature. Default ``0.8`` (EDL Burgers,
-            NOT the generic 1.0). Packed into ``LLMParams`` per call.
-        max_tokens: LLM max decode tokens. Default ``1024`` (kd-side pin; EDL
-            does not fix a value).
-        stop_threshold: ``is_done`` fires when ``best_reward >= stop_threshold``.
-            Default ``0.995`` (EDL); reward direction is max, range ~(0, 1].
-        reward_limit: ``filter_score`` drops candidates with ``score <=
-            reward_limit``. Default ``0.5`` (EDL).
-        pool_size: Elite pool capacity ``k`` (EDL PriorityQueue). Default ``5``.
-        init_num: The number of equations the init PROMPT asks the LLM to
-            generate (EDL ``optimzier_utils.py:108``, prompt-text only). Does
-            NOT change the returned batch size, which is ``n`` like every
-            round (EDL ``GENERATION_NUM = args.N`` covers initialization).
-            Default ``20``.
-        samples_per_epoch: Per-round proposal count -- the Runner's per-iteration
-            batch size (EDL ``--N`` / ``GENERATION_NUM``, Burgers script Num=8).
-            Default ``8``. Read by the plugin's ``runner_batch_size`` property.
-        max_llm_calls_per_propose: Plugin-owned upper bound on resample
-            ``complete()`` calls within one ``propose``. kd guardrail.
-        max_llm_calls_per_run: Whole-run call budget fed to the default chain's
-            ``BudgetedProvider``. kd guardrail.
-        seed: Base seed for the monotonic per-call LLM seed counter.
-        model: LLM model id for the default ``OpenAICompatProvider`` (transport;
-            unused when a provider is injected).
-        base_url: Optional endpoint override for the default provider.
-        tape_record_path: Optional JSONL path. When set (and no provider is
-            injected), the default chain wraps the transport in a
-            ``TapeRecordingProvider`` so every real request/response is recorded
-            to this path -- the offline replay fixture for CI + the manual
-            real-backend recovery step. ``None`` records nothing.
     """
 
     temperature: float = _DEFAULT_TEMPERATURE
+    """LLM sampling temperature. Default ``0.8`` (EDL Burgers, NOT the generic 1.0).
+    Packed into ``LLMParams`` per call.
+    """
     max_tokens: int = _DEFAULT_MAX_TOKENS
+    """LLM max decode tokens. Default ``1024`` (kd-side pin; EDL does not fix a value).
+    """
     stop_threshold: float = _DEFAULT_STOP_THRESHOLD
+    """``is_done`` fires when ``best_reward >= stop_threshold``. Default ``0.995``
+    (EDL); reward direction is max, range ~(0, 1].
+    """
     reward_limit: float = _DEFAULT_REWARD_LIMIT
+    """``filter_score`` drops candidates with ``score <= reward_limit``. Default
+    ``0.5`` (EDL).
+    """
     pool_size: int = _DEFAULT_POOL_SIZE
+    """Elite pool capacity ``k`` (EDL PriorityQueue). Default ``5``."""
     init_num: int = _DEFAULT_INIT_NUM
+    """The number of equations the init PROMPT asks the LLM to generate (EDL
+    ``optimzier_utils.py:108``, prompt-text only). Does NOT change the returned
+    batch size, which is ``n`` like every round (EDL ``GENERATION_NUM = args.N``
+    covers initialization). Default ``20``.
+    """
     samples_per_epoch: int = _DEFAULT_SAMPLES_PER_EPOCH
+    """Per-round proposal count -- the Runner's per-iteration batch size (EDL ``--N`` /
+    ``GENERATION_NUM``; the reference script uses 8). Default ``8``. Read by the
+    plugin's ``runner_batch_size`` property.
+    """
     max_llm_calls_per_propose: int = _DEFAULT_MAX_LLM_CALLS_PER_PROPOSE
+    """Plugin-owned upper bound on resample ``complete()`` calls within one
+    ``propose``. kd guardrail.
+    """
     max_llm_calls_per_run: int = _DEFAULT_MAX_LLM_CALLS_PER_RUN
+    """Whole-run call budget fed to the default chain's ``BudgetedProvider``. kd
+    guardrail.
+    """
     seed: int = 0
+    """Base seed for the monotonic per-call LLM seed counter."""
     model: str = "gpt-4o-mini"
+    """LLM model id for the default ``OpenAICompatProvider`` (transport; unused when a
+    provider is injected).
+    """
     base_url: str | None = None
+    """Optional endpoint override for the default provider."""
     tape_record_path: str | None = None
+    """Optional JSONL path. When set (and no provider is injected), the default chain
+    wraps the transport in a ``TapeRecordingProvider`` so every real
+    request/response is recorded to this path -- the offline replay fixture for CI +
+    the manual real-backend recovery step. ``None`` records nothing.
+    """
+    extra_body: dict[str, Any] | None = None
+    """Optional request body options forwarded unchanged to the default provider.
+    ``None`` omits the SDK keyword; unused when a provider is injected.
+    """
 
     def __post_init__(self) -> None:
         temperature = _validated_float(
@@ -157,6 +168,10 @@ class Llm4edConfig:
             raise ValueError(
                 f"base_url must be None or a str, got {self.base_url!r}"
             )
+        if self.extra_body is not None and not isinstance(self.extra_body, dict):
+            raise ValueError(
+                f"extra_body must be None or a dict, got {self.extra_body!r}"
+            )
         if self.tape_record_path is not None:
             if not isinstance(self.tape_record_path, str):
                 raise ValueError(
@@ -188,8 +203,8 @@ def config_to_json_safe_dict(config: Llm4edConfig) -> dict[str, Any]:
     """Return ``config`` as a JSON-safe dict (EqGPT ``config_to_json_safe_dict``).
 
     All ``Llm4edConfig`` fields are already JSON-native (float / int / str /
-    ``None``), so this is ``dataclasses.asdict`` plus a stable key order; it
-    exists as the single serialization seam the ``config`` property and the
+    dict / ``None``), so this is ``dataclasses.asdict`` plus a stable key order;
+    it exists as the single serialization seam the ``config`` property and the
     plugin share (and to keep parity with the EqGPT module API).
     """
     return asdict(config)

@@ -100,6 +100,10 @@ def _dependency_stratum(
 ) -> DependencyStratum:
     if instrument not in schema_by_instrument:
         return "undeclared"
+
+
+
+
     if instrument == "sga":
         use_autograd = run_spec.config.get("use_autograd")
         if use_autograd is True:

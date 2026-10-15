@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kd.core.equation import structure, term_diff
+from kd.core.equation import active_law, structure, term_diff
 from kd.core.expr import format_pde
 from kd.search.recorder import BEST_SCORE_KEY
 from kd.search.result import DEFAULT_SCORE_KIND
@@ -412,12 +412,12 @@ def plot_summary_table(
     col_labels = ["Run", "Expression", "NMSE", "R2", "Iterations", "Δ Terms vs Run 0"]
     table_data: list[list[Any]] = []
 
-    baseline_equation = _validate_baseline_for_term_diff(results, run_labels, warnings)
+    baseline_law = _validate_baseline_for_term_diff(results, run_labels, warnings)
     _warn_on_mixed_algorithm_vocabularies(results, warnings)
 
     for i, result in enumerate(results):
         term_diff_text = _summary_term_diff(
-            results, i, run_labels, warnings, baseline_equation
+            results, i, run_labels, warnings, baseline_law
         )
         table_data.append(
             [
@@ -491,14 +491,15 @@ def _validate_baseline_for_term_diff(
         )
         return None
     try:
-        structure(baseline_equation)
+        baseline_law = active_law(baseline_equation)
+        structure(baseline_law)
     except (ValueError, NotImplementedError) as err:
         warnings.append(
             f"Baseline {run_labels[0]} equation is not canonicalizable; "
             f"term diffs unavailable ({err})"
         )
         return None
-    return baseline_equation
+    return baseline_law
 
 
 def _warn_on_mixed_algorithm_vocabularies(
@@ -521,11 +522,11 @@ def _summary_term_diff(
     index: int,
     run_labels: list[str],
     warnings: list[str],
-    baseline_equation: Equation | None,
+    baseline_law: Equation | None,
 ) -> str:
     if index == 0:
         return "baseline"
-    if baseline_equation is None:
+    if baseline_law is None:
         return "n/a"
 
     result = results[index]
@@ -534,7 +535,7 @@ def _summary_term_diff(
         return "n/a"
 
     try:
-        delta = term_diff(baseline_equation, result.equation)
+        delta = term_diff(baseline_law, active_law(result.equation))
     except (ValueError, NotImplementedError) as err:
         warnings.append(
             f"{run_labels[index]} equation is not canonicalizable; "

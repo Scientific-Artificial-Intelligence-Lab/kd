@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from kd.core.expr.executor import (
     _SPECIAL_OPERATORS,
-    _UNITY_TOKEN,
     DIFF_OPERATOR_PATTERN,
+    UNITY_TOKEN,
 )
 from kd.core.expr.naming import parse_compound_derivative
 
@@ -32,9 +32,9 @@ class TermVocabulary:
         names = self.fields | self.coordinates
         if any(not isinstance(name, str) or not name for name in names):
             raise ValueError("TermVocabulary names must not contain an empty name")
-        if _UNITY_TOKEN in names:
+        if UNITY_TOKEN in names:
             raise ValueError(
-                f"TermVocabulary name {_UNITY_TOKEN!r} is reserved for unity"
+                f"TermVocabulary name {UNITY_TOKEN!r} is reserved for unity"
             )
         if any("_" in name for name in names):
             raise ValueError("TermVocabulary names must not contain an underscore")
@@ -116,10 +116,10 @@ class _FeatureCollector:
         self.visit(node.args[0], nested_path)
 
     def _visit_name(self, name: str, path: dict[str, int]) -> None:
-        if name == _UNITY_TOKEN:
+        if name == UNITY_TOKEN:
             if path:
                 raise ValueError(
-                    f"Reserved unity token {_UNITY_TOKEN!r} cannot appear "
+                    f"Reserved unity token {UNITY_TOKEN!r} cannot appear "
                     "under a derivative path"
                 )
             return

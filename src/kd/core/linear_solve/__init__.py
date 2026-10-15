@@ -7,6 +7,7 @@ from kd.core.linear_solve._helpers import (
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
 from kd.core.linear_solve.least_squares import LeastSquaresSolver
+from kd.core.linear_solve.lstsq import deterministic_lstsq
 from kd.core.linear_solve.stridge import STRidgeSolver
 from kd.core.linear_solve.svd_null_space import SVDNullSpaceSolver
 
@@ -16,6 +17,7 @@ __all__ = [
     "LeastSquaresSolver",
     "STRidgeSolver",
     "SVDNullSpaceSolver",
+    "deterministic_lstsq",
     "compute_r2",
     "r2_score",
     "R2_EPS_TOT",

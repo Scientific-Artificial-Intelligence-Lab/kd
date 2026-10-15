@@ -5,16 +5,22 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from kd.search.eqgpt.backend import GPTBackend, RealGPTBackend
+
 
 
 VOCAB_MASK_VERSION: str = "1"
 
 
 def resolve_weights_fingerprint_path(
-    backend: Any, configured_path: Path | None
+    backend: GPTBackend | None, configured_path: Path | None
 ) -> Path | None:
-    resolved = getattr(backend, "resolved_weights_path", None)
-    return resolved if resolved is not None else configured_path
+    if (
+        isinstance(backend, RealGPTBackend)
+        and backend.resolved_weights_path is not None
+    ):
+        return backend.resolved_weights_path
+    return configured_path
 
 
 def _file_fingerprint(path: Path) -> dict[str, Any]:

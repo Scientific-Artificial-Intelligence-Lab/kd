@@ -1,12 +1,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
 import os
 import signal
-import subprocess
 import sys
 import tempfile
 import time
@@ -35,6 +35,8 @@ _WORKER_MODULE: Final = "kdagent.episode_worker"
 
 TERM_SLACK_SECONDS: Final = 120.0
 KILL_GRACE_SECONDS: Final = 45.0
+
+_LIVE_GROUPS: set[int] = set()
 
 TASK_KEY: Final = "task"
 TRAIN_TASK: Final = "train_surrogate"
@@ -228,6 +230,7 @@ def _run(request: dict[str, Any], *, started_at: float) -> dict[str, Any]:
         "platform_coefficients": evaluation.coefficients,
         "platform_eval_error": evaluation.error,
         "platform_eval_dropped": evaluation.dropped,
+        "unavailable_reason": evaluation.unavailable_reason,
     }
 
 
@@ -290,8 +293,11 @@ def _train(request: dict[str, Any]) -> dict[str, Any]:
 def _prepare(request: dict[str, Any]) -> dict[str, Any]:
     import kd
 
-    from kdagent.data_source import prepare_input
+    from kdagent.data_source import load_dataset, prepare_input
 
+    if "dataset_id" in request:
+        dataset_id = request["dataset_id"]
+        return _input_summary(load_dataset(dataset_id, None), dataset_id, {}, None)
     path = Path(request["path"])
     inventory = None
 
@@ -308,16 +314,34 @@ def _prepare(request: dict[str, Any]) -> dict[str, Any]:
             ],
         }
     dataset, description = prepare_input(path, request["load_options"])
+    description["summary"] = _input_summary(
+        dataset, description["ref"], description["load_options"], inventory
+    )
+    return description
+
+
+def _input_summary(
+    dataset: Any,
+    dataset_id: str,
+    options: dict[str, Any],
+    inventory: dict[str, Any] | None,
+) -> dict[str, Any]:
+    import kd
+
     preview = kd.preview_report(dataset).to_dict()
-    description["summary"] = {
-        "id": description["ref"],
-        "axes": [axis["name"] for axis in preview["axes"]],
-        "lhs": preview["lhs_label"],
-        "layout": preview["topology"],
+    if isinstance(dataset, kd.TabularDataset):
+        task_kind = options["task_kind"]
+        target: str | None = dataset.target_name
+    else:
+        task_kind = "pde-steady" if dataset.lhs_order == 0 else "pde-evolution"
+        target = None if dataset.lhs_order == 0 else preview["lhs_label"]
+    return {
+        "id": dataset_id,
+        "task_kind": task_kind,
+        "target": target,
         "report": preview,
         "inventory": inventory,
     }
-    return description
 
 
 def _write_result(result: dict[str, Any], result_path: str) -> None:
@@ -385,6 +409,7 @@ class IsolatedEpisode:
     platform_coefficients: list[float] | None = None
     platform_eval_error: str | None = None
     platform_eval_dropped: int | None = None
+    unavailable_reason: str | None = None
     stopped_by_evaluation_cap: bool = False
 
 
@@ -499,14 +524,27 @@ def prepare_file(
     *,
     time_cap_seconds: float | None,
 ) -> dict[str, Any]:
-    result, sent_sigterm, returncode, _elapsed = _supervise(
+    return _prepare_isolated(
         {
             TASK_KEY: "prepare_input",
             "path": str(path.resolve()),
             "load_options": load_options,
         },
-        time_cap_seconds=time_cap_seconds,
-        term_slack=0.0,
+        time_cap_seconds,
+    )
+
+
+def prepare_catalog(dataset_id: str, time_cap_seconds: float | None) -> dict[str, Any]:
+    return _prepare_isolated(
+        {TASK_KEY: "prepare_input", "dataset_id": dataset_id}, time_cap_seconds
+    )
+
+
+def _prepare_isolated(
+    request: dict[str, Any], time_cap_seconds: float | None
+) -> dict[str, Any]:
+    result, sent_sigterm, returncode, _elapsed = _supervise(
+        request, time_cap_seconds=time_cap_seconds, term_slack=0.0
     )
     if result is None:
         raise ValueError(
@@ -524,6 +562,11 @@ def _supervise(
     time_cap_seconds: float | None,
     term_slack: float,
 ) -> tuple[dict[str, Any] | None, bool, int | None, float]:
+    from kd.harness import ProcessSupervisor
+
+
+
+
 
 
 
@@ -532,7 +575,6 @@ def _supervise(
     env["MKL_NUM_THREADS"] = "1"
     env["OPENBLAS_NUM_THREADS"] = "1"
     env["NUMEXPR_NUM_THREADS"] = "1"
-    env["PYTORCH_NVML_BASED_CUDA_CHECK"] = "1"
     start = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="kdagent-episode-") as tmp:
         request_path = os.path.join(tmp, "request.json")
@@ -543,37 +585,48 @@ def _supervise(
 
 
 
-        proc = subprocess.Popen(
+
+        worker = ProcessSupervisor(
             [sys.executable, "-m", _WORKER_MODULE, request_path, result_path],
             env=env,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
+            hard_seconds=(
+                None if time_cap_seconds is None else time_cap_seconds + term_slack
+            ),
+            grace_seconds=KILL_GRACE_SECONDS,
         )
-        sent_sigterm = False
+        _LIVE_GROUPS.add(worker.pid)
         try:
-            if time_cap_seconds is None:
-                proc.wait()
-            else:
-                try:
-                    proc.wait(timeout=time_cap_seconds + term_slack)
-                except subprocess.TimeoutExpired:
-                    sent_sigterm = True
-                    _signal_group(proc.pid, signal.SIGTERM)
-                    try:
-                        proc.wait(timeout=KILL_GRACE_SECONDS)
-                    except subprocess.TimeoutExpired:
-                        _signal_group(proc.pid, signal.SIGKILL)
-                        proc.wait()
+            supervised = worker.wait()
         finally:
-
-
-
-
-
-            _signal_group(proc.pid, signal.SIGKILL)
+            _LIVE_GROUPS.discard(worker.pid)
         elapsed = time.perf_counter() - start
         result = _read_result(result_path)
-    return result, sent_sigterm, proc.returncode, elapsed
+    return result, supervised.stop_reason == "timeout", supervised.returncode, elapsed
+
+
+def _group_alive(pgid: int) -> bool:
+    with contextlib.suppress(ChildProcessError):
+        os.waitpid(pgid, os.WNOHANG)
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def stop_live_workers(grace_seconds: float) -> None:
+    groups = set(_LIVE_GROUPS)
+    for pgid in groups:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(pgid, signal.SIGTERM)
+    deadline = time.monotonic() + grace_seconds
+    while groups and time.monotonic() < deadline:
+        time.sleep(0.1)
+        groups = {pgid for pgid in groups if _group_alive(pgid)}
+    for pgid in groups:
+        logger.warning("SIGKILL to worker group %d", pgid)
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(pgid, signal.SIGKILL)
 
 
 def _training_from(
@@ -623,13 +676,6 @@ def _training_from(
         epochs=None,
         final_loss=None,
     )
-
-
-def _signal_group(pgid: int, signum: int) -> None:
-    try:
-        os.killpg(pgid, signum)
-    except ProcessLookupError:
-        pass
 
 
 def _read_result(result_path: str) -> dict[str, Any] | None:
@@ -694,6 +740,7 @@ def _episode_from(
             platform_coefficients=result.get("platform_coefficients"),
             platform_eval_error=result.get("platform_eval_error"),
             platform_eval_dropped=result.get("platform_eval_dropped"),
+            unavailable_reason=result.get("unavailable_reason"),
         )
     if sent_sigterm or result is None:
 
@@ -783,6 +830,9 @@ def _episode_from(
         record=None,
         error_type=error_type,
         error_message=message,
+
+
+        error_traceback=None if result is None else str(result["error"]),
         wallclock_seconds=elapsed,
 
 

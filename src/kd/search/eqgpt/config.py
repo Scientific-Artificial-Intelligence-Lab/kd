@@ -9,6 +9,7 @@ it is a per-problem hyperparameter, not a constant.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -82,15 +83,17 @@ class EqGPTConfig:
     """
     max_length: int = 49
     """Maximum number of tokens in a sampled sentence, counting the pinned
-    ``start_words`` prefix; sampling stops there if no end token is drawn first. It
-    must exceed ``len(start_words)`` and stay below the model's context length, and
-    the default 49 is one below the pretrained context.
+    ``start_words`` prefix; it must stay below the model's context length, and the
+    default 49 is the largest value the pretrained model accepts. Sampling stops
+    there if no end token is drawn first, and the value must exceed
+    ``len(start_words)``.
     """
     variables: tuple[str, ...] | None = None
-    """Coordinate axis names the equation is allowed to mention; vocabulary tokens
-    naming an axis outside this set are masked out of sampling. ``None`` (the
-    default) takes the axes from the dataset, and an explicit value must match the
-    dataset axes exactly or the run fails to start.
+    """Coordinate axis names of the dataset; an explicit value must name exactly the
+    dataset's axes, or the run is refused before the search starts, so this field
+    cannot restrict the search to fewer axes. ``None`` (the default) takes the axes
+    from the dataset. Vocabulary tokens naming an axis outside this set are masked
+    out of sampling.
     """
     start_words: tuple[str, ...] = ("S", "ut", "+")
     """Vocabulary words pinned at the head of every sampled sentence, so generation
@@ -128,7 +131,8 @@ class EqGPTConfig:
 
 
     case_filter: str | None = None
-    """Substring matched against the wave-breaking case names: every case whose name
+    """Wave_multicase only: substring matched against the wave-breaking case names:
+    every case whose name
     contains it is scored, and a candidate's reward is the mean over the cases that
     could be scored. Setting it selects multi-case wave mode; ``None`` (default)
     keeps the single-case path.
@@ -148,21 +152,26 @@ class EqGPTConfig:
     (``kd.data.remote.fetch_wave_surrogate_tree``).
     """
     reward_points_per_window: int = 50
-    """Number of ``x`` sample points per camera window on the grid used to score
+    """Wave_multicase only: number of ``x`` sample points per camera window on the grid
+    used to score
     candidates. The grid covers three camera windows, so each time slice contributes
     three times this value; it must be a positive integer.
     """
     coeff_points_per_window: int = 100
-    """Number of ``x`` sample points per camera window on the grid used for the final
+    """Wave_multicase only: number of ``x`` sample points per camera window on the grid
+    used for the final
     coefficient fits. This grid stays separate from the reward grid
     (``reward_points_per_window``): scoring runs on the reward grid, the reported
     coefficients are fitted on this one.
     """
     primary_case: str | None = None
-    """Name of the case, among those ``case_filter`` selects, whose coefficient fit is
+    """Wave_multicase only: name of the case, among those ``case_filter`` selects, whose
+    coefficient fit is
     reported as the run's final result. When ``None`` (default) the first selected
     case in sorted order is used; a name outside the selection, or a value given
     without ``case_filter``, is rejected.
+    The dataset passed to ``fit`` must equal this case's data: axis order, field
+    names and every coordinate and field value are compared; the name may differ.
     """
 
 
@@ -186,6 +195,14 @@ class EqGPTConfig:
     sits at least this many cells from every edge with a fully populated surrounding
     block, so the data must lie on a grid; it requires ``steady=True`` and excludes
     ``steady_polar_eval``.
+    """
+    steady_boundary_grid: tuple[float, ...] | None = None
+    """Grid used only for boundary deletion, given as six numbers in the order
+    ``(x_start, x_stop, x_step, y_start, y_stop, y_step)``. Each axis is built with
+    ``np.arange(start, stop + step, step)``. When ``None`` (the default), the grid
+    uses the distinct coordinate values in the data, so a grid row or column with
+    no data point is missing from it. The eitech and smile presets set this field;
+    it requires ``steady_boundary_delete_num``.
     """
     steady_polar_eval: bool = False
     """Score steady candidates on a generated polar domain instead of the dataset's own
@@ -282,6 +299,7 @@ class EqGPTConfig:
                 "single-case config has no case family to pick a primary from."
             )
         self._validate_steady()
+        self._validate_steady_boundary_grid()
 
     def _validate_steady(self) -> None:
         """Validate steady-mode exclusivity and its otherwise-inert knobs."""
@@ -333,6 +351,7 @@ class EqGPTConfig:
             defaults = {
                 "steady_activation": None,
                 "steady_boundary_delete_num": None,
+                "steady_boundary_grid": None,
                 "steady_polar_eval": False,
                 "steady_constant_column": False,
                 "steady_train_points": 10_000,
@@ -344,6 +363,26 @@ class EqGPTConfig:
                 value = getattr(self, name)
                 if value != default:
                     raise ValueError(f"{name} requires steady=True, got {value!r}")
+
+    def _validate_steady_boundary_grid(self) -> None:
+        """Reject invalid boundary grids before surrogate training starts."""
+        grid = self.steady_boundary_grid
+        if grid is None:
+            return
+        if self.steady_boundary_delete_num is None:
+            raise ValueError("steady_boundary_grid requires steady_boundary_delete_num")
+        if len(grid) != 6:
+            raise ValueError("steady_boundary_grid must contain exactly six values")
+        if any(type(v) not in (int, float) or not math.isfinite(v) for v in grid):
+            raise ValueError(
+                "steady_boundary_grid values must be finite ints or floats"
+            )
+        if grid[2] <= 0 or grid[5] <= 0:
+            raise ValueError("steady_boundary_grid steps must be positive")
+        if grid[0] >= grid[1] or grid[3] >= grid[4]:
+            raise ValueError(
+                "steady_boundary_grid start must be below stop on each axis"
+            )
 
 
 
@@ -402,12 +441,21 @@ class EqGPTConfig:
             "eitech": {
                 "steady_activation": "sin",
                 "steady_boundary_delete_num": 8,
+                "steady_boundary_grid": (
+                    4.3,
+                    141.0,
+                    136.7 / 800,
+                    19.6,
+                    54.6,
+                    35.0 / 200,
+                ),
                 "steady_polar_eval": False,
                 "steady_constant_column": True,
             },
             "smile": {
                 "steady_activation": "rational",
                 "steady_boundary_delete_num": 8,
+                "steady_boundary_grid": (-4.0, 4.0, 8.0 / 250, -4.0, 4.0, 8.0 / 250),
                 "steady_polar_eval": False,
                 "steady_constant_column": False,
             },

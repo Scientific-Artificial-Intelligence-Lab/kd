@@ -5,15 +5,15 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
 
 from kd.core.equation import Form, LhsSpec
 from kd.core.equation.rendering import render_lhs_label
-from kd.core.equation.signature import law_term_entry, law_term_key
-from kd.core.equation.sketch import Sketch, constraint_admits
+from kd.core.equation.signature import law_term_entry
+from kd.core.equation.sketch import Sketch, constraint_admits, term_admission
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.term_features import TermFeatures, analyze_term, column_fingerprint
 from kd.core.interrupt import SearchInterrupted
@@ -62,6 +62,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INVALID_AIC = float("inf")
+
+_RESTART_SEED_STRIDE = 1000
 
 _FIELD_MODEL_ARTIFACT_FORMAT = "kd-field-model-v1"
 
@@ -227,6 +229,7 @@ class SGAPlugin:
         modes=(
             InstrumentMode(
                 name="default",
+                selected_by={"derivatives": "finite_diff"},
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
@@ -237,13 +240,14 @@ class SGAPlugin:
             ),
             InstrumentMode(
                 name="autograd",
+                selected_by={"derivatives": "autograd"},
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
                 sketch=_SKETCH_LEVELS,
                 description=(
-                    "use_autograd=True: SGA trains its own field surrogate and "
-                    "differentiates it with autograd."
+                    "SGA trains its own field surrogate and differentiates it with "
+                    'autograd; the facade selects it with derivatives="autograd".'
                 ),
                 lhs_orders=frozenset({1}),
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
@@ -354,9 +358,7 @@ class SGAPlugin:
                 resume_tier="resume_safe",
             ),
         ),
-        segmentation=Segmentation(
-            archive="progress", unit="generations", reseed=True
-        ),
+        segmentation=Segmentation(archive="progress", unit="generations", reseed=True),
         identity_breaking_fields=frozenset({"use_autograd", "field_model"}),
 
 
@@ -379,6 +381,9 @@ class SGAPlugin:
         self._config = config or SGAConfig()
         self._population: list[PDE] | None = None
         self._scores: list[float] | None = None
+        self._segment_generations: int = 0
+        self._restart_count: int = 0
+        self._cross_segment_best: tuple[float, PDE] | None = None
         self._best_score: float = float("inf")
         self._best_expression: str = ""
         self._best_formatted_cache: str | None = None
@@ -468,6 +473,10 @@ class SGAPlugin:
             if isinstance(seconds, (int, float)) and not isinstance(seconds, bool)
             else None
         )
+
+    @property
+    def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+        return "autograd" if self._config.use_autograd else "finite_diff"
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
@@ -681,6 +690,12 @@ class SGAPlugin:
         if n < 1:
             raise ValueError(f"n must be >= 1, got {n}")
 
+        if (
+            self._config.restart_interval is not None
+            and self._segment_generations >= self._config.restart_interval
+        ):
+            self._restart_population()
+
         offspring = self._apply_genetic_ops()
 
 
@@ -885,6 +900,9 @@ class SGAPlugin:
             "pde_lib": list(self._pde_lib),
             "repeat_cross": self._repeat_cross,
             "repeat_change": self._repeat_change,
+            "segment_generations": self._segment_generations,
+            "restart_count": self._restart_count,
+            "cross_segment_best": self._cross_segment_best,
             "sketch_predicate_checked": self._sketch_predicate_checked,
             "sketch_predicate_rejected": self._sketch_predicate_rejected,
             "sketch_capacity_checked": self._sketch_capacity_checked,
@@ -922,6 +940,9 @@ class SGAPlugin:
         self._pde_lib = set(value.get("pde_lib", []))
         self._repeat_cross = int(value.get("repeat_cross", 0))
         self._repeat_change = int(value.get("repeat_change", 0))
+        self._segment_generations = int(value.get("segment_generations", 0))
+        self._restart_count = int(value.get("restart_count", 0))
+        self._cross_segment_best = value.get("cross_segment_best")
         self._sketch_predicate_checked = int(value.get("sketch_predicate_checked", 0))
         self._sketch_predicate_rejected = int(value.get("sketch_predicate_rejected", 0))
         self._sketch_capacity_checked = int(value.get("sketch_capacity_checked", 0))
@@ -937,6 +958,9 @@ class SGAPlugin:
     def _reset_search_state(self) -> None:
         self._population = None
         self._scores = None
+        self._segment_generations = 0
+        self._restart_count = 0
+        self._cross_segment_best = None
         self._best_score = float("inf")
         self._best_expression = ""
         self._best_formatted_cache = None
@@ -956,6 +980,10 @@ class SGAPlugin:
         self._pending_scores = None
 
     def _best_pde(self) -> PDE | None:
+        if self._cross_segment_best is not None:
+            score, pde = self._cross_segment_best
+            if not self._scores or score <= self._scores[0]:
+                return pde
         population = self._population or []
         if not population:
             return None
@@ -1016,22 +1044,18 @@ class SGAPlugin:
             return True
         for tree in pde.terms:
             try:
-                key = law_term_key(tree_to_kd_expr(tree))
-                features = analyze_term(key, sketch.vocabulary)
+                term_ir = tree_to_kd_expr(tree)
             except ValueError:
                 self._sketch_predicate_rejected += 1
                 return False
-            if key in compiled.pinned_keys:
-                self._sketch_predicate_rejected += 1
-                return False
-            if column_fingerprint(features) in compiled.pinned_fingerprints:
-                self._sketch_predicate_rejected += 1
-                return False
-            if key in compiled.anchored_keys:
-                continue
-            if not any(
-                constraint_admits(hole.constraint, features) for hole in sketch.holes
-            ):
+            reason = term_admission(
+                term_ir,
+                sketch,
+                pinned_keys=compiled.pinned_keys,
+                pinned_monomials=compiled.pinned_monomials,
+                anchor_fingerprints=compiled.anchor_fingerprints,
+            )
+            if reason is not None:
                 self._sketch_predicate_rejected += 1
                 return False
         return True
@@ -1076,7 +1100,7 @@ class SGAPlugin:
         ]
         seats: dict[str, set[str]] = {hole.id: set() for hole in sketch.holes}
         for key in active:
-            if key in compiled.anchored_keys:
+            if column_fingerprint(features_by_key[key]) in compiled.anchor_fingerprints:
                 continue
             for hole in sketch.holes:
                 if constraint_admits(hole.constraint, features_by_key[key]):
@@ -1456,16 +1480,23 @@ class SGAPlugin:
             self._den,
             self._rng,
         )
-        if self._sketch_compiled is not None and not self._sketch_admissible(pde):
+        if self._sketch_compiled is None:
+            return _safe_evaluate_aic(
+                pde,
+                self._data_dict,
+                self._default_terms,
+                self._y,
+                self._config,
+                self._diff_ctx,
+            )
+        if not self._sketch_admissible(pde):
             return _INVALID_AIC, pde
-        return _safe_evaluate_aic(
-            pde,
-            self._data_dict,
-            self._default_terms,
-            self._y,
-            self._config,
-            self._diff_ctx,
-        )
+        scored = self._score_pde(pde)
+        if not self._selected_within_capacity(
+            scored.result, terms=self._build_term_list(scored.pde)
+        ):
+            return _INVALID_AIC, scored.pde
+        return scored.score, scored.pde
 
     def _sample_valid_individual(self, slot: int) -> tuple[float, PDE]:
         aic, pruned = self._draw_scored_individual()
@@ -1502,13 +1533,22 @@ class SGAPlugin:
         from kd.search.sga.genetic import max_generated_depth
 
         max_depth = max_generated_depth(self._config.depth)
+
+        def within_caps(pde: PDE) -> bool:
+            return pde.width <= self._config.width and all(
+                term.depth <= max_depth for term in pde.terms
+            )
+
+        if self._cross_segment_best is not None and not within_caps(
+            self._cross_segment_best[1]
+        ):
+            self._cross_segment_best = None
         kept: list[tuple[float, PDE]] = [
             (score, pde)
             for score, pde in zip(
                 self._current_scores(len(population)), population, strict=True
             )
-            if pde.width <= self._config.width
-            and all(term.depth <= max_depth for term in pde.terms)
+            if within_caps(pde)
         ]
         culled = len(population) - len(kept)
         if culled == 0:
@@ -1570,17 +1610,45 @@ class SGAPlugin:
 
 
         paired = sorted(
-            (
-                (aic if _is_valid_aic(aic) else _INVALID_AIC, pde)
-                for aic, pde in scored
-            ),
+            ((aic if _is_valid_aic(aic) else _INVALID_AIC, pde) for aic, pde in scored),
             key=lambda item: item[0],
         )
         self._scores = [score for score, _ in paired]
         self._population = [pde for _, pde in paired]
         self._best_score = self._scores[0]
-        self._best_expression = pde_to_kd_expr(self._population[0])
+        if self._cross_segment_best is not None:
+            aic, pde = _safe_evaluate_aic(
+                self._cross_segment_best[1],
+                self._data_dict,
+                self._default_terms,
+                self._y,
+                self._config,
+                self._diff_ctx,
+            )
+            score = aic if _is_valid_aic(aic) else _INVALID_AIC
+            self._cross_segment_best = (score, pde)
+            self._best_score = min(self._best_score, score)
+
+        self._best_expression = pde_to_kd_expr(cast(PDE, self._best_pde()))
         self._best_formatted_cache = None
+
+    def _restart_population(self) -> None:
+        if (
+            self._scores
+            and self._population
+            and (
+                self._cross_segment_best is None
+                or self._scores[0] < self._cross_segment_best[0]
+            )
+        ):
+            self._cross_segment_best = (self._scores[0], self._population[0])
+        self._restart_count += 1
+        self._rng.manual_seed(
+            self._config.seed + _RESTART_SEED_STRIDE * self._restart_count
+        )
+        self._pde_lib.clear()
+        self._init_population()
+        self._segment_generations = 0
 
     def _init_population(self) -> None:
         population: list[PDE] = []
@@ -1596,7 +1664,7 @@ class SGAPlugin:
         self._population = [p for _, p in paired]
 
 
-        if self._scores and math.isfinite(self._scores[0]):
+        if self._scores and self._scores[0] < self._best_score:
             self._best_score = self._scores[0]
             self._best_expression = pde_to_kd_expr(self._population[0])
             self._best_formatted_cache = None
@@ -1804,13 +1872,16 @@ class SGAPlugin:
         return [p for _, p in paired], [s for s, _ in paired]
 
     def _score_offspring(self, pde: PDE) -> _ScoredPDE:
-        expression = pde_to_kd_expr(pde)
         if not self._prepared:
             return _ScoredPDE(
                 pde,
                 _INVALID_AIC,
-                self._evaluation_failed_result(expression),
+                self._evaluation_failed_result(pde_to_kd_expr(pde)),
             )
+        return self._score_pde(pde)
+
+    def _score_pde(self, pde: PDE) -> _ScoredPDE:
+        expression = pde_to_kd_expr(pde)
         try:
             candidate = evaluate_candidate(
                 pde,
@@ -1840,6 +1911,7 @@ class SGAPlugin:
     def _commit_pending_generation(self) -> None:
         self._population = self._pending_population
         self._scores = self._pending_scores
+        self._segment_generations += 1
 
         if self._scores and self._scores[0] < self._best_score:
             self._best_score = self._scores[0]

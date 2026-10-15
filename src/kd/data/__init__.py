@@ -8,6 +8,7 @@ from kd.data.catalog import (
     list_datasets,
     list_datasets_answer_blind,
 )
+from kd.data.loaders import load_wave_breaking_datasets
 from kd.data.noise import (
     NoiseScale,
     add_noise,
@@ -35,12 +36,18 @@ from kd.data.schema import (
     TaskType,
     compute_dataset_fingerprint,
 )
+from kd.data.selection import interface_mask
+from kd.data.smoothing import savgol_smooth
 from kd.data.source import DatasetSource
 from kd.data.subsample import ratio_subsample, stride_subsample
 from kd.data.synthetic import (
+    ODE_CORE_TRACK,
+    ODE_SYSTEMS,
+    OdeSystem,
     generate_advection_data,
     generate_burgers_data,
     generate_diffusion_data,
+    generate_ode_trajectories,
     load_allen_cahn,
     load_burgers,
     load_burgers_2d,
@@ -56,6 +63,9 @@ from kd.data.synthetic import (
     load_poisson_disk,
     load_wave,
 )
+from kd.data.tabular_file import load_tabular
+from kd.data.trajectory import Trajectory, TrajectorySet, derivative_target
+from kd.data.trajectory_table import trajectories_to_tabular
 
 __all__ = [
     "AxisInfo",
@@ -65,15 +75,23 @@ __all__ = [
     "DatasetSpec",
     "FieldData",
     "NoiseScale",
+    "ODE_CORE_TRACK",
+    "ODE_SYSTEMS",
+    "OdeSystem",
     "PDEDataset",
     "TabularDataset",
     "TaskType",
+    "Trajectory",
+    "TrajectorySet",
     "compute_dataset_fingerprint",
+    "derivative_target",
     "discover_unnormalized",
     "generate_advection_data",
     "generate_burgers_data",
     "generate_diffusion_data",
+    "generate_ode_trajectories",
     "get_dataset",
+    "interface_mask",
     "list_datasets",
     "list_datasets_answer_blind",
     "list_remote_datasets",
@@ -95,12 +113,16 @@ __all__ = [
     "load_pde_compound",
     "load_pde_divide",
     "load_poisson_disk",
+    "load_tabular",
     "load_tlc_cc",
     "load_wave",
     "load_wave_breaking",
+    "load_wave_breaking_datasets",
     "add_noise",
     "ratio_subsample",
     "resample_to_grid",
+    "savgol_smooth",
     "stride_subsample",
+    "trajectories_to_tabular",
     "xu2020_relative",
 ]

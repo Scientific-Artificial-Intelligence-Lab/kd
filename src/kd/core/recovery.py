@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
+from kd.core.linear_solve.lstsq import deterministic_lstsq
+
 __all__ = [
     "RecoveryVerdict",
     "judge_recovery",
@@ -34,7 +36,7 @@ class RecoveryVerdict:
 
 
 def _span_nmse(rhs: Tensor, theta: Tensor, y_var: float) -> float:
-    solution = torch.linalg.lstsq(theta, rhs.unsqueeze(1)).solution.squeeze(1)
+    solution = deterministic_lstsq(theta, rhs.unsqueeze(1)).squeeze(1)
     residual = rhs - theta @ solution
     return float(torch.mean(residual**2)) / max(y_var, 1e-30)
 
@@ -57,7 +59,7 @@ def judge_recovery(
     columns = {label: truth_columns[label].flatten().double() for label in labels}
     theta = torch.stack([columns[label] for label in labels], dim=1)
 
-    solution = torch.linalg.lstsq(theta, rhs_flat.unsqueeze(1)).solution.squeeze(1)
+    solution = deterministic_lstsq(theta, rhs_flat.unsqueeze(1)).squeeze(1)
     projected = {label: float(solution[i]) for i, label in enumerate(labels)}
 
     y_var = float(torch.var(target, correction=0))
@@ -108,7 +110,7 @@ def span_floor(
     theta = torch.stack(
         [truth_columns[label].flatten().double() for label in labels], dim=1
     )
-    solution = torch.linalg.lstsq(theta, target.unsqueeze(1)).solution.squeeze(1)
+    solution = deterministic_lstsq(theta, target.unsqueeze(1)).squeeze(1)
     y_var = float(torch.var(target, correction=0))
     floor = float(torch.mean((target - theta @ solution) ** 2)) / max(y_var, 1e-30)
     return floor, {label: float(solution[i]) for i, label in enumerate(labels)}

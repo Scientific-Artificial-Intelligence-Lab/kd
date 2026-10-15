@@ -1,28 +1,17 @@
-### DLGA observations
+Set `surrogate_max_epochs` explicitly. Training precedes every search on a
+fresh call, so a limit reached during training yields no candidate. Training
+time grows with epochs and points; the derivative library also affects memory.
+Use `train_surrogate` and `surrogate=` to share a trained model across lineages.
 
-The packaged validation includes structure recovery at 15% relative noise.
-A 50000-epoch fit on a 256x101 grid took 1409 s on a laptop GPU. A CPU fit on
-501x501 had not returned after 2 hours 45 minutes. On that large grid, 2000
-epochs and a four-token library including u_x_t reached 13.4 GB after 23
-minutes and were killed by the host memory guard. A 1000-epoch run with three
-tokens and no mixed partial returned in 693 s. Those two changes were not
-separated experimentally. Probe a large grid with a small library and reduced
-training budget before increasing either.
-
-At 3 and 10 training epochs, first-order data probes selected the second time
-derivative; at 100 epochs they selected the first. Structural hits in the
-packaged suite spanned NMSE 4e-4 to 3.1e-2, while wrong structures on the
-hardest case spanned 2.7e-2 to 5.1e-2. The old operational heuristic was to
-try epsilon between 1e-2 and 5e-2 for expressions over five tokens at NMSE
-above 1e-2; treat it as a trial, not an acceptance criterion. One segment spent
-820.9 s between fit_started and search_started, then 28 s searching.
-
-The branch-selection NMSE/MSE A/B held surrogates, seeds, budget and epsilon
-fixed and moved recovery from 17/25 to 21/25 seeds. Validated epsilon values
-spanned 1e-6 to 1e-3, against the author's tutorial value of 1e-1. The earlier
-reference had crossover indexed by generation count instead of population
-size, and selection reused the first index for duplicate fitness values; KD
-corrects both. A `no_candidate` partial result has empty display, null law and
-null NMSE/MSE. Check the library and surrogate as well as population size,
-generations and seed; invariance across those probes alone is not proof that
-the target is unrepresentable.
+For a second-order target set `target_lhs_order=2`. Every candidate is fitted
+against the time derivative of that order only: the first for a first-order
+target, the second for a second-order one. `lhs_auto_select=true` fits both
+orders and keeps the branch with the lower NMSE, which can return a law for
+the order this input does not ask for; leave it off when the target is given.
+For additional spatial axes, build `library` with those axes' derivative
+names; the default library uses only `u` and its x derivatives. Only the
+left-hand-side field is modeled; tokens from other fields are refused before
+training. `mode` accepts only `constant`.
+`max_modules` and `max_module_length` bound the genome; `epsilon` multiplies
+the expression-length penalty. A null law can require a different library or
+better surrogate fit; repeated poor fits alone do not prove inexpressibility.

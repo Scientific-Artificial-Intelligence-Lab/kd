@@ -13,8 +13,8 @@ from kd.core.executor.context import ExecutionContext
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
 from kd.core.interrupt import SearchInterrupted
-from kd.core.linear_solve._helpers import is_cpu_alloc_failure
 from kd.core.linear_solve.least_squares import LeastSquaresSolver
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import FiniteDiffProvider
@@ -386,12 +386,10 @@ class PlatformBuilder:
         if self._reqs.surrogate_model is not None:
             return self._align_model_to_coords(self._reqs.surrogate_model, coords)
         if not self._reqs.needs_surrogate:
-
-
-
-
-            model = self._build_default_field_model(dataset)
-            return self._align_model_to_coords(model, coords)
+            raise ValueError(
+                "provider_kind='autograd' needs a surrogate: set "
+                "needs_surrogate=True to train one, or pass surrogate_model"
+            )
         return self._train_default_surrogate(dataset, coords)
 
     def _train_default_surrogate(
@@ -405,7 +403,6 @@ class PlatformBuilder:
             )
         model = self._build_default_field_model(dataset)
         target = dataset.get_field(dataset.lhs_field).flatten().detach()
-
 
 
 

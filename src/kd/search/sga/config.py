@@ -83,7 +83,8 @@ class SGAConfig:
 
     This config covers GA parameters and tree structure constraints.
     It does NOT contain ``generations`` or ``sga_run`` -- the Runner
-    is the sole loop owner.
+    is the sole loop owner; ``restart_interval`` only decides when, inside
+    that loop, the population is re-drawn.
     """
 
 
@@ -165,8 +166,11 @@ class SGAConfig:
 
 
     use_autograd: bool = False
-    """If True, train (or reuse) a FieldModel surrogate and use AutogradProvider
-    for Layer 2 terminals (u_x, u_t). Layer 1 (raw u leaf) and Layer 3 (tree
+    """Derivative source for the Layer 2 terminals (u_x, u_t): with autograd, SGA
+    trains (or reuses) a FieldModel surrogate and reads them through
+    AutogradProvider; otherwise they come from finite differences. The facade
+    spells the two settings ``derivatives="autograd"`` and
+    ``derivatives="finite_diff"``. Layer 1 (raw u leaf) and Layer 3 (tree
     d / d^2 operators) are unchanged.
 
     Note: enabling this triggers FieldModel training in ``prepare()`` unless a
@@ -210,19 +214,34 @@ class SGAConfig:
     ``use_autograd=True`` and ``field_model is None``; ignored in finite-diff
     mode (same handling as ``autograd_train_epochs``)."""
 
-    def __post_init__(self) -> None:
-        """Validate the autograd training-budget fields (fail-loud).
+    restart_interval: int | None = None
+    """Number of committed generations between population re-draws.
 
-        Deliberate style exception: ``SGAConfig`` is otherwise a plain dataclass
-        with no ``__post_init__``, but the autograd budget fields gate a silent
-        failure mode (a patience-with-no-val-signal config that quietly does
-        nothing) — so this mirrors ``DLGAConfig``'s runtime validation. The
-        config layer is intentionally STRICTER than the trainer (which only
-        *warns* on patience+val_ratio=0); a misconfigured budget must not reach
-        training. ``use_autograd=False`` paths ignore these fields, but the
-        validation still runs (cheap, and keeps the constraint honest if the
-        config is later switched to autograd).
+    ``None`` keeps the population throughout the search. Restart j
+    (j = 1, 2, ...) re-seeds with ``seed + 1000 * j``, empties the dedup
+    history and re-draws the population. The reported answer is the best
+    population head across segments; ties keep the earlier segment.
+    Restart happens at the start of the next generation, so
+    ``restart_interval >= generations`` behaves like ``None``. Initial
+    population draws are not counted as evaluations.
+
+    With ``use_autograd=True``, the surrogate is trained once (or supplied)
+    and shared by every segment, so segments are not equivalent to
+    independent fits at those seeds. With finite differences they are.
+    """
+
+    def __post_init__(self) -> None:
+        """Validate restart intervals and autograd training-budget fields.
+
+        Restart intervals must be positive. Autograd validation rejects
+        patience without a validation signal, which the trainer only warns
+        about: a misconfigured budget must not reach training. These checks
+        also run when ``use_autograd=False``, even though finite differences
+        ignore the training fields, so switching to autograd keeps the
+        constraints intact.
         """
+        if self.restart_interval is not None and self.restart_interval < 1:
+            raise ValueError("restart_interval must be None or >= 1")
         if (
             self.autograd_train_patience is not None
             and self.autograd_train_val_ratio == 0.0

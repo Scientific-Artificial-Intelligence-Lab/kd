@@ -8,6 +8,7 @@ from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
+from kd.core.jsonsafe import NO_MEASUREMENT
 from kd.search.checkpoint_manifest import (
     FINAL_STATUS_COMPLETED,
     FINAL_STATUS_CRASHED,
@@ -20,19 +21,10 @@ from kd.search.checkpoint_manifest import (
 from kd.search.checkpoint_payload import (
     _CHECKPOINT_FINAL,
     _CHECKPOINT_PATTERN,
+    atomic_torch_save,
+    build_checkpoint_payload,
 )
-from kd.search.checkpoint_payload import (
-    CHECKPOINT_VERSION as CHECKPOINT_VERSION,
-)
-from kd.search.checkpoint_payload import (
-    _algorithm_name as _algorithm_name,
-)
-from kd.search.checkpoint_payload import (
-    atomic_torch_save as atomic_torch_save,
-)
-from kd.search.checkpoint_payload import (
-    build_checkpoint_payload as build_checkpoint_payload,
-)
+from kd.search.protocol import DeadlineAwareSearchAlgorithm
 from kd.search.recorder import BEST_SCORE_KEY
 
 if TYPE_CHECKING:
@@ -161,7 +153,10 @@ class VizDataCollector:
         candidates: list[str],
         results: list[Any],
     ) -> None:
-        self._recorder.log(BEST_SCORE_KEY, algorithm.best_score)
+        best_score = (
+            algorithm.best_score if algorithm.best_expression else NO_MEASUREMENT
+        )
+        self._recorder.log(BEST_SCORE_KEY, best_score)
         self._recorder.log("_best_expr", algorithm.best_expression)
         self._recorder.log("_n_candidates", len(candidates))
 
@@ -282,6 +277,8 @@ class WallClockBudgetCallback:
 
     def on_experiment_start(self, algorithm: Any) -> None:
         self._started = time.perf_counter()
+        if isinstance(algorithm, DeadlineAwareSearchAlgorithm):
+            algorithm.set_wall_clock_deadline(self._started + self._max_seconds)
 
     def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
         pass
@@ -385,6 +382,11 @@ class CheckpointCallback:
         self._lineage = lineage
         self._task = task
         self._dataset_fingerprint = dataset_fingerprint
+
+
+
+
+
         self._last_iteration: int = -1
         self._manifest: CheckpointManifestWriter | None = None
 
@@ -400,6 +402,9 @@ class CheckpointCallback:
 
     def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
         pass
+
+    def on_iteration_updated(self, iteration: int, algorithm: Any) -> None:
+        self._last_iteration = iteration
 
     def on_iteration_end(
         self,

@@ -60,6 +60,7 @@ from kd.search.llm4ed.score import (
     ERROR_PARSE,
     ERROR_UNDEFINED_OPERANDS,
     ERROR_UNDEFINED_OPERATORS,
+    MAX_TERMS,
     EquationScore,
     score_equation,
 )
@@ -105,6 +106,19 @@ def _invalid_reason_for_score(error_type: str | None) -> str:
     if error_type == ERROR_LSTSQ:
         return "evaluation_error"
     return "unclassified"
+
+
+def _display_terms(score: EquationScore) -> tuple[str, ...]:
+    assert score.coefficients is not None
+    kept = [
+        term
+        for term, coef in zip(
+            score.term_strs, np.ravel(score.coefficients), strict=True
+        )
+        if coef != 0
+    ][:MAX_TERMS]
+    return tuple(term[1:] if term.startswith("-") else term for term in kept)
+
 
 
 
@@ -232,6 +246,9 @@ class Llm4edPlugin:
         modes=(
             InstrumentMode(
                 name="default",
+                field_names=("u",),
+                spatial_axes=("x",),
+                description="LLM proposals over field u and spatial axis x.",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
@@ -403,7 +420,16 @@ class Llm4edPlugin:
         return {"tokens_in": self._tokens_in, "tokens_out": self._tokens_out}
 
 
+    def refuse_unsupported_names(self, dataset: PDEDataset) -> None:
+        fields = set(dataset.fields or {})
+        if fields != {"u"}:
+            raise ValueError(
+                f"LLM4ED requires fields ['u']; dataset fields={sorted(fields)}. "
+                "Use an instrument that reads all of these fields."
+            )
+
     def prepare(self, components: PlatformComponents) -> None:
+        self.refuse_unsupported_names(components.dataset)
         self._components = components
         self._recorder = components.recorder
         self._lhs, self._features, self._lhs_name = _dataset_columns(
@@ -503,9 +529,9 @@ class Llm4edPlugin:
 
         batch = sorted(survivors, key=lambda item: item.score)[-target:]
         for item in batch:
-            equation_score = self._round_cache[item.expression]
-            permutation = permute_terms(list(equation_score.term_strs), self._rng)
-            self._display[item.expression] = (permutation, equation_score.term_strs)
+            terms = _display_terms(self._round_cache[item.expression])
+            permutation = permute_terms(list(terms), self._rng)
+            self._display[item.expression] = (permutation, terms)
         return [item.expression for item in batch]
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
@@ -634,8 +660,7 @@ class Llm4edPlugin:
         if not rescored.valid:
 
             return invalid_evaluation_result(
-                "best candidate re-scoring failed: "
-                f"{rescored.error_type or 'unknown'}",
+                f"best candidate re-scoring failed: {rescored.error_type or 'unknown'}",
                 score=self._best_reward,
                 expression=self._best_expression,
                 reason=_invalid_reason_for_score(rescored.error_type),
@@ -766,7 +791,9 @@ class Llm4edPlugin:
                 "provider."
             )
         inner: LLMProvider = OpenAICompatProvider(
-            model=self._config.model, base_url=self._config.base_url
+            model=self._config.model,
+            base_url=self._config.base_url,
+            extra_body=self._config.extra_body,
         )
         if self._config.tape_record_path is not None:
             inner = TapeRecordingProvider(

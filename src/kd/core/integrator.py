@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import ast
 import logging
+import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +16,7 @@ from torch import Tensor
 
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr.executor import (
+    UNITY_TOKEN,
     PythonExecutor,
     _is_diff_operator,
     _parse_diff_name,
@@ -39,6 +42,28 @@ DEFAULT_METHOD = "Radau"
 
 
 _MAX_STENCIL_ORDER = MAX_SUPPORTED_ORDER
+
+
+def assemble_rhs(
+    terms: Sequence[str],
+    coefficients: Sequence[float],
+    keep: Sequence[int],
+) -> str:
+    non_finite = [i for i in keep if not math.isfinite(coefficients[i])]
+    if non_finite:
+        detail = ", ".join(
+            f"term '{terms[i]}' has coefficient {coefficients[i]!r}" for i in non_finite
+        )
+        raise ValueError(
+            f"Cannot assemble integration RHS: non-finite coefficient(s) — "
+            f"{detail}. Coefficients must be finite; a NaN/Inf here points "
+            "at a degenerate upstream fit/refit, not at the RHS terms."
+        )
+    survivors = [i for i in keep if coefficients[i] != 0.0]
+    if not survivors:
+        return "0"
+    return " + ".join(f"({coefficients[i]!r})*({terms[i]})" for i in survivors)
+
 
 
 
@@ -231,6 +256,8 @@ def _classify_rhs(
             continue
         if isinstance(node, ast.Name) and id(node) not in call_func_ids:
             name = node.id
+            if name == UNITY_TOKEN:
+                continue
             if name == lhs_field:
                 continue
             if name in field_names:
@@ -575,5 +602,6 @@ def integrate_pde(
 
 __all__ = [
     "IntegrationResult",
+    "assemble_rhs",
     "integrate_pde",
 ]

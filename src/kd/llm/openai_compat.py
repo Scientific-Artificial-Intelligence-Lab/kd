@@ -5,7 +5,7 @@ import importlib
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Final
 
 from kd.llm.protocol import LLMBackendError, LLMRequest, LLMResponse, LLMUsage
@@ -16,17 +16,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_API_KEY_ENV_VAR: Final[str] = "OPENAI_API_KEY"
 
 
-
-_RETRYABLE_SDK_ERROR_NAMES: Final[tuple[str, ...]] = (
-    "APIConnectionError",
-    "APITimeoutError",
-    "RateLimitError",
-    "InternalServerError",
-)
-_BUILTIN_RETRYABLE: Final[tuple[type[BaseException], ...]] = (
-    ConnectionError,
-    TimeoutError,
-)
+class _EmptyCompletionError(Exception):
+    pass
 
 
 def _import_sdk() -> Any:
@@ -34,12 +25,12 @@ def _import_sdk() -> Any:
 
 
 def _retryable_exceptions_from_sdk(sdk: Any) -> tuple[type[BaseException], ...]:
-    resolved = tuple(
-        candidate
-        for name in _RETRYABLE_SDK_ERROR_NAMES
-        if isinstance(candidate := getattr(sdk, name, None), type)
+    return (
+        sdk.APIConnectionError,
+        sdk.APITimeoutError,
+        sdk.RateLimitError,
+        sdk.InternalServerError,
     )
-    return resolved or _BUILTIN_RETRYABLE
 
 
 class OpenAICompatProvider:
@@ -50,6 +41,7 @@ class OpenAICompatProvider:
         model: str,
         base_url: str,
         api_key_env_var: str = DEFAULT_API_KEY_ENV_VAR,
+        extra_body: Mapping[str, Any] | None = None,
         max_retries_per_call: int = 5,
         backoff_initial_seconds: float = 1.0,
         backoff_factor: float = 2.0,
@@ -70,6 +62,7 @@ class OpenAICompatProvider:
         self._model = model
         self._base_url = base_url
         self._api_key_env_var = api_key_env_var
+        self._extra_body = extra_body
         self._max_retries_per_call = max_retries_per_call
         self._backoff_initial_seconds = backoff_initial_seconds
         self._backoff_factor = backoff_factor
@@ -87,7 +80,10 @@ class OpenAICompatProvider:
             sdk = _import_sdk()
             api_key = self._resolve_api_key()
             self._client = sdk.OpenAI(
-                base_url=self._base_url, api_key=api_key, timeout=self._timeout
+                base_url=self._base_url,
+                api_key=api_key,
+                timeout=self._timeout,
+                max_retries=0,
             )
             if self._retryable_exceptions is None:
                 self._retryable_exceptions = _retryable_exceptions_from_sdk(sdk)
@@ -101,6 +97,7 @@ class OpenAICompatProvider:
         client = self._client
         retryable = self._retryable_exceptions
         assert client is not None and retryable is not None
+        retryable = (_EmptyCompletionError, *retryable)
 
         last_exc: BaseException | None = None
         total_attempts = self._max_retries_per_call + 1
@@ -137,22 +134,21 @@ class OpenAICompatProvider:
         return key
 
     def _call_api(self, client: Any, request: LLMRequest) -> LLMResponse:
+        extra_kwargs = (
+            {} if self._extra_body is None else {"extra_body": self._extra_body}
+        )
         response = client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": request.prompt}],
             temperature=request.params.temperature,
             max_tokens=request.params.max_tokens,
             seed=request.seed,
+            **extra_kwargs,
         )
         choices = getattr(response, "choices", None)
         if not choices:
             raise LLMBackendError(
                 "OpenAI-compatible LLM provider received a response with no choices"
-            )
-        content = getattr(getattr(choices[0], "message", None), "content", None)
-        if content is None:
-            raise LLMBackendError(
-                "OpenAI-compatible LLM provider received an empty completion"
             )
         model = getattr(response, "model", None)
         if not model:
@@ -160,6 +156,11 @@ class OpenAICompatProvider:
                 "OpenAI-compatible LLM provider received a response with no "
                 "model id; the served model is recorded on every response and "
                 "tape entry, so it is never substituted with the configured one"
+            )
+        content = getattr(getattr(choices[0], "message", None), "content", None)
+        if content is None:
+            raise _EmptyCompletionError(
+                "OpenAI-compatible LLM provider received an empty completion"
             )
         return LLMResponse(
             text=str(content),

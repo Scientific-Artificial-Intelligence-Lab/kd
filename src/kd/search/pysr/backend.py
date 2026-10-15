@@ -46,6 +46,7 @@ class PySRBackend(Protocol):
         variable_names: list[str],
         *,
         search_state: bytes | None,
+        timeout_in_seconds: float | None,
     ) -> None:
         ...
 
@@ -59,7 +60,9 @@ class PySRBackend(Protocol):
         ...
 
 
-def _regressor_kwargs(cfg: PySRConfig) -> dict[str, Any]:
+def _regressor_kwargs(
+    cfg: PySRConfig, timeout_in_seconds: float | None
+) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "niterations": cfg.niterations,
         "population_size": cfg.population_size,
@@ -78,6 +81,10 @@ def _regressor_kwargs(cfg: PySRConfig) -> dict[str, Any]:
         "temp_equation_file": True,
     }
     kwargs.update(cfg.extra_pysr_kwargs or {})
+    if timeout_in_seconds is None:
+        kwargs.pop("timeout_in_seconds", None)
+    else:
+        kwargs["timeout_in_seconds"] = timeout_in_seconds
     return kwargs
 
 
@@ -94,6 +101,7 @@ class _PySRRegressorBackend:
         variable_names: list[str],
         *,
         search_state: bytes | None,
+        timeout_in_seconds: float | None,
     ) -> None:
         os.environ.setdefault(_JULIA_SIGNALS_ENV_VAR, _JULIA_SIGNALS_ENV_VALUE)
         try:
@@ -105,9 +113,16 @@ class _PySRRegressorBackend:
                 f'`pip install "sail-kd[pysr]"`. Original error: {e}'
             ) from e
         if search_state is None:
-            self._model = PySRRegressor(**_regressor_kwargs(self._config))
+            self._model = PySRRegressor(
+                **_regressor_kwargs(self._config, timeout_in_seconds)
+            )
         else:
             self._model = pickle.loads(search_state)
+
+
+
+
+
 
 
 
@@ -126,6 +141,7 @@ class _PySRRegressorBackend:
             self._model.set_params(
                 niterations=self._config.niterations,
                 random_state=self._config.seed,
+                timeout_in_seconds=timeout_in_seconds,
                 warm_start=True,
             )
 
@@ -186,6 +202,7 @@ class _SubprocessBackend:
         variable_names: list[str],
         *,
         search_state: bytes | None,
+        timeout_in_seconds: float | None,
     ) -> None:
         request = {
             "X": X,
@@ -193,6 +210,7 @@ class _SubprocessBackend:
             "variable_names": list(variable_names),
             "config": self._config,
             "search_state": search_state,
+            "timeout_in_seconds": timeout_in_seconds,
         }
         with tempfile.TemporaryDirectory(prefix="kd-pysr-") as tmp:
             request_path = os.path.join(tmp, "request.pkl")

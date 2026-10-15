@@ -19,26 +19,15 @@ DISK_N_THETA: Final[int] = 100
 
 _MAX_LATTICE_CELLS: Final[int] = 16_000_000
 
-_REFERENCE_GRIDS: Final[dict[str, tuple[np.ndarray, np.ndarray]]] = {
-    "eqgpt-laplacian-eitech": (
-        np.arange(4.3, 141.0 + 136.7 / 800, 136.7 / 800),
-        np.arange(19.6, 54.6 + 35.0 / 200, 35.0 / 200),
-    ),
-    "eqgpt-laplacian-smile": (
-        np.arange(-4.0, 4.0 + 8.0 / 250, 8.0 / 250),
-        np.arange(-4.0, 4.0 + 8.0 / 250, 8.0 / 250),
-    ),
-}
 
-
-def build_steady_eval_dataset(
-    dataset: PDEDataset, config: EqGPTConfig
-) -> PDEDataset:
+def build_steady_eval_dataset(dataset: PDEDataset, config: EqGPTConfig) -> PDEDataset:
     if config.steady_polar_eval:
         return _polar_eval_dataset(dataset)
     delete_num = config.steady_boundary_delete_num
     if delete_num is not None:
-        return _corroded_eval_dataset(dataset, int(delete_num))
+        return _corroded_eval_dataset(
+            dataset, int(delete_num), config.steady_boundary_grid
+        )
     return PDEDataset.from_scatter(
         coords={axis: dataset.get_coords(axis) for axis in dataset.axis_order or []},
         fields={"u": dataset.get_field("u")},
@@ -62,11 +51,13 @@ def _polar_eval_dataset(dataset: PDEDataset) -> PDEDataset:
     )
 
 
-def _corroded_eval_dataset(dataset: PDEDataset, delete_num: int) -> PDEDataset:
+def _corroded_eval_dataset(
+    dataset: PDEDataset, delete_num: int, grid: tuple[float, ...] | None
+) -> PDEDataset:
     x = dataset.get_coords("x").detach().cpu().numpy()
     y = dataset.get_coords("y").detach().cpu().numpy()
     u = dataset.get_field("u").detach().cpu().numpy()
-    x_grid, y_grid = _corrosion_grid(dataset.name, x, y)
+    x_grid, y_grid = _corrosion_grid(grid, x, y)
     x_idx = _lattice_indices(x, x_grid)
     y_idx = _lattice_indices(y, y_grid)
     n_x, n_y = x_grid.size, y_grid.size
@@ -114,12 +105,15 @@ def _corroded_eval_dataset(dataset: PDEDataset, delete_num: int) -> PDEDataset:
 
 
 def _corrosion_grid(
-    dataset_name: str, x: np.ndarray, y: np.ndarray
+    grid: tuple[float, ...] | None, x: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    reference = _REFERENCE_GRIDS.get(dataset_name)
-    if reference is not None:
-        return reference
-    return np.unique(x), np.unique(y)
+    if grid is None:
+        return np.unique(x), np.unique(y)
+    x_start, x_stop, x_step, y_start, y_stop, y_step = grid
+    return (
+        np.arange(x_start, x_stop + x_step, x_step),
+        np.arange(y_start, y_stop + y_step, y_step),
+    )
 
 
 def _lattice_indices(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
@@ -130,10 +124,16 @@ def _lattice_indices(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
         np.rint((values - grid[0]) / spacing), dtype=np.int64
     )
     if (indices < 0).any() or (indices >= grid.size).any():
-        raise ValueError("steady boundary corrosion coordinates fall outside its grid")
+        raise ValueError(
+            "steady boundary corrosion coordinates fall outside its grid; "
+            "steady_boundary_grid specifies the grid explicitly"
+        )
     tolerance = abs(spacing) * 1.0e-5
     if not np.allclose(values, grid[indices], rtol=1.0e-7, atol=tolerance):
-        raise ValueError("steady boundary corrosion coordinates are off its grid")
+        raise ValueError(
+            "steady boundary corrosion coordinates are off its grid; "
+            "steady_boundary_grid specifies the grid explicitly"
+        )
     return indices
 
 

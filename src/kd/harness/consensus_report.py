@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kd.core.strict_keys import strict_keys as _strict_keys_core
 from kd.harness._consensus_serialize import (
@@ -50,7 +50,11 @@ from kd.harness.consensus import (
     ConsensusReport,
     DatasetConsensus,
 )
+from kd.harness.report import _kd_version_label, _sources_lines
 from kd.search.mini_table import escape_cell as _escape_cell
+
+if TYPE_CHECKING:
+    from kd.harness.store import EvidenceStore
 
 __all__ = [
     "ConsensusArtifactError",
@@ -364,12 +368,44 @@ def _dataset_lines(dataset: DatasetConsensus, n_unsignable: int) -> list[str]:
     return lines
 
 
-def render_consensus_markdown(report: ConsensusReport) -> str:
+def _unsignable_lines(report: ConsensusReport) -> list[str]:
+    unsignable = report.store_level.unsignable
+    if not unsignable:
+        return []
+    lines = [
+        "### unsignable",
+        "| entry | instrument | dataset_ref | seed | reason | detail |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for entry in unsignable:
+        if entry.invalid_reason is not None:
+            detail = entry.invalid_reason
+        elif entry.error_type is not None:
+            detail = f"{entry.error_type}: {entry.error_message}"
+        else:
+            detail = ""
+        cells = (
+            str(entry.entry_index),
+            _escape_cell(entry.instrument),
+            _escape_cell(entry.dataset_ref),
+            str(entry.seed),
+            entry.reason,
+            _escape_cell(detail),
+        )
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+def render_consensus_markdown(
+    report: ConsensusReport, *, store: EvidenceStore | None = None
+) -> str:
     provenance = report.provenance
     kd_version = provenance.kd_version or "unknown"
+    sources = () if store is None else store.sources
+    label = _kd_version_label(_escape_cell(kd_version), sources)
     lines: list[str] = [
         f"# consensus {_escape_cell(provenance.plan_name)} "
-        f"({provenance.plan_hash[:10]}, kd {_escape_cell(kd_version)})",
+        f"({provenance.plan_hash[:10]}, {label})",
         f"schema {CONSENSUS_ARTIFACT_TAG} | "
         f"stratum rules {provenance.stratum_rules_version} | "
         f"eligibility rules {provenance.eligibility_rules_version}",
@@ -377,6 +413,10 @@ def render_consensus_markdown(report: ConsensusReport) -> str:
         _verifier_line(report),
         "",
     ]
+    if store is not None and sources:
+        lines.append("## sources")
+        lines.extend(_sources_lines(sources, store.version_note))
+        lines.append("")
     unsignable_by_ref = _unsignable_counts(report)
     for dataset in report.datasets:
         lines.extend(
@@ -390,25 +430,6 @@ def render_consensus_markdown(report: ConsensusReport) -> str:
         f"{store_level.n_attempts} attempts / {store_level.n_completed} completed / "
         f"{store_level.n_raised} raised / {store_level.n_no_record} no_record"
     )
-    if store_level.unsignable:
-        lines.append("### unsignable")
-        lines.append("| entry | instrument | dataset_ref | seed | reason | detail |")
-        lines.append("| --- | --- | --- | --- | --- | --- |")
-        for entry in store_level.unsignable:
-            if entry.invalid_reason is not None:
-                detail = entry.invalid_reason
-            elif entry.error_type is not None:
-                detail = f"{entry.error_type}: {entry.error_message}"
-            else:
-                detail = ""
-            cells = (
-                str(entry.entry_index),
-                _escape_cell(entry.instrument),
-                _escape_cell(entry.dataset_ref),
-                str(entry.seed),
-                entry.reason,
-                _escape_cell(detail),
-            )
-            lines.append("| " + " | ".join(cells) + " |")
+    lines.extend(_unsignable_lines(report))
 
     return "\n".join(lines).rstrip() + "\n"

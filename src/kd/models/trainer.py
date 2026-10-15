@@ -70,13 +70,14 @@ class FieldModelTrainer:
             self._model = self._model.to(dtype=_data_dtype)
 
 
-        cuda_devices: list[int] = []
-        if torch.cuda.is_available():
-            cuda_devices = list(range(torch.cuda.device_count()))
 
+
+
+        training_device = entry_device if target_device is None else target_device
+        rng_devices = _rng_devices(training_device)
         try:
-            with torch.random.fork_rng(devices=cuda_devices):
-                torch.manual_seed(seed)
+            with torch.random.fork_rng(devices=rng_devices):
+                _seed_generators(seed, rng_devices)
                 result = self._fit_inner(
                     coords,
                     targets,
@@ -249,6 +250,19 @@ class FieldModelTrainer:
 
 
 
+
+
+def _rng_devices(device: torch.device) -> list[int]:
+    if device.type != "cuda":
+        return []
+    index = torch.cuda.current_device() if device.index is None else device.index
+    return [index]
+
+
+def _seed_generators(seed: int, devices: list[int]) -> None:
+    torch.default_generator.manual_seed(seed)
+    for index in devices:
+        torch.cuda.default_generators[index].manual_seed(seed)
 
 
 def _reinit_parameters(model: nn.Module) -> None:

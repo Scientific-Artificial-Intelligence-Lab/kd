@@ -6,12 +6,12 @@ import keyword
 import numpy as np
 import torch
 
-from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
-from kd.core.expr.registry import FunctionRegistry
+from kd.data._field_names import (
+    is_reserved_field_name,
+    reserved_field_name_message,
+)
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, FieldData, PDEDataset, TaskType
-
-_UNITY_TOKEN = "one"
 
 
 def dataset_from_tabular(tabular: TabularDataset) -> PDEDataset:
@@ -75,14 +75,13 @@ def _build_fields(
 
 def _validate_names(var_names: list[str], target_name: str) -> None:
     all_names = [*var_names, target_name]
-    reserved = set(FunctionRegistry.create_default().list_names()) | {_UNITY_TOKEN}
     for name in all_names:
         if not isinstance(name, str) or not name.isidentifier():
             raise ValueError(f"name must be a valid Python identifier, got {name!r}")
         if keyword.iskeyword(name):
             raise ValueError(f"name {name!r} is a Python keyword")
-        if name in reserved or DIFF_OPERATOR_PATTERN.fullmatch(name):
-            raise ValueError(f"name {name!r} collides with a reserved kd token")
+        if is_reserved_field_name(name):
+            raise ValueError(reserved_field_name_message(name, label="name"))
     duplicates = sorted({name for name in all_names if all_names.count(name) > 1})
     if duplicates:
         if isinstance(target_name, str) and target_name in var_names:

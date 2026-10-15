@@ -40,9 +40,9 @@ from kd.core.verify import (
 )
 
 if TYPE_CHECKING:
-    from kd.core.integrator import IntegrationResult, integrate_pde
+    from kd.core.integrator import IntegrationResult, assemble_rhs, integrate_pde
 
-_LAZY_INTEGRATOR = {"IntegrationResult", "integrate_pde"}
+_LAZY_INTEGRATOR = {"IntegrationResult", "assemble_rhs", "integrate_pde"}
 
 
 def __getattr__(name: str) -> object:
@@ -70,6 +70,7 @@ __all__ = [
     "EvaluationResult",
     "SearchInterrupted",
     "IntegrationResult",
+    "assemble_rhs",
     "integrate_pde",
     "ScorerFn",
     "aic",

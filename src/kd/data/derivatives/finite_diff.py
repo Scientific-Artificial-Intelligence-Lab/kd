@@ -5,6 +5,7 @@ import math
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.schema import DataTopology, PDEDataset
@@ -39,6 +40,152 @@ UNIFORM_GRID_RTOL = 1e-4
 
 
 DX_ZERO_FLOOR = 1e-30
+
+
+def coordinate_diff(
+    f: torch.Tensor,
+    coords: torch.Tensor,
+    axis: int,
+    order: int,
+    *,
+    is_periodic: bool = False,
+) -> torch.Tensor:
+    _validate_coordinate_diff(f, coords, axis, order)
+    if is_uniform_grid(coords, rtol=UNIFORM_GRID_RTOL):
+        dx = (coords[1:] - coords[:-1])[0].item()
+        return central_diff(f, dx, axis, order, is_periodic=is_periodic)
+    if is_periodic:
+        raise ValueError(
+            "Periodic derivatives require a uniform grid, got non-uniform coords"
+        )
+    indices, counts = _coordinate_stencils(f.shape[axis], order)
+    nodes = coords.detach().cpu().to(torch.float64).numpy()
+    weights = _coordinate_weights(nodes, indices, counts, order)
+    return _apply_coordinate_weights(f, axis, indices, weights)
+
+
+def _validate_coordinate_diff(
+    f: torch.Tensor, coords: torch.Tensor, axis: int, order: int
+) -> None:
+    if order < 1 or order > MAX_SUPPORTED_ORDER:
+        raise ValueError(f"order must be in [1, {MAX_SUPPORTED_ORDER}], got {order}")
+    if axis < 0 or axis >= f.dim():
+        raise ValueError(f"axis {axis} out of range for {f.dim()}D tensor")
+    if torch.isnan(f).any():
+        raise ValueError("Input tensor contains NaN values")
+    if torch.isinf(f).any():
+        raise ValueError("Input tensor contains Inf values")
+    n_points = f.shape[axis]
+    min_points = _MIN_POINTS_FOR_ORDER[order]
+    if n_points < min_points:
+        raise ValueError(
+            f"Order {order} derivative requires at least {min_points} points, "
+            f"got {n_points}"
+        )
+    if coords.ndim != 1:
+        raise ValueError("coords must be 1-D")
+    if not torch.isfinite(coords).all():
+        raise ValueError("coords must be finite")
+    if not torch.all(coords[1:] > coords[:-1]):
+        raise ValueError("coords must be strictly increasing")
+    if coords.numel() != n_points:
+        raise ValueError(
+            f"coords length {coords.numel()} must equal f.shape[{axis}]={n_points}"
+        )
+
+
+def _coordinate_stencils(
+    n: int, order: int
+) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+    indices = np.repeat(np.arange(n, dtype=np.int64)[:, None], 5, axis=1)
+    indices[2:-2] = np.arange(n - 4)[:, None] + np.arange(5)
+    counts = np.full(n, 5, dtype=np.int64)
+    if order < 3:
+        indices[1, :3] = np.arange(3)
+        indices[-2, :3] = np.arange(n - 3, n)
+        counts[[1, -2]] = 3
+        width = 2 if order == 1 else 4
+    else:
+        indices[1, :4] = np.arange(1, 5)
+        indices[-2, :4] = np.arange(n - 5, n - 1)
+        counts[[1, -2]] = 4
+        width = 4
+    indices[0, :width] = np.arange(width)
+    indices[-1, :width] = np.arange(n - width, n)
+    counts[[0, -1]] = width
+    return indices, counts
+
+
+def _fornberg_weights(nodes: NDArray[np.float64], order: int) -> NDArray[np.float64]:
+    n_rows, width = nodes.shape
+    coefficients = np.zeros((n_rows, width, order + 1), dtype=np.float64)
+    coefficients[:, 0, 0] = 1.0
+    previous_product = np.ones(n_rows, dtype=np.float64)
+    offset = nodes[:, 0]
+    for i in range(1, width):
+        max_order = min(i, order)
+        product = np.ones(n_rows, dtype=np.float64)
+        previous_offset, offset = offset, nodes[:, i]
+        for j in range(i):
+            separation = nodes[:, i] - nodes[:, j]
+            product *= separation
+            if j == i - 1:
+                for k in range(max_order, 0, -1):
+                    coefficients[:, i, k] = (
+                        previous_product
+                        * (
+                            k * coefficients[:, i - 1, k - 1]
+                            - previous_offset * coefficients[:, i - 1, k]
+                        )
+                        / product
+                    )
+                coefficients[:, i, 0] = (
+                    -previous_product
+                    * previous_offset
+                    * coefficients[:, i - 1, 0]
+                    / product
+                )
+            for k in range(max_order, 0, -1):
+                coefficients[:, j, k] = (
+                    offset * coefficients[:, j, k] - k * coefficients[:, j, k - 1]
+                ) / separation
+            coefficients[:, j, 0] *= offset / separation
+        previous_product = product
+    return coefficients[:, :, order]
+
+
+def _coordinate_weights(
+    coords: NDArray[np.float64],
+    indices: NDArray[np.int64],
+    counts: NDArray[np.int64],
+    order: int,
+) -> NDArray[np.float64]:
+    weights = np.zeros(indices.shape, dtype=np.float64)
+    for width in np.unique(counts):
+        rows = counts == width
+        offsets = coords[indices[rows, :width]] - coords[rows, None]
+
+        spacing = np.max(np.diff(offsets, axis=1), axis=1)
+        local_weights = _fornberg_weights(offsets / spacing[:, None], order)
+        for _ in range(order):
+            local_weights /= spacing[:, None]
+        weights[rows, :width] = local_weights
+    return weights
+
+
+def _apply_coordinate_weights(
+    f: torch.Tensor,
+    axis: int,
+    indices: NDArray[np.int64],
+    weights: NDArray[np.float64],
+) -> torch.Tensor:
+    f_moved = f.movedim(axis, 0)
+    index_tensor = torch.as_tensor(indices, dtype=torch.long, device=f.device)
+    weight_tensor = torch.as_tensor(weights, dtype=f.dtype, device=f.device)
+
+    samples = f_moved[index_tensor] - f_moved[:, None]
+    result = torch.einsum("nk,nk...->n...", weight_tensor, samples)
+    return result.movedim(0, axis)
 
 
 def central_diff(

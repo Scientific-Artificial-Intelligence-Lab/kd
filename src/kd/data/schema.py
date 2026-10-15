@@ -41,7 +41,12 @@ from kd.data._factory import (
     parse_lhs_spec,
     validate_scatter_point_shapes,
 )
+from kd.data._field_names import (
+    is_reserved_field_name,
+    reserved_field_name_message,
+)
 from kd.data.source import DatasetSource
+from kd.data.trajectory import TrajectorySet, trajectory_set_fingerprint
 from kd.data.xlsx import read_xlsx_columns
 
 logger = logging.getLogger(__name__)
@@ -200,11 +205,20 @@ class PDEDataset:
 
     def __post_init__(self) -> None:
         """Validate dataset consistency."""
+        self._validate_field_names()
         self._validate_lhs_order_value()
         self._validate_axis_consistency()
         self._validate_field_shapes()
         self._validate_lhs()
         self._validate_lhs_order()
+
+    def _validate_field_names(self) -> None:
+        if self.fields is not None:
+            for name in self.fields:
+                if is_reserved_field_name(name):
+                    raise ValueError(
+                        reserved_field_name_message(name, label="field name")
+                    )
 
     def _validate_axis_consistency(self) -> None:
         """Validate that axis_order and axes are consistent."""
@@ -297,8 +311,7 @@ class PDEDataset:
                 )
             if field.values.dim() != 1:
                 raise ValueError(
-                    f"TABULAR field '{key}' must be 1-D, got "
-                    f"{field.values.dim()}D"
+                    f"TABULAR field '{key}' must be 1-D, got {field.values.dim()}D"
                 )
             lengths[key] = field.values.numel()
         if len(set(lengths.values())) > 1:
@@ -362,13 +375,9 @@ class PDEDataset:
     def _validate_tabular_lhs(self) -> None:
         """Validate the fields-only scalar-regression dataset contract."""
         if self.lhs_order != 0:
-            raise ValueError(
-                f"TABULAR lhs_order must be 0, got {self.lhs_order}"
-            )
+            raise ValueError(f"TABULAR lhs_order must be 0, got {self.lhs_order}")
         if self.lhs_axis != "":
-            raise ValueError(
-                f"TABULAR lhs_axis must be empty, got {self.lhs_axis!r}"
-            )
+            raise ValueError(f"TABULAR lhs_axis must be empty, got {self.lhs_axis!r}")
         if not self.lhs_field:
             raise ValueError("TABULAR lhs_field must be non-empty")
         if self.fields is None or self.lhs_field not in self.fields:
@@ -385,8 +394,7 @@ class PDEDataset:
             raise ValueError("TABULAR axis_order must be None")
         if self.task_type is not TaskType.REGRESSION:
             raise ValueError(
-                "TABULAR task_type must be TaskType.REGRESSION, got "
-                f"{self.task_type!r}"
+                f"TABULAR task_type must be TaskType.REGRESSION, got {self.task_type!r}"
             )
 
     @property
@@ -729,13 +737,17 @@ class PDEDataset:
         )
 
 
-def compute_dataset_fingerprint(dataset: PDEDataset) -> str:
+def compute_dataset_fingerprint(dataset: PDEDataset | TrajectorySet) -> str:
     """Compute dataset fingerprint for cache isolation.
 
-    The fingerprint includes:
+    For a ``PDEDataset`` the fingerprint includes:
     - Meta info: name, topology, lhs_field, lhs_axis
     - Shape info: field shapes
     - Content hash: sampled data hash (for large datasets)
+
+    A ``TrajectorySet`` gets ``kd-trajectories-v1:<sha256>`` over every text
+    field, every parameter value and every array's dtype, shape and bytes
+    (:func:`kd.data.trajectory.trajectory_set_fingerprint`).
 
     Args:
         dataset: The dataset to fingerprint.
@@ -743,6 +755,8 @@ def compute_dataset_fingerprint(dataset: PDEDataset) -> str:
     Returns:
         Unique string identifier for this dataset.
     """
+    if isinstance(dataset, TrajectorySet):
+        return trajectory_set_fingerprint(dataset)
 
     meta = f"{dataset.name}:{dataset.topology.value}"
     meta += f":{dataset.lhs_field}:{dataset.lhs_axis}"

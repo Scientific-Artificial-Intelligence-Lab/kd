@@ -23,7 +23,6 @@ _DEFAULT_TERMS: tuple[str, ...] = ("u", "u_x", "u_xx", "mul(u, u_x)")
 
 _DEFAULT_BINARY_OPERATORS: tuple[str, ...] = ("+", "-", "*", "/")
 _DEFAULT_UNARY_OPERATORS: tuple[str, ...] = ()
-TABULAR_UNARY_OPERATORS: tuple[str, ...] = ("sin", "cos", "exp", "log")
 
 
 
@@ -78,18 +77,25 @@ class PySRConfig:
     - ``extra_pysr_kwargs``: a pass-through seam splatted into the underlying
       ``PySRRegressor`` constructor. The caller owns the JSON-safe (and
       PySR-valid) responsibility for whatever it puts here; defaults to
-      ``None`` (never a shared mutable ``{}``).
+      ``None`` (never a shared mutable ``{}``). A ``timeout_in_seconds`` here
+      is the upper bound of every fit's time limit, re-applied to each
+      segment: a wall-clock deadline announced to the plugin can shorten a
+      fit below it, never lengthen it.
     """
 
     terms: tuple[str, ...] = _DEFAULT_TERMS
+    """Ordered catalog of candidate columns for PDE regression."""
     seed: int = 0
     niterations: int = 40
     population_size: int = 33
     populations: int = 15
     maxsize: int = 20
     binary_operators: tuple[str, ...] = _DEFAULT_BINARY_OPERATORS
+    """Binary operators allowed in the PySR expression grammar."""
     unary_operators: tuple[str, ...] = _DEFAULT_UNARY_OPERATORS
+    """Unary operators allowed in the PySR expression grammar."""
     extra_pysr_kwargs: dict[str, Any] | None = None
+    """Additional PySR backend options; typed configuration keys are refused."""
 
     def __post_init__(self) -> None:
         """Validate the configuration, raising ``ValueError`` on illegal input.

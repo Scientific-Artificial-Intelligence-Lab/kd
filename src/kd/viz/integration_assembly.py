@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import ast
-import math
 from typing import TYPE_CHECKING
 
 from kd.core.equation import Evolution, LhsSpec, render_lhs_label
 from kd.core.expr.registry import PROTECTED_OPERATORS
+from kd.core.small_terms import small_term_indices
 from kd.viz._result_data import _NO_SKETCH_SOLUTION, _equation_data
 
 if TYPE_CHECKING:
@@ -49,20 +49,11 @@ def _prune_near_zero_terms(
     coefficients: Sequence[float],
     active: list[int],
 ) -> tuple[list[int], list[str]]:
-    finite_magnitudes = [
-        abs(coefficients[i]) for i in active if math.isfinite(coefficients[i])
-    ]
-    if not finite_magnitudes:
-        return active, []
-    threshold = _INTEGRATION_PRUNE_RTOL * max(finite_magnitudes)
-    dropped = [
-        i
-        for i in active
-        if math.isfinite(coefficients[i]) and abs(coefficients[i]) < threshold
-    ]
+    keep = small_term_indices(coefficients, active, _INTEGRATION_PRUNE_RTOL)
+    kept_indices = set(keep)
+    dropped = [i for i in active if i not in kept_indices]
     if not dropped:
         return active, []
-    keep = [i for i in active if i not in set(dropped)]
     detail = ", ".join(f"'{terms[i]}' (coeff {coefficients[i]:.3g})" for i in dropped)
     note = (
         f"Near-zero term(s) excluded from time integration: {detail} "
@@ -70,27 +61,6 @@ def _prune_near_zero_terms(
         "reported equation and metrics keep the full term list."
     )
     return keep, [note]
-
-
-def _assemble_integration_rhs(
-    terms: Sequence[str],
-    coefficients: Sequence[float],
-    keep: Sequence[int],
-) -> str:
-    non_finite = [i for i in keep if not math.isfinite(coefficients[i])]
-    if non_finite:
-        detail = ", ".join(
-            f"term '{terms[i]}' has coefficient {coefficients[i]!r}" for i in non_finite
-        )
-        raise ValueError(
-            f"Cannot assemble integration RHS: non-finite coefficient(s) — "
-            f"{detail}. Coefficients must be finite; a NaN/Inf here points "
-            "at a degenerate upstream fit/refit, not at the RHS terms."
-        )
-    survivors = [i for i in keep if coefficients[i] != 0.0]
-    if not survivors:
-        return "0"
-    return " + ".join(f"({coefficients[i]!r})*({terms[i]})" for i in survivors)
 
 
 def _protected_semantics_note(rhs: str) -> str | None:
@@ -155,7 +125,7 @@ def build_integration_result(
     result: ExperimentResult,
     dataset: PDEDataset,
 ) -> tuple[IntegrationResult, list[str]]:
-    from kd.core.integrator import IntegrationResult, integrate_pde
+    from kd.core.integrator import IntegrationResult, assemble_rhs, integrate_pde
 
     if result.equation is None and result.config.get("sketch") is not None:
         return IntegrationResult(success=False, warning=_NO_SKETCH_SOLUTION), []
@@ -171,7 +141,7 @@ def build_integration_result(
     coeff_values = [float(c) for c in coeffs]
     active = list(selected) if selected is not None else list(range(len(terms)))
     keep, notes = _prune_near_zero_terms(terms, coeff_values, active)
-    rhs = _assemble_integration_rhs(terms, coeff_values, keep)
+    rhs = assemble_rhs(terms, coeff_values, keep)
     protected_note = _protected_semantics_note(rhs)
     if protected_note is not None:
         notes = [*notes, protected_note]

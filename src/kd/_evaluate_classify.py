@@ -246,8 +246,8 @@ def _column_reason(column: torch.Tensor, lhs_target: torch.Tensor) -> str | None
     if column.numel() != expected:
         return (
             f"{_REASON_SHAPE} mismatch: term produces {column.numel()} elements, "
-            f"expected {expected} (Theta has no intercept column; pure constants "
-            f"are not supported)"
+            f"expected {expected} (a scalar such as a numeric literal is not a "
+            f"column; the constant column is spelled 'one')"
         )
     if not torch.isfinite(column).all():
         return f"{_REASON_NONFINITE}: {_NONFINITE_REASON_TEXT}"

@@ -34,7 +34,14 @@ def artifact_key(schema: dict[str, Any]) -> str:
 def unsupported_params(
     schema: dict[str, Any], requested: dict[str, Any] | None
 ) -> list[str]:
-    return sorted(set(requested or {}) - set(schema["surrogate_fields"]))
+    allowed = set(schema["surrogate_fields"])
+    allowed.update(
+        key
+        for mode in schema["modes"]
+        for params in mode["order_params"].values()
+        for key in params
+    )
+    return sorted(set(requested or {}) - allowed)
 
 
 def surrogate_params(
@@ -44,8 +51,8 @@ def surrogate_params(
     if extra:
         raise ValueError(
             f"params {extra} are not surrogate parameters of "
-            f"{schema['algorithm']}; only {schema['surrogate_fields']} (plus the "
-            "seed) shape the network"
+            f"{schema['algorithm']}; use surrogate_fields or mode order_params "
+            "and pass search parameters to run_discovery"
         )
     return deepcopy(requested) if requested else {}
 
@@ -83,6 +90,7 @@ def run_training(
     time_cap_seconds: float | None,
 ) -> IsolatedTraining:
     input_source = resolve_input(registry.workspace, recipe["dataset_id"])
+    _check_training_input(schema, recipe, input_source)
     return run_isolated_training(
         dataset_id=recipe["dataset_id"],
         algorithm=recipe["algorithm"],
@@ -93,6 +101,46 @@ def run_training(
         time_cap_seconds=time_cap_seconds,
         input_source=input_source,
     )
+
+
+def _check_training_input(
+    schema: dict[str, Any], recipe: dict[str, Any], source: dict[str, Any] | None
+) -> None:
+    from kd import get_dataset
+
+    if source is not None:
+        report = source["summary"]["report"]
+        if report["topology"] == "tabular":
+            raise ValueError(
+                "train_surrogate does not take tabular input; use run_discovery"
+            )
+        orders = {str(report["lhs_order"])}
+    else:
+        spec = get_dataset(recipe["dataset_id"])
+
+
+        orders = {
+            order
+            for mode in schema["modes"]
+            for order in mode["order_params"]
+            if spec.lhs is not None
+            and any(spec.lhs.endswith("_" + axis * int(order)) for axis in spec.axes)
+        }
+    required = {
+        key: value
+        for mode in schema["modes"]
+        for order, params in mode["order_params"].items()
+        if order in orders
+        for key, value in params.items()
+    }
+    defaults = {field["name"]: field["default"] for field in schema["fields"]}
+    missing = {
+        key: value
+        for key, value in required.items()
+        if recipe["params"].get(key, defaults[key]) != value
+    }
+    if missing:
+        raise ValueError(f"train_surrogate on this input requires params {required}")
 
 
 def register_training(

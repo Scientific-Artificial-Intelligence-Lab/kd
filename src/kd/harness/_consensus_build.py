@@ -203,7 +203,7 @@ def _build_dataset_node(
         dataset_fingerprint=fingerprint_by_ref.get(ref),
         empirical_state=empirical_state,
         classes=tuple(classes),
-        adjacency=_adjacency(classes),
+        adjacency=_adjacency(classes, dataset_lhs_term),
         instrument_stability=_instrument_stability(
             ref, plan, signables_for_ref, classes, store, dataset_instruments
         ),

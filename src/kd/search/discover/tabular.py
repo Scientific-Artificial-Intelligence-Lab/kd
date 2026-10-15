@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import ast
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol, cast
 
@@ -20,7 +20,39 @@ from kd.search.discover.tokens.library import Library, Token
 FloatArray = NDArray[np.float64]
 TokenLike = Token | str
 _CONST_NAME = "const"
-_BINARY_OPERATORS = frozenset({"add", "sub", "mul", "div"})
+
+
+def _protected_exp(values: FloatArray) -> FloatArray:
+    return np.exp(np.clip(values, -50.0, 50.0))
+
+
+def _protected_log(values: FloatArray) -> FloatArray:
+    return np.log(np.maximum(np.abs(values), 1e-10))
+
+
+def _protected_div(left: FloatArray, right: FloatArray) -> FloatArray:
+    sign = np.sign(right)
+    sign = np.where(sign == 0, 1.0, sign)
+    return np.divide(left, right + 1e-10 * sign)
+
+
+
+
+
+
+_BINARY_FUNCTIONS: dict[str, Callable[[FloatArray, FloatArray], FloatArray]] = {
+    "add": np.add,
+    "sub": np.subtract,
+    "mul": np.multiply,
+    "div": _protected_div,
+}
+_UNARY_FUNCTIONS: dict[str, Callable[[FloatArray], FloatArray]] = {
+    "sin": np.sin,
+    "cos": np.cos,
+    "exp": _protected_exp,
+    "log": _protected_log,
+}
+TABULAR_OPERATORS: tuple[str, ...] = (*_BINARY_FUNCTIONS, *_UNARY_FUNCTIONS)
 
 
 class _TermEvaluator(Protocol):
@@ -138,11 +170,15 @@ def _execute(
             stack.append(np.asarray(constants[const_positions[position]]))
         elif name in columns:
             stack.append(columns[name])
-        elif name in _BINARY_OPERATORS:
+        elif name in _UNARY_FUNCTIONS:
+            if not stack:
+                raise ValueError("Incomplete tabular token traversal")
+            stack.append(_UNARY_FUNCTIONS[name](stack.pop()))
+        elif name in _BINARY_FUNCTIONS:
             if len(stack) < 2:
                 raise ValueError("Incomplete tabular token traversal")
             left, right = stack.pop(), stack.pop()
-            stack.append(_apply_binary(name, left, right))
+            stack.append(_BINARY_FUNCTIONS[name](left, right))
         else:
             raise ValueError(f"Unsupported tabular token: {name!r}")
     if len(stack) != 1:
@@ -160,16 +196,6 @@ def _constant_positions(names: Sequence[str]) -> dict[int, int]:
     return positions
 
 
-def _apply_binary(name: str, left: FloatArray, right: FloatArray) -> FloatArray:
-    if name == "add":
-        return np.add(left, right)
-    if name == "sub":
-        return np.subtract(left, right)
-    if name == "mul":
-        return np.multiply(left, right)
-    return np.divide(left, right)
-
-
 def _token_name(token: TokenLike) -> str:
     return token.name if isinstance(token, Token) else token
 
@@ -182,7 +208,11 @@ def _render_tokens(tokens: Sequence[TokenLike], constants: FloatArray) -> str:
         name = names[position]
         if name == _CONST_NAME:
             stack.append(repr(float(constants[const_positions[position]])))
-        elif name in _BINARY_OPERATORS:
+        elif name in _UNARY_FUNCTIONS:
+            if not stack:
+                raise ValueError("Incomplete tabular token traversal")
+            stack.append(f"{name}({stack.pop()})")
+        elif name in _BINARY_FUNCTIONS:
             if len(stack) < 2:
                 raise ValueError("Incomplete tabular token traversal")
             left, right = stack.pop(), stack.pop()
@@ -318,6 +348,7 @@ class TabularDeduplicator(Deduplicator):
 
 
 __all__ = [
+    "TABULAR_OPERATORS",
     "ParetoTracker",
     "TabularCandidateScorer",
     "count_tokens",

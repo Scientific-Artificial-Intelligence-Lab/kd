@@ -284,6 +284,9 @@ def _record(
                 "platform_eval_dropped": (
                     None if evaluation is None else evaluation.dropped
                 ),
+                "unavailable_reason": (
+                    None if evaluation is None else evaluation.unavailable_reason
+                ),
             }
         )
     return payload

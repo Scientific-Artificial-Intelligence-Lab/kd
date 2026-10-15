@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import logging
 import time
+import traceback
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,6 +73,7 @@ class EpisodeOutcome:
 
 
     lineage: dict[str, Any] | None = None
+    error_traceback: str | None = None
 
 
 def _recording_kwargs(
@@ -169,45 +171,28 @@ def run_episode(
 
 
         model_kwargs = copy.deepcopy(entry.model_kwargs)
-
-
-
-        sibling_kwargs: dict[str, Any] = {}
-        if device is not None:
-            sibling_kwargs["device"] = device
+        sibling_kwargs: dict[str, Any] = {"callbacks": list(extra_callbacks or ())}
         if run_dir is not None:
             paths = create_run_dir(run_dir)
             run_id = new_run_id(entry.instrument)
             sibling_kwargs.update(
                 _recording_kwargs(paths, options, extra_callbacks or ())
             )
-        elif extra_callbacks is not None:
-            sibling_kwargs["callbacks"] = list(extra_callbacks)
         model = model_factory(
             algorithm=entry.instrument,
             seed=entry.seed,
             verbose=False,
+            device=device,
             **model_kwargs,
             **sibling_kwargs,
         )
-
-
-
-        fit_kwargs: dict[str, Any] = {}
-        if sketch is not None:
-            fit_kwargs["sketch"] = sketch
-        if verify is not None:
-            fit_kwargs["verify"] = verify
-        if reseed:
-
-
-
-
-            model.fit(dataset, resume_from=resume_from, reseed=True, **fit_kwargs)
-        elif resume_from is not None:
-            model.fit(dataset, resume_from=resume_from, **fit_kwargs)
-        else:
-            model.fit(dataset, **fit_kwargs)
+        model.fit(
+            dataset,
+            resume_from=resume_from,
+            sketch=sketch,
+            reseed=reseed,
+            verify=verify,
+        )
         result: ExperimentResult | None = model.result_
         record: RunRecord | None = model.result_.run_record
     except Exception as exc:
@@ -230,6 +215,7 @@ def run_episode(
             record=None,
             error_type=error_type,
             error_message=error_message,
+            error_traceback=traceback.format_exc(),
             wallclock_seconds=elapsed,
             run_id=run_id,
             run_dir=None if paths is None else paths.root,

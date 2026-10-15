@@ -57,10 +57,11 @@ def chat(
     time_budget_seconds: float | None = None,
     *,
     config: EndpointConfig,
+    advice: Path | None = None,
     data: Path | None = None,
     load_options: dict[str, Any] | None = None,
 ) -> None:
-    session, agent, metadata, _prior_record = prepare_run(
+    session, agent, metadata, record = prepare_run(
         workspace,
         config=config,
         dataset_id=dataset_id,
@@ -68,6 +69,7 @@ def chat(
         time_budget_seconds=time_budget_seconds,
         data=data,
         load_options=load_options,
+        advice=advice,
     )
 
 
@@ -80,7 +82,7 @@ def chat(
         truncation_nudges=0,
         stop_reason="chat_ready",
     )
-    finish_run(captured, session, config=config)
+    finish_run(captured, session, config=config, record=record)
 
     _write(
         f"kdagent | endpoint={config.endpoint} model={config.model} "
@@ -111,7 +113,7 @@ def chat(
             captured.update(
                 {"messages": [], "answer": None, "stop_reason": "conversation_reset"}
             )
-            finish_run(captured, session, config=config)
+            finish_run(captured, session, config=config, record=record)
             _write("conversation cleared (the pinned dataset and run ledger stay)")
             continue
         history.append({"role": "user", "content": line})
@@ -165,4 +167,4 @@ def chat(
             _write(f" !! turn crashed: {type(error).__name__}: {error}")
         if answer is not None and answer["source"] == "submitted":
             _write(f"=== answer submitted: {answer}")
-        finish_run(captured, session, config=config)
+        finish_run(captured, session, config=config, record=record)

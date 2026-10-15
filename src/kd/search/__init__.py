@@ -9,27 +9,15 @@ all seven registered engines (``sga`` / ``dlga`` / ``discover`` / ``pysr`` /
 pair plus each package's own deeper names (backend seams, IR converters,
 vocabularies, solver helpers), which stay there and are not re-exported here.
 
-Carrying all seven pairs costs no extra import: ``import kd.search`` runs
-``kd/__init__`` first, which already imports every engine package eagerly, so
-the four pairs this facade used to withhold (on eager-solver-import grounds)
-were loaded anyway and the omission only made the engine surface non-uniform.
-That debt is still open, but the eager import it has to remove is
-``kd/__init__``'s, not this one's.
-
 Sanctioned direct-import module paths beyond this facade:
 ``kd.search.records`` / ``kd.search.mini_table`` / ``kd.search.descriptor``
 -- their key types (``RunRecord`` / ``build_mini_table`` /
-``InstrumentDescriptor`` / ``InstrumentMode`` / ``Knob`` / ``Segmentation`` /
-``tool_schema``)
-are re-exported here (045 rows 4a-4c), but each module carries more than
+``InstrumentDescriptor`` / ``InstrumentMode`` / ``ModeSelector`` / ``Knob`` /
+``Segmentation`` / ``tool_schema``)
+are re-exported here, but each module carries more than
 what is promoted (e.g. ``mini_table``'s ``escape_cell``) and stays
 direct-import-sanctioned at its own module path.
 """
-
-
-
-
-
 
 from __future__ import annotations
 
@@ -64,10 +52,14 @@ from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ModeSelector,
+    ModeVerdict,
     Segmentation,
+    mode_accepts,
+    mode_inputs,
     tool_schema,
 )
-from kd.search.discover import DiscoverConfig, DISCOVERPlugin
+from kd.search.discover import DiscoverConfig, DISCOVERPlugin, PINNConfig
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt import EqGPTConfig, EqGPTPlugin
 from kd.search.iteration_events import (
@@ -86,6 +78,8 @@ from kd.search.iteration_events import (
 from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
 from kd.search.mini_table import build_mini_table
 from kd.search.protocol import (
+    DeadlineAwareSearchAlgorithm,
+    DerivativeSourceAlgorithm,
     DiscoveryTask,
     IterativeSearchAlgorithm,
     PlatformComponents,
@@ -137,6 +131,8 @@ __all__ = [
     "DISCOVERPlugin",
     "DLGAConfig",
     "DLGAPlugin",
+    "DeadlineAwareSearchAlgorithm",
+    "DerivativeSourceAlgorithm",
     "DiscoverConfig",
     "DiscoveryTask",
     "EarlyStoppingCallback",
@@ -158,9 +154,12 @@ __all__ = [
     "Llm4edConfig",
     "Llm4edPlugin",
     "LoggingCallback",
+    "ModeSelector",
+    "ModeVerdict",
     "PHASE_SCHEMA_VERSION",
     "PHASE_SCHEME",
     "PHASE_VOCABULARY",
+    "PINNConfig",
     "ParetoEntry",
     "PhaseEvent",
     "PhaseWriter",
@@ -198,6 +197,8 @@ __all__ = [
     "eligible_checkpoint_iterations",
     "finalize_run_dir",
     "load_checkpoint_manifest",
+    "mode_accepts",
+    "mode_inputs",
     "new_run_id",
     "resolve_checkpoint",
     "run_id_of_run_dir",

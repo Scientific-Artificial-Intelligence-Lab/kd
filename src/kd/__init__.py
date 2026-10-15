@@ -1,6 +1,6 @@
 """kd - Symbolic regression platform for PDE discovery."""
 
-from kd.api import Model, instrument_schemas
+from kd.api import Model, instrument_schema_digest, instrument_schemas
 from kd.core.equation import LhsSpec, Sketch, law_signature
 from kd.core.equation.rendering import render_lhs_label
 from kd.core.evaluator import EvaluationResult
@@ -56,13 +56,18 @@ from kd.data import (
     load_tlc_cc,
     load_wave,
     load_wave_breaking,
+    load_wave_breaking_datasets,
 )
+from kd.data.tabular_file import load_tabular
 from kd.evaluate import (
     EvaluationFailedError,
+    ForwardError,
     InvalidTermsError,
     TermRejection,
     TermValidationReport,
+    block_dispersion,
     evaluate_terms,
+    forward_error,
     validate_terms,
 )
 from kd.inspect import (
@@ -88,6 +93,7 @@ from kd.search.checkpoint_select import (
     eligible_checkpoint_iterations,
     resolve_checkpoint,
 )
+from kd.search.descriptor import ModeVerdict, mode_accepts
 from kd.search.discover import DiscoverConfig
 from kd.search.dlga import DLGAConfig
 from kd.search.eqgpt import EqGPTConfig
@@ -98,7 +104,7 @@ from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.viz.engine import VizEngine
 
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 
 
 
@@ -128,10 +134,12 @@ __all__ = [
     "FieldData",
     "FieldReport",
     "FormattedEquation",
+    "ForwardError",
     "InvalidTermsError",
     "KIND_FINAL",
     "LhsSpec",
     "Llm4edConfig",
+    "ModeVerdict",
     "Model",
     "PDEDataset",
     "PySINDyConfig",
@@ -153,14 +161,17 @@ __all__ = [
     "VizEngine",
     "__version__",
     "add_noise",
+    "block_dispersion",
     "eligible_checkpoint_iterations",
     "evaluate_terms",
     "format_pde",
+    "forward_error",
     "generate_advection_data",
     "generate_burgers_data",
     "generate_diffusion_data",
     "get_dataset",
     "inspect_file",
+    "instrument_schema_digest",
     "instrument_schemas",
     "judge_recovery",
     "law_signature",
@@ -184,9 +195,12 @@ __all__ = [
     "load_llm4ed_heat",
     "load_pde_compound",
     "load_pde_divide",
+    "load_tabular",
     "load_tlc_cc",
     "load_wave",
     "load_wave_breaking",
+    "load_wave_breaking_datasets",
+    "mode_accepts",
     "paired_exact_test",
     "preview",
     "preview_report",

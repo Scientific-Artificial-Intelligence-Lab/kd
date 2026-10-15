@@ -26,8 +26,8 @@ from kd.core.equation import (
 )
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.expr.naming import parse_derivative_name
-from kd.core.jsonsafe import JSON_INDENT_SPACES
-from kd.search.recorder import VizRecorder, _make_json_safe, _sanitize_float
+from kd.core.jsonsafe import JSON_INDENT_SPACES, make_json_safe, sanitize_float
+from kd.search.recorder import VizRecorder
 from kd.search.records import RunRecord, validate_invalid_reason
 from kd.search.series_keys import (
     PARETO_COMPLEXITY_KEY,
@@ -473,15 +473,15 @@ class ExperimentResult(RunResult):
         return {
             "result_schema_version": RESULT_SCHEMA_VERSION,
             "best_expression": self.best_expression,
-            "best_score": _sanitize_float(self.best_score),
+            "best_score": sanitize_float(self.best_score),
             "iterations": self.iterations,
             "early_stopped": self.early_stopped,
             "final_eval": _serialize_evaluation_result(self.final_eval),
-            "actual": _make_json_safe(self.actual, key="actual"),
-            "predicted": _make_json_safe(self.predicted, key="predicted"),
+            "actual": make_json_safe(self.actual, key="actual"),
+            "predicted": make_json_safe(self.predicted, key="predicted"),
             "dataset_name": self.dataset_name,
             "algorithm_name": self.algorithm_name,
-            "config": _make_json_safe(self.config, key="config"),
+            "config": make_json_safe(self.config, key="config"),
             "recorder": self.recorder.to_dict(),
             "lhs_label": self.lhs_label,
             "equation": (

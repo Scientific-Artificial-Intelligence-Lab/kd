@@ -8,10 +8,12 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import HOMOGENEOUS_LHS_LABEL, Form, LhsSpec, render_lhs_label
+from kd.core.equation.sketch import Sketch
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
+from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.core.term_cache import TermColumnCache
-from kd.data.schema import DataTopology
+from kd.data.schema import DataTopology, PDEDataset
 from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
@@ -45,9 +47,15 @@ from kd.search.eqgpt.sampling import (
     SamplingConfig,
     dimension_masked_tokens,
 )
+from kd.search.eqgpt.sketch_backend import (
+    EqGPTCompiled,
+    compile_for_eqgpt,
+    refuse_candidate,
+)
 from kd.search.eqgpt.vocab import VOCAB_SHA256, Vocab, load_vocab
-from kd.search.protocol import PlatformComponents
+from kd.search.protocol import DiscoveryTask, PlatformComponents
 from kd.search.recorder import log_whitelisted_metrics
+from kd.search.result import invalid_evaluation_result
 from kd.search.term_utils import fold_add
 from kd.search.trajectory import (
     active_fit_terms,
@@ -104,6 +112,20 @@ _N_DROPPED_KEY: Final[str] = _viz_helpers.N_DROPPED_KEY
 _NO_MEASUREMENT: Final[float] = NO_MEASUREMENT
 
 
+
+
+
+
+_SKETCH_LEVELS = SketchClauseLevels(
+    fixed_terms="lowered",
+    anchors="exit_checked",
+    hole_count="exit_checked",
+    derivative_order="generation_enforced",
+    operator_set="generation_enforced",
+    field_axis_set="generation_enforced",
+)
+
+
 class EqGPTPlugin:
 
     score_kind: ClassVar[str] = "EqGPT reward"
@@ -118,31 +140,51 @@ class EqGPTPlugin:
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="eqgpt",
-        summary="GPT-guided equation discovery across wave and steady modes.",
+        summary=(
+            "GPT-guided discovery of grid u_t evolution PDEs in one "
+            "field u, and of scattered 2-D steady relations; no u_tt"
+        ),
         cost_class="heavy",
         modes=(
             InstrumentMode(
                 name="single_wave",
+                required_params=frozenset({"sparsity_alpha"}),
+                field_names=("u",),
+                spatial_axes=("x", "y", "z"),
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
-                description="Default single-case evolution-equation path.",
+                description=(
+                    "Grid evolution in field u with spatial axes from x/y/z and time t."
+                ),
                 lhs_orders=frozenset({1}),
+                sketch=_SKETCH_LEVELS,
             ),
             InstrumentMode(
                 name="wave_multicase",
+                selectable_from_data=False,
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID, DataTopology.SCATTERED}),
                 provider_kind="none",
-                description="Private multi-case wave evaluation path.",
+                description=(
+                    "Reproduction of the bundled wave-breaking "
+                    "cases only; not selectable from benchmark data."
+                ),
                 lhs_orders=frozenset({1}),
             ),
             InstrumentMode(
                 name="steady",
+                selected_by={"steady": True, "start_words": ["S"]},
+                required_params=frozenset({"sparsity_alpha", "steady_activation"}),
+                field_names=("u",),
+                spatial_axes=("x", "y"),
                 forms=frozenset({Form.HOMOGENEOUS}),
                 topologies=frozenset({DataTopology.SCATTERED}),
                 provider_kind="none",
-                description="Private steady homogeneous-equation path.",
+                description=(
+                    "Scattered (x, y), field u, homogeneous; "
+                    "retrains a surrogate inside every call."
+                ),
                 lhs_orders=frozenset({0}),
             ),
         ),
@@ -251,6 +293,12 @@ class EqGPTPlugin:
         self._sampler: Sampler | None = None
         self._start_len_no_s = 0
         self._variables: tuple[str, ...] = ()
+
+
+
+        self._sketch: Sketch | None = None
+        self._sketch_compiled: EqGPTCompiled | None = None
+        self._gate_variables: tuple[str, ...] = ()
         self._lhs_flat: Tensor | None = None
         self._optimizer: torch.optim.Optimizer | None = None
 
@@ -315,9 +363,33 @@ class EqGPTPlugin:
     def runner_batch_size(self) -> int:
         return self._config.samples_per_epoch
 
+    @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        if self._sketch_compiled is None:
+            return None
+        return self._sketch_compiled.report
+
+
+    def refuse_unsupported_names(self, dataset: PDEDataset) -> None:
+        if self._config.is_steady or self._config.is_wave_multicase:
+            return
+        fields = set(dataset.fields or {})
+        axes = set(dataset.axis_order or ())
+        if (
+            fields != {"u"}
+            or not axes <= {"x", "y", "z", "t"}
+            or dataset.lhs_axis != "t"
+        ):
+            raise ValueError(
+                f"EqGPT single_wave requires fields ['u'] and axes from "
+                f"x/y/z with time t; "
+                f"dataset fields={sorted(fields)}, axes={sorted(axes)}. "
+                "Use an instrument with a configurable field vocabulary."
+            )
 
     def prepare(self, components: PlatformComponents) -> None:
         dataset = components.dataset
+        self.refuse_unsupported_names(dataset)
         self._steady_viz_cache = None
         self._components = components
         self._recorder = components.recorder
@@ -360,6 +432,18 @@ class EqGPTPlugin:
 
         vocab = load_vocab()
         self._vocab = vocab
+        start_tokens = tuple(vocab.word2id[word] for word in self._config.start_words)
+        self._start_len_no_s = len(start_tokens) - 1
+        base_masked = (
+            dimension_masked_tokens(vocab, self._variables)
+            | order_masked_tokens(vocab, self.derivative_requirements.max_atomic_order)
+            | ir_inexpressible_tokens(vocab)
+            | frozenset(self._config.masked_tokens)
+        )
+
+
+
+        masked_tokens = self._compile_task(components.task, vocab, base_masked)
         is_restore = self._restore_pending and self._pending_state is not None
         if self._backend is None:
             self._backend = self._build_default_backend(vocab)
@@ -390,14 +474,6 @@ class EqGPTPlugin:
                 self._config,
             )
 
-        start_tokens = tuple(vocab.word2id[word] for word in self._config.start_words)
-        self._start_len_no_s = len(start_tokens) - 1
-        masked_tokens = (
-            dimension_masked_tokens(vocab, self._variables)
-            | order_masked_tokens(vocab, self.derivative_requirements.max_atomic_order)
-            | ir_inexpressible_tokens(vocab)
-            | frozenset(self._config.masked_tokens)
-        )
         sampling_config = SamplingConfig(
             start_tokens=start_tokens,
             masked_tokens=masked_tokens,
@@ -454,6 +530,28 @@ class EqGPTPlugin:
         self._reseed_pending = False
         self._prepared = True
 
+    def _compile_task(
+        self, task: DiscoveryTask | None, vocab: Vocab, base_masked: frozenset[int]
+    ) -> frozenset[int]:
+        self._sketch = None
+        self._sketch_compiled = None
+        self._gate_variables = self._variables
+        if task is None:
+            return base_masked
+        compiled = compile_for_eqgpt(
+            task.sketch,
+            vocab,
+            base_masked=base_masked,
+            variables=self._variables,
+            max_length=self._config.max_length,
+            start_words=self._config.start_words,
+        )
+        self._sketch_compiled = compiled
+        self._gate_variables = compiled.gate_variables
+        if not task.compiled.closed:
+            self._sketch = task.sketch
+        return base_masked | compiled.masked_tokens
+
     def propose(self, n: int) -> list[str]:
         self._require_prepared()
         assert self._sampler is not None and self._vocab is not None
@@ -507,25 +605,41 @@ class EqGPTPlugin:
             return [
                 self._score_steady(candidate, sentence) for candidate, sentence in pairs
             ]
+        return [
+            self._score_single(candidate, sentence) for candidate, sentence in pairs
+        ]
+
+    def _score_single(
+        self, candidate: str, sentence: list[int] | None
+    ) -> EvaluationResult:
+        assert self._vocab is not None
         assert self._lhs_flat is not None and self._components is not None
+        if self._sketch is not None:
+            assert self._sketch_compiled is not None
+            refusal = refuse_candidate(candidate, self._sketch, self._sketch_compiled)
+            if refusal is not None:
+                return invalid_evaluation_result(
+                    refusal,
+                    score=None,
+                    expression=candidate,
+                    terms=candidate.split(" + "),
+                    reason="structural_reject",
+                )
         context = self._components.context
 
 
         assert context is not None
-        return [
-            _scoring.score_candidate(
-                candidate=candidate,
-                sentence=sentence,
-                vocab=self._vocab,
-                variables=self._variables,
-                executor=self._components.executor,
-                context=context,
-                lhs_flat=self._lhs_flat,
-                sparsity_alpha=self._config.sparsity_alpha,
-                term_cache=self._term_cache,
-            )
-            for candidate, sentence in pairs
-        ]
+        return _scoring.score_candidate(
+            candidate=candidate,
+            sentence=sentence,
+            vocab=self._vocab,
+            variables=self._gate_variables,
+            executor=self._components.executor,
+            context=context,
+            lhs_flat=self._lhs_flat,
+            sparsity_alpha=self._config.sparsity_alpha,
+            term_cache=self._term_cache,
+        )
 
     def _score_wave(
         self, candidate: str, sentence: list[int] | None
@@ -851,20 +965,30 @@ class EqGPTPlugin:
         if not self._prepared:
             raise RuntimeError("prepare() must be called before using the plugin.")
 
-    def _assert_primary_dataset(self, dataset: Any) -> None:
-        from kd.data.loaders.wave_breaking import wave_dataset_name
-
+    def _assert_primary_dataset(self, dataset: PDEDataset) -> None:
         assert self._multicase is not None
-        expected = wave_dataset_name(self._multicase.primary_case)
-        actual = getattr(dataset, "name", None)
-        if actual != expected:
-            raise ValueError(
-                f"wave multi-case primary dataset mismatch: config primary_case "
-                f"resolves to {self._multicase.primary_case!r} (expected dataset "
-                f"name {expected!r}), but the facade dataset is named {actual!r}. "
-                f"Build it with wave_breaking_case_to_dataset(cases[primary_case]) "
-                f"so the reproducibility manifest carries the right identity."
-            )
+        primary = self._multicase.primary_dataset
+        assert primary.axis_order is not None
+        assert primary.axes is not None and dataset.axes is not None
+        assert primary.fields is not None and dataset.fields is not None
+        mismatch = (
+            f"wave multi-case primary dataset mismatch for "
+            f"{self._multicase.primary_case!r}: comparison is by data content "
+            "(renaming is allowed). Build the dataset with "
+            "wave_breaking_case_to_dataset(cases[primary_case]). "
+        )
+        if dataset.axis_order != primary.axis_order:
+            raise ValueError(f"{mismatch}Axis order differs.")
+        if set(dataset.fields) != set(primary.fields):
+            raise ValueError(f"{mismatch}Field names differ.")
+        for axis in primary.axis_order:
+            if not torch.equal(dataset.axes[axis].values, primary.axes[axis].values):
+                raise ValueError(f"{mismatch}Coordinate {axis!r} differs.")
+        for field in primary.fields:
+            if not torch.equal(
+                dataset.fields[field].values, primary.fields[field].values
+            ):
+                raise ValueError(f"{mismatch}Field {field!r} differs.")
 
     def _resolve_variables(self, dataset: Any) -> tuple[str, ...]:
         if dataset.axis_order:
@@ -1005,6 +1129,7 @@ class EqGPTPlugin:
             fingerprints["steady_boundary_delete_num"] = (
                 self._config.steady_boundary_delete_num
             )
+            fingerprints["steady_boundary_grid"] = self._config.steady_boundary_grid
             fingerprints["steady_polar_eval"] = self._config.steady_polar_eval
             fingerprints["steady_constant_column"] = self._config.steady_constant_column
             fingerprints["steady_dataset_fingerprint"] = (

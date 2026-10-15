@@ -144,6 +144,7 @@ class Evaluator:
         self._lhs_var = self._lhs_flat.var(correction=0).item()
 
 
+        self._custom_scorer = scorer
         self._scorer = scorer or make_aic_scorer(self._n_samples)
 
     @property
@@ -153,6 +154,10 @@ class Evaluator:
     @property
     def lhs(self) -> Tensor:
         return self._lhs_flat.detach()
+
+    @property
+    def lhs_variance(self) -> float:
+        return self._lhs_var
 
     @property
     def executor(self) -> PythonExecutor:
@@ -175,19 +180,27 @@ class Evaluator:
         terms: list[str],
         *,
         skip_invalid: bool = False,
+        rows: Tensor | None = None,
     ) -> tuple[Tensor, list[str]]:
         if not terms:
             raise ValueError("Empty term list")
+        indices = self._row_indices(rows)
         with torch.no_grad():
             theta, valid_terms = self._build_theta(
                 terms,
                 skip_invalid=skip_invalid,
+                rows=indices,
             )
         return theta.detach(), list(valid_terms)
 
     def evaluate_terms(
-        self, terms: list[str], *, skip_invalid: bool = False
+        self,
+        terms: list[str],
+        *,
+        skip_invalid: bool = False,
+        rows: Tensor | None = None,
     ) -> EvaluationResult:
+        indices = self._row_indices(rows)
 
         if not terms:
             return self._make_invalid_result(
@@ -201,7 +214,9 @@ class Evaluator:
 
         try:
             with torch.no_grad():
-                return self._evaluate_terms_impl(terms, skip_invalid=skip_invalid)
+                return self._evaluate_terms_impl(
+                    terms, skip_invalid=skip_invalid, rows=indices
+                )
         except torch.cuda.OutOfMemoryError as exc:
             logger.warning(
                 "Autograd OOM during evaluate_terms; returning invalid "
@@ -212,8 +227,31 @@ class Evaluator:
             release_cuda_memory()
             return self._make_invalid_result("autograd OOM", reason="evaluation_error")
 
+    def _row_indices(self, rows: Tensor | None) -> Tensor | None:
+        if rows is None:
+            return None
+        if rows.dtype == torch.bool:
+            if tuple(rows.shape) != self._context.dataset.get_shape():
+                raise ValueError("rows boolean mask must have the dataset grid shape")
+            indices = rows.flatten().nonzero().flatten()
+        else:
+            if rows.ndim != 1 or rows.dtype not in (torch.int32, torch.int64):
+                raise ValueError(
+                    "rows must be a grid boolean mask or flat integer indices"
+                )
+            indices = rows
+        if indices.numel() == 0:
+            raise ValueError("rows must select at least one sample")
+        if (indices < 0).any() or (indices >= self._n_samples).any():
+            raise ValueError("rows indices are outside the flattened dataset")
+        return indices.to(device=self._lhs_flat.device)
+
     def _build_theta(
-        self, terms: list[str], *, skip_invalid: bool = False
+        self,
+        terms: list[str],
+        *,
+        skip_invalid: bool = False,
+        rows: Tensor | None = None,
     ) -> tuple[Tensor, list[str]]:
         theta_columns: list[Tensor] = []
         valid_terms: list[str] = []
@@ -260,9 +298,7 @@ class Evaluator:
                 except Exception as e:
                     if not skip_invalid:
                         raise ValueError(f"Execution error for '{term}': {e}") from e
-                    logger.debug(
-                        "skip_invalid: skipping '%s' (execution error)", term
-                    )
+                    logger.debug("skip_invalid: skipping '%s' (execution error)", term)
                     continue
 
 
@@ -270,6 +306,9 @@ class Evaluator:
 
                 if cache is not None:
                     cache.put(term, col, generation)
+
+            if rows is not None:
+                col = col.index_select(0, rows)
 
 
             if skip_invalid and not torch.isfinite(col).all():
@@ -310,10 +349,16 @@ class Evaluator:
         return n_terms
 
     def _evaluate_terms_impl(
-        self, terms: list[str], *, skip_invalid: bool = False
+        self,
+        terms: list[str],
+        *,
+        skip_invalid: bool = False,
+        rows: Tensor | None = None,
     ) -> EvaluationResult:
         try:
-            theta, valid_terms = self._build_theta(terms, skip_invalid=skip_invalid)
+            theta, valid_terms = self._build_theta(
+                terms, skip_invalid=skip_invalid, rows=rows
+            )
         except _ThetaStructuralError as e:
             return self._make_invalid_result(str(e), reason="structural_reject")
         except _ThetaNonFiniteError as e:
@@ -321,8 +366,15 @@ class Evaluator:
         except ValueError as e:
             return self._make_invalid_result(str(e))
 
+        lhs = self._lhs_flat
+        lhs_var = self._lhs_var
+        scorer = self._scorer
+        if rows is not None:
+            lhs = lhs.index_select(0, rows)
+            lhs_var = lhs.var(correction=0).item()
+            scorer = self._custom_scorer or make_aic_scorer(lhs.numel())
         try:
-            solve_result = self._solver.solve(theta, self._lhs_flat)
+            solve_result = self._solver.solve(theta, lhs)
         except (SearchInterrupted, torch.cuda.OutOfMemoryError):
 
 
@@ -338,17 +390,17 @@ class Evaluator:
 
         coefficients = solve_result.coefficients
         y_pred = theta @ coefficients
-        mse = ((self._lhs_flat - y_pred) ** 2).mean().item()
+        mse = ((lhs - y_pred) ** 2).mean().item()
 
         if not math.isfinite(mse):
             return self._make_invalid_result("MSE is NaN or Inf", reason="non_finite")
 
-        nmse_val = _metrics_nmse(mse, self._lhs_var)
+        nmse_val = _metrics_nmse(mse, lhs_var)
         r2 = solve_result.r2
         complexity = self._get_complexity(
             solve_result.selected_indices, len(valid_terms)
         )
-        score_val = self._scorer(mse, complexity)
+        score_val = scorer(mse, complexity)
 
         return EvaluationResult(
             mse=mse,
@@ -360,12 +412,10 @@ class Evaluator:
             is_valid=True,
             error_message="",
             selected_indices=solve_result.selected_indices,
-            residuals=(y_pred - self._lhs_flat).detach(),
+            residuals=(y_pred - lhs).detach(),
             terms=list(valid_terms),
             condition_number=(
-                solve_result.condition_number
-                if self._report_condition_number
-                else None
+                solve_result.condition_number if self._report_condition_number else None
             ),
         )
 

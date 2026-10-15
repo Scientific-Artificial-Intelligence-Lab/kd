@@ -190,7 +190,7 @@ def features_from_report(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "topology": report["topology"],
         "lhs_order": report["lhs_order"],
-        "n_axes": len(report["axes"]),
+        "n_axes": 0 if report["axes"] is None else len(report["axes"]),
         "n_fields": len(fields),
 
 

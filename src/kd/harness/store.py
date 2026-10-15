@@ -7,6 +7,7 @@ import math
 import os
 import platform
 import subprocess
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
@@ -17,6 +18,7 @@ from kd.harness._verify import (
     INDEX_FILENAME,
     INDEX_SCHEMA_VERSION,
     RECORDS_DIRNAME,
+    SOURCES_INDEX_SCHEMA_VERSION,
     STATUS_COMPLETED,
     STATUS_RAISED,
     STATUS_VOCABULARY,
@@ -24,6 +26,7 @@ from kd.harness._verify import (
     load_verified_index,
     record_relpath,
     verify_record_plan_binding,
+    verify_sources,
 )
 from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan
 from kd.search.records import RunRecord
@@ -81,6 +84,8 @@ class EvidenceStore:
         attempts: list[dict[str, Any]],
         records: dict[int, RunRecord],
         records_index: dict[str, dict[str, str]],
+        sources: tuple[dict[str, Any], ...],
+        version_note: str | None,
         read_only: bool,
     ) -> None:
 
@@ -94,6 +99,8 @@ class EvidenceStore:
         self._attempts = attempts
         self._records = records
         self._records_index = records_index
+        self._sources = sources
+        self._version_note = version_note
         self._read_only = read_only
 
 
@@ -122,6 +129,14 @@ class EvidenceStore:
     def records(self) -> MappingProxyType[int, RunRecord]:
         return MappingProxyType(self._records)
 
+    @property
+    def sources(self) -> tuple[dict[str, Any], ...]:
+        return tuple({**row, "env": dict(row["env"])} for row in self._sources)
+
+    @property
+    def version_note(self) -> str | None:
+        return self._version_note
+
 
 
     @classmethod
@@ -131,8 +146,18 @@ class EvidenceStore:
         *,
         plan: ExperimentPlan,
         env: dict[str, str],
+        sources: Sequence[Mapping[str, Any]] = (),
+        version_note: str | None = None,
     ) -> EvidenceStore:
         root = Path(root)
+        rows: tuple[dict[str, Any], ...] = ()
+        if sources:
+            rows = verify_sources(plan, env, list(sources), version_note)
+        elif version_note is not None:
+
+            raise EvidenceStoreError(
+                "version_note is stored only with a sources table (merged store)"
+            )
         if root.exists():
             if not root.is_dir():
                 raise EvidenceStoreError(
@@ -153,6 +178,8 @@ class EvidenceStore:
             attempts=[],
             records={},
             records_index={},
+            sources=rows,
+            version_note=version_note,
             read_only=False,
         )
         store._persist_index()
@@ -297,13 +324,15 @@ class EvidenceStore:
             attempts=verified.attempts,
             records=verified.records,
             records_index=verified.records_index,
+            sources=verified.sources,
+            version_note=verified.version_note,
             read_only=True,
         )
 
 
 
     def _index_payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "index_schema_version": INDEX_SCHEMA_VERSION,
             "plan": self._plan.to_dict(),
             "plan_hash": self._plan_hash,
@@ -314,6 +343,11 @@ class EvidenceStore:
                 key: dict(meta) for key, meta in self._records_index.items()
             },
         }
+        if self._sources:
+            payload["index_schema_version"] = SOURCES_INDEX_SCHEMA_VERSION
+            payload["sources"] = list(self.sources)
+            payload["version_note"] = self._version_note
+        return payload
 
     def _persist_index(self) -> None:
 

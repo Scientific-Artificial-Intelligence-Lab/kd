@@ -15,7 +15,7 @@ from kd.data.schema import PDEDataset
 
 AXIS_ORDER_KEY: Final[str] = "axis_order"
 UNIFORM_RTOL: Final[float] = 1e-6
-AXIS_ENDPOINT_ATOL: Final[float] = 1e-5
+AXIS_STEP_RTOL: Final[float] = 1e-3
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,7 +56,8 @@ def regularize_axis(
     axis_name: str,
     values: npt.NDArray[Any],
 ) -> npt.NDArray[np.float64]:
-    axis = np.asarray(values, dtype=np.float64).reshape(-1)
+    source = np.asarray(values)
+    axis = source.astype(np.float64).reshape(-1)
     if axis.ndim != 1 or axis.size < 2:
         raise ValueError(f"axis '{axis_name}' must be a 1D array with >=2 values")
     if not np.isfinite(axis).all():
@@ -66,7 +67,12 @@ def regularize_axis(
         raise ValueError(f"axis '{axis_name}' must be strictly increasing")
     if is_uniform_spacing(diffs):
         return axis
-    return reconstruct_uniform_axis(axis_name, axis, diffs)
+    source_eps = (
+        float(np.finfo(source.dtype).eps)
+        if np.issubdtype(source.dtype, np.floating)
+        else 0.0
+    )
+    return reconstruct_uniform_axis(axis_name, axis, source_eps=source_eps)
 
 
 def is_uniform_spacing(diffs: npt.NDArray[np.float64]) -> bool:
@@ -77,28 +83,14 @@ def is_uniform_spacing(diffs: npt.NDArray[np.float64]) -> bool:
 def reconstruct_uniform_axis(
     axis_name: str,
     axis: npt.NDArray[np.float64],
-    diffs: npt.NDArray[np.float64],
+    *,
+    source_eps: float,
 ) -> npt.NDArray[np.float64]:
-    step = float(np.median(diffs))
-    expected = np.linspace(
-        axis[0],
-        axis[0] + step * axis.size,
-        axis.size,
-        endpoint=False,
-    )
-    if (
-        abs(float(axis[0] - expected[0])) > AXIS_ENDPOINT_ATOL
-        or abs(float(axis[-1] - expected[-1])) > AXIS_ENDPOINT_ATOL
-    ):
-        raise ValueError(
-            f"axis '{axis_name}' is not uniformly spaced and endpoints disagree "
-            f"with endpoint=False reconstruction"
-        )
-    if np.any(np.abs(axis[1:-1] - expected[1:-1]) > AXIS_ENDPOINT_ATOL):
-        raise ValueError(
-            f"axis '{axis_name}' is not uniformly spaced: interior coordinates "
-            f"disagree with endpoint=False reconstruction"
-        )
+    expected = np.linspace(axis[0], axis[-1], axis.size)
+    step = expected[1] - expected[0]
+    tol = AXIS_STEP_RTOL * abs(step) + 4.0 * source_eps * float(np.abs(axis).max())
+    if np.any(np.abs(axis - expected) > tol):
+        raise ValueError(f"axis '{axis_name}' is not uniformly spaced")
     return expected
 
 
@@ -154,7 +146,11 @@ class KdNpzLayout:
     name = "kd-npz"
 
     def matches(self, inventory: Inventory) -> bool:
-        return inventory.container == "npz" and AXIS_ORDER_KEY in inventory.entries
+        return (
+            inventory.container == "npz"
+            and AXIS_ORDER_KEY in inventory.entries
+            and "format" not in inventory.entries
+        )
 
     def build(
         self,
@@ -188,8 +184,8 @@ KD_NPZ = KdNpzLayout()
 
 
 __all__ = [
-    "AXIS_ENDPOINT_ATOL",
     "AXIS_ORDER_KEY",
+    "AXIS_STEP_RTOL",
     "KD_NPZ",
     "UNIFORM_RTOL",
     "KdNpzArrays",

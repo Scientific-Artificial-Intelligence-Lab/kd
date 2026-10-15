@@ -31,6 +31,7 @@ class Session:
         self._started = time.monotonic()
         self.prior_annotation: dict[str, dict[str, Any]] | None = None
         self.successful_runs: dict[str, dict[str, Any]] = {}
+        self.sealed_lhs: dict[str, dict[str, Any] | None] = {}
         self.ledger = SegmentLedger(workspace)
         selected = self.ledger.selected
         self.answer_dataset_id: str | None = (

@@ -65,6 +65,7 @@ class EndpointConfig:
     base_url: str
     model: str
     api_key: str = field(repr=False)
+    effort: str | None = None
 
 
 class MissingConfigError(ValueError):
@@ -91,7 +92,7 @@ def _validate_settings(values: Mapping[str, str]) -> None:
     if not isinstance(values, dict):
         raise ValueError("agent configuration must be a JSON object")
     for key, value in values.items():
-        if key not in ("endpoint", "base_url", "model", "api_key"):
+        if key not in ("endpoint", "base_url", "model", "api_key", "effort"):
             raise ValueError(f"unknown configuration field: {key}")
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{key} must be a non-empty string")
@@ -104,17 +105,23 @@ def _merge_settings(
     endpoint: str | None,
     base_url: str | None,
     model: str | None,
+    effort: str | None,
     env: Mapping[str, str],
 ) -> tuple[str, dict[str, str]]:
     file_values = {} if saved is None else saved
     env_values = {
         name: env[f"KD_AGENT_{name.upper()}"]
-        for name in ("endpoint", "base_url", "model", "api_key")
+        for name in ("endpoint", "base_url", "model", "api_key", "effort")
         if f"KD_AGENT_{name.upper()}" in env
     }
     explicit = {
         k: v
-        for k, v in (("endpoint", endpoint), ("base_url", base_url), ("model", model))
+        for k, v in (
+            ("endpoint", endpoint),
+            ("base_url", base_url),
+            ("model", model),
+            ("effort", effort),
+        )
         if v is not None
     }
     for values in (file_values, env_values, explicit):
@@ -152,6 +159,7 @@ def resolve_config(
     endpoint: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    effort: str | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> EndpointConfig:
     selected, values = _merge_settings(
@@ -159,6 +167,7 @@ def resolve_config(
         endpoint,
         base_url,
         model,
+        effort,
         os.environ if environ is None else environ,
     )
     preset = ENDPOINT_PRESETS.get(selected)
@@ -177,6 +186,7 @@ def resolve_config(
         values["base_url"],
         values["model"],
         values["api_key"],
+        values.get("effort"),
     )
 
 
@@ -191,6 +201,7 @@ def save_config(config: EndpointConfig, path: Path) -> None:
                 "base_url": config.base_url,
                 "model": config.model,
                 "api_key": config.api_key,
+                **({"effort": config.effort} if config.effort is not None else {}),
             },
             stream,
             indent=2,

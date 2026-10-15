@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import ast
+import copy
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 from types import CodeType
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import torch
 from torch import Tensor
@@ -29,11 +30,16 @@ DIFF_OPERATOR_PATTERN = re.compile(r"^diff([0-9]*)_([a-z]+)$")
 _SPECIAL_OPERATOR_STUBS: dict[str, Any] = {"lap": _lap_stub}
 
 _SPECIAL_OPERATORS: frozenset[str] = frozenset(_SPECIAL_OPERATOR_STUBS)
-_UNITY_TOKEN: Final = "one"
+UNITY_TOKEN: Final = "one"
+
+
+
+
+_LITERAL_DTYPE: Final = torch.float64
 
 
 def _resolve_unity(name: str, context: ExecutionContext) -> Tensor | None:
-    if name == _UNITY_TOKEN:
+    if name == UNITY_TOKEN:
         return context.unity_column()
     return None
 
@@ -45,6 +51,37 @@ class _ParsedExpression:
     depth: int
     has_open_form_diff: bool
     compiled: CodeType
+    literals: tuple[tuple[str, Any], ...]
+
+
+class _CallLiteralRewriter(ast.NodeTransformer):
+
+    def __init__(self) -> None:
+        self.literals: list[tuple[str, Any]] = []
+        self._call_depth = 0
+
+    def visit_Call(self, node: ast.Call) -> ast.Call:
+        self._call_depth += 1
+        self.generic_visit(node)
+        self._call_depth -= 1
+        return node
+
+    def visit_BinOp(self, node: ast.BinOp) -> ast.BinOp:
+        node.left = self.visit(node.left)
+        if isinstance(node.op, ast.Pow):
+            outer_depth, self._call_depth = self._call_depth, 0
+            node.right = self.visit(node.right)
+            self._call_depth = outer_depth
+        else:
+            node.right = self.visit(node.right)
+        return node
+
+    def visit_Constant(self, node: ast.Constant) -> ast.expr:
+        if self._call_depth == 0:
+            return node
+        name = f"__kd_literal_{len(self.literals)}__"
+        self.literals.append((name, node.value))
+        return ast.copy_location(ast.Name(id=name, ctx=ast.Load()), node)
 
 
 @lru_cache(maxsize=512)
@@ -53,11 +90,14 @@ def _parse_expression(code: str) -> _ParsedExpression:
         tree = ast.parse(code, mode="eval")
     except SyntaxError as e:
         raise ValueError(f"Syntax error in expression: {e}") from e
+    rewriter = _CallLiteralRewriter()
+    fast_tree = ast.fix_missing_locations(rewriter.visit(copy.deepcopy(tree)))
     return _ParsedExpression(
         tree=tree,
         depth=_get_ast_depth(tree.body),
         has_open_form_diff=_tree_has_open_form_diff(tree),
-        compiled=compile(tree, "<expr>", "eval"),
+        compiled=compile(fast_tree, "<expr>", "eval"),
+        literals=tuple(rewriter.literals),
     )
 
 
@@ -111,13 +151,13 @@ class PythonExecutor:
             value = self._execute_with_diff(parsed.tree.body, context, depth=0)
         else:
 
-            value = self._execute_simple(parsed.compiled, context)
+            value = self._execute_simple(parsed, context)
 
         return ExecutorResult(value=value, used_diff=use_full_path)
 
     def _execute_simple(
         self,
-        compiled: CodeType,
+        parsed: _ParsedExpression,
         context: ExecutionContext,
     ) -> Tensor:
 
@@ -125,6 +165,10 @@ class PythonExecutor:
 
         eval_ctx: dict[str, Any] = {"__builtins__": {}}
         eval_ctx.update(self._registry.get_context())
+        for name, literal in parsed.literals:
+            eval_ctx[name] = torch.tensor(
+                literal, dtype=_LITERAL_DTYPE, device=context.device
+            )
 
 
 
@@ -140,7 +184,7 @@ class PythonExecutor:
 
 
         try:
-            result = eval(compiled, {"__builtins__": {}}, eval_ctx)
+            result = eval(parsed.compiled, {"__builtins__": {}}, eval_ctx)
         except NameError as e:
 
 
@@ -337,11 +381,8 @@ class PythonExecutor:
         known_fields, known_axes = _context_name_sets(context)
         if get_field is not None and callable(get_field):
             try:
-                result = get_field(name)
-
-                if isinstance(result, Tensor):
-                    return result
-            except (KeyError, AttributeError, NotImplementedError):
+                return cast(Tensor, get_field(name))
+            except KeyError:
                 pass
 
 

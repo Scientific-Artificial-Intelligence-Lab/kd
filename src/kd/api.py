@@ -17,6 +17,8 @@ from __future__ import annotations
 import copy
 import dataclasses
 import functools
+import hashlib
+import json
 import logging
 import time
 import warnings
@@ -30,6 +32,7 @@ from kd.core.equation.types import LhsSpec
 from kd.core.platform.requirements import resolve_derivative_requirements
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.core.verify import VerifyPolicy
+from kd.data import savgol_smooth
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, compute_dataset_fingerprint
 from kd.data.tabular_bridge import dataset_from_tabular
@@ -52,9 +55,11 @@ from kd.search.config_fields import (
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
     DEFAULT_N_ITERATIONS,
+    DEFAULT_PINN_N_CYCLES,
     DEFAULT_STABILITY_QUEUE_CAPACITY,
     DEFAULT_STABILITY_SELECTION,
 )
+from kd.search.discover.tabular import TABULAR_OPERATORS
 from kd.search.discover.tokens.library import LibraryConfig
 from kd.search.dlga import DLGAConfig, DLGAPlugin
 from kd.search.eqgpt.config import EqGPTConfig
@@ -67,12 +72,17 @@ from kd.search.iteration_events import (
     PhaseWriter,
 )
 from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
-from kd.search.protocol import DiscoveryTask, FacadeWiringContract, PlatformComponents
+from kd.search.protocol import (
+    DiscoveryTask,
+    FacadeWiringContract,
+    PlatformComponents,
+    ScoreContract,
+)
+from kd.search.pysindy.assembly import polynomial_terms
 from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.plugin import PySINDyPlugin
-from kd.search.pysr.config import TABULAR_UNARY_OPERATORS, PySRConfig
+from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
-from kd.search.result import DEFAULT_SCORE_KIND
 from kd.search.resume_policy import check_resume_config
 from kd.search.run_dir import CHECKPOINTS_DIRNAME, run_id_of_run_dir
 from kd.search.runner import ExperimentRunner
@@ -92,7 +102,7 @@ if TYPE_CHECKING:
     from kd.search.protocol import SearchAlgorithm, SurrogateTrainer
     from kd.search.result import ExperimentResult
 
-__all__ = ["Model", "instrument_schemas"]
+__all__ = ["Model", "instrument_schemas", "instrument_schema_digest"]
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +161,7 @@ _UNSET: Any = object()
 
 
 _DEFAULT_GENERATIONS = 50
+_DEFAULT_SMALL_TERM_RTOL = 0.0
 _DEFAULT_POPULATION = 20
 _DEFAULT_DEPTH = 4
 _DEFAULT_WIDTH = 5
@@ -180,6 +191,8 @@ _GENERATIONS_INTO_CONFIG = frozenset({"pysr"})
 
 _FACADE_PARAM_DEFAULTS: dict[str, Any] = {
     "generations": _DEFAULT_GENERATIONS,
+    "savgol_window": 0,
+    "small_term_rtol": _DEFAULT_SMALL_TERM_RTOL,
     "population": _DEFAULT_POPULATION,
     "depth": _DEFAULT_DEPTH,
     "width": _DEFAULT_WIDTH,
@@ -192,23 +205,33 @@ _FACADE_PARAM_LITERALS: dict[str, list[str]] = {
 }
 
 
+_PIPELINE_PARAM_EFFECTS: dict[str, str] = {
+    "savgol_window": "preprocessing",
+    "small_term_rtol": "answer_selection",
+}
+
+
 def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
     """Describe the facade parameters this algorithm consumes, and where.
 
-    ``effect`` comes from two sources: ``FACADE_MAPPED[algorithm]``, the table
-    naming the config field each facade parameter feeds, and the plugin class's
-    ``one_shot`` flag. A mapped name reports ``config_field``; an unmapped
-    ``generations`` reports ``unused`` on a one-shot plugin and
-    ``max_iterations`` otherwise.
+    Mapped parameters report ``config_field`` from ``FACADE_MAPPED[algorithm]``.
+    An unmapped ``generations`` reports ``unused`` on a one-shot plugin and
+    ``max_iterations`` otherwise. Every algorithm also exposes ``savgol_window``
+    for preprocessing and ``small_term_rtol`` for final-answer selection;
+    neither maps to a plugin config field.
     """
     into_config = {
         facade_name: field_name
         for field_name, facade_name in FACADE_MAPPED[algorithm].items()
     }
     rows: list[dict[str, Any]] = []
-    for name in sorted(set(into_config) | {"generations"}):
+    for name in sorted(
+        set(into_config) | {"generations"} | set(_PIPELINE_PARAM_EFFECTS)
+    ):
         field_name = into_config.get(name)
-        if field_name is not None:
+        if name in _PIPELINE_PARAM_EFFECTS:
+            effect = _PIPELINE_PARAM_EFFECTS[name]
+        elif field_name is not None:
             effect = "config_field"
         elif _PLUGIN_CLASS_BY_ALGORITHM[algorithm].one_shot:
             effect = "unused"
@@ -259,6 +282,32 @@ def _check_resume_dataset(
             "was searched against; resume onto the original dataset, or start "
             "a fresh fit on this one."
         )
+
+
+def instrument_schema_digest() -> str:
+    """Hash mode and call-configuration declarations, excluding descriptive prose."""
+    fields = (
+        "name",
+        "json_kind",
+        "default",
+        "required",
+        "settable_from",
+        "facade_param",
+    )
+    rows = [
+        {
+            "algorithm": schema["algorithm"],
+            "modes": [
+                {key: value for key, value in mode.items() if key != "description"}
+                for mode in schema["modes"]
+            ],
+            "fields": [{key: row[key] for key in fields} for row in schema["fields"]],
+            "facade_params": schema["facade_params"],
+        }
+        for schema in instrument_schemas()
+    ]
+    payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def instrument_schemas() -> list[dict[str, Any]]:
@@ -450,17 +499,17 @@ class _ProgressPrinter:
 
 
 def _score_label(algorithm: SearchAlgorithm) -> str:
-    """Pick the user-facing score label for an algorithm.
+    """Read the user-facing score label of a registered facade algorithm.
 
     Reads the instance's ``ScoreContract`` ``score_kind`` declaration — the
     single source of truth, declared once on each plugin class: SGA -> "AIC";
     DLGA -> "DLGA fitness" (``nmse + epsilon*length`` — it is NOT an AIC,
     labeling it so would mislead); discover -> "reward"; pysr -> "NMSE";
     eqgpt -> "EqGPT reward" (maximized); llm4ed -> "LLM4ED sparse reward"
-    (maximized). Algorithms without a declaration (external / fake plugins)
-    fall back to ``"Score"`` for consistency with HTML reports.
+    (maximized). Every registered facade algorithm declares this contract.
     """
-    return getattr(algorithm, "score_kind", DEFAULT_SCORE_KIND)
+
+    return cast(ScoreContract, algorithm).score_kind
 
 
 
@@ -491,7 +540,10 @@ class Model:
 
     Args:
         algorithm: Search algorithm name. Supported: ``"sga"`` (default,
-            with dedicated facade parameters), ``"dlga"``, ``"discover"``,
+            with dedicated facade parameters), ``"dlga"``, ``"discover"``
+            (on tabular data, when neither ``batch_size`` nor ``epsilon`` is
+            passed, the facade uses 500 and 0.05 rather than the schema's
+            grid defaults 16 and 0.10; see ``_build_discover_config``),
             ``"pysr"`` (``generations`` maps to PySR's internal GP
             ``niterations``),
             ``"eqgpt"`` (``sparsity_alpha`` is required because it is a
@@ -524,10 +576,11 @@ class Model:
         derivatives: Derivative provider mode: ``"finite_diff"`` or
             ``"autograd"`` (forwards ``use_autograd=True`` to ``SGAConfig``).
             When ``"autograd"``, the SGA terminal derivatives (u_x, u_t) are
-            routed through an autograd-trained surrogate, while the dataset's
-            finite-difference provider remains in place for tree-internal
-            derivative operators. SGA-only — DLGA always uses autograd,
-            discover uses finite-diff.
+            routed through an autograd-trained surrogate, while tree-internal
+            derivative operators keep SGA's own finite-difference stencil
+            (not the dataset's provider). SGA-only — DLGA always uses autograd,
+            discover uses finite-diff, or autograd on its own network when its
+            ``pinn`` field is set.
         seed: Random seed for reproducibility. It threads into every
             algorithm's default config when ``config=`` is unset; otherwise
             the config's own seed wins. Passing the facade ``seed=`` together
@@ -546,7 +599,8 @@ class Model:
             ``derivatives``, ``seed``) or extra ``kwargs`` raises
             ``ValueError``.
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
-            ``checkpoint_dir``/``checkpoint_every``, (for DLGA)
+            ``checkpoint_dir``/``checkpoint_every``, ``savgol_window``,
+            ``small_term_rtol``, (for DLGA)
             ``surrogate_model``, and (for llm4ed) ``provider`` remain effective
             on the facade — except for pysr, where ``generations`` maps into
             the config's own ``niterations`` and passing both raises.
@@ -632,6 +686,34 @@ class Model:
             file: a reused path fails loud instead of interleaving two fits
             (same discipline as the iteration-event sink). Observability only;
             never part of the run's scientific identity.
+        savgol_window: Savitzky-Golay smoothing window length. ``0`` (default)
+            disables smoothing. A positive value smooths every field along
+            every grid axis with that window length and polynomial order 3
+            before the search; ``train_surrogate`` smooths its training data
+            the same way. Only GRID datasets are supported; other
+            topologies raise ``ValueError`` at ``fit``. A negative value raises
+            ``ValueError`` at construction. The dataset fingerprint in the run
+            record and checkpoints is computed from the smoothed data. In a
+            harness plan, each smoothing setting needs its own ``dataset_ref``:
+            the evidence store binds one ``dataset_ref`` to one data
+            fingerprint, and consensus building compares the supplied data
+            with the recorded fingerprint by ``dataset_ref``.
+        small_term_rtol: Relative coefficient threshold for the final answer.
+            ``0.0`` (default) keeps the algorithm's answer. A value r in (0, 1)
+            drops every term whose finite coefficient magnitude is below r
+            times the largest finite coefficient magnitude. The largest term
+            always survives, and no refit is performed. In a homogeneous
+            result the pivot term, whose coefficient is fixed at 1, always
+            stays and is not counted in the largest magnitude. Values
+            outside [0, 1) or NaN raise ``ValueError`` at construction. This
+            option is not applied on sketch fits. ``best_expr_`` remains the
+            algorithm's own string; ``result_.equation`` and the record's
+            ``support`` and ``coefficients`` reflect the drop. The record's
+            ``catalog_fit`` retains dropped terms as inactive with their
+            original coefficients. Metrics, score and complexity describe the
+            algorithm's own fit. On non-sketch fits, a positive value is
+            written into the run config, changing the run's spec and record
+            hashes.
         **kwargs: Forwarded to the selected algorithm's config dataclass when
             the field is not already owned by a facade parameter. Unknown,
             cross-algorithm, colliding, or JSON-type-invalid fields raise at
@@ -694,6 +776,8 @@ class Model:
         checkpoint_keep_last: int | None = None,
         device: str | None = None,
         phases_path: str | Path | None = None,
+        savgol_window: int = 0,
+        small_term_rtol: float = _DEFAULT_SMALL_TERM_RTOL,
         **kwargs: Any,
     ) -> None:
 
@@ -724,6 +808,7 @@ class Model:
         )
         self._validate_device(device)
         self._validate_derivatives(derivatives_resolved)
+        self._validate_pipeline_options(savgol_window, small_term_rtol)
         self._check_kwarg_names(algorithm, kwargs)
         self._validate_field_model(kwargs, derivatives_resolved)
 
@@ -748,6 +833,7 @@ class Model:
 
         self._validate_algorithm_supported(algorithm)
         self._validate_early_stopping_direction(callbacks, algorithm)
+        self._reject_early_stopping_with_pinn(algorithm, config, kwargs, callbacks)
 
 
         self._validate_algorithm_arg_exclusivity(
@@ -764,7 +850,9 @@ class Model:
 
 
 
-        self._validate_discover_config_facade_compat(algorithm, config, kwargs)
+        self._validate_discover_config_facade_compat(
+            algorithm, config, generations_resolved
+        )
 
 
 
@@ -772,6 +860,8 @@ class Model:
 
         self.algorithm = algorithm
         self.generations = generations_resolved
+        self.savgol_window = savgol_window
+        self.small_term_rtol = small_term_rtol
         self.population = population_resolved
         self.depth = depth_resolved
         self.width = width_resolved
@@ -833,6 +923,23 @@ class Model:
         self._tabular_feature_names: tuple[str, ...] | None = None
 
 
+
+    @staticmethod
+    def _validate_pipeline_options(
+        savgol_window: int,
+        small_term_rtol: float,
+    ) -> None:
+        """Reject pipeline options outside their supported ranges."""
+        if savgol_window < 0:
+            raise ValueError(
+                "savgol_window must be >= 0 (0 disables smoothing), "
+                f"got {savgol_window}"
+            )
+        if not 0.0 <= small_term_rtol < 1.0:
+            raise ValueError(
+                "small_term_rtol must be in [0.0, 1.0) (0.0 disables the drop), "
+                f"got {small_term_rtol}"
+            )
 
     @staticmethod
     def _validate_checkpoint_params(
@@ -1172,46 +1279,59 @@ class Model:
         | EqGPTConfig
         | Llm4edConfig
         | None,
-        kwargs: dict[str, Any],
+        generations: int,
     ) -> None:
-        """Reject a Discover PINN request from either config input route.
+        """Warn about a ``config=DiscoverConfig(...)`` field the facade does not read.
 
         The facade drives the search loop via ``generations`` and single-steps
-        DISCOVER's engine through ExperimentRunner — it never runs the
-        standalone loop (``n_iterations``) or the MODE2 PINN cycle (``pinn``).
-
-        ``pinn`` is a hard error: silently falling back to MODE1 when the user
-        asked for the PINN surrogate yields wrong scientific conclusions.
-        The three ignored scalar fields are warned about only after the
-        effective config has constructed successfully; see
-        ``_warn_discover_config_facade_compat``.
+        DISCOVER's engine through ExperimentRunner; it never runs the
+        standalone loop. Which fields that leaves unread depends on ``pinn``;
+        see ``_warn_discover_config_facade_compat``. The kwargs route has no
+        effective config until ``fit``, and warns there
+        (``_build_discover_config``).
         """
-        if algorithm != "discover":
+        if algorithm == "discover" and isinstance(config, DiscoverConfig):
+            Model._warn_discover_config_facade_compat(config, generations)
+
+    @staticmethod
+    def _warn_discover_config_facade_compat(
+        config: DiscoverConfig, generations: int
+    ) -> None:
+        """Warn after a valid effective Discover config has been constructed.
+
+        Without ``pinn`` (MODE1) ``n_iterations`` and the stability fields have
+        no effect. With ``pinn`` they do: ``n_iterations`` is the generation
+        the first PINN phase follows, and stability selection runs on the
+        final cycle. There ``n_cycles`` is the unread field, and a run that
+        starts fresh with its first PINN phase placed at or after the last
+        generation has none. The warning speaks about a fresh start only: a
+        resumed run counts generations across its segments, and ``Model`` does
+        not know at construction whether ``fit`` will resume.
+        """
+        if config.pinn is not None:
+            if config.pinn.n_cycles != DEFAULT_PINN_N_CYCLES:
+                warnings.warn(
+                    f"Model(algorithm='discover'): pinn.n_cycles="
+                    f"{config.pinn.n_cycles} is not read under the facade. "
+                    "Model(generations=...) is the total number of search "
+                    "generations; a PINN phase follows generation n_iterations "
+                    "and then every cycle_n_iterations generations.",
+                    stacklevel=3,
+                )
+            if generations <= config.n_iterations:
+                warnings.warn(
+                    f"Model(algorithm='discover'): a run that starts fresh "
+                    f"has no PINN phase, because generations={generations} "
+                    f"does not exceed n_iterations={config.n_iterations} and "
+                    "the first PINN phase follows generation n_iterations. "
+                    "The network is pretrained and the search runs on its "
+                    "derivatives without retraining it. Set n_iterations "
+                    "below generations to place PINN phases. This does not "
+                    "hold for a resumed run, which counts generations across "
+                    "its segments.",
+                    stacklevel=3,
+                )
             return
-
-
-
-        if isinstance(config, DiscoverConfig):
-            if config.pinn is not None:
-                Model._reject_discover_pinn("config=DiscoverConfig(pinn=...)")
-            Model._warn_discover_config_facade_compat(config)
-        elif kwargs.get("pinn") is not None:
-            Model._reject_discover_pinn("pinn=...")
-
-    @staticmethod
-    def _reject_discover_pinn(route: str) -> None:
-        """Raise the MODE2 hard error, naming the route the value arrived on."""
-        raise TypeError(
-            f"Model(algorithm='discover', {route}): "
-            "MODE2 PINN is unreachable via the facade and would be silently "
-            "ignored (the run falls back to MODE1 finite-diff). Use the "
-            "standalone MODE2 research entry point (not part of the packaged "
-            "API), or drop pinn."
-        )
-
-    @staticmethod
-    def _warn_discover_config_facade_compat(config: DiscoverConfig) -> None:
-        """Warn after a valid effective Discover config has been constructed."""
         ignored: list[str] = []
         if config.n_iterations != DEFAULT_N_ITERATIONS:
             ignored.append(
@@ -1224,7 +1344,7 @@ class Model:
         ):
             ignored.append(
                 "stability_selection / stability_queue_capacity (stability "
-                "selection runs only on the MODE2 cycle path)"
+                "selection runs only with pinn set)"
             )
         if ignored:
             warnings.warn(
@@ -1333,6 +1453,42 @@ class Model:
                     f"prematurely."
                 )
 
+    @staticmethod
+    def _reject_early_stopping_with_pinn(
+        algorithm: str,
+        config: SGAConfig
+        | DLGAConfig
+        | DiscoverConfig
+        | PySRConfig
+        | PySINDyConfig
+        | EqGPTConfig
+        | Llm4edConfig
+        | None,
+        kwargs: dict[str, Any],
+        callbacks: list[RunnerCallback] | None,
+    ) -> None:
+        """Reject an EarlyStoppingCallback on a DISCOVER fit with ``pinn`` set.
+
+        Every PINN phase rebuilds the evaluator from the retrained network, so
+        rewards before and after a phase are on different scales, while the
+        callback takes its reference score once, when the run starts. Checked
+        on both input routes: ``config=DiscoverConfig(pinn=...)`` and the
+        ``pinn=`` kwarg, which is a ``PINNConfig`` or ``None`` by now.
+        """
+        if algorithm != "discover" or callbacks is None:
+            return
+        pinn = config.pinn if isinstance(config, DiscoverConfig) else kwargs.get("pinn")
+        if pinn is None:
+            return
+        if any(isinstance(cb, EarlyStoppingCallback) for cb in callbacks):
+            raise TypeError(
+                "EarlyStoppingCallback cannot be combined with "
+                "Model(algorithm='discover') when pinn is set: each PINN phase "
+                "rebuilds the evaluator and changes the reward scale, and the "
+                "callback compares scores across phases. Drop the callback, or "
+                "drop pinn."
+            )
+
 
 
     def train_surrogate(
@@ -1350,7 +1506,8 @@ class Model:
         ``derivatives="autograd"``, dlga ``surrogate_model``; the schema's
         ``config_artifact_keys`` names it). Which constructor parameters
         shape the surrogate is the schema's ``surrogate_fields`` (plus
-        ``seed``); the rest of the configuration does not enter the network.
+        ``seed``, and ``savgol_window``, which smooths the training data as
+        in ``fit``); the rest of the configuration does not enter the network.
 
         Returns:
             ``(module, training_result)``; the module is not installed on
@@ -1403,7 +1560,11 @@ class Model:
 
 
 
-        self._check_dataset_supported(dataset, resolve_derivative_requirements(plugin))
+        self._check_dataset_supported(
+            dataset, resolve_derivative_requirements(plugin), plugin
+        )
+        if self.savgol_window > 0:
+            dataset = savgol_smooth(dataset, self.savgol_window)
         if self.algorithm == "dlga":
 
 
@@ -1682,6 +1843,9 @@ class Model:
                     "run a fresh fit with the new seed."
                 )
 
+        if self.savgol_window > 0:
+            dataset = savgol_smooth(dataset, self.savgol_window)
+
 
 
 
@@ -1718,11 +1882,26 @@ class Model:
                     f"sketch must be a Sketch or None, got {type(sketch).__name__}"
                 )
             plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
+
+
+
+
+
+
+            override = self._config_override
             assert_sketch_supported(
                 plugin_cls.descriptor,
                 sketch,
                 algorithm=self.algorithm,
                 sketch_lower_owner=plugin_cls.sketch_lower_owner,
+                config=(
+                    self._extra_kwargs
+                    if override is None
+                    else {
+                        field.name: getattr(override, field.name)
+                        for field in dataclasses.fields(override)
+                    }
+                ),
             )
             if dataset.lhs_order == 0:
                 raise ValueError("sketch requires an evolution dataset")
@@ -1805,6 +1984,7 @@ class Model:
             max_iterations=max_iterations,
             batch_size=batch_size,
             callbacks=callbacks,
+            small_term_rtol=self.small_term_rtol,
         )
 
 
@@ -1938,16 +2118,27 @@ class Model:
 
         plugin_factory = cast("Callable[..., FacadeWiringContract]", plugin_cls)
         if self.algorithm == "pysindy":
-            plugin = plugin_factory(cfg, task=task)
-        elif self.algorithm in {"discover", "pysr"}:
+            mode = "tabular" if self._tabular_feature_names is not None else "default"
+            plugin = plugin_factory(cfg, task=task, mode=mode)
+        elif self.algorithm == "discover":
             mode = "tabular" if self._tabular_feature_names is not None else "default"
             plugin = plugin_factory(cfg, mode=mode)
+        elif self.algorithm == "pysr":
+
+
+
+            mode = "tabular" if self._tabular_feature_names is not None else "default"
+            plugin = plugin_factory(cfg, mode=mode, task=task)
         elif self.algorithm == "dlga":
 
 
 
 
-            plugin = plugin_factory(cfg, surrogate_model=self._surrogate_model)
+
+
+            plugin = plugin_factory(
+                cfg, surrogate_model=self._surrogate_model, task=task
+            )
         elif self.algorithm == "llm4ed":
 
 
@@ -2010,16 +2201,51 @@ class Model:
     def _build_discover_config(self) -> DiscoverConfig:
         """Resolve DiscoverConfig and warn about facade-ignored valid fields.
 
+        ``pinn`` (the PINN mode) trains its network on a grid, so it is refused
+        on tabular data.
+
+        Tabular fits default to batch_size=500 and epsilon=0.05; the dataclass
+        and published schema defaults remain 16 and 0.10 for grid fits. The
+        tabular pair applies only when the caller passes neither field: the two
+        are sized together (``batch_size * epsilon`` must exceed 1 for the
+        risk-seeking quantile to keep more than one sample), so one explicit
+        field takes the dataclass default for the other. A supplied config
+        preserves both fields unchanged.
+
+        On tabular data the mode owns the library: ``TABULAR_OPERATORS`` (add,
+        sub, mul, div, sin, cos, exp, log; exp and log protected as in the torch
+        registry) over the feature columns and a fitted constant. A
+        user-supplied library is refused.
+
         Warnings are emitted only after the config dataclass has accepted the
         complete input, so a rejected construction never warns first.
         """
+        feature_names = self._tabular_feature_names
+        defaults: dict[str, Any] = {}
+        overrides = next(
+            mode.default_overrides
+            for mode in DISCOVERPlugin.descriptor.modes
+            if mode.name == "tabular"
+        )
+        if (
+            feature_names is not None
+            and not overrides.keys() & self._extra_kwargs.keys()
+        ):
+            defaults = dict(overrides)
         config = self._resolve_config(
             DiscoverConfig,
-            lambda: DiscoverConfig(seed=self.seed, **self._extra_kwargs),
+            lambda: DiscoverConfig(
+                seed=self.seed, **{**defaults, **self._extra_kwargs}
+            ),
         )
+        if feature_names is not None and config.pinn is not None:
+            raise ValueError(
+                "Model(algorithm='discover') cannot fit a TabularDataset with "
+                "pinn set: the PINN mode trains its network on grid data. Drop "
+                "pinn to run tabular regression."
+            )
         if self._config_override is None:
-            self._warn_discover_config_facade_compat(config)
-        feature_names = self._tabular_feature_names
+            self._warn_discover_config_facade_compat(config, self.generations)
         if feature_names is not None:
             if config.library != DiscoverConfig().library:
                 raise ValueError(
@@ -2029,7 +2255,7 @@ class Model:
             config = dataclasses.replace(
                 config,
                 library=LibraryConfig(
-                    operators=["add", "sub", "mul", "div"],
+                    operators=list(TABULAR_OPERATORS),
                     state_vars=list(feature_names),
                     coord_vars=[],
                 ),
@@ -2041,7 +2267,18 @@ class Model:
 
         With a user
         ``config=PySRConfig(...)`` the config is the single source of truth and
-        is deep-copied verbatim; its ``niterations`` is preserved because the
+        is deep-copied; on PDE data it is used as-is. On tabular data the
+        default-valued ``terms`` and ``unary_operators`` are treated as unset:
+        ``terms`` becomes the dataset feature names (a non-default ``terms`` is
+        refused, because the catalog is dataset-derived) and ``unary_operators``
+        takes the mode declaration default, the same tabular default the kwargs
+        route and a config-less ``PySRPlugin(mode="tabular")`` use; user-set
+        values are kept. A frozen dataclass cannot tell an explicit
+        ``unary_operators=()`` from the default ``()``, so on a table that
+        spelling also yields the tabular set, while the kwargs route (and a
+        ``PySRConfig`` handed straight to ``PySRPlugin``) keeps an explicit
+        ``()``. Its
+        ``niterations`` is preserved because the
         facade refuses an explicit ``generations`` alongside it
         (``_validate_config_exclusivity``). Without one,
         the facade ``generations`` knob maps to PySR's *internal* GP loop length
@@ -2066,23 +2303,40 @@ class Model:
                 ),
             )
 
+        overrides = normalize_config_kwargs(
+            PySRPlugin,
+            "pysr",
+            dict(
+                next(
+                    mode.default_overrides
+                    for mode in PySRPlugin.descriptor.modes
+                    if mode.name == "tabular"
+                )
+            ),
+        )
         if "terms" in self._extra_kwargs:
             raise ValueError(
                 "terms are derived from the tabular dataset; do not pass terms"
             )
         if self._config_override is not None:
             config = self._resolve_config(PySRConfig, PySRConfig)
-            if config.terms != PySRConfig().terms:
+            defaults = PySRConfig()
+            if config.terms != defaults.terms:
                 raise ValueError(
                     "PySRConfig.terms must stay at its default for tabular data; "
                     "terms are derived from the dataset"
                 )
-            return dataclasses.replace(config, terms=feature_names)
+            unary = config.unary_operators
+            if unary == defaults.unary_operators:
+                unary = tuple(overrides["unary_operators"])
+            return dataclasses.replace(
+                config, terms=feature_names, unary_operators=unary
+            )
         return PySRConfig(
             terms=feature_names,
             niterations=self.generations,
             seed=self.seed,
-            **{"unary_operators": TABULAR_UNARY_OPERATORS, **self._extra_kwargs},
+            **{**overrides, **self._extra_kwargs},
         )
 
     def _build_pysindy_config(self) -> PySINDyConfig:
@@ -2090,11 +2344,39 @@ class Model:
 
         ``max_iter`` is the native STLSQ convergence cap, not the kd search
         loop length. The default path threads the facade seed into manifest
-        bookkeeping and forwards normalized PySINDy config fields.
+        bookkeeping and forwards normalized PySINDy config fields. Tabular
+        libraries are derived from feature names and ``degree``; grid data
+        keeps the configured terms and refuses a non-default ``degree``.
         """
-        return self._resolve_config(
-            PySINDyConfig,
-            lambda: PySINDyConfig(seed=self.seed, **self._extra_kwargs),
+        feature_names = self._tabular_feature_names
+        if feature_names is None:
+            config = self._resolve_config(
+                PySINDyConfig,
+                lambda: PySINDyConfig(seed=self.seed, **self._extra_kwargs),
+            )
+            if config.degree != PySINDyConfig.degree:
+                raise ValueError("degree applies to tabular data only")
+            return config
+
+        if "terms" in self._extra_kwargs:
+            raise ValueError(
+                "terms are derived from the tabular dataset; do not pass terms"
+            )
+        if self._config_override is not None:
+            config = self._resolve_config(PySINDyConfig, PySINDyConfig)
+            if config.terms != PySINDyConfig.terms:
+                raise ValueError(
+                    "PySINDyConfig.terms must stay at its default for tabular data; "
+                    "terms are derived from the dataset"
+                )
+            return dataclasses.replace(
+                config, terms=polynomial_terms(feature_names, config.degree)
+            )
+        degree = self._extra_kwargs.get("degree", PySINDyConfig.degree)
+        return PySINDyConfig(
+            terms=polynomial_terms(feature_names, degree),
+            seed=self.seed,
+            **self._extra_kwargs,
         )
 
     def _build_eqgpt_config(self) -> EqGPTConfig:
@@ -2298,7 +2580,17 @@ class Model:
         from kd.core.platform.builder import PlatformBuilder
 
         reqs = resolve_derivative_requirements(self._algorithm)
-        self._check_dataset_supported(dataset, reqs)
+        self._check_dataset_supported(dataset, reqs, self._algorithm)
+        if self.algorithm == "dlga":
+
+
+
+
+            from kd.core.platform.builder import resolve_lhs_defaults
+
+            cast("DLGAPlugin", self._algorithm).refuse_lhs_terms(
+                resolve_lhs_defaults(dataset)
+            )
         if task is None:
             return PlatformBuilder(dataset, reqs, device=self.device).build()
         plugin_cls = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm]
@@ -2315,6 +2607,7 @@ class Model:
         self,
         dataset: PDEDataset,
         reqs: DerivativeReqs,
+        plugin: Any,
     ) -> None:
         """Fail loud when the dataset's (topology, LHS order) is unsupported.
 
@@ -2339,6 +2632,40 @@ class Model:
         assert_dataset_supported(
             dataset.lhs_order, dataset.topology, reqs, self.algorithm
         )
+        from kd.core.platform.builder import resolve_lhs_defaults
+
+        resolved = resolve_lhs_defaults(dataset)
+        if (
+            self.algorithm in {"pysr", "pysindy"}
+            and dataset.topology is DataTopology.GRID
+        ):
+            defaults = _PLUGIN_CLASS_BY_ALGORITHM[self.algorithm].config_cls
+            supplied_terms = "terms" in self._extra_kwargs or (
+                self._config_override is not None
+                and cast("PySRConfig | PySINDyConfig", self._config_override).terms
+                != defaults.terms
+            )
+            if not supplied_terms and (
+                set(resolved.fields or {}) != {"u"} or resolved.spatial_axes != ["x"]
+            ):
+                raise ValueError(
+                    f"{self.algorithm} dataset fields={list(resolved.fields or {})}, "
+                    f"axes={resolved.spatial_axes} require explicit terms; "
+                    "set terms from this input's fields and axes."
+                )
+        if self.algorithm == "discover":
+            cast("DISCOVERPlugin", plugin).refuse_unsupported_names(resolved)
+        elif self.algorithm == "eqgpt":
+            cast("EqGPTPlugin", plugin).refuse_unsupported_names(resolved)
+        elif self.algorithm == "llm4ed":
+            cast("Llm4edPlugin", plugin).refuse_unsupported_names(resolved)
+        elif self.algorithm == "pysindy":
+            cast("PySINDyPlugin", plugin).refuse_lhs_terms(resolved)
+        if self.algorithm == "dlga":
+
+
+
+            cast("DLGAPlugin", plugin).refuse_unmodeled_fields(resolved)
 
     def _effective_max_iterations(self) -> int:
         """Return the runner loop length this Model will actually drive.

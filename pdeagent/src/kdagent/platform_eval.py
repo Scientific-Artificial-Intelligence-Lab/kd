@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import kd
 
 if TYPE_CHECKING:
-    from kd.data import PDEDataset
+    from kd import PDEDataset, TabularDataset
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class PlatformEvaluation:
     coefficients: list[float] | None
     error: str | None
     dropped: int | None
+    unavailable_reason: str | None = None
 
 
 def lhs_order_of(catalog_fit: dict[str, Any] | None) -> int | None:
@@ -31,8 +32,10 @@ def lhs_order_of(catalog_fit: dict[str, Any] | None) -> int | None:
 
 
 def platform_evaluation(
-    dataset: PDEDataset, support: Sequence[str], lhs_order: int | None
+    dataset: PDEDataset | TabularDataset, support: Sequence[str], lhs_order: int | None
 ) -> PlatformEvaluation:
+    if lhs_order == 0 or isinstance(dataset, kd.TabularDataset):
+        return PlatformEvaluation(None, None, None, None, "unsupported_form")
     terms = list(support)
     try:
         result = kd.evaluate_terms(

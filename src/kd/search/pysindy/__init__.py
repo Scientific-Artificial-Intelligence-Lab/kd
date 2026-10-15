@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from kd.search.pysindy.assembly import polynomial_terms
 from kd.search.pysindy.backend import (
     PySINDyOptimizerBackend,
     default_backend_factory,
@@ -13,4 +14,5 @@ __all__ = [
     "PySINDyOptimizerBackend",
     "PySINDyPlugin",
     "default_backend_factory",
+    "polynomial_terms",
 ]

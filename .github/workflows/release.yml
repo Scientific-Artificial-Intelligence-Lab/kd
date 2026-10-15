@@ -1,0 +1,272 @@
+# Release on a version tag: build and check the distributions, install the
+# wheel on Linux and macOS and run the README quick start, publish them to
+# PyPI through Trusted Publishing, then create the GitHub Release from the
+# CHANGELOG entry.
+#
+# The tag is pushed by the release export (export-public.py --push) right
+# after the release commit lands on trunk; nothing else in this repository
+# runs it. The build job stops the run before any upload when the tag and
+# pyproject.toml disagree, when CHANGELOG.md has no entry for the version, or
+# when the wheel content check fails; the smoke job stops it when the wheel
+# does not install or the quick start fails.
+#
+# Four jobs pass the files on as workflow artifacts. A failed publish or
+# release job is re-run on its own ("Re-run failed jobs") with the same files:
+# a rebuild differs in zip timestamps, and PyPI refuses a second file under a
+# name it already holds.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      # v6/v8: Node 24 runners
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        # pinned: setup-uv publishes no floating major tag for v8
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+
+      - name: Tag matches the package version
+        # A version with a pre-release (a, b, rc) or dev segment, e.g.
+        # 0.9.0rc1, becomes a GitHub pre-release.
+        id: version
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+          import sys
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          with open("pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          if tag.removeprefix("v") != version:
+              sys.exit(f"::error::tag {tag} does not match pyproject.toml version {version}")
+          prerelease = re.search(
+              r"(?<=\d)[._-]?(a|b|c|rc|alpha|beta|pre|preview|dev)\d*",
+              version,
+              re.IGNORECASE,
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"version={version}\n")
+              f.write(f"prerelease={'true' if prerelease else 'false'}\n")
+
+      - name: Cut release notes from CHANGELOG.md
+        # Runs before the upload so a missing entry stops the run with PyPI
+        # untouched.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "## [" ver "]") == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no non-empty '## [$VERSION] - <date>' section"
+            exit 1
+          fi
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check wheel content
+        # The same three zip checks the release export runs before a push:
+        # top-level packages, required package-data, declared extras. The
+        # three constants below are hand copies of the export's constants; a
+        # unit test in the source repository compares them. The export's
+        # fourth check (kd-agent entry point and the per-algorithm skill
+        # resources) enumerates algorithms through an importable kd; this job
+        # inspects the zip only and deliberately does not repeat it.
+        shell: python3 {0}
+        run: |
+          import glob
+          import sys
+          import zipfile
+
+          PACKAGES = {"kd", "kdagent"}
+          REQUIRED_MEMBERS = (
+              "kd/py.typed",
+              "kd/viz/templates/report.html",
+              "kd/_assets/data/",
+              "kd/search/eqgpt/_assets/",
+          )
+          EXTRAS = {"pysr", "agent", "all"}
+
+          wheels = glob.glob("dist/*.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected one wheel in dist/, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as zf:
+              names = zf.namelist()
+              metadata = zf.read(
+                  next(n for n in names if n.endswith(".dist-info/METADATA"))
+              ).decode("utf-8")
+          errors = []
+          top_level = {n.split("/", 1)[0] for n in names}
+          packages = {t for t in top_level if not t.endswith(".dist-info")}
+          if packages != PACKAGES:
+              errors.append(f"top-level packages {sorted(packages)}, expected {sorted(PACKAGES)}")
+          missing = [r for r in REQUIRED_MEMBERS if not any(n.startswith(r) for n in names)]
+          if missing:
+              errors.append(f"missing package-data {missing}")
+          extras = {
+              line.split(":", 1)[1].strip()
+              for line in metadata.splitlines()
+              if line.startswith("Provides-Extra:")
+          }
+          if extras != EXTRAS:
+              errors.append(f"extras {sorted(extras)}, expected {sorted(EXTRAS)}")
+          if errors:
+              sys.exit(f"{wheels[0]}: " + "; ".join(errors))
+          print(f"{wheels[0]}: packages, package-data and extras as expected")
+
+      # upload-artifact v7 / download-artifact v8: the current majors, released
+      # together, on Node 24
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes.md
+          if-no-files-found: error
+
+  # The wheel installed the way the README says, on the platforms and
+  # interpreters the source repository's smoke tier covers. It runs before the
+  # upload because PyPI never takes a corrected file under the same name. No
+  # checkout: the job exercises the installed wheel, not a source tree.
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: macos-latest
+            python: "3.11"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      MPLBACKEND: Agg
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install uv
+        # No uv.lock without a checkout, so there is no cache key.
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: false
+
+      - name: Install the wheel as the README does
+        run: |
+          uv venv --python "${{ matrix.python }}" .venv
+          wheel=$(ls dist/*.whl)
+          uv pip install --python .venv "$wheel" --torch-backend=auto
+
+      - name: README quick start
+        run: |
+          .venv/bin/python - <<'EOF'
+          import os
+          import time
+
+          import kd
+
+          if kd.__version__ != os.environ["VERSION"]:
+              raise SystemExit(f"installed kd {kd.__version__}, tag says {os.environ['VERSION']}")
+          start = time.perf_counter()
+          dataset = kd.load_burgers()
+          model = kd.Model(algorithm="sga", generations=5, seed=0)
+          model.fit(dataset)
+          print(f"{model.result_.equation}  ({time.perf_counter() - start:.0f} s)")
+          EOF
+
+      - name: Agent extra and the kd-agent command
+        # kd-agent --help runs without the extra; importing the orchestration
+        # module needs the extra's framework packages, so the import is the
+        # check that the extra installs and imports.
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv pip install --python .venv "${wheel}[agent]" --torch-backend=auto
+          .venv/bin/kd-agent --help
+          .venv/bin/python -c "import kdagent.orchestration"
+
+  publish:
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+    permissions:
+      id-token: write  # PyPI Trusted Publishing (OIDC), no stored token
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install uv
+        # This job resolves no dependencies, so there is nothing to cache.
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: false
+
+      - name: Publish to PyPI
+        run: uv publish
+
+  release:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write  # gh release create
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: notes/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --target "$GITHUB_REF_NAME" \
+            --title "KD $VERSION" \
+            --notes-file notes/notes.md \
+            "${flags[@]}"

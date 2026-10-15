@@ -140,6 +140,21 @@ class IterativeSearchAlgorithm(SearchAlgorithm, Protocol):
 
 
 @runtime_checkable
+class DerivativeSourceAlgorithm(SearchAlgorithm, Protocol):
+
+    @property
+    def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+        ...
+
+
+@runtime_checkable
+class DeadlineAwareSearchAlgorithm(SearchAlgorithm, Protocol):
+
+    def set_wall_clock_deadline(self, deadline: float) -> None:
+        ...
+
+
+@runtime_checkable
 class TerminatingSearchAlgorithm(SearchAlgorithm, Protocol):
 
     @property

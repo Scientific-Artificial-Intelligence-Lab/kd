@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 import sympy
 
+from kd.core.expr.executor import UNITY_TOKEN
 from kd.core.expr.sympy_bridge import from_sympy, to_sympy
 
 logger = logging.getLogger(__name__)
@@ -67,10 +68,10 @@ def _check_undeclared_features(
         )
 
 
-def _structural_ir(term: sympy.Expr) -> str | None:
+def _structural_ir(term: sympy.Expr) -> str:
     _coeff, rest = term.as_coeff_Mul()
     if rest == sympy.Integer(1):
-        return None
+        return UNITY_TOKEN
     return from_sympy(rest)
 
 
@@ -88,13 +89,13 @@ def pysr_sympy_to_kd_terms(
     _check_undeclared_features(pysr_expr, feature_names, terms)
     subs_map = _build_substitution(terms, feature_names)
     expr = sympy.expand(pysr_expr.subs(subs_map, simultaneous=True))
+    if expr.is_zero:
+        return []
 
     result: list[str] = []
     seen: set[sympy.Expr] = set()
     for additive_term in expr.as_ordered_terms():
         ir = _structural_ir(additive_term)
-        if ir is None:
-            continue
         key = to_sympy(ir)
         if key in seen:
             continue
@@ -117,8 +118,7 @@ def pysr_sympy_to_tabular_term(
     declared = {sympy.Symbol(name) for name in feature_names}
     if not (pysr_expr.free_symbols & declared):
         raise ValueError(
-            "PySR tabular expression is a constant model with no feature "
-            "symbols; kd has no intercept-only semantics"
+            "PySR tabular mode does not accept a constant model with no feature symbols"
         )
     subs_map = _build_substitution(terms, feature_names)
     return from_sympy(pysr_expr.subs(subs_map, simultaneous=True))

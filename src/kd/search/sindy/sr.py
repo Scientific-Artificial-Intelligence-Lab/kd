@@ -12,9 +12,12 @@ import torch
 from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
-from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
 from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import STRidgeSolver
+from kd.data._field_names import (
+    is_reserved_field_name,
+    reserved_field_name_message,
+)
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.schema import FieldData, PDEDataset, TaskType
 
@@ -25,14 +28,6 @@ _DATASET_NAME = "sindy-tabular"
 _NO_DERIVATIVE_MESSAGE = "SINDyRegressor does not support derivative terms"
 _TORCH_DTYPE = torch.float64
 _ZERO_EXPRESSION = "0"
-
-
-
-
-
-_KD_IR_RESERVED_NAMES: frozenset[str] = frozenset(
-    FunctionRegistry.create_default().list_names()
-)
 
 
 class SINDyRegressor:
@@ -226,18 +221,14 @@ def _validate_var_names(names: Sequence[str]) -> None:
             )
         if keyword.iskeyword(name):
             raise ValueError(f"var_name {name!r} is a Python keyword")
-        if name in _KD_IR_RESERVED_NAMES or _is_diff_reserved_name(name):
-            raise ValueError(f"var_name {name!r} collides with a reserved kd-IR token")
+        if is_reserved_field_name(name):
+            raise ValueError(reserved_field_name_message(name, label="var_name"))
         if name in seen and name not in duplicates:
             duplicates.append(name)
         seen.add(name)
     if duplicates:
         joined = ", ".join(repr(name) for name in duplicates)
         raise ValueError(f"var_names must be unique; duplicate names: {joined}")
-
-
-def _is_diff_reserved_name(name: str) -> bool:
-    return DIFF_OPERATOR_PATTERN.match(name) is not None
 
 
 def _build_context(x_arr: FloatArray, var_names: Sequence[str]) -> ExecutionContext:

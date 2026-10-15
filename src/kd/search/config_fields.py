@@ -1,8 +1,12 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import functools
+import inspect
+import re
+import textwrap
 import types
 import typing
 from collections.abc import Hashable
@@ -96,7 +100,28 @@ def _json_kind(annotation: Any) -> str | None:
             return f"{element_kind}_list"
     if origin is dict and args == (str, Any):
         return "dict"
+    if _object_class(annotation) is not None:
+        return "object"
     return None
+
+
+def _object_class(annotation: Any) -> type[Any] | None:
+    inner, _ = _without_none(annotation)
+    if not (isinstance(inner, type) and dataclasses.is_dataclass(inner)):
+        return None
+
+    if not typing.cast(Any, inner).__dataclass_params__.frozen:
+        return None
+    hints = _resolved_hints(inner)
+    for field in dataclasses.fields(inner):
+        if (
+            field.default is dataclasses.MISSING
+            and field.default_factory is dataclasses.MISSING
+        ):
+            return None
+        if _json_kind(hints[field.name]) is None:
+            return None
+    return inner
 
 
 def _json_default(value: Any) -> Any:
@@ -129,49 +154,107 @@ def _resolved_hints(config_cls: type[Any]) -> dict[str, Any]:
     return typing.get_type_hints(config_cls, include_extras=True)
 
 
+@functools.cache
+def _attribute_descriptions(config_cls: type[Any]) -> dict[str, str]:
+    tree = ast.parse(textwrap.dedent(inspect.getsource(config_cls)))
+    body = tree.body[0]
+    assert isinstance(body, ast.ClassDef)
+    descriptions = {}
+    for assignment, following in zip(body.body, body.body[1:], strict=False):
+        if (
+            isinstance(assignment, ast.AnnAssign)
+            and isinstance(assignment.target, ast.Name)
+            and isinstance(following, ast.Expr)
+            and isinstance(following.value, ast.Constant)
+            and isinstance(following.value.value, str)
+        ):
+            prose = " ".join(following.value.value.split())
+            descriptions[assignment.target.id] = re.split(
+                r"(?<=[.!?])\s+", prose, maxsplit=1
+            )[0]
+    return descriptions
+
+
+def _field_row(
+    field: dataclasses.Field[Any],
+    annotation: Any,
+    *,
+    facade_param: str | None,
+    resume_tier: str,
+    knob: bool,
+    description: str,
+) -> dict[str, Any]:
+    raw_kind = _json_kind(annotation)
+    inner, nullable = _without_none(annotation)
+    return {
+        "name": field.name,
+        "type": _render_type(annotation),
+
+
+
+
+
+        "json_kind": raw_kind,
+        "literal_values": (
+            list(get_args(inner)) if get_origin(inner) is Literal else None
+        ),
+        "nullable": nullable,
+        "default": _default_of(field, raw_kind),
+        "required": (
+            field.default is dataclasses.MISSING
+            and field.default_factory is dataclasses.MISSING
+        ),
+        "settable_from": (
+            "facade"
+            if facade_param is not None
+            else "json" if raw_kind is not None else "python"
+        ),
+        "facade_param": facade_param,
+        "resume_tier": resume_tier,
+        "knob": knob,
+        "description": description,
+        "object_fields": (
+            _object_rows(inner, resume_tier) if raw_kind == "object" else None
+        ),
+    }
+
+
+def _object_rows(nested_cls: type[Any], resume_tier: str) -> list[dict[str, Any]]:
+    hints = _resolved_hints(typing.cast(Hashable, nested_cls))
+    descriptions = _attribute_descriptions(typing.cast(Hashable, nested_cls))
+    return [
+        _field_row(
+            field,
+            hints[field.name],
+            facade_param=None,
+            resume_tier=resume_tier,
+            knob=False,
+            description=descriptions.get(field.name, ""),
+        )
+        for field in dataclasses.fields(nested_cls)
+    ]
+
+
 def field_specs(plugin_cls: type[FacadeWiringContract]) -> list[dict[str, Any]]:
     algorithm = plugin_cls.descriptor.algorithm
     hints = _resolved_hints(typing.cast(Hashable, plugin_cls.config_cls))
+    descriptions = _attribute_descriptions(typing.cast(Hashable, plugin_cls.config_cls))
     knobs = {knob.name: knob for knob in plugin_cls.descriptor.knobs}
     mapped = FACADE_MAPPED[algorithm]
     rows: list[dict[str, Any]] = []
     for field in dataclasses.fields(plugin_cls.config_cls):
-        annotation = hints[field.name]
-        raw_kind = _json_kind(annotation)
         knob = knobs.get(field.name)
-        required = (
-            field.default is dataclasses.MISSING
-            and field.default_factory is dataclasses.MISSING
-        )
-        settable_from = (
-            "facade"
-            if field.name in mapped
-            else "json" if raw_kind is not None else "python"
-        )
         rows.append(
-            {
-                "name": field.name,
-                "type": _render_type(annotation),
-
-
-
-
-
-                "json_kind": raw_kind,
-                "literal_values": (
-                    list(get_args(_without_none(annotation)[0]))
-                    if get_origin(_without_none(annotation)[0]) is Literal
-                    else None
-                ),
-                "nullable": _without_none(annotation)[1],
-                "default": _default_of(field, raw_kind),
-                "required": required,
-                "settable_from": settable_from,
-                "facade_param": mapped.get(field.name),
-                "resume_tier": resolve_field_tier(plugin_cls, field.name),
-                "knob": knob is not None,
-                "description": "" if knob is None else knob.description,
-            }
+            _field_row(
+                field,
+                hints[field.name],
+                facade_param=mapped.get(field.name),
+                resume_tier=resolve_field_tier(plugin_cls, field.name),
+                knob=knob is not None,
+                description=descriptions.get(field.name, "")
+                if knob is None
+                else knob.description,
+            )
         )
     return rows
 
@@ -220,7 +303,9 @@ def _validate_list(
             )
 
 
-def _validate_json_value(algorithm: str, spec: dict[str, Any], value: Any) -> Any:
+def _validate_json_value(
+    algorithm: str, spec: dict[str, Any], value: Any, annotation: Any
+) -> Any:
     if value is None:
         if spec["nullable"]:
             return None
@@ -229,6 +314,8 @@ def _validate_json_value(algorithm: str, spec: dict[str, Any], value: Any) -> An
             "null. Supply a non-null value of the declared type."
         )
     kind = spec["json_kind"]
+    if kind == "object":
+        return _build_object(algorithm, spec, value, annotation)
     if kind == "dict":
         if type(value) is not dict:
             raise _wrong_type(algorithm, spec, value)
@@ -247,6 +334,42 @@ def _validate_json_value(algorithm: str, spec: dict[str, Any], value: Any) -> An
             f"{sorted(allowed, key=repr)}. Choose one of those values."
         )
     return value
+
+
+def _build_object(
+    algorithm: str, spec: dict[str, Any], value: Any, annotation: Any
+) -> Any:
+    if type(value) is not dict:
+        raise _wrong_type(algorithm, spec, value)
+    nested_cls, _ = _without_none(annotation)
+    nested_specs = {row["name"]: row for row in spec["object_fields"]}
+    unknown = sorted(str(key) for key in value if key not in nested_specs)
+    if unknown:
+        raise TypeError(
+            f"Model(algorithm={algorithm!r}) fields={[spec['name']]} received "
+            f"keys {unknown} that are not fields of {nested_cls.__name__}. Check "
+            "this field's object_fields in kd.instrument_schemas() for legal keys."
+        )
+    hints = _resolved_hints(nested_cls)
+    return nested_cls(
+        **{
+            key: _normalize_value(
+                algorithm,
+                {**nested_specs[key], "name": f"{spec['name']}.{key}"},
+                item,
+                hints[key],
+            )
+            for key, item in value.items()
+        }
+    )
+
+
+def _normalize_value(
+    algorithm: str, spec: dict[str, Any], value: Any, annotation: Any
+) -> Any:
+    if not _is_json_native(value):
+        return value
+    return _validate_json_value(algorithm, spec, value, annotation)
 
 
 def _coerce_list(spec: dict[str, Any], value: list[Any]) -> Any:
@@ -277,6 +400,7 @@ def normalize_config_kwargs(
     plugin_cls: type[FacadeWiringContract], algorithm: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
     specs = {row["name"]: row for row in field_specs(plugin_cls)}
+    hints = _resolved_hints(typing.cast(Hashable, plugin_cls.config_cls))
     normalized: dict[str, Any] = {}
     for name, value in kwargs.items():
         spec = specs.get(name)
@@ -305,7 +429,9 @@ def normalize_config_kwargs(
             else:
                 raise _closed_field_error(algorithm, spec, value)
         else:
-            normalized[name] = _validate_json_value(algorithm, spec, value)
+            normalized[name] = _validate_json_value(
+                algorithm, spec, value, hints[name]
+            )
     return normalized
 
 
