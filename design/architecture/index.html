@@ -2226,9 +2226,9 @@ the algorithm packages. Declared exceptions are shown on the diagram.</p>
 <li><strong><code>kd.api</code>, <code>kd.evaluate</code>, <code>kd.inspect</code>.</strong> The <code>Model</code> facade, term evaluation
   without a search, equation verification, cross-algorithm comparison, dataset
   inspection and preview.</li>
-<li><strong><code>kd.harness</code>.</strong> Batch execution: a plan of runs executed serially or dispatched to
-  worker subprocesses, an evidence store with hashed records, shard merging, and
-  consensus across runs.</li>
+<li><strong><code>kd.harness</code>.</strong> Batch execution: a plan of runs executed serially, an evidence store
+  with hashed records, merging of stores written by separate batches, and consensus
+  across runs.</li>
 </ul>
 <h2 id="conventions-that-cross-layers">Conventions that cross layers</h2>
 <p>Three conventions apply in several layers at once and are drawn as columns beside the

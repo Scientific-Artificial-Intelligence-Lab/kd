@@ -2262,7 +2262,17 @@ Status: ready to fit
 <p>That <code>dataset</code> goes straight into <code>kd.Model.fit()</code>. <code>kd.preview</code> prints, per axis, the point count,
 range and whether the step is uniform; per field, the dtype, shape, extrema and NaN count; plus the
 left-hand side it parsed. <code>kd.preview_report</code> returns the same facts as an object you can read from
-code.</p>
+code. It also gives, for each field and each uniformly spaced axis with at least five points, a noise
+estimate relative to the field's standard deviation and two finite-difference consistency measures
+that compare central differences with step 1 and step 2 for the first and second derivatives. They
+are the <code>noise_estimate</code>, <code>first_derivative_gap</code> and <code>second_derivative_gap</code> dictionaries of each
+<a href="../../api/data/#kd.FieldReport"><code>FieldReport</code></a>, keyed by axis name. <code>kd.preview</code> does not print
+these three values.</p>
+<p><code>kd.Model(savgol_window=w)</code> smooths every field of a grid dataset along every axis with a
+Savitzky-Golay filter of window length <code>w</code> and polynomial order 3 before the search starts, for any
+algorithm; <code>Model.train_surrogate</code> trains on the same smoothed data, and the default <code>0</code> leaves the
+data unchanged. <code>kd.data.savgol_smooth(dataset, w)</code> returns the smoothed copy as a new dataset, so
+its effect can be inspected with <code>kd.preview_report</code> before a fit.</p>
 <h2 id="load-a-dataset-from-a-file">Load a dataset from a file</h2>
 <p><code>kd.load</code> takes a catalog id or a file path. A catalog id returns that entry
 (<code>kd.load("kdv")</code> is <code>kd.load_kdv()</code>). A path is read on evidence, never on a
@@ -2345,7 +2355,7 @@ where the table came from, and are required alongside the four above.</p>
     <span class="n">X</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">pressure</span><span class="p">,</span> <span class="n">flow</span><span class="p">]),</span>
     <span class="n">y</span><span class="o">=</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">pressure</span> <span class="o">+</span> <span class="mf">3.0</span><span class="p">,</span>
     <span class="n">var_names</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;pressure&quot;</span><span class="p">,</span> <span class="s2">&quot;flow&quot;</span><span class="p">),</span>
-    <span class="n">target_name</span><span class="o">=</span><span class="s2">&quot;yield&quot;</span><span class="p">,</span>
+    <span class="n">target_name</span><span class="o">=</span><span class="s2">&quot;reactor_yield&quot;</span><span class="p">,</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span>
     <span class="n">source</span><span class="o">=</span><span class="s2">&quot;lab notebook&quot;</span><span class="p">,</span>
     <span class="n">description</span><span class="o">=</span><span class="s2">&quot;reactor yield against pressure and flow rate&quot;</span><span class="p">,</span>
@@ -2353,17 +2363,20 @@ where the table came from, and are required alongside the four above.</p>
 </code></pre></div>
 <p><code>fit()</code> reads the table through one converter, and that is where the names and the values are
 checked: every name is a Python identifier, distinct from the others, and neither a Python keyword
-nor one of the names KD reserves for its own functions and derivatives; every value is finite; the
-columns are read as <code>float64</code>.</p>
+nor one of the names KD reserves for its own functions, derivatives and the constant term <code>one</code>;
+every value is finite; the columns are read as <code>float64</code>.</p>
 <p>That <code>table</code> goes straight into <code>kd.Model.fit()</code>. Each column becomes a field of its own and the
 target column becomes the left-hand side. No derivatives are taken, so a column named <code>x</code> or <code>t</code> is
 just another feature. The result is an expression in the feature names rather than a PDE.
 <code>result_.lhs_label</code> is the target column, and <code>best_expr_</code> carries the expression together with the
 constants fitted for it. An algorithm whose tabular mode declares the <code>REGRESSION</code> form returns the
 same answer on <code>result_.equation</code> as well, the target column on the left of it.</p>
-<p>DISCOVER and PySR both read this layout: each declares a tabular mode, and KD selects that mode from
-the dataset you hand to <code>fit()</code>. KD ships one table of its own, <code>kd.load_tlc_cc()</code>, which returns a
-<code>TabularDataset</code> ready to fit.</p>
+<p>DISCOVER, PySR and PySINDy read this layout: each declares a tabular mode, and KD selects that mode
+from the dataset you hand to <code>fit()</code>. On a table, the reserved term <code>one</code> is a column of ones with
+the length of the target column. PySINDy's tabular library starts with <code>one</code>, followed by every
+monomial of the feature columns up to <code>PySINDyConfig.degree</code>, so an additive constant in the fitted
+law is the coefficient of <code>one</code> and is printed as a number in <code>result_.equation</code>. KD ships one table
+of its own, <code>kd.load_tlc_cc()</code>, which returns a <code>TabularDataset</code> ready to fit.</p>
 <h2 id="supported-layouts-per-algorithm">Supported layouts per algorithm</h2>
 <p>Every mode of every algorithm declares the layouts it accepts (<code>topologies</code>: <code>grid</code> / <code>scattered</code> /
 <code>tabular</code>) and the equation forms it searches (<code>forms</code>: <code>EVOLUTION</code> / <code>HOMOGENEOUS</code> / <code>REGRESSION</code>,

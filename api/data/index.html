@@ -1865,6 +1865,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#kd.load_tabular" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;load_tabular
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kd.inspect_file" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2497,6 +2508,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#kd.load_tabular" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;load_tabular
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kd.inspect_file" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2774,6 +2796,10 @@ package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
 <tr>
 <td><a href="#kd.load"><code>kd.load(source, coords[, ...])</code></a></td>
 <td>Load a catalog dataset or a file, recording provenance for files.</td>
+</tr>
+<tr>
+<td><a href="#kd.load_tabular"><code>kd.load_tabular(path, name)</code></a></td>
+<td>Load float64 columns, validating names and shapes through the tabular bridge.</td>
 </tr>
 <tr>
 <td><a href="#kd.inspect_file"><code>kd.inspect_file(path)</code></a></td>
@@ -3684,6 +3710,33 @@ package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="kd.load_tabular" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">load_tabular</span>
+
+
+</h2>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_tabular</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n"><span title="pathlib.Path">Path</span></span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="#kd.TabularDataset">TabularDataset</a></span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Load float64 columns, validating names and shapes through the tabular bridge.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="kd.inspect_file" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">inspect_file</span>
 
@@ -4182,7 +4235,7 @@ package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
               (<code><span title="list">list</span>[<span title="str">str</span>]</code>)
           –
           <div class="doc-md-description">
-            <p>Human-readable warnings in the order <code>kd.preview</code> prints them: per axis (spacing, then small grid) in <code>axis_order</code>, then per field (NaN, then Inf) in insertion order, then mixed field dtypes, then unset LHS.</p>
+            <p>Human-readable warnings in the order <code>kd.preview</code> prints them: per axis (spacing, then small grid) in <code>axis_order</code>, then per field (NaN, then Inf) in insertion order, then mixed field dtypes, then an unset LHS on an evolution dataset (<code>lhs_order &gt; 0</code>).</p>
           </div>
         </li>
     </ul>
@@ -4324,7 +4377,44 @@ package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
             <p>Number of Inf entries (either sign).</p>
           </div>
         </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.FieldReport.noise_estimate">noise_estimate</span></code></b>
+              (<code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>Robust relative noise level along each axis: the median absolute deviation (MAD) of the second difference <code>u[i-1] - 2*u[i] + u[i+1]</code>, scaled by <code>1.4826 / sqrt(6)</code> and divided by the field's population standard deviation.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.FieldReport.first_derivative_gap">first_derivative_gap</span></code></b>
+              (<code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>Relative gap <code>||2C - E|| / ||E||</code> between the second-order central first differences <code>C = u[i+1] - u[i-1]</code> (step 1) and <code>E = u[i+2] - u[i-2]</code> (step 2).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.FieldReport.second_derivative_gap">second_derivative_gap</span></code></b>
+              (<code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>Relative gap <code>||4A - B|| / ||B||</code> between the second-order central second differences <code>A = u[i-1] - 2*u[i] + u[i+1]</code> (step 1) and <code>B = u[i-2] - 2*u[i] + u[i+2]</code> (step 2).</p>
+          </div>
+        </li>
     </ul>
+        <p>Here <code>u[i]</code> is the field value at index <code>i</code> (0-based) along the axis,
+out of <code>n</code> points. Both gaps use the common interior <code>2 &lt;= i &lt;= n-3</code>.
+The MAD, the standard deviation and both L2 norms pool all other
+dimensions of the field. The grid spacing cancels from both ratios. A gap
+is 0 when step 1 and step 2 give the same derivative and grows as the two
+results diverge (noise or unresolved structure along the axis). The gaps
+describe the raw field, not the derivative method a fit uses. All three
+diagnostics are computed on uniformly spaced axes with at least five
+points, and only for a field without NaN or Inf values.</p>
+<p>The three diagnostic dicts share eligible axis keys in <code>axis_order</code> order;
+an absent key means the axis was not eligible. In these dicts a serialized
+<code>null</code> means the computed value is infinite, while <code>null</code> in <code>min</code>,
+<code>max</code> or <code>mean</code> means no finite value exists.</p>
 
 
 
@@ -4437,6 +4527,14 @@ package are listed under <a href="../datasets/">Dataset catalog</a>.</p>
           –
           <div class="doc-md-description">
             <p>Spacing verdict (see :data:<code>AxisSpacing</code>). The <code>"uniform"</code> verdict is the shared <code>is_uniform_grid</code> predicate the finite-difference provider uses, so the report never disagrees with the FD accept/reject decision.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.AxisReport.periodic">periodic</span></code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Whether the dataset declares this axis periodic.</p>
           </div>
         </li>
         <li class="doc-section-item field-body">

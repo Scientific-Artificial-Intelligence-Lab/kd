@@ -986,6 +986,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2187,6 +2198,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2340,16 +2362,17 @@
 </details>
 <h2 id="search-space">Search space</h2>
 <p>PySR is a third-party symbolic-regression package whose search is documented
-by its authors. Install the optional backend with <code>pip install "sail-kd[pysr]"</code>;
-it uses Julia. The KD wrapper supplies numeric columns and converts the
+by its authors. Its backend uses Julia. The KD wrapper supplies numeric
+columns and converts the
 result into KD's equation representation.</p>
-<p>For PDE data, <code>PySRConfig.terms</code> names the candidate columns in KD's
+<p>For PDE data, <code>terms</code> names the candidate columns in KD's
 function-call notation. PySR combines those columns but does not differentiate
 or invent another input column. Use the field and axis names in the dataset;
 adding an axis does not expand the configured library. An unresolvable term
 fails the fit. Compound derivatives use <code>u_x_t</code> or <code>diff_t(u_x)</code>, not <code>u_xt</code>.</p>
-<p>A <code>kd.TabularDataset</code> selects tabular mode, where the feature columns supply
-the inputs automatically. Both modes read <code>binary_operators</code> and
+<p>Tabular data selects tabular mode, where feature columns supply the inputs
+automatically and <code>terms</code> is refused. Grids other than one-field <code>u(x,t)</code>
+require explicit <code>terms</code>. Both modes read <code>binary_operators</code> and
 <code>unary_operators</code> from the configuration. These operators let the search form
 nonlinear combinations beyond a linear fit of the original columns.</p>
 <h2 id="method">Method</h2>
@@ -2360,13 +2383,15 @@ hall of fame with complexity, loss and expressions. One KD run contains one
 batch search, rather than one KD iteration per internal PySR generation.
 <code>generations</code> sets PySR's internal iteration budget.</p>
 <p>For PDEs, conversion replaces placeholders with the terms' SymPy expressions,
-expands the sum, removes each additive term's numeric factor and removes
-pure constants, then serializes the remaining structure to KD IR. A fitted
-constant inside a unary operation, as in <code>sin(mul(2, u))</code>, remains part of
-that structure. For tables the expression stays whole, including fitted
-constants and additive intercepts. An expression with no feature symbols is
-rejected as a constant model.</p>
-<p>A resumed <code>Model.fit(resume_from=...)</code> restores PySR populations and the hall
+expands the sum, removes each additive term's numeric factor and serializes
+the remaining structure to KD IR. A nonzero pure-constant additive term
+becomes the constant term <code>one</code>, a column of ones, so a selected expression
+that is a nonzero constant becomes the law <code>one</code>. A fitted constant inside a
+unary operation, as in <code>sin(mul(2, u))</code>, remains part of that structure. For
+tables the expression stays whole, including fitted constants and additive
+intercepts, and an expression with no feature symbols is rejected as a
+constant model.</p>
+<p>A resumed run restores PySR populations and the hall
 of fame and runs the new model's <code>generations</code> as additional internal
 iterations. It incurs another Julia startup. The hall of fame retains its
 best internal loss, while the headline expression is selected again and its
@@ -2376,7 +2401,8 @@ search identity.</p>
 <h2 id="result-interpretation">Result interpretation</h2>
 <p><code>model.best_score_</code> is KD's least-squares refit NMSE, not PySR's selection loss.
 For PDEs, the refit supplies coefficients for the converted structural terms;
-<code>best_expr_</code> itself is structural. For tables, PySR's fitted constants remain
+<code>best_expr_</code> itself is structural. A retained <code>one</code> carries the additive
+constant as its refit coefficient. For tables, PySR's fitted constants remain
 inside the expression and the refit supplies one outer scale. That scale is
 often near one, but the score measures the scaled expression's shape.
 Refit coefficients are available on <code>result_.final_eval.coefficients</code> and
@@ -2389,6 +2415,9 @@ outer <code>scale</code>. Recorder series include <code>pareto_complexity</code>
 headline expression before KD re-scores it; the KD re-score does not select a
 new headline. Unconvertible front rows are omitted, but an unconvertible
 selected expression fails the run.</p>
+<h2 id="python-setup">Python setup</h2>
+<p>Install the optional backend with <code>pip install "sail-kd[pysr]"</code>.
+A <code>kd.TabularDataset</code> selects tabular mode in <code>Model.fit()</code>.</p>
 <h2 id="references">References</h2>
 <p>Cranmer (2023). "Interpretable machine learning for science with PySR and SymbolicRegression.jl". arXiv:2305.01582. <a href="https://arxiv.org/abs/2305.01582">Paper</a></p>
 <p>Documentation: <a href="https://ai.damtp.cam.ac.uk/pysr/">ai.damtp.cam.ac.uk/pysr</a></p>

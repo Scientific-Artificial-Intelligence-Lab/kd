@@ -1014,6 +1014,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2187,6 +2198,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2227,7 +2249,7 @@
 
 <h1 id="pysindy">PySINDy</h1>
 <p>Sparse regression over a supplied candidate library, solved in one pass.</p>
-<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">pysindy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">NMSE <em>min</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">light</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid</div></div></div>
+<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">pysindy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">NMSE <em>min</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">light</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION REGRESSION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid tabular</div></div></div>
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
@@ -2269,6 +2291,18 @@
 <td><span class="kd-tier kd-tier--init">init-only</span></td>
 <td>Normalize library columns before STLSQ.</td>
 </tr>
+<tr>
+<td><code>relative_threshold</code></td>
+<td><code>False</code></td>
+<td><span class="kd-tier kd-tier--init">init-only</span></td>
+<td>Read threshold as a fraction of the target L2 norm (requires normalize_columns).</td>
+</tr>
+<tr>
+<td><code>degree</code></td>
+<td><code>2</code></td>
+<td><span class="kd-tier kd-tier--init">init-only</span></td>
+<td>Maximum total polynomial degree for tabular data.</td>
+</tr>
 </tbody>
 </table>
 <details class="note">
@@ -2303,6 +2337,11 @@
 <td><code>False</code></td>
 </tr>
 <tr>
+<td><code>relative_threshold</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+</tr>
+<tr>
 <td><code>unbias</code></td>
 <td><code>bool</code></td>
 <td><code>True</code></td>
@@ -2317,13 +2356,19 @@
 <td><code>dict[str, Any] \| None</code></td>
 <td><code>None</code></td>
 </tr>
+<tr>
+<td><code>degree</code></td>
+<td><code>int</code></td>
+<td><code>2</code></td>
+</tr>
 </tbody>
 </table>
 </details>
 <h2 id="search-space">Search space</h2>
 <p>The KD wrapper uses PySINDy's sparse optimizer over a supplied term library.
-<code>PySINDyConfig.terms</code> contains KD function-call strings using the dataset's
-field and axis names. Terms can contain coordinates, products such as
+<code>terms</code> contains KD function-call strings using the dataset's
+field and axis names. Supply <code>terms</code> for grids other than one-field <code>u(x,t)</code>.
+<code>mul</code> and <code>add</code> take two arguments; nest multiplication for a cube. Terms can contain coordinates, products such as
 <code>mul(u, u_x)</code>, and operators such as <code>sin</code>, <code>exp</code> or binary <code>div</code>. A compound
 derivative uses <code>u_x_t</code> or <code>diff_t(u_x)</code> rather than <code>u_xt</code>. Supply terms for
 all relevant axes and fields; dataset dimensions do not expand the library.</p>
@@ -2331,26 +2376,54 @@ all relevant axes and fields; dataset dimensions do not expand the library.</p>
 finite-difference stencil. Any number of spatial axes can supply columns. Atomic derivative names support orders through three per axis;
 compound and open-form derivatives are computed during execution. For example,
 <code>u_xxxx</code> exceeds the atomic-order cap, while <code>diff_x(u_xxx)</code> uses composition.
-<code>kd.validate_terms(dataset, terms)</code> checks the library before the solve. A
-non-uniform axis or an unresolvable term fails explicitly. Smoothing noisy
+The fit refuses duplicate terms and target-derivative tautologies.
+A non-uniform axis or an unresolvable term fails explicitly. Smoothing noisy
 observations before differentiation can improve the columns used for support
 selection.</p>
-<p>Numeric literals are rejected in the term catalog and no intercept column is
-added. The fitted combination is restricted to the supplied columns, so a
-missing governing term can still produce a valid but incomplete fit.</p>
+<p>Tabular input selects the tabular mode. The library is
+then built from the table's feature columns: the constant term <code>one</code> first,
+followed by every monomial of the features from degree 1 up to
+<code>degree</code>, written as products such as <code>mul(x, v)</code>. A <code>terms</code>
+catalog is refused on tabular data, and a non-default <code>degree</code> is refused on
+grid data, where the catalog is supplied explicitly. For ODE tables, states are the features and the derivative of one state is
+the target. The library contains only polynomials: a small residual on
+sinusoidal data can be a polynomial approximation.</p>
+<p>The constant term is the reserved term name <code>one</code>, a column of ones. The
+tabular library always contains it, and a grid catalog can list it like any
+other term. Numeric literals are rejected in the term catalog in either mode;
+an additive constant in a law is represented as the coefficient of <code>one</code>. The
+fitted combination is restricted to the supplied columns, so a missing
+governing term can still produce a valid but incomplete fit.</p>
 <h2 id="method">Method</h2>
 <p>KD supplies the derivatives, candidate columns and single regression target;
 PySINDy supplies <code>pysindy.optimizers.STLSQ</code>. Atomic derivative names determine
 the precomputed orders on each axis. Compound derivatives and open-form calls
 are evaluated as expressions. The finite-difference provider uses fourth-order
 interior stencils for first and second derivatives, with separate boundary
-and third-derivative stencils.</p>
+and third-derivative stencils. In the tabular mode no derivatives are
+computed: the columns are <code>one</code> and the monomials evaluated on the feature
+columns, and the target is the table's target column.</p>
 <p>STLSQ alternates a ridge solve with hard thresholding. Coefficients below
 <code>threshold</code> in magnitude are zeroed and their columns removed, until support
 stabilizes or <code>max_iter</code> rounds have run. With <code>unbias</code> enabled, an
 unregularized least-squares solve on the retained support removes ridge
 shrinkage. <code>normalize_columns</code> changes the scale at which thresholding acts,
 so choose normalization and threshold together.</p>
+<p>With <code>relative_threshold</code> enabled, <code>threshold</code> is a dimensionless fraction:
+KD passes STLSQ the value of <code>threshold</code> multiplied by the L2 norm of the
+regression target. The setting requires <code>normalize_columns</code>, so STLSQ
+thresholds coefficients fitted on unit-norm columns, and a term is kept in a
+round when its coefficient times its column norm is at least <code>threshold</code>
+times the target norm. Rescaling a column or the target therefore leaves the
+selected support unchanged and scales the returned coefficients accordingly.
+With normalization and an absolute threshold, the thresholded quantity is the
+same product of coefficient and column norm, which carries the target's units
+and grows with the number of rows, so one absolute value selects differently
+with and without normalization and on different datasets. The norm is that
+of the target the optimizer receives. With a <code>kd.Sketch</code>, pinned terms are
+deducted from that target first and anchored columns are projected out of it,
+so the fraction refers to the part of the target that remains for STLSQ to
+fit.</p>
 <p>One sparse-regression solve answers the run; <code>generations</code> does not create
 additional solves and the seed does not randomize the optimizer. Equivalent
 catalog spellings can still produce collinear numeric columns: canonical
@@ -2362,7 +2435,11 @@ refit. <code>model.best_score_</code> is NMSE evaluated with those coefficients.
 <code>model.best_expr_</code> lists the structural terms; read the coefficient vector on
 <code>model.result_.final_eval.coefficients</code> or the terms and coefficients on
 <code>model.result_.equation</code>. The full evaluated catalog retains zero coefficients
-for dropped terms and records its active support and fitted left-hand side.</p>
+for dropped terms and records its active support and fitted left-hand side.
+In the tabular mode the equation has the regression form, with the target
+column as its left-hand side and the selected library terms on the right. A
+retained <code>one</code> carries the additive constant as its coefficient, and the
+rendered equation prints that constant as a number.</p>
 <p>Interpret NMSE with the candidate library and threshold. A small value does
 not establish that the library contains the governing equation. If all
 coefficients are removed, the fit raises an empty-support error naming the
@@ -2370,6 +2447,10 @@ threshold; reduce the threshold to retain a support. Repeating an otherwise
 unchanged deterministic solve does not explore another structure. A near-zero
 residual obtained by putting the target derivative itself in the library is
 a tautology.</p>
+<h2 id="python-setup">Python setup</h2>
+<p>Construct a <code>kd.TabularDataset</code> for direct <code>Model.fit()</code> calls.
+<code>kd.data.trajectories_to_tabular</code> makes time-derivative tables from ODE
+trajectories, with states as features and one state's derivative as target.</p>
 <h2 id="references">References</h2>
 <p>de Silva et al. (2020). "PySINDy: A Python package for the sparse identification of nonlinear dynamical systems from data". <em>J. Open Source Softw.</em> 5(49), 2104. <a href="https://doi.org/10.21105/joss.02104">Paper</a></p>
 <p>Kaptanoglu et al. (2022). "PySINDy: A comprehensive Python package for robust sparse system identification". <em>J. Open Source Softw.</em> 7(69), 3994. <a href="https://doi.org/10.21105/joss.03994">Paper</a></p>
@@ -2378,10 +2459,11 @@ a tautology.</p>
 <div style="font-size: 0.85em">
 <p>Implementation notes. KD uses the native STLSQ optimizer. It does not use PySINDy's <code>SINDy</code> model,
 <code>PDELibrary</code>, differentiation, weak formulation, ensembling or multi-target
-fit. A nonzero optimizer intercept is rejected because the KD term matrix has
-no intercept column. The typed settings follow STLSQ's defaults; other settings,
-such as ridge <code>alpha</code>, pass through <code>extra_optimizer_kwargs</code>. That mapping
-rejects names already represented by typed fields rather than overriding them.
+fit. A nonzero optimizer intercept is rejected: the constant belongs to the
+library column <code>one</code>, so the optimizer fits no intercept of its own. The typed
+settings follow STLSQ's defaults; other settings, such as ridge <code>alpha</code>, pass
+through <code>extra_optimizer_kwargs</code>. That mapping rejects names already
+represented by typed fields rather than overriding them.
 Threshold and iteration bounds are validated before computation. Integration
 checks compare the plugin with a direct STLSQ solve on identical Theta and
 target arrays, including their coefficient vectors.</p>

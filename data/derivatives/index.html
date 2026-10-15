@@ -2223,6 +2223,7 @@ training run.</p>
 sga       autograd        autograd
 dlga      default         autograd
 discover  mode1           finite_diff
+discover  mode2           autograd
 discover  tabular         none
 pysr      default         finite_diff
 pysr      tabular         none
@@ -2231,12 +2232,13 @@ eqgpt     wave_multicase  none
 eqgpt     steady          none
 llm4ed    default         finite_diff
 pysindy   default         finite_diff
+pysindy   tabular         none
 </code></pre></div>
-<p>DLGA-PDE differentiates through a network. The PDE modes of DISCOVER and PySR,
-PySINDy, LLM4ED and EqGPT's single-case wave mode use finite differences;
-SGA-PDE offers both and defaults to finite differences. DISCOVER and PySR also
-have tabular regression modes, which fit a target column without derivatives
-and report <code>none</code>.
+<p>DLGA-PDE differentiates through a network. The PDE modes of DISCOVER, PySR and
+PySINDy use finite differences, as do LLM4ED and EqGPT's single-case wave mode;
+SGA-PDE offers both and defaults to finite differences. DISCOVER, PySR and
+PySINDy also have tabular regression modes, which fit a target column without
+derivatives and report <code>none</code>.
 EqGPT's multi-case wave mode and steady mode report <code>none</code>: they take no derivatives from the
 platform and build their own field representation and evaluation internally.</p>
 <h2 id="configurable-options">Configurable options</h2>

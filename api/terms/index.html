@@ -1849,6 +1849,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#kd.block_dispersion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;block_dispersion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd.forward_error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;forward_error
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd.ForwardError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;ForwardError
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kd.law_signature" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2358,6 +2391,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#kd.block_dispersion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;block_dispersion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd.forward_error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;forward_error
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd.ForwardError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;ForwardError
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kd.law_signature" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2641,6 +2707,18 @@ and what the numbers mean under
 <td>Verify an equation on a dataset using its reported coefficients unchanged.</td>
 </tr>
 <tr>
+<td><a href="#kd.block_dispersion"><code>kd.block_dispersion(dataset, terms[, ...])</code></a></td>
+<td>Refit the terms on separate grid blocks and measure coefficient spread.</td>
+</tr>
+<tr>
+<td><a href="#kd.forward_error"><code>kd.forward_error(dataset, terms[, ...])</code></a></td>
+<td>Integrate the equation from the data's first time slice and compare.</td>
+</tr>
+<tr>
+<td><a href="#kd.ForwardError"><code>kd.ForwardError(value, reason[, ...])</code></a></td>
+<td>Outcome of <code>forward_error</code>.</td>
+</tr>
+<tr>
 <td><a href="#kd.law_signature"><code>kd.law_signature(eq)</code></a></td>
 <td>Build a versioned signature from an equation's active law.</td>
 </tr>
@@ -2721,6 +2799,7 @@ and what the numbers mean under
     <span class="n">skip_invalid</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">max_order</span><span class="p">:</span> <span class="n"><span title="int">int</span></span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
     <span class="n">lhs_order</span><span class="p">:</span> <span class="n"><span title="int">int</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">rows</span><span class="p">:</span> <span class="n"><span title="torch.Tensor">Tensor</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            EvaluationResult
 
 
@@ -2785,6 +2864,16 @@ and what the numbers mean under
           –
           <div class="doc-md-description">
             <p>LHS derivative order targeted by the fit (<code>1</code> -&gt; <code>u_t</code>, <code>2</code> -&gt; <code>u_tt</code>; <code>-&gt; DerivativeReqs.lhs_order</code>). Default <code>None</code> DERIVES from <code>dataset.lhs_order</code> (single source of truth).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>rows</code></b>
+              (<code><span title="torch.Tensor">Tensor</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Grid-shaped boolean mask or flat int32/int64 sample indices. Derivatives and term validation run on the complete grid first.</p>
           </div>
         </li>
     </ul>
@@ -3070,6 +3159,342 @@ and what the numbers mean under
 
         <p>Verify an equation on a dataset using its reported coefficients unchanged.</p>
 
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="kd.block_dispersion" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">block_dispersion</span>
+
+
+</h2>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">block_dispersion</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">,</span>
+    <span class="n">terms</span><span class="p">:</span> <span class="n"><span title="collections.abc.Sequence">Sequence</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">n_blocks</span><span class="p">:</span> <span class="n"><span title="int">int</span></span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">axis</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_order</span><span class="p">:</span> <span class="n"><span title="int">int</span></span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">lhs_order</span><span class="p">:</span> <span class="n"><span title="int">int</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="float">float</span></span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Refit the terms on separate grid blocks and measure coefficient spread.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>dataset</code></b>
+              (<code><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>A GRID <code>PDEDataset</code> (never mutated).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>terms</code></b>
+              (<code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>Candidate term strings (canonical funcall IR).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>n_blocks</code></b>
+              (<code><span title="int">int</span></code>, default:
+                  <code>4</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Number of blocks; <code>1</code> gives <code>0.0</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>axis</code></b>
+              (<code><span title="str">str</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Axis name to split along; default <code>dataset.spatial_axes[0]</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>max_order</code></b>
+              (<code><span title="int">int</span></code>, default:
+                  <code>2</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>As in <code>evaluate_terms</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>lhs_order</code></b>
+              (<code><span title="int">int</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>As in <code>evaluate_terms</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="float">float</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The mean coefficient of variation across blocks.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="ValueError">ValueError</span></code>
+            –
+          <div class="doc-md-description">
+            <p>If the dataset is not GRID, the resolved LHS field/axis is absent, or the result is non-finite.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-internal" title="            InvalidTermsError (kd.evaluate.InvalidTermsError)" href="#kd.InvalidTermsError">InvalidTermsError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>Propagated from <code>evaluate_terms</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-internal" title="            EvaluationFailedError (kd.evaluate.EvaluationFailedError)" href="#kd.EvaluationFailedError">EvaluationFailedError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>Propagated from <code>evaluate_terms</code> when the fit on any block is invalid.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="kd.forward_error" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">forward_error</span>
+
+
+</h2>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">forward_error</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">,</span>
+    <span class="n">terms</span><span class="p">:</span> <span class="n"><span title="collections.abc.Sequence">Sequence</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">],</span>
+    <span class="n">coefficients</span><span class="p">:</span> <span class="n"><span title="collections.abc.Sequence">Sequence</span></span><span class="p">[</span><span class="n"><span title="float">float</span></span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s2">&quot;Radau&quot;</span><span class="p">,</span>
+    <span class="n">max_step</span><span class="p">:</span> <span class="n"><span title="float">float</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            ForwardError
+
+
+  
+      dataclass
+   (kd.evaluate.ForwardError)" href="#kd.ForwardError">ForwardError</a></span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Integrate the equation from the data's first time slice and compare.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>dataset</code></b>
+              (<code><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>The dataset providing the grid, initial field and target (never mutated).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>terms</code></b>
+              (<code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>RHS term strings of a first-order evolution law.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>coefficients</code></b>
+              (<code><span title="collections.abc.Sequence">Sequence</span>[<span title="float">float</span>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>One coefficient per term.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>method</code></b>
+              (<code><span title="str">str</span></code>, default:
+                  <code>&#39;Radau&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p><code>scipy.integrate.solve_ivp</code> method.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>max_step</code></b>
+              (<code><span title="float">float</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Maximum solver step; None lets the solver choose.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-internal" title="            ForwardError
+
+
+  
+      dataclass
+   (kd.evaluate.ForwardError)" href="#kd.ForwardError">ForwardError</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A <code>ForwardError</code> with <code>value</code> set, or with <code>reason</code> set when the equation diverged, the solver failed, or integration was refused (for example a non-GRID dataset, unsupported LHS order or a time-derivative term).</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="ValueError">ValueError</span></code>
+            –
+          <div class="doc-md-description">
+            <p>If <code>terms</code> and <code>coefficients</code> differ in length, a coefficient is non-finite, the error is non-finite, or the resolved LHS field/axis is absent from a GRID dataset.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="kd.ForwardError" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">ForwardError</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Outcome of <code>forward_error</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.ForwardError.value">value</span></code></b>
+              (<code><span title="float">float</span> | None</code>)
+          –
+          <div class="doc-md-description">
+            <p><code>||pred - u||_2 / ||u||_2</code> over the full grid, or None when the equation could not be integrated.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.ForwardError.reason">reason</span></code></b>
+              (<code><span title="str">str</span> | None</code>)
+          –
+          <div class="doc-md-description">
+            <p>None when <code>value</code> is set; otherwise <code>"diverged"</code>, <code>"solve-failed"</code> (scipy <code>solve_ivp</code> failed) or <code>"refused"</code> (the equation or dataset is unsupported).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="kd.ForwardError.warning">warning</span></code></b>
+              (<code><span title="str">str</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Why integration was refused or failed, empty on a clean run.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
 
     </div>
 

@@ -2711,6 +2711,26 @@ what <code>best_score_</code> measures in
           </div>
         </li>
         <li class="doc-section-item field-body">
+            <b><code>savgol_window</code></b>
+              (<code><span title="int">int</span></code>, default:
+                  <code>0</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Savitzky-Golay smoothing window length. <code>0</code> (default) disables smoothing. A positive value smooths every field along every grid axis with that window length and polynomial order 3 before the search.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>small_term_rtol</code></b>
+              (<code><span title="float">float</span></code>, default:
+                  <code>0.0</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Relative coefficient threshold for the final answer. <code>0.0</code> (default) keeps the algorithm's answer. A value r in (0, 1) drops every term whose finite coefficient magnitude is below r times the largest finite coefficient magnitude.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
             <b><code>**kwargs</code></b>
               (<code><span title="typing.Any">Any</span></code>, default:
                   <code>{}</code>

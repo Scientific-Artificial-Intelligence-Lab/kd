@@ -905,23 +905,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search space">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pretrained-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pretrained model
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -943,6 +926,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Python setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pretrained-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pretrained model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2201,23 +2212,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search space">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pretrained-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pretrained model
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -2239,6 +2233,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Python setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pretrained-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pretrained model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2483,6 +2505,11 @@ sets <code>sparsity_alpha=0.02</code>.</p>
 <td><code>None</code></td>
 </tr>
 <tr>
+<td><code>steady_boundary_grid</code></td>
+<td><code>tuple[float, ...] \| None</code></td>
+<td><code>None</code></td>
+</tr>
+<tr>
 <td><code>steady_polar_eval</code></td>
 <td><code>bool</code></td>
 <td><code>False</code></td>
@@ -2518,7 +2545,7 @@ sets <code>sparsity_alpha=0.02</code>.</p>
 <h2 id="search-space">Search space</h2>
 <p>EqGPT samples equations from a fixed vocabulary of terms, then fits their
 coefficients against data. The single-case evolution path uses one field <code>u</code>,
-a time axis and one to three spatial axes named <code>x</code>, <code>y</code> or <code>z</code>. In evolution mode the prefix <code>S ut +</code> fixes the
+time axis <code>t</code> and one to three spatial axes named <code>x</code>, <code>y</code> or <code>z</code>. In evolution mode the prefix <code>S ut +</code> fixes the
 left-hand side, and right-hand-side terms combine atoms by multiplication,
 division and addition. The vocabulary comes with KD; no candidate-term library
 is supplied by the caller.</p>
@@ -2539,15 +2566,12 @@ represent its spatial axes. These gates act before fitting.</p>
 <p>For a steady problem on scattered <code>(x, y)</code> coordinates, configure <code>steady</code>,
 <code>steady_activation</code> and <code>start_words=["S"]</code> together. This mode trains its own
 surrogate before search. <code>sparsity_alpha</code> is required because the appropriate
-penalty depends on the problem; the packaged presets supply explicit values.</p>
-<h3 id="pretrained-model">Pretrained model</h3>
-<p>The checkpoint is downloaded from the KD Hub mirror on first use and cached.
-An uncached run needs network access. <code>KD_EQGPT_ASSET_DIR</code> can point to a local
-directory containing <code>gpt_model/PDEGPT_wave_breaking.pt</code>; the Python API also
-accepts <code>EqGPTConfig(weights_path=...)</code> or <code>asset_dir</code>. The mirror is
-<code>timeoutHao/KD-data</code>, with a pinned revision and SHA-256 verification.
-Multi-case wave mode also needs <code>WaveBreaking.pkl</code> and per-case surrogates;
-<code>KD_V1_WAVE_ASSETS</code> selects local assets instead of the Hub copy.</p>
+penalty depends on the problem; the packaged presets supply explicit values.
+Boundary deletion (<code>steady_boundary_delete_num</code>) counts cells on a grid that by
+default consists of the distinct coordinate values in the data, so a grid row
+or column without data points is missing from it. <code>steady_boundary_grid</code> gives
+the grid explicitly, and the presets that enable boundary deletion set it; the
+dataset name does not affect the grid.</p>
 <h2 id="method">Method</h2>
 <p>The proposer is a decoder-only transformer with six layers, eight heads,
 model dimension 768 and a context of 50, over 56 vocabulary tokens plus a pad
@@ -2581,6 +2605,18 @@ A low reward warrants checking whether the required atoms and combinations
 are expressible before increasing the sample budget. Because the prior was
 trained on named textbook equations, a familiar law can be proposed from that
 prior as well as selected by its fit to data.</p>
+<h2 id="python-setup">Python setup</h2>
+<h3 id="pretrained-model">Pretrained model</h3>
+<p>The checkpoint is downloaded from the KD Hub mirror on first use and cached.
+An uncached run needs network access. <code>KD_EQGPT_ASSET_DIR</code> can point to a local
+directory containing <code>gpt_model/PDEGPT_wave_breaking.pt</code>; the Python API also
+accepts <code>EqGPTConfig(weights_path=...)</code> or <code>asset_dir</code>. The mirror is
+<code>timeoutHao/KD-data</code>, with a pinned revision and SHA-256 verification.
+Multi-case wave mode also needs <code>WaveBreaking.pkl</code> and per-case surrogates;
+<code>KD_V1_WAVE_ASSETS</code> selects local assets instead of the Hub copy.
+The dataset passed to <code>fit</code> in this mode must equal the data of the primary
+case (<code>primary_case</code>): axis order, field names and every coordinate and field
+value are compared, and only the name may differ.</p>
 <h2 id="references">References</h2>
 <p>Xu et al. (2025). "Generative discovery of partial differential equations by learning from math handbooks". <em>Nat. Commun.</em> 16, 10255. <a href="https://doi.org/10.1038/s41467-025-65114-2">Paper</a></p>
 <p>Code: <a href="https://github.com/woshixuhao/EqGPT">woshixuhao/EqGPT</a></p>

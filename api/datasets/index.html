@@ -2084,6 +2084,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#kd.load_wave_breaking_datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;load_wave_breaking_datasets
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2646,6 +2657,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#kd.load_wave_breaking_datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;load_wave_breaking_datasets
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2790,6 +2812,10 @@ reached through the catalog alone.</p>
 <tr>
 <td><a href="#kd.load_wave_breaking"><code>kd.load_wave_breaking(case, data_dir)</code></a></td>
 <td>Load wave-tank surface-elevation data (real-world experimental data).</td>
+</tr>
+<tr>
+<td><a href="#kd.load_wave_breaking_datasets"><code>kd.load_wave_breaking_datasets(path, case_filter)</code></a></td>
+<td>Load wave-tank cases as SCATTERED datasets in sorted case-name order.</td>
 </tr>
 </tbody>
 </table>
@@ -4463,6 +4489,33 @@ torch.Size([128, 51])</p>
           </div>
         </li>
     </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="kd.load_wave_breaking_datasets" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">load_wave_breaking_datasets</span>
+
+
+</h2>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_wave_breaking_datasets</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="n"><span title="pathlib.Path">Path</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">case_filter</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
+
+
+  
+      dataclass
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Load wave-tank cases as SCATTERED datasets in sorted case-name order.</p>
 
 
     </div>

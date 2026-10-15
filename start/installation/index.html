@@ -421,6 +421,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#cuda-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CUDA PyTorch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#optional-components" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2119,6 +2130,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#cuda-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CUDA PyTorch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#optional-components" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2164,7 +2186,8 @@ code imports it as <code>kd</code>.</p>
 <p>Use pip in an activated Python environment, or use
 <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a> to create <code>.venv</code>
 and install KD. With uv, <code>--torch-backend=auto</code> selects the PyTorch build for
-the available hardware.</p>
+the available hardware: a CUDA build the installed driver supports, or the CPU
+build.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">pip</label><label for="__tabbed_1_2">uv</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -2193,6 +2216,17 @@ it with the command for your platform above, then run the pip installation.</p>
 </code></pre></div>
 <p>Then install KD with the pip command above. With uv, replace
 <code>--torch-backend=auto</code> with <code>--torch-backend=cpu</code>.</p>
+<h2 id="cuda-pytorch">CUDA PyTorch</h2>
+<p>A CUDA build of PyTorch runs only with a driver that supports its CUDA
+version. <code>pip install sail-kd</code> resolves the newest CUDA build on PyPI; on a
+machine whose driver is older, <code>torch.cuda.is_available()</code> returns False and
+KD runs on the CPU. Install the build for the driver first, from the PyTorch
+index for that CUDA version, then install KD with the pip command above:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128
+</code></pre></div>
+<p>With uv, <code>--torch-backend=auto</code> reads the driver and selects a supported
+build; a specific build can be named instead, for example
+<code>--torch-backend=cu128</code>.</p>
 <h2 id="optional-components">Optional components</h2>
 <p>PySR requires an extra and downloads a Julia runtime on first use:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;sail-kd[pysr]&quot;</span><span class="w"> </span>--torch-backend<span class="o">=</span>auto

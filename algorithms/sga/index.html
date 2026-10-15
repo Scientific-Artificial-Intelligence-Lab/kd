@@ -2464,6 +2464,11 @@
 <td><code>float</code></td>
 <td><code>0.0</code></td>
 </tr>
+<tr>
+<td><code>restart_interval</code></td>
+<td><code>int \| None</code></td>
+<td><code>None</code></td>
+</tr>
 </tbody>
 </table>
 </details>
@@ -2488,8 +2493,9 @@ finite differences. Surrogate training adds a separate cost before the first
 generation. SGA needs no optional package, pretrained weights or endpoint.</p>
 <h2 id="method">Method</h2>
 <p>A population contains candidate equations, each a set of up to <code>width</code> trees
-of depth at most <code>depth</code>. Leaves are the field, spatial coordinates and
-first-order spatial derivatives. Internal nodes are addition, subtraction,
+of depth at most <code>depth</code>. Leaves include every field, spatial coordinates and each field's first-order
+derivatives along every non-target axis. Only the left-hand-side field is
+prepended as the default regression column. Internal nodes are addition, subtraction,
 multiplication, division, square, cube and the first- and second-derivative
 operators. Tree roots exclude addition and subtraction because the term list
 already represents a sum.</p>
@@ -2502,6 +2508,21 @@ baseline is followed by adaptive <code>d_tol</code> steps, bounded by <code>maxi
 <code>str_iters</code> ridge iterations and column normalization of order 2. The fit's AIC
 ranks candidates for selection. One generation is one KD iteration, controlled
 by <code>generations</code>.</p>
+<p>With <code>restart_interval</code> set to k, the population is re-drawn once k
+generations have been committed since the last draw. The re-draw happens when
+the next generation's proposal starts, so no draw follows the last generation
+and a value of at least <code>generations</code> leaves the run unchanged; <code>generations</code>
+remains the total across segments, and initial draws are not counted as
+evaluations. Restart j (j = 1, 2, ...) re-seeds the random generator with
+<code>seed + 1000 * j</code>, clears the history of expressions already seen, and draws a
+new population as at the start of a run. Before each re-draw, the best-ranked
+candidate of the finished segment replaces the stored best of earlier segments
+only if its AIC is strictly lower. The reported equation is the better of the
+stored best and the current population's best-ranked candidate, with ties
+going to the earlier segment. With finite differences, each segment reproduces
+an independent run of k generations at its seed. With autograd, the field
+surrogate trained before the first generation is shared by all segments, so
+the segments are not independent runs at those seeds.</p>
 <h2 id="result-interpretation">Result interpretation</h2>
 <p><code>model.best_score_</code> combines fit error and support size through
 <code>2 * k * aic_ratio + 2 * ln(MSE)</code>. NMSE alone therefore does not determine which

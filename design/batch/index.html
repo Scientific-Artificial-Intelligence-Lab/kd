@@ -2197,11 +2197,30 @@ resolved at run time, which keeps the plan itself free of data.</p>
 </code></pre></div>
 <p>Widening the study means editing those entries to add an algorithm, a dataset or more
 seeds. The surrounding code does not change, and the new matrix receives its own hash.</p>
-<p>Entries run sequentially. Parallel execution is a separate call that shards a plan
-across subprocesses. It pins the numerical libraries to one thread per worker, limits
-the memory-heavy algorithms to one at a time, and gives each shard a wall-clock limit.
-The shards are then merged back into a single store, which replays every record and
-checks that none of them changed during the merge.</p>
+<p><code>run_plan</code> runs the entries one after another in the calling process, so the batch
+ends if that process dies, and the outcomes written before that point remain in the
+store. To run a study in parallel, split its entries in order into several plans with
+the same name, run each plan in its own process with its own store directory, and pass
+the stores to <code>merge_stores</code> in the order of the split, under that name. Batches that
+ran separately for another reason, for example on different days or machines, are
+combined the same way.</p>
+<p><code>merge_stores</code> writes a new store from several sealed ones and leaves the sources
+unchanged. The merged plan is the sources' entries concatenated in the order given, so
+a single <code>run_plan</code> over the same entries under the same name has the same plan hash
+and the same entry indices. Records are copied unchanged, and the new store is reopened
+and re-verified after the copy. The merge is refused when one entry was attempted in
+two sources, when one dataset name refers to different data in two sources, or when a
+source is itself a merged store. An entry counts as attempted once it has an outcome of
+any status, so an entry that failed in one batch and was run again in another cannot be
+merged back with the first batch. An entry that a batch never reached can be run in a
+later batch and merged.</p>
+<p>The merged store keeps one row per source with its plan name, plan hash, entry range
+and environment, and its top-level environment holds only the fields on which all
+sources agree. When the sources ran under different KD versions or commits, the merge
+requires a <code>version_note</code> stating what changed between them and whether it affects
+the results. The store report then lists each source's KD version and commit
+together with the note. The consensus report lists them as well when it is rendered
+with the merged store, <code>render_consensus_markdown(report, store=merged)</code>.</p>
 <h2 id="failed-entries">Failed entries</h2>
 <p>An entry that raises is recorded with its error type and message, and the remaining
 entries still run. Each outcome carries one of three statuses: the fit completed, it
@@ -2234,18 +2253,21 @@ selected the same law are placed in the same class:</p>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;adjacency&quot;</span><span class="p">,</span> <span class="n">pair</span><span class="o">.</span><span class="n">structure_key_a</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span> <span class="n">pair</span><span class="o">.</span><span class="n">structure_key_b</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span>
               <span class="n">pair</span><span class="o">.</span><span class="n">relation</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">pair</span><span class="o">.</span><span class="n">jaccard</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code>9f6aa9b928 | sga/seed0, sga/seed1
+<div class="highlight"><pre><span></span><code>ed0de3fa1f | sga/seed0, sga/seed1
     (&#39;diff_x(u_x)&#39;, &#39;mul(u,u_x)&#39;, &#39;u_t&#39;)
-0bb825b5f3 | sga/seed2
+2b7f162ff3 | sga/seed2
     (&#39;diff2_x(sub(u,x))&#39;, &#39;diff_x(n2(u))&#39;, &#39;u_t&#39;)
-adjacency 9f6aa9b928 0bb825b5f3 overlap 0.2
+adjacency ed0de3fa1f 2b7f162ff3 disjoint 0.0
 </code></pre></div>
 <p>The three runs produced two classes. The second class is the same law in a different
 notation: <code>diff_x(n2(u))</code> is the derivative of <code>u²</code>, which equals <code>2·u·u_x</code>, and
 <code>diff2_x(sub(u, x))</code> is the second derivative of <code>u - x</code>, which equals <code>u_xx</code>. Seed 2
-therefore selected the same law written differently, and the adjacency line reports the
-overlap between the two classes. Term sets are grouped rather than simplified, so the
-report records a relation between classes instead of merging them.</p>
+therefore selected the same law written differently. Term sets are grouped rather than
+simplified, and the adjacency line compares them literally, leaving out the shared
+left-hand side <code>u_t</code>, so it reports the two classes as disjoint: it does not detect that
+two spellings evaluate to the same column. To check whether a split is a difference of
+notation, fit both term sets on the data with <code>kd.evaluate_terms</code> and compare the
+recovered laws.</p>
 <p>Each class is described along four independent axes: whether the structure agrees,
 whether the support agrees, whether the coefficients agree, and whether the empirical
 fit agrees. The four are reported separately, without a combined confidence number,

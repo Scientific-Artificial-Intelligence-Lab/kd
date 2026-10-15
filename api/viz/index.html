@@ -2234,13 +2234,20 @@ seven algorithms, and the panels they produce are listed under
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">file</span><span class="p">:</span> <span class="n"><span title="typing.TextIO">TextIO</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">file</span><span class="p">:</span> <span class="n"><span title="typing.TextIO">TextIO</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
 
-        <p>Print a sanity-check summary of a <code>PDEDataset</code>.</p>
+        <p>Print a sanity-check summary of PDE data or a regression table.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2252,7 +2259,12 @@ seven algorithms, and the panels they produce are listed under
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></code>)
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a> | <a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></code>)
           –
           <div class="doc-md-description">
             <p>The dataset to inspect.</p>
@@ -2295,12 +2307,19 @@ seven algorithms, and the panels they produce are listed under
 
 
 </h2>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">preview_report</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">preview_report</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="            PDEDataset
 
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            DatasetReport
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="            DatasetReport
 
 
   
@@ -2310,7 +2329,7 @@ seven algorithms, and the panels they produce are listed under
 
     <div class="doc doc-contents first">
 
-        <p>Build a typed report of a <code>PDEDataset</code> without printing anything.</p>
+        <p>Build a typed report of PDE data or a regression table without printing.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2322,7 +2341,12 @@ seven algorithms, and the panels they produce are listed under
 
   
       dataclass
-   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a></code>)
+   (kd.data.schema.PDEDataset)" href="../data/#kd.PDEDataset">PDEDataset</a> | <a class="autorefs autorefs-internal" title="            TabularDataset
+
+
+  
+      dataclass
+   (kd.data.regression.TabularDataset)" href="../data/#kd.TabularDataset">TabularDataset</a></code>)
           –
           <div class="doc-md-description">
             <p>The dataset to inspect. Not mutated; no RNG is consumed.</p>

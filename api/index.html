@@ -2201,6 +2201,18 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <td>Return agent-facing schemas for facade plugins in registration order.</td>
 </tr>
 <tr>
+<td><a href="config/#kd.instrument_schema_digest"><code>kd.instrument_schema_digest()</code></a></td>
+<td>Hash mode and call-configuration declarations, excluding descriptive prose.</td>
+</tr>
+<tr>
+<td><a href="config/#kd.mode_accepts"><code>kd.mode_accepts(mode, topology[, ...])</code></a></td>
+<td>Route from published declarations, without loading or inspecting data.</td>
+</tr>
+<tr>
+<td><a href="config/#kd.ModeVerdict"><code>kd.ModeVerdict(accepts, reason[, ...])</code></a></td>
+<td>Declaration-level applicability and parameters required for this input.</td>
+</tr>
+<tr>
 <td><a href="config/#kd.SGAConfig"><code>kd.SGAConfig(num, p_var[, ...])</code></a></td>
 <td>Configuration for the SGA search algorithm.</td>
 </tr>
@@ -2248,6 +2260,10 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <tr>
 <td><a href="data/#kd.load"><code>kd.load(source, coords[, ...])</code></a></td>
 <td>Load a catalog dataset or a file, recording provenance for files.</td>
+</tr>
+<tr>
+<td><a href="data/#kd.load_tabular"><code>kd.load_tabular(path, name)</code></a></td>
+<td>Load float64 columns, validating names and shapes through the tabular bridge.</td>
 </tr>
 <tr>
 <td><a href="data/#kd.inspect_file"><code>kd.inspect_file(path)</code></a></td>
@@ -2418,6 +2434,10 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <td><a href="datasets/#kd.load_wave_breaking"><code>kd.load_wave_breaking(case, data_dir)</code></a></td>
 <td>Load wave-tank surface-elevation data (real-world experimental data).</td>
 </tr>
+<tr>
+<td><a href="datasets/#kd.load_wave_breaking_datasets"><code>kd.load_wave_breaking_datasets(path, case_filter)</code></a></td>
+<td>Load wave-tank cases as SCATTERED datasets in sorted case-name order.</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2442,6 +2462,18 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <tr>
 <td><a href="terms/#kd.verify_equation"><code>kd.verify_equation(eq, executor[, ...])</code></a></td>
 <td>Verify an equation on a dataset using its reported coefficients unchanged.</td>
+</tr>
+<tr>
+<td><a href="terms/#kd.block_dispersion"><code>kd.block_dispersion(dataset, terms[, ...])</code></a></td>
+<td>Refit the terms on separate grid blocks and measure coefficient spread.</td>
+</tr>
+<tr>
+<td><a href="terms/#kd.forward_error"><code>kd.forward_error(dataset, terms[, ...])</code></a></td>
+<td>Integrate the equation from the data's first time slice and compare.</td>
+</tr>
+<tr>
+<td><a href="terms/#kd.ForwardError"><code>kd.ForwardError(value, reason[, ...])</code></a></td>
+<td>Outcome of <code>forward_error</code>.</td>
 </tr>
 <tr>
 <td><a href="terms/#kd.law_signature"><code>kd.law_signature(eq)</code></a></td>
@@ -2563,11 +2595,11 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <tbody>
 <tr>
 <td><a href="viz/#kd.preview"><code>kd.preview(dataset, file)</code></a></td>
-<td>Print a sanity-check summary of a <code>PDEDataset</code>.</td>
+<td>Print a sanity-check summary of PDE data or a regression table.</td>
 </tr>
 <tr>
 <td><a href="viz/#kd.preview_report"><code>kd.preview_report(dataset)</code></a></td>
-<td>Build a typed report of a <code>PDEDataset</code> without printing anything.</td>
+<td>Build a typed report of PDE data or a regression table without printing.</td>
 </tr>
 <tr>
 <td><a href="viz/#kd.VizEngine"><code>kd.VizEngine(output_dir, style)</code></a></td>
@@ -2656,6 +2688,10 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <td>The sealed result of running one plan entry.</td>
 </tr>
 <tr>
+<td><a href="harness/#kd.harness.merge_stores"><code>kd.harness.merge_stores(sources, root[, ...])</code></a></td>
+<td>Merge sealed stores into a new store at <code>root</code>; return it reloaded.</td>
+</tr>
+<tr>
 <td><a href="harness/#kd.harness.EvidenceStore"><code>kd.harness.EvidenceStore(root, plan[, ...])</code></a></td>
 <td>A fresh-dir, append-only, tamper-evident batch evidence directory.</td>
 </tr>
@@ -2668,12 +2704,36 @@ in the <a href="../guide/">user guide</a> and <a href="../design/">design docume
 <td>The full consensus report tree for one sealed evidence store.</td>
 </tr>
 <tr>
-<td><a href="harness/#kd.harness.render_consensus_markdown"><code>kd.harness.render_consensus_markdown(report)</code></a></td>
+<td><a href="harness/#kd.harness.render_consensus_markdown"><code>kd.harness.render_consensus_markdown(report, store)</code></a></td>
 <td>Render the report as a deterministic Markdown document (pure function).</td>
 </tr>
 <tr>
 <td><a href="harness/#kd.harness.SKETCH_SIDECAR_FILENAME"><code>kd.harness.SKETCH_SIDECAR_FILENAME</code></a></td>
 <td>—</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.ProcessSupervisor"><code>kd.harness.ProcessSupervisor(command, env[, ...])</code></a></td>
+<td>Launch a command in its own session and supervise its whole process group.</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.run_supervised"><code>kd.harness.run_supervised(command, env[, ...])</code></a></td>
+<td>Launch a process group and block until cleanup or the post-SIGKILL bound.</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.ProcessResult"><code>kd.harness.ProcessResult(pid, returncode[, ...])</code></a></td>
+<td>Observed leader termination, group cleanup, timing and sampled memory.</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.ProcessEnding"><code>kd.harness.ProcessEnding(value, names[, ...])</code></a></td>
+<td>Escalation stage reached while the leader was observed alive.</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.build_capped_command"><code>kd.harness.build_capped_command(command, memory_max_gb)</code></a></td>
+<td>Prefix a command with a systemd user scope enforcing memory and no swap.</td>
+</tr>
+<tr>
+<td><a href="harness/#kd.harness.check_memory_cap_available"><code>kd.harness.check_memory_cap_available()</code></a></td>
+<td>Run a capped user scope to check whether memory caps are available.</td>
 </tr>
 </tbody>
 </table>

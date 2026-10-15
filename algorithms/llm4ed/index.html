@@ -933,23 +933,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search space">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#endpoint-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Endpoint configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -971,6 +954,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Python setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#endpoint-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2201,23 +2212,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search space">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#endpoint-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Endpoint configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -2239,6 +2233,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Python setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#endpoint-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2438,6 +2460,11 @@
 <td><code>str \| None</code></td>
 <td><code>None</code></td>
 </tr>
+<tr>
+<td><code>extra_body</code></td>
+<td><code>dict[str, Any] \| None</code></td>
+<td><code>None</code></td>
+</tr>
 </tbody>
 </table>
 </details>
@@ -2450,20 +2477,13 @@ The prompts specify <code>+</code>, <code>-</code>, <code>*</code>, <code>/</cod
 accepts integer powers through five. Explicit spatial dependence is
 expressible. Extra fields, other-axis derivatives, mixed space-time derivatives,
 higher spatial derivatives, trigonometric functions, exponentials, square roots
-and standalone constants require a different symbol library.</p>
+and standalone constants are outside this route's symbol library.
+Extra fields and other spatial axes are refused before proposal generation.</p>
 <p>Operand construction needs at least four spatial and three time points.
 Spacing is taken from <code>x[2] - x[1]</code> and <code>t[1] - t[0]</code>, so use uniform axes.
-The method differentiates the observations directly without smoothing or a
-surrogate; the accuracy of higher derivatives therefore depends on measurement
-noise and resolution.</p>
-<h3 id="endpoint-configuration">Endpoint configuration</h3>
-<p>Set an OpenAI-compatible <code>base_url</code> and <code>OPENAI_API_KEY</code> for the default
-client; the OpenAI SDK is installed with KD. This is the algorithm that calls
-an external language-model service during search. Alternatively, pass a
-<code>provider=</code> implementing <code>kd.llm.LLMProvider</code>: a prompt goes in and text comes
-out. A custom client can set timeouts and headers, use <code>BudgetedProvider</code> for
-metering, or use <code>TapeRecordingProvider</code> to save a JSONL tape for offline replay.
-The authors' mirrored datasets download on first load.</p>
+The method itself does not smooth or train a surrogate; the platform's
+<code>savgol_window</code> applies before differentiation. Higher derivatives therefore
+depend on measurement noise and resolution.</p>
 <h2 id="method">Method</h2>
 <p>The language model receives the symbol library and scored proposal history,
 not the observed arrays. The first round requests a numbered batch of
@@ -2475,7 +2495,7 @@ of term sets.</p>
 as design-matrix columns over second-order finite-difference operands. Division
 allows reciprocals, but a zero denominator that makes a column non-finite
 rejects that candidate. STRidge sweeps a tolerance ladder to fit coefficients;
-out-of-range fitted coefficients also reject a candidate.</p>
+fitted coefficient magnitudes outside <code>[1e-4, 1e4]</code> also reject a candidate.</p>
 <p>A round resamples until enough distinct-scoring survivors arrive or its call
 budget is exhausted. Scores at or below <code>reward_limit</code> and scores already kept
 in the round are discarded. The best <code>samples_per_epoch</code> survivors are offered
@@ -2508,6 +2528,15 @@ counts dropped scoring events, broken down into eight series:
 They sum to the total in each round; unused causes record zero, and <code>other</code>
 collects labels outside those named categories. Pool progress and admissions
 help distinguish proposal failures from valid but poorly fitting equations.</p>
+<h2 id="python-setup">Python setup</h2>
+<h3 id="endpoint-configuration">Endpoint configuration</h3>
+<p>Set an OpenAI-compatible <code>base_url</code> and <code>OPENAI_API_KEY</code> for the default
+client; the OpenAI SDK is installed with KD. This is the algorithm that calls
+an external language-model service during search. Alternatively, pass a
+<code>provider=</code> implementing <code>kd.llm.LLMProvider</code>: a prompt goes in and text comes
+out. A custom client can set timeouts and headers, use <code>BudgetedProvider</code> for
+metering, or use <code>TapeRecordingProvider</code> to save a JSONL tape for offline replay.
+The authors' mirrored datasets download on first load.</p>
 <h2 id="references">References</h2>
 <p>Du et al. (2024). "Large language models for automatic equation discovery of nonlinear dynamics". <em>Phys. Fluids</em> 36, 097121. <a href="https://doi.org/10.1063/5.0224297">Paper</a> · <a href="https://arxiv.org/abs/2405.07761">arXiv:2405.07761</a></p>
 <p>Code: <a href="https://github.com/menggedu/EDL">menggedu/EDL</a></p>

@@ -905,6 +905,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Method">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pinn-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PINN mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -912,6 +929,17 @@
     <span class="md-ellipsis">
       
         Result interpretation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
       
     </span>
   </a>
@@ -2240,6 +2268,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Method">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pinn-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PINN mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2247,6 +2292,17 @@
     <span class="md-ellipsis">
       
         Result interpretation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python setup
       
     </span>
   </a>
@@ -2327,7 +2383,7 @@
 
 <h1 id="discover">DISCOVER</h1>
 <p>A recurrent controller writes expression trees token by token and is trained on its own best-rewarded draws; the coefficients come from a platform refit.</p>
-<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">discover</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">reward <em>max</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">heavy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION REGRESSION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid tabular</div></div></div>
+<div class="kd-spec"><div class="kd-spec__cell"><div class="kd-spec__label">algorithm</div><div class="kd-spec__value">discover</div></div><div class="kd-spec__cell"><div class="kd-spec__label">score</div><div class="kd-spec__value">reward <em>max</em></div></div><div class="kd-spec__cell"><div class="kd-spec__label">cost</div><div class="kd-spec__value">heavy</div></div><div class="kd-spec__cell"><div class="kd-spec__label">derivatives</div><div class="kd-spec__value">finite_diff autograd</div></div><div class="kd-spec__cell"><div class="kd-spec__label">equation form</div><div class="kd-spec__value">EVOLUTION REGRESSION</div></div><div class="kd-spec__cell"><div class="kd-spec__label">data layout</div><div class="kd-spec__value">grid tabular</div></div></div>
 
 <h2 id="usage">Usage</h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
@@ -2384,7 +2440,7 @@
 </tr>
 <tr>
 <td><code>epsilon</code></td>
-<td><code>0.05</code></td>
+<td><code>0.1</code></td>
 <td><span class="kd-tier kd-tier--safe">resume-safe</span></td>
 <td>Risk-seeking reward quantile: the top-epsilon fraction of a batch's rewards feeds the policy-gradient update.</td>
 </tr>
@@ -2495,7 +2551,7 @@
 <tr>
 <td><code>epsilon</code></td>
 <td><code>float</code></td>
-<td><code>0.05</code></td>
+<td><code>0.1</code></td>
 </tr>
 <tr>
 <td><code>baseline</code></td>
@@ -2642,19 +2698,21 @@ quotients and trigonometric expressions can use <code>u</code>, <code>x</code> a
 derivatives represented by <code>diff_x(u)</code> and <code>diff2_x(u)</code>. Repeated multiplication
 forms powers. Priors restrict nesting of derivatives and trigonometric
 functions. Coordinate tokens permit coordinate-dependent fits.</p>
-<p>The PDE vocabulary is fixed to those names unless a typed <code>DiscoverConfig</code>
-supplies a different <code>library</code>. An additional dataset axis does not add tokens
-automatically. The standard vocabulary contains no mixed derivative or
+<p>The facade's grid vocabulary is fixed to <code>u</code>, <code>x</code>, <code>t</code>, <code>diff_x</code>, <code>diff2_x</code>.
+Other field names, extra fields and extra spatial axes are refused.
+An additional dataset axis does not add tokens automatically. The standard vocabulary contains no mixed derivative or
 third-order derivative token. <code>max_diff_order</code> can further restrict the
 vocabulary but cannot add an absent token or override another structural prior.
 The facade controls iteration count with <code>generations</code>; <code>n_iterations</code> does
-not set its loop length. The PINN cycle and its stability-selection path belong
-to the separate typed workflow. The facade's PDE path evaluates derivatives
-from the observed grid and requires no pretrained weights or optional backend.</p>
+not set its loop length. Without <code>pinn</code>, the PDE path evaluates derivatives
+from the observed grid by finite differences and requires no pretrained weights
+or optional backend. With <code>pinn</code> set, the same vocabulary is searched in PINN
+mode, where a neural network is trained on the data and derivatives are taken
+from the network by automatic differentiation.</p>
 <h3 id="tabular-regression">Tabular regression</h3>
-<p>A <code>kd.TabularDataset</code> selects tabular mode in <code>Model.fit()</code>. Its vocabulary
-is derived from the feature columns plus <code>add</code>, <code>sub</code>, <code>mul</code>, <code>div</code> and a
-<code>const</code> terminal. No derivative tokens or configured term library are used.
+<p>Tabular mode is selected by the input data, without a <code>mode</code> parameter.
+Its vocabulary is derived from the feature columns plus <code>add</code>, <code>sub</code>, <code>mul</code>,
+<code>div</code>, <code>sin</code>, <code>cos</code>, <code>exp</code>, <code>log</code> and a fitted <code>const</code> terminal. No derivative tokens or configured term library are used.
 Each distinct candidate's constants are fitted before scoring. The recurrent
 controller and training rule remain the same, while complexity counts tokens
 instead of additive terms.</p>
@@ -2679,6 +2737,30 @@ plus an entropy bonus. Invalid fits receive zero reward and are excluded from
 training. The champion changes only on strict improvement, so ties retain the
 incumbent. The seed controls both initial network weights and token sampling.
 One controller iteration is one KD iteration, controlled by <code>generations</code>.</p>
+<h3 id="pinn-mode">PINN mode</h3>
+<p>Setting <code>pinn</code> on grid data selects PINN mode. On a fresh call, a fully connected
+network is first pretrained on the observations: every grid point, or the share
+given by <code>obs_ratio</code>. A resumed call loads the stored network without pretraining.
+Candidates are then scored on collocation points sampled inside
+the data domain, with the time derivative on the left-hand side and every
+spatial derivative taken from the network by automatic differentiation.</p>
+<p>After <code>n_iterations</code> generations, and then after every <code>cycle_n_iterations</code>
+generations, the network is retrained on the data loss plus <code>coef_pde</code> times
+the residual of the best equation found so far, and the search continues on
+the derivatives of the retrained network. The champion is re-scored on each
+new network before the search resumes. On a fresh call, <code>generations</code> is the
+total number of search generations, so a retraining phase runs only when
+<code>n_iterations</code> is smaller than <code>generations</code>. On resume, the phase boundaries
+use the generation count over all segments of the run; the resumed call's
+<code>generations</code> add to that count. A phase on a call's last generation is not run in that call. If
+the earlier segment ended on such a boundary, the resumed call runs that phase
+first, before its first generation. When <code>stability_selection</code> is positive, the final
+equation is chosen among the top candidates of the last cycle by refitting
+each on bootstrap resamples.</p>
+<p>The time of the pretraining and of each retraining phase grows with the number
+of epochs times the number of training points. The library defaults of
+<code>pretrain_epoch</code>, <code>pinn_epoch</code> and <code>n_collocation</code> are the research budget of
+the reference configuration.</p>
 <h2 id="result-interpretation">Result interpretation</h2>
 <p>The reward combines fit and complexity as
 <code>(1 - reward_alpha * complexity) / (1 + sqrt(nmse))</code>, clipped to <code>[0, 1]</code>.
@@ -2692,18 +2774,36 @@ fit used in scoring. The recorder's <code>best_reward</code> is non-decreasing;
 <code>n_eval_valid</code> distinguishes invalid sampling from valid candidates with poor
 fits. An improving champion at the final iteration suggests additional search
 may still change the result; a flat curve alone does not identify the cause.</p>
+<p>In PINN mode the final equation is fitted on the collocation points, so the
+target and the residuals of the result have one entry per collocation point,
+and the result config records <code>provider_kind</code> as <code>autograd</code>. On a fresh call,
+the recorder carries the pretraining outcome in the <code>pinn_pretrain_*</code> series;
+a resumed segment's recorder has no such series. Each segment records one entry
+per retraining phase it executes in <code>pinn_cycle_idx</code>, <code>pinn_phase_ran</code>, <code>pinn_data_loss</code>,
+<code>pinn_physics_loss</code>, <code>pinn_total_loss</code>, <code>pinn_epochs_run</code> and
+<code>pinn_train_seconds</code>. A phase with no valid best equation is recorded with
+<code>pinn_phase_ran</code> equal to 0 and leaves the network unchanged.</p>
 <p>Tabular results carry a <code>REGRESSION</code> equation with the target column on the
 left. The expression retains its fitted numeric literals and one outer
 least-squares scale. <code>model.result_.pareto_front()</code> exposes nondominated
 expressions with their token counts, loss and outer scale; the corresponding
 series are <code>pareto_expressions</code>, <code>pareto_complexity</code>, <code>pareto_loss</code> and
 <code>pareto_scale</code>. The inner constants and outer scale are distinct fitted values.</p>
+<h2 id="python-setup">Python setup</h2>
+<p>A <code>kd.TabularDataset</code> selects tabular mode in <code>Model.fit()</code>.
+A typed <code>DiscoverConfig</code> can supply a different <code>library</code>, which is Python-only
+and unavailable through JSON <code>params</code>. <code>pinn</code> takes a <code>PINNConfig</code>, exported
+from <code>kd.search</code>, or a JSON object of its fields, in which every omitted key
+keeps its default. <code>DiscoverConfig.burgers_preset(pinn=PINNConfig(...))</code>
+combines a reference preset with PINN mode through <code>config=</code>. A sketch, an
+<code>EarlyStoppingCallback</code> and a <code>kd.TabularDataset</code> are refused together with
+<code>pinn</code>.</p>
 <h2 id="references">References</h2>
 <p>Du et al. (2024). "DISCOVER: Deep identification of symbolically concise open-form partial differential equations via enhanced reinforcement learning". <em>Phys. Rev. Research</em> 6, 013182. <a href="https://doi.org/10.1103/PhysRevResearch.6.013182">Paper</a> · <a href="https://arxiv.org/abs/2210.02181">arXiv:2210.02181</a></p>
 <p>Code: <a href="https://github.com/menggedu/DISCOVER">menggedu/DISCOVER</a></p>
 <div style="font-size: 0.85em">
-<p>Implementation notes. KD implements the reinforcement-learning search, structural priors and the
-separate optional stability-selection code. The paper's genetic operators and
+<p>Implementation notes. KD implements the reinforcement-learning search, structural priors, PINN mode
+and its optional stability selection. The paper's genetic operators and
 dynamic subtree bank are not implemented. Risk-seeking policy gradient is the
 training strategy; PQT has zero weight in the reference's shipped configuration,
 and PPO is not implemented. The configured quantile follows DSO-PyTorch, while
@@ -2712,8 +2812,10 @@ for one-dimensional spatial differentiation.</p>
 <p>Dense least squares and the stability-selection statistic <code>std / mean</code> follow
 the reference code; the paper prints the reciprocal statistic. The optional
 coefficient-magnitude rejection is disabled unless configured. A follow-up
-method trains a neural surrogate and differentiates it by autograd; that PINN
-workflow is separate from the facade path documented here.</p>
+method trains a neural surrogate and differentiates it by autograd; KD runs it
+as PINN mode. The retraining phases are placed inside the <code>generations</code> loop
+by <code>n_iterations</code> and <code>cycle_n_iterations</code>, and the reference's cycle count
+<code>n_cycles</code> is read only by the standalone cycle runner.</p>
 </div>
 <h2 id="worked-example">Worked example</h2>
 <p>The run below uses the Chafee-Infante dataset that ships with KD: a 301 × 200

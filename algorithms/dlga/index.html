@@ -2352,7 +2352,7 @@
 <tr>
 <td><code>lhs_auto_select</code></td>
 <td><code>bool</code></td>
-<td><code>True</code></td>
+<td><code>False</code></td>
 </tr>
 <tr>
 <td><code>target_lhs_order</code></td>
@@ -2464,32 +2464,40 @@ field and derivative tokens. Use the dataset's own field and axis names:
 <code>u_x_t</code> is a mixed partial, and <code>diff_t(u_x)</code> is its open-form spelling.
 An atomic name segment is limited to third order; higher compound derivatives
 can be written as <code>u_xx_xx</code>.</p>
-<p>The library determines which axes can enter a result. Tokens that cannot be
-resolved cause the whole candidate containing them to be discarded; other
-candidates can still produce a fit. The surrogate models the left-hand-side
-field, so derivatives of another field are not available. Check a proposed
-library with <code>kd.validate_terms(dataset, terms)</code> before training. The
-constant-coefficient stage is implemented; the adaptive variable-coefficient
-modes are rejected at construction.</p>
+<p>The library determines which axes can enter a result. A library token that
+names an unknown field or axis, or a dataset field other than the
+left-hand-side one, refuses the whole fit before training. So does, when no
+sketch is set, a token that spells a time derivative of the left-hand-side
+field that the run fits: the order <code>target_lhs_order</code> names (<code>u_t</code>,
+<code>diff_t(u)</code>, <code>diff1_t(u)</code> for order 1; <code>u_tt</code>, <code>diff2_t(u)</code> for order 2), or
+both orders while <code>lhs_auto_select</code> is on. Such a token would fit its own
+branch exactly. The time derivative of an order the run does not fit is an
+ordinary library token. An atomic segment
+above third order, such as <code>u_xxxx</code>, is not refused: the fit runs and every
+candidate containing that token is invalid, so use the <code>u_xx_xx</code> spelling.
+The surrogate models only the left-hand-side field; other fields and their
+derivatives cannot enter its library. The constant-coefficient stage is
+implemented; the adaptive variable-coefficient modes are rejected at
+construction.</p>
 <p>Surrogate fitting precedes genetic search and can dominate cost. Both the
 number of observations and the derivative library affect resource use; the
 epoch budget alone does not bound memory. A shorter fit changes derivative
-accuracy and can affect the selected left-hand-side order. No pretrained
-weights or optional backend are needed.</p>
+accuracy and, under <code>lhs_auto_select</code>, can change the selected left-hand-side
+order. No pretrained weights or optional backend are needed.</p>
 <h2 id="method">Method</h2>
 <p>A neural network first fits the observations over their coordinates. The
-architecture has five hidden layers of 50 units, sine activation and Adam
+architecture has five hidden layers of 50 units, <code>sin</code> activation and Adam
 optimization. Field reads and derivatives both come from this network,
 with derivatives obtained by autograd.</p>
-<p>A genome contains up to five modules of up to five tokens. Each module is a
+<p>A genome contains up to <code>max_modules</code> modules of up to <code>max_module_length</code> tokens. Each module is a
 product and the genome is their sum. Coefficients are found from the augmented
 system's null space or by ordinary least squares, according to <code>solver</code>.
-Fitness is <code>nmse + epsilon * length</code>, with length counted in tokens. With
-<code>lhs_auto_select</code> enabled, each candidate is fitted against both the first and
-second time derivative, and the branch with the lower NMSE is used.
-<code>target_lhs_order</code> controls which dataset orders the run accepts; it does not
-pin the fitted branch. Second-order input requires auto-selection, while
-disabling auto-selection fits only the first derivative.</p>
+Fitness is <code>nmse + epsilon * length</code>, with length counted in tokens. Each
+candidate is fitted against the time derivative of the order
+<code>target_lhs_order</code> names, which has to equal the dataset's own left-hand-side
+order. With <code>lhs_auto_select</code> enabled, each candidate is fitted against both
+the first and second time derivative and the branch with the lower NMSE is
+used, so the returned law can carry the order the dataset does not declare.</p>
 <p>Each generation scores the population, retains the better half, refills it
 with random genomes, exchanges a module between adjacent pairs, then mutates
 by adding or deleting a module and shifting a token to an adjacent library
@@ -2513,8 +2521,14 @@ and surrogate accuracy.</p>
 <p>Xu et al. (2020). "DLGA-PDE: Discovery of PDEs with incomplete candidate library via combination of deep learning and genetic algorithm". <em>J. Comput. Phys.</em> 418, 109584. <a href="https://doi.org/10.1016/j.jcp.2020.109584">Paper</a> · <a href="https://arxiv.org/abs/2001.07305">arXiv:2001.07305</a></p>
 <p>Code: <a href="https://github.com/woshixuhao/DLGA_tutorial">woshixuhao/DLGA_tutorial</a> (the author's tutorial notebook, on the KdV case), <a href="https://github.com/woshixuhao/PIC_code">woshixuhao/PIC_code</a> (the author's own code for a later paper, running the same neural-network-plus-genetic-algorithm search)</p>
 <div style="font-size: 0.85em">
-<p>Implementation notes. KD compares the candidate left-hand-side branches by NMSE. The paper's
-Eq. (6) and an earlier implementation compare raw MSE, which also varies with
+<p>Implementation notes. The paper treats the order of the time derivative as
+part of what is discovered: the left-hand side is a gene of the genome,
+changed by mutation, and genomes with different left-hand sides compete on
+fitness. By default KD takes the order from the dataset and fits only that
+left-hand side. An earlier implementation fits <code>u_t</code> and <code>u_tt</code> for every
+candidate and keeps the better branch, which is <code>lhs_auto_select=true</code> here;
+under that option KD compares the branches by NMSE. The paper's
+Eq. (6) and that implementation compare raw MSE, which also varies with
 the target branch's variance. The length penalty is configurable; the author's
 tutorial fixes it for its demonstration. The genetic mechanism is checked
 against that implementation, with corrected crossover indexing and selection
@@ -2523,7 +2537,7 @@ extension is not part of this implementation.</p>
 </div>
 <h2 id="worked-example">Worked example</h2>
 <p>The run below uses the Burgers dataset that ships with KD: a 256 × 201 grid
-over <code>x</code> in [-8, 8] and <code>t</code> in [0, 10], whose initial profile steepens into a
+over <code>x</code> in [-8, 8) and <code>t</code> in [0, 10], whose initial profile steepens into a
 front at the origin and then spreads out as the diffusive term takes over.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../../images/dlga-field.png" alt="Heatmap of the Burgers field u(x, t)">
@@ -2552,9 +2566,11 @@ front at the origin and then spreads out as the diffusive term takes over.</p>
 </table>
 </div>
 <p>Both terms and both coefficients match. The terms were assembled from the
-default candidate library (<code>u</code>, <code>u_x</code>, <code>u_xx</code>, <code>u_xxx</code>), and the left-hand side
-was chosen by the run as well: DLGA-PDE fits both <code>u_t</code> and <code>u_tt</code> and keeps
-the one with the lower nmse.</p>
+default candidate library (<code>u</code>, <code>u_x</code>, <code>u_xx</code>, <code>u_xxx</code>), and every candidate
+was fitted against <code>u_t</code> alone under the default <code>target_lhs_order=1</code> and
+<code>lhs_auto_select=False</code>. Setting <code>lhs_auto_select=True</code> enables the paper's
+two-branch selection, fitting each candidate against both <code>u_t</code> and <code>u_tt</code>
+and keeping the branch with the lower NMSE.</p>
 <figure class="kd-figure kd-figure--wide" markdown="0">
   <img src="../../images/dlga-compare.png" alt="Surrogate u_t, predicted u_t, and the residual between them">
   <figcaption>The surrogate derivative target, its equation prediction, and predicted minus surrogate values. The first two panels share a color scale; the residual has its own scale, with any clipping disclosed on the figure.</figcaption>
