@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, Literal
 
 import torch
 
@@ -18,6 +18,10 @@ DEFAULT_START_WORDS: Final[tuple[str, ...]] = ("S", "ut", "+")
 DEFAULT_MAX_LENGTH: Final[int] = 49
 DEFAULT_EXPLORATION_RATE: Final[float] = 0.2
 
+SamplerKind = Literal["batched", "sequential"]
+SAMPLER_KINDS: Final[tuple[str, ...]] = ("batched", "sequential")
+DEFAULT_SAMPLER: Final[SamplerKind] = "batched"
+
 
 class AllTokensMaskedError(ValueError):
     pass
@@ -30,6 +34,7 @@ class SamplingConfig:
     masked_tokens: frozenset[int] = field(default_factory=frozenset)
     exploration_rate: float = DEFAULT_EXPLORATION_RATE
     max_length: int = DEFAULT_MAX_LENGTH
+    sampler: SamplerKind = DEFAULT_SAMPLER
 
     def __post_init__(self) -> None:
         if len(self.start_tokens) < 1:
@@ -43,6 +48,10 @@ class SamplingConfig:
             raise ValueError(
                 f"max_length ({self.max_length}) must exceed len(start_tokens) "
                 f"({len(self.start_tokens)})"
+            )
+        if self.sampler not in SAMPLER_KINDS:
+            raise ValueError(
+                f"sampler must be one of {SAMPLER_KINDS}, got {self.sampler!r}"
             )
 
 
@@ -112,14 +121,50 @@ class Sampler:
                 break
         return sentence
 
+    def _draw_next_batch(self, prefixes: list[list[int]]) -> list[int]:
+        term_position = len(prefixes[0]) % 2 == 1
+        legal = self._legal_ids(term_position=term_position)
+        if not legal:
+            kind = "term" if term_position else "operator"
+            raise AllTokensMaskedError(
+                f"no legal {kind} token at position {len(prefixes[0])}"
+            )
+        tokens = torch.tensor(prefixes, dtype=torch.long)
+        with torch.no_grad():
+            logits = self.backend.forward_logits(tokens)[:, -1,:]
+        legal_idx = torch.as_tensor(legal, dtype=torch.long, device=logits.device)
+        probs = torch.softmax(logits.index_select(1, legal_idx).cpu(), dim=1)
+        model_choice = torch.multinomial(probs, 1).squeeze(1)
+        explore = torch.rand(len(prefixes)) < self.config.exploration_rate
+        uniform = torch.randint(0, len(legal), (len(prefixes),))
+        choice = torch.where(explore, uniform, model_choice)
+        return [legal[int(index)] for index in choice.tolist()]
+
+    def _draw_sentences(self, n: int) -> list[list[int]]:
+        sentences = [list(self.config.start_tokens) for _ in range(n)]
+        active = list(range(n))
+        while active and len(sentences[active[0]]) < self.config.max_length:
+            tokens = self._draw_next_batch([sentences[i] for i in active])
+            still_active: list[int] = []
+            for index, token in zip(active, tokens, strict=True):
+                sentences[index].append(token)
+                if token != E_ID:
+                    still_active.append(index)
+            active = still_active
+        return sentences
+
     def sample(self, *, seed: int) -> list[int]:
         with torch.random.fork_rng():
             torch.manual_seed(seed)
-            return self._draw_sentence()
+            if self.config.sampler == "sequential":
+                return self._draw_sentence()
+            return self._draw_sentences(1)[0]
 
     def sample_batch(self, n: int, *, seed: int) -> list[list[int]]:
         if n == 0:
             return []
         with torch.random.fork_rng():
             torch.manual_seed(seed)
-            return [self._draw_sentence() for _ in range(n)]
+            if self.config.sampler == "sequential":
+                return [self._draw_sentence() for _ in range(n)]
+            return self._draw_sentences(n)

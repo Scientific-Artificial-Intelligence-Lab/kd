@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import replace
 from datetime import datetime, timezone
 
+import torch
 from torch import Tensor
 
 from kd.core.equation import Equation, Form, Scalar
@@ -44,6 +46,23 @@ def cpu_seconds_now() -> float | None:
         + child_usage.ru_utime
         + child_usage.ru_stime
     )
+
+
+def peak_rss_bytes() -> int | None:
+    try:
+        import resource
+    except ImportError:
+        return None
+    scale = 1 if sys.platform == "darwin" else 1024
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
+
+
+def cuda_peak_bytes(device: torch.device | None) -> int | None:
+    if device is None or device.type != "cuda":
+        return None
+    if not torch.cuda.is_initialized():
+        return None
+    return int(torch.cuda.max_memory_allocated(device))
 
 
 def residual_stats_from(residuals: Tensor | None) -> ResidualStats | None:

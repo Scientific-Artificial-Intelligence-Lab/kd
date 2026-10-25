@@ -312,11 +312,18 @@ class SourceReport:
     It is deliberately not a :class:`DatasetReport`: a raw file has no axes, no
     LHS and no spacing verdict until a layout or a mapping has named the
     arrays, so those facts are absent here rather than fabricated.
+    ``layouts`` names the registered layouts that recognize the file, the
+    route ``kd.load(path)`` takes without ``coords=`` / ``fields=``. An empty
+    list means ``kd.load`` needs that mapping. A recognized file can still need
+    a load option: ``select=`` for a PDEBench file with several samples, or
+    the explicit call with ``field_axes=`` for a plain grid whose coordinates
+    share a length.
     """
 
     path: str
     container: str
     arrays: list[ArrayReport]
+    layouts: list[str]
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe dict (MCP-boundary contract)."""
@@ -324,4 +331,5 @@ class SourceReport:
             "path": self.path,
             "container": self.container,
             "arrays": [array.to_dict() for array in self.arrays],
+            "layouts": list(self.layouts),
         }

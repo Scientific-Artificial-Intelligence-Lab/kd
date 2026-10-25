@@ -157,7 +157,7 @@ class KdNpzLayout:
         inventory: Inventory,
         *,
         select: dict[str, int] | None,
-        lhs: str,
+        lhs: str | None,
         periodic: Iterable[str] | None,
         name: str,
         dtype: torch.dtype,

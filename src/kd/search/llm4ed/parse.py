@@ -15,11 +15,15 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
+from kd.core.expr.executor import UNITY_TOKEN
 from kd.core.interrupt import SearchInterrupted
 
 
 _ALLOWED_POWER_ORDERS = frozenset({"2", "3", "4", "5"})
 _POWER_ORDER_PATTERN = re.compile(r"\^(\d+)")
+
+
+_MAX_POWER = 5
 
 
 _POSITIVE_POW_IR = {
@@ -28,6 +32,21 @@ _POSITIVE_POW_IR = {
     4: "n2(n2({base}))",
     5: "mul(n2(n2({base})), {base})",
 }
+
+
+
+_FUNCTION_IR: dict[type, str] = {
+    sympy.sin: "sin",
+    sympy.cos: "cos",
+    sympy.exp: "exp",
+    sympy.log: "log",
+}
+
+_PLACEHOLDER_PATTERN = re.compile(r"c[1-9][0-9]*")
+
+
+def is_placeholder(name: str) -> bool:
+    return _PLACEHOLDER_PATTERN.fullmatch(name) is not None
 
 
 class Llm4edParseError(ValueError):
@@ -63,28 +82,39 @@ class ParsedEquation:
     terms: tuple[ParsedTerm, ...]
 
 
-def equation_to_sympy(equation: str, operands: Sequence[str]) -> sympy.Expr:
+def equation_to_sympy(
+    equation: str,
+    operands: Sequence[str],
+    *,
+    placeholders: bool = False,
+    target: str | None = None,
+) -> sympy.Expr:
     operand_set = frozenset(operands)
 
     def _can_split(symbol: str) -> bool:
 
 
-        if symbol not in operand_set:
-            return bool(_token_splittable(symbol))
-        return False
+        if symbol in operand_set or (placeholders and is_placeholder(symbol)):
+            return False
+        return bool(_token_splittable(symbol))
 
     transformations = standard_transformations + (
         split_symbols_custom(_can_split),
         convert_xor,
         implicit_multiplication,
     )
+
+
+
+    bound = operand_set if target is None else operand_set | {target}
+    symbols = {name: sympy.Symbol(name) for name in bound}
     try:
-        expr = parse_expr(equation, transformations=transformations)
+        expr = parse_expr(equation, local_dict=symbols, transformations=transformations)
 
 
 
 
-        return sympy.expand(expr)
+        expanded = sympy.expand(expr)
     except SearchInterrupted:
 
 
@@ -94,6 +124,22 @@ def equation_to_sympy(equation: str, operands: Sequence[str]) -> sympy.Expr:
         raise Llm4edParseError(
             f"cannot parse equation {equation!r}: {type(exc).__name__}: {exc}"
         ) from exc
+    if not isinstance(expanded, sympy.Expr):
+
+
+        raise Llm4edParseError(
+            f"equation {equation!r} is a {type(expanded).__name__}, not an expression"
+        )
+    return expanded
+
+
+def reads_as_symbol(name: str) -> bool:
+    probe = f"{name} + 2*c1 + 0.5"
+    expected = sympy.Symbol(name) + 2 * sympy.Symbol("c1") + sympy.Float(0.5)
+    try:
+        return bool(equation_to_sympy(probe, (name,), placeholders=True) == expected)
+    except Llm4edParseError:
+        return False
 
 
 def _check_power_orders(equation: str) -> None:
@@ -105,10 +151,15 @@ def _check_power_orders(equation: str) -> None:
             )
 
 
-def _check_operands(expr: sympy.Expr, operands: Sequence[str]) -> None:
+def _check_operands(
+    expr: sympy.Expr, operands: Sequence[str], *, placeholders: bool
+) -> None:
     operand_set = frozenset(operands)
     unknown = sorted(
-        str(symbol) for symbol in expr.free_symbols if str(symbol) not in operand_set
+        str(symbol)
+        for symbol in expr.free_symbols
+        if str(symbol) not in operand_set
+        and not (placeholders and is_placeholder(str(symbol)))
     )
     if unknown:
         raise UndefinedOperandError(
@@ -128,14 +179,23 @@ def _fold(op: str, parts: list[str]) -> str:
     return result
 
 
-def _convert_pow(node: sympy.Expr) -> str:
+def _convert_pow(node: sympy.Expr, functions: frozenset[str]) -> str:
     base, exponent = node.args
+    if exponent.is_Rational and exponent.q == 2 and "sqrt" in functions:
+
+
+        if abs(exponent) > _MAX_POWER:
+            raise InexpressibleTermError(
+                f"exponent {exponent} in {node} is outside the expressible range "
+                f"(|p/2| <= {_MAX_POWER})"
+            )
+        return _sqrt_power_ir(_convert_node(base, functions), int(exponent.p))
     if not exponent.is_Integer:
         raise InexpressibleTermError(
             f"non-integer exponent {exponent} in {node} is not expressible"
         )
     k = int(exponent)
-    base_ir = _convert_node(base)
+    base_ir = _convert_node(base, functions)
     if k in _POSITIVE_POW_IR:
         return _POSITIVE_POW_IR[k].format(base=base_ir)
     if k == -1:
@@ -143,39 +203,80 @@ def _convert_pow(node: sympy.Expr) -> str:
     if -k in _POSITIVE_POW_IR:
         return f"recip({_POSITIVE_POW_IR[-k].format(base=base_ir)})"
     raise InexpressibleTermError(
-        f"exponent {k} in {node} is outside the expressible range "
-        "(-5..-1, 2..5)"
+        f"exponent {k} in {node} is outside the expressible range (-5..-1, 2..5)"
     )
 
 
-def _convert_node(node: sympy.Expr) -> str:
+def _sqrt_power_ir(base_ir: str, p: int) -> str:
+    power = _positive_power_ir(f"sqrt({base_ir})", abs(p))
+    return power if p > 0 else f"recip({power})"
+
+
+def _positive_power_ir(base_ir: str, k: int) -> str:
+    if k == 1:
+        return base_ir
+    if k in _POSITIVE_POW_IR:
+        return _POSITIVE_POW_IR[k].format(base=base_ir)
+    fifth = _POSITIVE_POW_IR[5].format(base=base_ir)
+    return f"mul({_positive_power_ir(base_ir, k - 5)}, {fifth})"
+
+
+def _convert_node(node: sympy.Expr, functions: frozenset[str]) -> str:
     if isinstance(node, sympy.Symbol):
         return str(node)
     if node.is_Number:
         return _number_literal(node)
     if isinstance(node, sympy.Add):
-        return _fold("add", [_convert_node(arg) for arg in node.args])
+        return _fold("add", [_convert_node(arg, functions) for arg in node.args])
     if isinstance(node, sympy.Mul):
-        return _fold("mul", [_convert_node(arg) for arg in node.args])
+        return _fold("mul", [_convert_node(arg, functions) for arg in node.args])
     if isinstance(node, sympy.Pow):
-        return _convert_pow(node)
+        return _convert_pow(node, functions)
+    name = _FUNCTION_IR.get(type(node))
+    if name is not None and name in functions:
+        return f"{name}({_convert_node(node.args[0], functions)})"
     raise InexpressibleTermError(
         f"cannot express {node} (sympy {type(node).__name__}) in kd IR"
     )
 
 
-def term_to_ir(term: sympy.Expr) -> str:
+def term_to_ir(
+    term: sympy.Expr,
+    *,
+    functions: frozenset[str] = frozenset(),
+    constant_term: bool = False,
+) -> str:
     if term.is_Number:
+
+        if constant_term and term.is_finite and float(term) != 0.0:
+            if term == 1:
+                return UNITY_TOKEN
+            return f"mul({_number_literal(term)}, {UNITY_TOKEN})"
+        if constant_term:
+            raise InexpressibleTermError(
+                f"constant term {term} has no finite nonzero value"
+            )
         raise InexpressibleTermError(
             f"pure constant term {term} has no design-matrix column "
             "(EDL PDE mode has no constant term; candidate is dropped)"
         )
-    return _convert_node(term)
+    ir = _convert_node(term, functions)
+    if not term.free_symbols:
+        raise InexpressibleTermError(
+            f"constant term {term} is not a number and has no design-matrix column"
+        )
+    return ir
 
 
-def term_base_ir_and_coeff(term: sympy.Expr) -> tuple[str, float]:
+def term_base_ir_and_coeff(
+    term: sympy.Expr,
+    *,
+    functions: frozenset[str] = frozenset(),
+    constant_term: bool = False,
+) -> tuple[str, float]:
     coeff, base = term.as_coeff_Mul()
-    return term_to_ir(base), float(coeff)
+    ir = term_to_ir(base, functions=functions, constant_term=constant_term)
+    return ir, float(coeff)
 
 
 def _split_terms(expr: sympy.Expr) -> tuple[sympy.Expr, ...]:
@@ -188,21 +289,38 @@ def _term_str(term: sympy.Expr) -> str:
     return str(term).replace("**", "^")
 
 
-def parse_equation(equation: str, operands: Sequence[str]) -> ParsedEquation:
-    expr = equation_to_sympy(equation, operands)
+def parse_equation(
+    equation: str,
+    operands: Sequence[str],
+    *,
+    functions: frozenset[str] = frozenset(),
+    placeholders: bool = False,
+    constant_term: bool = False,
+    target: str | None = None,
+) -> ParsedEquation:
+    expr = equation_to_sympy(
+        equation, operands, placeholders=placeholders, target=target
+    )
 
 
     _check_power_orders(equation)
-    _check_operands(expr, operands)
-    terms = tuple(_build_parsed_term(term) for term in _split_terms(expr))
+    _check_operands(expr, operands, placeholders=placeholders)
+    terms = tuple(
+        _build_parsed_term(term, functions, constant_term)
+        for term in _split_terms(expr)
+    )
     return ParsedEquation(equation=equation, sympy_expr=expr, terms=terms)
 
 
-def _build_parsed_term(term: sympy.Expr) -> ParsedTerm:
-    base_ir, coeff = term_base_ir_and_coeff(term)
+def _build_parsed_term(
+    term: sympy.Expr, functions: frozenset[str], constant_term: bool
+) -> ParsedTerm:
+    base_ir, coeff = term_base_ir_and_coeff(
+        term, functions=functions, constant_term=constant_term
+    )
     return ParsedTerm(
         term_str=_term_str(term),
-        ir=term_to_ir(term),
+        ir=term_to_ir(term, functions=functions, constant_term=constant_term),
         base_ir=base_ir,
         coeff=coeff,
     )

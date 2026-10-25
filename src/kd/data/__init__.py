@@ -1,4 +1,10 @@
-"""kd data module: PDE dataset schema and synthetic data generation."""
+"""kd data module: PDE dataset schema and synthetic data generation.
+
+Sanctioned direct-import module path beyond this facade: ``kd.data.lowpass``
+for the result and refit types of ``select_lowpass_modes``
+(``LowpassSelection``, ``LowpassStep``, ``LowpassRefit``, ``RefitOutcome``),
+which are not re-exported here.
+"""
 
 from kd.data._load import load
 from kd.data.catalog import (
@@ -9,6 +15,13 @@ from kd.data.catalog import (
     list_datasets_answer_blind,
 )
 from kd.data.loaders import load_wave_breaking_datasets
+from kd.data.lowpass import lowpass_smooth, lowpass_spectrum, select_lowpass_modes
+from kd.data.network_smoothing import (
+    NetworkSmoothing,
+    NetworkSmoothingQuality,
+    network_smooth,
+    surrogate_field,
+)
 from kd.data.noise import (
     NoiseScale,
     add_noise,
@@ -65,6 +78,15 @@ from kd.data.synthetic import (
 )
 from kd.data.tabular_file import load_tabular
 from kd.data.trajectory import Trajectory, TrajectorySet, derivative_target
+from kd.data.trajectory_regression import (
+    TrajectoryNNConfig,
+    TrajectoryRegression,
+    prepare_trajectory_regression,
+)
+from kd.data.trajectory_regression_io import (
+    load_trajectory_regression,
+    save_trajectory_regression,
+)
 from kd.data.trajectory_table import trajectories_to_tabular
 
 __all__ = [
@@ -82,6 +104,8 @@ __all__ = [
     "TabularDataset",
     "TaskType",
     "Trajectory",
+    "TrajectoryNNConfig",
+    "TrajectoryRegression",
     "TrajectorySet",
     "compute_dataset_fingerprint",
     "derivative_target",
@@ -115,13 +139,23 @@ __all__ = [
     "load_poisson_disk",
     "load_tabular",
     "load_tlc_cc",
+    "load_trajectory_regression",
     "load_wave",
     "load_wave_breaking",
     "load_wave_breaking_datasets",
+    "lowpass_smooth",
+    "lowpass_spectrum",
+    "select_lowpass_modes",
+    "NetworkSmoothing",
+    "NetworkSmoothingQuality",
+    "network_smooth",
+    "surrogate_field",
     "add_noise",
     "ratio_subsample",
+    "prepare_trajectory_regression",
     "resample_to_grid",
     "savgol_smooth",
+    "save_trajectory_regression",
     "stride_subsample",
     "trajectories_to_tabular",
     "xu2020_relative",

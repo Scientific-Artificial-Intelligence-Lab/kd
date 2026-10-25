@@ -8,8 +8,16 @@ This example walks through the heat equation: u_t = 0.1 * u_xx
 on a periodic 1D domain. The same recipe works for any field on a
 regular grid - change the arrays, keep the structure.
 
-For other file formats (.npy, .npz, .csv, .mat, .h5), load them
-with the matching numpy/scipy reader and follow the same recipe.
+For data stored in a file, ``kd.inspect_file(path)`` lists the arrays
+or columns the file holds, and ``kd.load(path, coords={"x": "x", "t": "t"},
+fields={"u": "u"})`` builds the dataset from them. A plain ``.npz`` with
+1-D coordinate arrays of different lengths and one field array loads with
+``kd.load(path)`` alone. When two coordinates have the same length, the
+field's shape does not show which dimension is which, and the mapped call
+also takes ``field_axes=["x", "t"]``, the coordinate of each field
+dimension in storage order. A file does not state periodicity:
+``kd.load`` takes the same ``periodic={"x"}`` argument that
+``from_arrays`` takes below.
 
 Run: python examples/02_your_data.py
 """

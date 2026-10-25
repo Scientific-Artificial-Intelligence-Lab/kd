@@ -59,17 +59,43 @@ HEADLINE_COEFFICIENT_SOURCE_VOCAB: Final[frozenset[str]] = frozenset(
     {"native", "platform_refit", "undeclared"}
 )
 
+
+
+STOP_REASON_VOCAB: Final[frozenset[str]] = frozenset(
+    {
+        "iterations_exhausted",
+        "algorithm_done",
+        "wall_clock_budget",
+        "wall_clock_budget_before_search",
+        "evaluation_budget",
+        "early_stopping",
+        "callback",
+    }
+)
+
 _RUN_COST_REQUIRED_FIELDS = frozenset(
     {
         "wallclock_seconds", "search_seconds",
         "boundary_results", "boundary_invalid_results",
     }
 )
-_RUN_COST_OPTIONAL_FIELDS = frozenset(
+
+
+
+_RUN_COST_SPARSE_FIELDS = frozenset(
     {
-        "preprocessing_seconds", "surrogate_train_seconds", "cpu_seconds",
-        "tokens_in", "tokens_out", "tokens_cached", "api_cost_usd",
+        "stop_reason", "max_seconds", "peak_rss_bytes",
+        "cuda_max_memory_allocated_bytes", "device",
     }
+)
+_RUN_COST_OPTIONAL_FIELDS = (
+    frozenset(
+        {
+            "preprocessing_seconds", "surrogate_train_seconds", "cpu_seconds",
+            "tokens_in", "tokens_out", "tokens_cached", "api_cost_usd",
+        }
+    )
+    | _RUN_COST_SPARSE_FIELDS
 )
 _RESIDUAL_STATS_FIELDS = frozenset({"mean", "std", "max_abs", "n"})
 _EVIDENCE_REQUIRED_FIELDS = frozenset(
@@ -154,8 +180,18 @@ class RunCost:
     tokens_out: int | None = None
     tokens_cached: int | None = None
     api_cost_usd: float | None = None
+    stop_reason: str | None = None
+    max_seconds: float | None = None
+    peak_rss_bytes: int | None = None
+    cuda_max_memory_allocated_bytes: int | None = None
+    device: str | None = None
 
     def __post_init__(self) -> None:
+        if self.stop_reason is not None and self.stop_reason not in STOP_REASON_VOCAB:
+            raise RunCostValueError(
+                f"Unsupported RunCost.stop_reason: got {self.stop_reason!r}; "
+                f"supported values: {sorted(STOP_REASON_VOCAB)!r}"
+            )
         for field in ("wallclock_seconds", "search_seconds"):
             value = getattr(self, field)
             if not math.isfinite(value) or value < 0:
@@ -168,6 +204,7 @@ class RunCost:
             "surrogate_train_seconds",
             "cpu_seconds",
             "api_cost_usd",
+            "max_seconds",
         ):
             value = getattr(self, field)
             if value is not None and (not math.isfinite(value) or value < 0):
@@ -175,7 +212,13 @@ class RunCost:
                     f"RunCost.{field} must be finite and non-negative when set; "
                     f"got {value!r}"
                 )
-        for field in ("tokens_in", "tokens_out", "tokens_cached"):
+        for field in (
+            "tokens_in",
+            "tokens_out",
+            "tokens_cached",
+            "peak_rss_bytes",
+            "cuda_max_memory_allocated_bytes",
+        ):
             value = getattr(self, field)
             if value is not None and value < 0:
                 raise RunCostValueError(
@@ -197,7 +240,11 @@ class RunCost:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        for field in _RUN_COST_SPARSE_FIELDS:
+            if payload[field] is None:
+                del payload[field]
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RunCost:
@@ -219,6 +266,13 @@ class RunCost:
             tokens_out=data.get("tokens_out"),
             tokens_cached=data.get("tokens_cached"),
             api_cost_usd=data.get("api_cost_usd"),
+            stop_reason=data.get("stop_reason"),
+            max_seconds=data.get("max_seconds"),
+            peak_rss_bytes=data.get("peak_rss_bytes"),
+            cuda_max_memory_allocated_bytes=data.get(
+                "cuda_max_memory_allocated_bytes"
+            ),
+            device=data.get("device"),
         )
 
 
@@ -413,7 +467,9 @@ class RunRecord:
     record_hash_scheme: str
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["cost"] = self.cost.to_dict()
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RunRecord:

@@ -16,12 +16,22 @@ from kd.viz.plots.field import plot_field, plot_field_comparison
 from kd.viz.plots.parity import plot_parity
 from kd.viz.plots.pde_residual import plot_pde_residual_field
 from kd.viz.plots.plugin import plot_plugin
+from kd.viz.plots.profile_animation import (
+    plot_profile_animation,
+    plot_profile_waterfall,
+    save_profile_animation,
+)
 from kd.viz.plots.residual import plot_residual
 from kd.viz.plots.search_trajectory import (
     plot_search_score_distribution,
     plot_term_presence,
 )
 from kd.viz.plots.time_slices import plot_time_slices
+from kd.viz.plots.trajectory import (
+    plot_state_panels,
+    plot_trajectory_overlay,
+    save_trajectory_animation,
+)
 
 __all__ = [
     "plot_coefficient_bar",
@@ -36,13 +46,19 @@ __all__ = [
     "plot_parity",
     "plot_plugin",
     "plot_pde_residual_field",
+    "plot_profile_animation",
+    "plot_profile_waterfall",
     "plot_residual",
     "plot_score_bar",
     "plot_search_score_distribution",
+    "plot_state_panels",
     "plot_structure_comparison",
     "plot_summary_table",
     "plot_term_presence",
     "plot_time_slices",
+    "plot_trajectory_overlay",
     "render_overlaid_convergence",
     "save_field_animation",
+    "save_profile_animation",
+    "save_trajectory_animation",
 ]

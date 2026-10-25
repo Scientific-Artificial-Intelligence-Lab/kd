@@ -18,10 +18,18 @@ from kd.harness.consensus_report import (
 )
 from kd.harness.consensus_verify import MemberVerification, VerificationStatus
 from kd.harness.episode import SKETCH_SIDECAR_FILENAME, EpisodeOutcome, run_episode
+from kd.harness.jobs import JobResult, run_jobs
 from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan, PlanEntry
 from kd.harness.recording import RecordingOptions
 from kd.harness.report import build_plan_report, build_store_report, write_store_report
-from kd.harness.runner import PlanRunResult, run_plan
+from kd.harness.runner import ParallelOptions, PlanRunResult, run_plan
+from kd.harness.schedule import (
+    Job,
+    ResourceLimits,
+    SchedulerState,
+    child_environment,
+    resolve_gpu_pool,
+)
 from kd.harness.store import EvidenceStore, EvidenceStoreError, environment_fingerprint
 from kd.harness.store_merge import merge_stores
 from kd.harness.supervise import (
@@ -46,25 +54,33 @@ __all__ = [
     "EvidenceStore",
     "EvidenceStoreError",
     "ExperimentPlan",
+    "Job",
+    "JobResult",
     "MemberVerification",
+    "ParallelOptions",
     "PlanEntry",
     "PlanRunResult",
     "ProcessEnding",
     "ProcessResult",
     "ProcessSupervisor",
     "RecordingOptions",
+    "ResourceLimits",
+    "SchedulerState",
     "VerificationStatus",
     "build_capped_command",
     "build_consensus",
     "build_plan_report",
     "build_store_report",
     "check_memory_cap_available",
+    "child_environment",
     "consensus_to_dict",
     "environment_fingerprint",
     "merge_stores",
     "read_consensus_artifact",
     "render_consensus_markdown",
+    "resolve_gpu_pool",
     "run_episode",
+    "run_jobs",
     "run_plan",
     "run_supervised",
     "write_consensus_artifact",

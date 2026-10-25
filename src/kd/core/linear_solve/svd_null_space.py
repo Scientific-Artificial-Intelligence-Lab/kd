@@ -11,6 +11,7 @@ from kd.core.linear_solve._helpers import (
     upcast_for_solve,
 )
 from kd.core.linear_solve.base import SolveResult, SparseSolver
+from kd.core.oom import is_cpu_alloc_failure
 
 _SELECT_EPS = 1e-14
 
@@ -38,7 +39,13 @@ class SVDNullSpaceSolver(SparseSolver):
             augmented = torch.column_stack((y_solve, theta_solve))
             try:
                 _u, _s, vh = torch.linalg.svd(augmented, full_matrices=False)
+            except torch.cuda.OutOfMemoryError:
+
+
+                raise
             except RuntimeError as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
                 return self._invalid(theta, f"SVD failed: {exc}")
 
             null_vector = vh[-1,:]

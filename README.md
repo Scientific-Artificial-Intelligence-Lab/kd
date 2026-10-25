@@ -111,9 +111,11 @@ Each linked page covers the method, its parameters and setup.
 | [**PySR**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysr/) | `"pysr"` | External, Cranmer 2023 | Genetic programming over expression trees |
 | [**PySINDy**](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/pysindy/) | `"pysindy"` | External, de Silva et al. 2020 | Native STLSQ sparse regression over a KD term library |
 
-DISCOVER and PySR also accept feature tables. SGA-PDE and PySINDy support
-[sketches](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/21_sketch_discovery.py) that specify known terms and constrain
-the unknown remainder. Algorithm settings can be passed as `Model` keywords;
+SGA-PDE, DISCOVER, LLM4ED, PySR and PySINDy also accept feature tables. Every algorithm
+accepts a [sketch](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/21_sketch_discovery.py) for a PDE on gridded data,
+apart from the two modes named under "Discovery with a sketch"; a sketch
+specifies known terms and constrains the unknown remainder. Algorithm settings
+can be passed as `Model` keywords;
 [the API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/config/)
 documents their types, defaults and programmatic configuration schemas.
 
@@ -122,13 +124,17 @@ documents their types, defaults and programmatic configuration schemas.
 `Model.fit` also accepts a `TabularDataset`: a plain feature table, searched for
 `y = f(X)` with no fields, no derivatives and no term library to supply. The
 example below uses the bundled TLC-CC measurements, 74 chromatography conditions.
+The search takes about 17 minutes with `OMP_NUM_THREADS=1` and about 30 minutes
+with PyTorch's default thread count on a 24-core CPU. At seed 0 its front contains
+the published form r/(a*R_F + b), with a and b close to the published 0.147 and
+0.0114.
 
 ```python
 import kd
 
 dataset = kd.load_tlc_cc(target="start")  # X = (R_F, r), y = V_S
-model = kd.Model("discover", generations=100, seed=0,
-                 batch_size=500, reward_alpha=0.005, max_length=15).fit(dataset)
+model = kd.Model("discover", generations=200, seed=0,
+                 batch_size=1000, reward_alpha=0.005, max_length=15).fit(dataset)
 
 for entry in model.result_.pareto_front():
     print(entry.complexity, entry.loss, entry.scale, entry.expression)
@@ -136,9 +142,38 @@ for entry in model.result_.pareto_front():
 
 The Pareto front records accuracy and expression size. Each entry holds the raw
 candidate in `entry.expression` and its fitted outer coefficient in `entry.scale`;
-both are needed to read the fitted expression. DISCOVER and PySR run in tabular
-mode. [Column chromatography](https://scientific-artificial-intelligence-lab.github.io/kd/examples/two_engines/)
-compares their fronts and the recovered coefficients with the published formula.
+both are needed to read the fitted expression. SGA-PDE, DISCOVER, LLM4ED, PySR
+and PySINDy run in tabular mode. [Column chromatography](https://scientific-artificial-intelligence-lab.github.io/kd/examples/two_engines/)
+compares the DISCOVER and PySR fronts and their recovered coefficients with the
+published formula.
+
+## ODE trajectories
+
+Time series of an ODE system load with `kd.load(..., kind="trajectory")`. The
+file below is a long table with one row per sample: a trajectory id column
+(`run`), a time column (`time`) and one column per state. Trajectories may
+differ in length and time grid.
+
+```python
+import kd
+
+trajectories = kd.load(
+    "trajectories.csv",
+    kind="trajectory",
+    coords={"t": "time"},
+    fields={"x": "position", "v": "velocity"},
+    trajectory_id="run",
+)
+table = kd.trajectories_to_tabular(trajectories, "x", trim=2)
+model = kd.Model("sga", generations=100, seed=0).fit(table)
+```
+
+`kd.trajectories_to_tabular` differentiates each trajectory in time and returns
+a feature table with every state as an input and the derivative of one state,
+here `dx_dt`, as the target; `trim=2` drops two samples at each end of every
+trajectory. The fit gives the law of that one state. Integrating the system
+forward needs one law per state, so the projection and the fit are repeated for
+`v`.
 
 ## Examples and datasets
 
@@ -185,7 +220,23 @@ An anchored term fixes the structure while leaving its coefficient free.
 A hole declares how many terms may fill it and what forms they may take,
 including derivative order, operators, fields and axes.
 
-SGA-PDE and PySINDy accept sketches. The
+With the quick start's `dataset` and `model`, this sketch pins the advection
+term with its coefficient and leaves one hole for a single term of derivative
+order at most 2:
+
+```python
+sketch = kd.Sketch(pinned={"u*u_x": -1.0},
+                   holes=[kd.Hole(max_terms=1, max_deriv_order=2)])
+model.fit(dataset, sketch=sketch)
+```
+
+`model.result_.equation` contains the pinned term, and
+`model.result_.sketch_outcome` reports the clause-by-clause verdict and, when
+the law satisfies every clause and fits the data, the certified solution.
+
+Every algorithm accepts a sketch when it searches a PDE on gridded data, except
+DISCOVER's PINN mode and EqGPT's multi-case wave mode; `kd.instrument_schemas()`
+declares the support of each mode clause by clause. The
 [Burgers sketch example](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/21_sketch_discovery.py) pins the advection term,
 searches for the missing diffusion term and explains how the result is checked
 against the sketch and the data.

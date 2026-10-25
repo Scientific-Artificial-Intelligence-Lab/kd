@@ -6,15 +6,25 @@ import json
 import os
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import kd
-from kdagent.data_source import load_dataset, resolve_input
+from kdagent.data_source import (
+    derivation_chain,
+    input_record,
+    is_derived,
+    is_file_ref,
+    load_dataset,
+    raw_fingerprint,
+    resolve_input,
+)
 from kd.core.equation import sketch_from_dict
 from kd.search import RUNDIR_SCHEME, RunDirPaths, RunRecord, run_id_of_run_dir
 
 from kdagent import criteria, priors, surrogate_training
+from kdagent.episode_worker import measure_selection_forward
 from kdagent.lineage import PLATFORM_FRAME, SegmentEntry, SegmentLedger
 from kdagent.platform_eval import PlatformEvaluation, lhs_order_of, platform_evaluation
 from kdagent.resume import (
@@ -26,6 +36,7 @@ from kdagent.resume import (
     segment_action,
 )
 from kdagent.segment_report import build_segment_report, law_from_evidence
+from kdagent.session import DEVICES
 from kdagent.surrogates import (
     REGISTRY_DIRNAME,
     SurrogateEntry,
@@ -74,6 +85,8 @@ def _dispatch(
             sketch=None if args.sketch is None else json.loads(args.sketch),
             surrogate=args.surrogate,
             platform_eval=args.platform_eval,
+            forward_eval=args.forward_eval,
+            reason=args.reason,
         )
     if args.command == "status":
         return _status(
@@ -91,11 +104,15 @@ def _dispatch(
             return _surrogate_list(registry)
         return _surrogate_train(
             registry,
+            ledger,
+            reason=args.reason,
             dataset=args.dataset,
             algorithm=args.algorithm,
             params=None if args.params is None else json.loads(args.params),
             seed=args.seed,
             max_seconds=args.max_seconds,
+            device=args.device,
+            training_dtype=args.training_dtype,
         )
     if args.command == "prune":
         ledger.prune(args.run_id, reason=args.reason)
@@ -126,6 +143,8 @@ def _record(
     sketch: dict[str, Any] | None = None,
     surrogate: str | None = None,
     platform_eval: bool = False,
+    forward_eval: bool = False,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     if sketch is not None:
         sketch_from_dict(sketch)
@@ -163,8 +182,10 @@ def _record(
     evaluation: PlatformEvaluation | None = None
     report: dict[str, Any] | None = None
     summary = None
+    record_hash: str | None = None
     if status == "completed":
-        evidence = RunRecord.load(RunDirPaths(root=path).record).evidence
+        sealed = RunRecord.load(RunDirPaths(root=path).record)
+        evidence, record_hash = sealed.evidence, sealed.record_hash
         dataset = evidence.dataset_name
         nmse = evidence.nmse
         law = law_from_evidence(evidence)
@@ -265,6 +286,12 @@ def _record(
         platform_nmse=platform_nmse,
         platform_frame=platform_frame,
         platform_coefficients=platform_coefficients,
+        selection_forward=(
+            _forward_eval(workspace, run_id, law, record_hash, dataset)
+            if forward_eval
+            else None
+        ),
+        reason=reason,
     )
 
 
@@ -289,7 +316,28 @@ def _record(
                 ),
             }
         )
+    if forward_eval:
+        payload["selection_forward"] = entry.selection_forward
     return payload
+
+
+def _forward_eval(
+    workspace: Path,
+    run_id: str,
+    law: dict[str, Any] | None,
+    record_hash: str | None,
+    dataset: str,
+) -> dict[str, Any]:
+    chain = derivation_chain(workspace, dataset) if is_file_ref(dataset) else []
+    return measure_selection_forward(
+        run_id=run_id,
+        law=law,
+        record_hash=record_hash,
+        dataset_id=dataset,
+        input_source=resolve_input(workspace, dataset),
+        input_record=input_record(dataset, chain),
+        remaining_seconds=None,
+    )
 
 
 def _preview(workspace: Path, *, dataset: str) -> dict[str, Any]:
@@ -335,16 +383,22 @@ def _surrogate_list(registry: SurrogateRegistry) -> dict[str, Any]:
 
 def _surrogate_train(
     registry: SurrogateRegistry,
+    ledger: SegmentLedger,
     *,
+    reason: str | None,
     dataset: str,
     algorithm: str,
     params: dict[str, Any] | None,
     seed: int,
     max_seconds: int | None,
+    device: str,
+    training_dtype: str | None,
 ) -> dict[str, Any]:
     schema = _registered_schema(algorithm)
     key = surrogate_training.artifact_key(schema)
-    requested = surrogate_training.surrogate_params(schema, params)
+    requested = surrogate_training.resolve_training_params(
+        schema, surrogate_training.surrogate_params(schema, params), training_dtype
+    )
     if max_seconds is not None and max_seconds <= 0:
         raise ValueError(
             f"--max-seconds has to be a positive number of seconds, got "
@@ -358,23 +412,61 @@ def _surrogate_train(
     }
     hit, retrained_reason = surrogate_training.reuse_hit(registry, recipe)
     if hit is not None:
-        return _surrogate_answer(hit, reused=True, retrained_reason=None)
+        return _noted(
+            ledger,
+            _surrogate_answer(hit, reused=True, retrained_reason=None),
+            reason=reason,
+        )
     training = surrogate_training.run_training(
         registry=registry,
         schema=schema,
         recipe=recipe,
         key=key,
         time_cap_seconds=None if max_seconds is None else float(max_seconds),
+        device=device,
     )
     if training.error_type is not None:
 
 
 
+        ledger.note(
+            verb="train_surrogate",
+            ref={},
+            run_id=None,
+            reason=reason,
+            status="failure",
+            created_at=_now(),
+        )
         raise RuntimeError(f"{training.error_type}: {training.error_message}")
     entry = surrogate_training.register_training(
         registry=registry, recipe=recipe, key=key, training=training
     )
-    return _surrogate_answer(entry, reused=False, retrained_reason=retrained_reason)
+    return _noted(
+        ledger,
+        _surrogate_answer(entry, reused=False, retrained_reason=retrained_reason),
+        reason=reason,
+    )
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _noted(
+    ledger: SegmentLedger, payload: dict[str, Any], *, reason: str | None
+) -> dict[str, Any]:
+    try:
+        ledger.note(
+            verb="train_surrogate",
+            ref={"surrogate_id": payload["surrogate_id"]},
+            run_id=None,
+            reason=reason,
+            status="success",
+            created_at=_now(),
+        )
+    except OSError as exc:
+        payload["action_log_error"] = f"{type(exc).__name__}: {exc}"
+    return payload
 
 
 def _surrogate_answer(
@@ -423,8 +515,10 @@ def _status(
     ]
     prior = None if prior_path is None else priors.load_prior(prior_path)
     excluded = None if prior is None else prior.get("excluded")
+    decision = criteria.selection_decision(ledger, dataset_id=dataset)
     return {
         "tree": ledger.to_dict(),
+        "systems": ledger.systems_dict(),
         "leaves": [
             _leaf(
                 ledger,
@@ -435,7 +529,9 @@ def _status(
             )
             for entry in leaves
         ],
-        "default_selection": criteria.default_selection(ledger, dataset_id=dataset),
+        "default_selection": decision["run_id"],
+        "selection_decision": decision,
+        "system_decision": _system_decision(ledger, workspace, dataset),
         **(
             {}
             if prior is None
@@ -447,6 +543,26 @@ def _status(
             }
         ),
     }
+
+
+def _system_decision(
+    ledger: SegmentLedger, workspace: Path, dataset: str | None
+) -> dict[str, Any] | None:
+    if (
+        not ledger.systems()
+        or dataset is None
+        or not is_file_ref(dataset)
+        or is_derived(dataset)
+    ):
+        return None
+    description = resolve_input(workspace, dataset)
+    fingerprint = raw_fingerprint(description)
+    if fingerprint is None:
+        return None
+    target = kd.derivative_target(
+        cast(dict[str, Any], description)["projection"]["target_state"]
+    )
+    return criteria.system_decision(ledger, raw_fingerprint=fingerprint, target=target)
 
 
 def _leaf(
@@ -702,6 +818,25 @@ def _parser() -> argparse.ArgumentParser:
         "all is kept, so give it what the epoch count needs. Omitted, the "
         "training is uncapped -- this command runs under no budget of its own",
     )
+    train.add_argument(
+        "--device",
+        choices=DEVICES,
+        default="cpu",
+        help="where the surrogate training executes",
+    )
+    train.add_argument(
+        "--training-dtype",
+        choices=("float32", "float64"),
+        default=None,
+        help="the precision the network is trained in, as kd-agent run "
+        "--training-dtype sets it; part of the recipe (default: the data's "
+        "dtype)",
+    )
+    train.add_argument(
+        "--reason",
+        default=None,
+        help="why this surrogate is trained; noted on the tree with the action",
+    )
 
     record = subcommands.add_parser(
         "record", help="file a sealed run directory on the tree"
@@ -733,7 +868,8 @@ def _parser() -> argparse.ArgumentParser:
     record.add_argument(
         "--sketch",
         default=None,
-        help="the kd-sketch-v1 payload this segment searched under, as JSON; "
+        help="the Sketch payload (kd-sketch-v2) this segment searched under, "
+        "as JSON; "
         "with --decision-parent on the same instrument and dataset the "
         "recorded action is a narrow; with --parent, omitted means the "
         "parent's and a different one exits 1",
@@ -751,6 +887,20 @@ def _parser() -> argparse.ArgumentParser:
         help="load the dataset and add a neutral full-grid score (and its re-fit "
         "coefficients, measured against the LHS the sealed record names) to "
         "this row; the outcome, including a failure, is printed",
+    )
+    record.add_argument(
+        "--reason",
+        default=None,
+        help="why this segment was run; stored on its row",
+    )
+    record.add_argument(
+        "--forward-eval",
+        action="store_true",
+        help="measure the sealed law's forward error (its own coefficients and "
+        "LHS, Radau, at most 10 s inside a worker capped at 30 s) and file it "
+        "on this row as selection_forward, the number the cross-instrument "
+        "default selection ranks on; the outcome, including a failure, is "
+        "printed",
     )
 
     for name, help_text in (

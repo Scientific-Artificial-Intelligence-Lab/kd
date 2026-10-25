@@ -290,6 +290,18 @@ def assert_sketch_supported(
     )
 
 
+def _spatial_dims(mode: InstrumentMode) -> list[int] | None:
+    if mode.spatial_axes is None or mode.names_from is not None:
+        return None
+    return list(range(1, len(mode.spatial_axes) + 1))
+
+
+def _field_counts(mode: InstrumentMode) -> list[int] | None:
+    if mode.field_names is None or mode.names_from is not None:
+        return None
+    return [len(mode.field_names)]
+
+
 def _config_cls_ref(plugin_cls: type[FacadeWiringContract]) -> str:
     config_cls = plugin_cls.config_cls
     return f"{config_cls.__module__}.{config_cls.__qualname__}"
@@ -327,9 +339,11 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
                 "field_names": None
                 if mode.field_names is None
                 else list(mode.field_names),
+                "field_counts": _field_counts(mode),
                 "spatial_axes": None
                 if mode.spatial_axes is None
                 else list(mode.spatial_axes),
+                "spatial_dims": _spatial_dims(mode),
                 "names_from": mode.names_from,
                 "selectable_from_data": mode.selectable_from_data,
                 "selector": (

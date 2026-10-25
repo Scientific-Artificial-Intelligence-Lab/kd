@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from copy import deepcopy
@@ -16,7 +17,43 @@ TREE_FORMAT = "kd-segtree-v1"
 
 PLATFORM_FRAME = "kd-evaluate-terms-full-grid-v1"
 
-_EVENTS = ("segment", "prune", "select")
+FORWARD_FRAME = "kd-agent-forward-sealed-v1"
+
+SYSTEM_FRAME = "kd-agent-trajectory-forward-v1"
+
+_SYSTEM_DOMAIN = "kd-agent-system-v1"
+
+_EVENTS = ("segment", "prune", "select", "action", "system_verify", "system_select")
+
+
+def system_identity(raw_fingerprint: str, members: dict[str, str]) -> str:
+    encoded = json.dumps(
+        {
+            "domain": _SYSTEM_DOMAIN,
+            "raw_fingerprint": raw_fingerprint,
+            "members": [[target, run_id] for target, run_id in members.items()],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"system-{hashlib.sha256(encoded.encode('utf-8')).hexdigest()[:12]}"
+
+
+def standing_verification(system: dict[str, Any]) -> dict[str, Any] | None:
+    measured = [v for v in system["verifications"] if v["status"] == "measured"]
+    return deepcopy(measured[-1]) if measured else None
+
+
+def finite_or_none(value: float | None) -> float | None:
+    return value if value is None or math.isfinite(value) else None
+
+
+def sketch_identity(payload: dict[str, Any]) -> tuple[str, str]:
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return f"sketch-{digest[:12]}", digest
 
 
 def signature_from_dict(payload: dict[str, Any]) -> LawSignature:
@@ -98,11 +135,32 @@ class SegmentEntry:
     platform_frame: str | None = None
     platform_coefficients: list[float] | None = None
     cost: dict[str, Any] | None = None
+    selection_forward: dict[str, Any] | None = None
+    reason: str | None = None
+    trained_surrogate: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["summary"] = None if self.summary is None else self.summary.to_dict()
         return payload
+
+
+def legacy_forward(run_id: str) -> dict[str, Any]:
+    return {
+        "frame": FORWARD_FRAME,
+        "run_id": run_id,
+        "status": "not_measured",
+        "value": None,
+        "reason": "legacy",
+    }
+
+
+def lhs_inapplicable(lhs: dict[str, Any] | None) -> str | None:
+    if lhs is None:
+        return "homogeneous"
+    if lhs["order"] != 1:
+        return "lhs_order"
+    return None
 
 
 def _entry_from_dict(payload: dict[str, Any]) -> SegmentEntry:
@@ -133,6 +191,13 @@ def _entry_from_dict(payload: dict[str, Any]) -> SegmentEntry:
         platform_frame=payload.get("platform_frame"),
         platform_coefficients=payload.get("platform_coefficients"),
         cost=payload.get("cost"),
+        selection_forward=(
+            payload["selection_forward"]
+            if "selection_forward" in payload
+            else legacy_forward(payload["run_id"])
+        ),
+        reason=payload.get("reason"),
+        trained_surrogate=payload.get("trained_surrogate"),
     )
 
 
@@ -144,6 +209,9 @@ class SegmentLedger:
         self._entries: dict[str, SegmentEntry] = {}
         self._pruned: dict[str, str] = {}
         self._selected: tuple[str, str] | None = None
+        self._selected_system: tuple[str, str] | None = None
+        self._actions: list[dict[str, Any]] = []
+        self._systems: dict[str, dict[str, Any]] = {}
         if self._path.is_file():
             self._replay()
 
@@ -173,6 +241,9 @@ class SegmentLedger:
         platform_frame: str | None = None,
         platform_coefficients: list[float] | None = None,
         cost: dict[str, Any] | None = None,
+        selection_forward: dict[str, Any] | None = None,
+        reason: str | None = None,
+        trained_surrogate: str | None = None,
     ) -> SegmentEntry:
         entry = SegmentEntry(
             run_id=run_id,
@@ -183,7 +254,7 @@ class SegmentLedger:
             dataset=dataset,
             seed=seed,
             status=status,
-            nmse=(nmse if nmse is None or math.isfinite(nmse) else None),
+            nmse=finite_or_none(nmse),
             created_at=created_at,
             summary=summary,
             reseed=reseed,
@@ -198,16 +269,15 @@ class SegmentLedger:
             report_projection=deepcopy(report_projection),
             sketch=deepcopy(sketch),
             surrogate=surrogate,
-            platform_nmse=(
-                platform_nmse
-                if platform_nmse is None or math.isfinite(platform_nmse)
-                else None
-            ),
+            platform_nmse=finite_or_none(platform_nmse),
             platform_frame=platform_frame,
             platform_coefficients=(
                 None if platform_coefficients is None else list(platform_coefficients)
             ),
             cost=deepcopy(cost),
+            selection_forward=deepcopy(selection_forward),
+            reason=reason,
+            trained_surrogate=trained_surrogate,
         )
         self._require_not_recorded(run_id)
         self._require_parent(entry)
@@ -215,6 +285,109 @@ class SegmentLedger:
         self._append({"event": "segment", **entry.to_dict()})
         self._entries[run_id] = entry
         return entry
+
+    def note(
+        self,
+        *,
+        verb: str,
+        ref: dict[str, Any],
+        run_id: str | None,
+        reason: str | None,
+        status: str,
+        created_at: str,
+    ) -> dict[str, Any]:
+        action = {
+            "verb": verb,
+            "ref": deepcopy(ref),
+            "run_id": run_id,
+            "reason": reason,
+            "status": status,
+            "created_at": created_at,
+        }
+        self._append({"event": "action", **action})
+        self._actions.append(action)
+        return deepcopy(action)
+
+    def actions(self) -> tuple[dict[str, Any], ...]:
+        return tuple(deepcopy(action) for action in self._actions)
+
+    def verify(self, verification: dict[str, Any]) -> None:
+        event = {"event": "system_verify", **deepcopy(verification)}
+        self._require_system(event, "")
+        self._append(event)
+        self._add_verification(event)
+
+    def select_system(self, system_id: str, *, reason: str) -> None:
+        if system_id not in self._systems:
+            raise KeyError(
+                f"cannot select system {system_id!r}: no verification recorded it; "
+                f"the recorded ones are {list(self._systems)}"
+            )
+        if self.system_pruned(system_id):
+            raise ValueError(
+                f"system {system_id!r} has a pruned member and cannot be selected"
+            )
+        self._append(
+            {"event": "system_select", "system_id": system_id, "reason": reason}
+        )
+        self._selected_system, self._selected = (system_id, reason), None
+
+    def systems(self) -> tuple[dict[str, Any], ...]:
+        return tuple(deepcopy(system) for system in self._systems.values())
+
+    def system(self, system_id: str) -> dict[str, Any]:
+        return deepcopy(self._systems[system_id])
+
+    def system_pruned(self, system_id: str) -> bool:
+        members = self._systems[system_id]["members"].values()
+        return any(self.is_pruned(run_id) for run_id in members)
+
+    @property
+    def selected_system(self) -> str | None:
+        if self._selected_system is None:
+            return None
+        system_id = self._selected_system[0]
+        return None if self.system_pruned(system_id) else system_id
+
+    def systems_dict(self) -> dict[str, Any]:
+        selected: dict[str, Any] | None = None
+        if self._selected_system is not None and self.selected_system is not None:
+            system_id, reason = self._selected_system
+            selected = {"system_id": system_id, "reason": reason}
+        return {
+            "systems": [deepcopy(system) for system in self._systems.values()],
+            "selected_system": selected,
+        }
+
+    def _require_system(self, event: dict[str, Any], where: str) -> None:
+        for target, run_id in event["members"].items():
+            if run_id not in self._entries:
+                raise ValueError(
+                    f"{where}system {event['system_id']!r} names member {run_id!r} "
+                    f"for {target!r}, which no segment event recorded"
+                )
+            if self._entries[run_id].law != event["laws"][target]:
+                raise ValueError(
+                    f"{where}system {event['system_id']!r} records for {target!r} "
+                    f"a law that is not the one segment {run_id!r} recorded"
+                )
+        expected = system_identity(event["raw_fingerprint"], event["members"])
+        if event["system_id"] != expected:
+            raise ValueError(
+                f"{where}system {event['system_id']!r} is not the identity "
+                f"{expected!r} of its raw trajectories and members"
+            )
+
+    def _add_verification(self, event: dict[str, Any]) -> None:
+        record = {key: value for key, value in event.items() if key != "event"}
+        system = self._systems.setdefault(
+            event["system_id"],
+            {
+                key: deepcopy(event[key])
+                for key in ("system_id", "raw_fingerprint", "members", "laws")
+            },
+        )
+        system.setdefault("verifications", []).append(record)
 
     def prune(self, run_id: str, *, reason: str) -> None:
         self._require_recorded(run_id, "prune")
@@ -230,7 +403,7 @@ class SegmentLedger:
                 "abandoned result"
             )
         self._append({"event": "select", "run_id": run_id, "reason": reason})
-        self._selected = (run_id, reason)
+        self._selected, self._selected_system = (run_id, reason), None
 
     def is_pruned(self, run_id: str) -> bool:
         if run_id not in self._entries:
@@ -310,6 +483,7 @@ class SegmentLedger:
                 for run_id, reason in self._pruned.items()
             ],
             "selected": selected,
+            "actions": [deepcopy(action) for action in self._actions],
         }
 
     def _append(self, event: dict[str, Any]) -> None:
@@ -376,6 +550,34 @@ class SegmentLedger:
             return
         if event not in _EVENTS:
             raise ValueError(f"{where}event {event!r} is none of {list(_EVENTS)}")
+        if event == "system_verify":
+            self._require_system(payload, where)
+            self._add_verification(payload)
+            return
+        if event == "system_select":
+            system_id = payload["system_id"]
+            if system_id not in self._systems:
+                raise ValueError(
+                    f"{where}system_select names system {system_id!r}, which no "
+                    "system_verify event recorded"
+                )
+            self._selected_system, self._selected = (system_id, payload["reason"]), None
+            return
+        if event == "action":
+            self._actions.append(
+                {
+                    key: payload[key]
+                    for key in (
+                        "verb",
+                        "ref",
+                        "run_id",
+                        "reason",
+                        "status",
+                        "created_at",
+                    )
+                }
+            )
+            return
         run_id = payload["run_id"]
         if run_id not in self._entries:
             raise ValueError(
@@ -384,4 +586,4 @@ class SegmentLedger:
         if event == "prune":
             self._pruned[run_id] = payload["reason"]
         else:
-            self._selected = (run_id, payload["reason"])
+            self._selected, self._selected_system = (run_id, payload["reason"]), None

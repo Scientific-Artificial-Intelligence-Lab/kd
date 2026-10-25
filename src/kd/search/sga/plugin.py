@@ -11,19 +11,29 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import Form, LhsSpec
+from kd.core.equation.gauge import regression_term_gauge
 from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.signature import law_term_entry
-from kd.core.equation.sketch import Sketch, constraint_admits, term_admission
+from kd.core.equation.sketch import (
+    Sketch,
+    anchor_basis,
+    anchor_spelled_by,
+    constraint_admits,
+    term_admission,
+)
 from kd.core.evaluator import EvaluationResult
-from kd.core.expr.term_features import TermFeatures, analyze_term, column_fingerprint
+from kd.core.expr.executor import UNITY_TOKEN, PythonExecutor
+from kd.core.expr.term_features import TermFeatures, analyze_term
 from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import R2_EPS_RES, R2_EPS_TOT, r2_score
 from kd.core.metrics import nmse as metrics_nmse
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.derivatives.finite_diff import DX_ZERO_FLOOR, UNIFORM_GRID_RTOL
 from kd.data.schema import DataTopology
+from kd.models._training_precision import omit_default_training_dtype
 from kd.models.field_model import FieldModel
 from kd.models.trainer import FieldModelTrainer, TrainingResult
 from kd.search import surrogate_log as _surrogate_log
@@ -41,12 +51,37 @@ from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
 from kd.search.sga import tree_render as _tree_render
 from kd.search.sga import viz as _viz_helpers
-from kd.search.sga.config import DEDUP_MODES, OP1, OP2, OPS, ROOT, SGAConfig, build_den
+from kd.search.sga.candidate_basis import TabularBasisCompiler
+from kd.search.sga.config import (
+    DEDUP_MODES,
+    OP1,
+    OP2,
+    OPS,
+    ROOT,
+    TABULAR_OP1,
+    TABULAR_OP2,
+    TABULAR_OPS,
+    TABULAR_ROOT,
+    SGAConfig,
+    build_den,
+)
 from kd.search.sga.convert import pde_to_kd_expr, tree_to_kd_expr
-from kd.search.sga.evaluate import DiffContext, build_theta, execute_pde, execute_tree
+from kd.search.sga.evaluate import (
+    DiffContext,
+    _is_column_valid,
+    build_theta,
+    execute_pde,
+    execute_tree,
+)
 from kd.search.sga.pde import PDE
 from kd.search.sga.sketch_backend import SGACompiled, compile_for_sga
-from kd.search.sga.train import CandidateResult, TrainResult, evaluate_candidate
+from kd.search.sga.tabular_registry import build_tabular_registry
+from kd.search.sga.train import (
+    CandidateResult,
+    TrainResult,
+    evaluate_candidate,
+    train_sweep,
+)
 from kd.search.trajectory import (
     active_fit_terms,
     log_search_trajectory,
@@ -57,6 +92,7 @@ from kd.viz.extension import PlotInfo
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
+    from kd.core.executor.context import ExecutionContext
     from kd.data.schema import PDEDataset
 
 logger = logging.getLogger(__name__)
@@ -66,6 +102,7 @@ _INVALID_AIC = float("inf")
 _RESTART_SEED_STRIDE = 1000
 
 _FIELD_MODEL_ARTIFACT_FORMAT = "kd-field-model-v1"
+_TABULAR_SCORE_POLICY = "canonical-basis-aic-floor-v2"
 
 
 def _field_model_artifact(model: FieldModel) -> dict[str, str | int]:
@@ -91,6 +128,8 @@ _AIC_LOWER_BOUND = -100.0
 
 _MAX_RESAMPLE_PER_INDIVIDUAL = 50
 
+_MAX_ADMISSION_REFUSALS_PER_INDIVIDUAL = 500
+
 _SKETCH_LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
     anchors="exit_checked",
@@ -111,8 +150,15 @@ class _ScoredPDE:
     result: EvaluationResult
 
 
-def _is_valid_aic(aic: float) -> bool:
+def _is_valid_aic(aic: float, mode: str) -> bool:
+    if mode == "tabular":
+        return math.isfinite(aic)
     return math.isfinite(aic) and aic >= _AIC_LOWER_BOUND
+
+
+def _skeletons_collide(terms: tuple[str, ...], selected: list[int]) -> bool:
+    skeletons = [regression_term_gauge(terms[index])[0] for index in selected]
+    return len(set(skeletons)) != len(skeletons)
 
 
 def _invalid_reason_for_aic_mse(aic: float, mse: float) -> str:
@@ -176,6 +222,8 @@ def _safe_evaluate_aic(
     y: Tensor | None,
     config: SGAConfig,
     diff_ctx: DiffContext | None,
+    *,
+    active_support_only: bool = False,
 ) -> tuple[float, PDE]:
     try:
         cr = evaluate_candidate(
@@ -185,6 +233,7 @@ def _safe_evaluate_aic(
             y if y is not None else torch.zeros(1),
             config,
             diff_ctx=diff_ctx,
+            active_support_only=active_support_only,
         )
         return cr.aic_score, cr.pruned_pde
     except SearchInterrupted:
@@ -211,10 +260,11 @@ class SGAPlugin:
     config_cls: ClassVar[type[SGAConfig]] = SGAConfig
     one_shot: ClassVar[bool] = False
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "native"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset({"mode"})
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="sga",
-        summary="Genetic PDE structure search with SGA's internal sparse fit.",
+        summary="Genetic PDE and tabular search with SGA's internal sparse fit.",
         cost_class="medium",
 
 
@@ -237,6 +287,11 @@ class SGAPlugin:
                 description="Platform finite-difference derivatives.",
                 lhs_orders=frozenset({1}),
                 score_frame=SCORE_FRAME_NATIVE_INTERNAL,
+                refused_fields={
+                    "functions": "non_default",
+                    "constants": "non_default",
+                    "training_dtype": "non_default",
+                },
             ),
             InstrumentMode(
                 name="autograd",
@@ -251,6 +306,25 @@ class SGAPlugin:
                 ),
                 lhs_orders=frozenset({1}),
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
+                refused_fields={"functions": "non_default", "constants": "non_default"},
+            ),
+            InstrumentMode(
+                name="tabular",
+                forms=frozenset({Form.REGRESSION}),
+                topologies=frozenset({DataTopology.TABULAR}),
+                provider_kind="none",
+                lhs_orders=frozenset({0}),
+                score_frame=SCORE_FRAME_NATIVE_INTERNAL,
+                description="Algebraic structure search over fixed regression columns.",
+                refused_fields={
+                    "use_autograd": "non_default",
+                    "field_model": "non_default",
+                    "autograd_train_epochs": "non_default",
+                    "autograd_train_lr": "non_default",
+                    "autograd_train_patience": "non_default",
+                    "autograd_train_val_ratio": "non_default",
+                    "training_dtype": "non_default",
+                },
             ),
         ),
         knobs=(
@@ -359,7 +433,13 @@ class SGAPlugin:
             ),
         ),
         segmentation=Segmentation(archive="progress", unit="generations", reseed=True),
-        identity_breaking_fields=frozenset({"use_autograd", "field_model"}),
+
+
+
+
+        identity_breaking_fields=frozenset(
+            {"use_autograd", "field_model", "functions", "constants", "training_dtype"}
+        ),
 
 
 
@@ -373,12 +453,41 @@ class SGAPlugin:
                 "autograd_train_lr",
                 "autograd_train_patience",
                 "autograd_train_val_ratio",
+                "training_dtype",
             }
         ),
     )
 
-    def __init__(self, config: SGAConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: SGAConfig | None = None,
+        *,
+        mode: Literal["default", "tabular"] = "default",
+    ) -> None:
+        if mode not in ("default", "tabular"):
+            raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
+        self._mode = mode
         self._config = config or SGAConfig()
+        if mode == "tabular":
+            self._validate_tabular_config()
+        elif self._config.functions or self._config.constants:
+            raise ValueError(
+                "SGA functions and constants extend the tabular grammar; "
+                "grid (PDE) modes refuse them"
+            )
+        elif not self._config.use_autograd and self._config.training_dtype is not None:
+            raise ValueError(
+                "SGA training_dtype sets the precision of the autograd surrogate; "
+                "the finite-difference mode trains none (Model(derivatives="
+                "'autograd') selects the autograd mode), got training_dtype="
+                f"{self._config.training_dtype!r}"
+            )
+        self._basis_compiler = TabularBasisCompiler() if mode == "tabular" else None
+        self._basis_feature_order: tuple[str, ...] = ()
+        self._basis_executor = (
+            PythonExecutor(build_tabular_registry()) if mode == "tabular" else None
+        )
+        self._basis_context: ExecutionContext | None = None
         self._population: list[PDE] | None = None
         self._scores: list[float] | None = None
         self._segment_generations: int = 0
@@ -435,15 +544,19 @@ class SGAPlugin:
 
     @property
     def config(self) -> dict[str, Any]:
-        config = {
-            field.name: getattr(self._config, field.name)
-            for field in fields(self._config)
-        }
+        config = omit_default_training_dtype(
+            {
+                field.name: getattr(self._config, field.name)
+                for field in fields(self._config)
+            }
+        )
         if self._config.field_model is not None:
             config["field_model"] = {
                 "artifact": "field_model",
                 "format": _FIELD_MODEL_ARTIFACT_FORMAT,
             }
+        if self._mode == "tabular":
+            config["mode"] = self._mode
         return {"algorithm": "sga", **config}
 
     @property
@@ -476,10 +589,19 @@ class SGAPlugin:
 
     @property
     def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+        if self._mode == "tabular":
+            return "none"
         return "autograd" if self._config.use_autograd else "finite_diff"
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
+        if self._mode == "tabular":
+            return DerivativeReqs(
+                provider_kind="none",
+                lhs_source="field",
+                lhs_order=0,
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=2,
@@ -503,12 +625,30 @@ class SGAPlugin:
             self._autograd_training_data(dataset, field_shape)
         )
         return self._train_field_model(
-            coord_names, field_names, flat_coords, flat_targets
+            coord_names, field_names, flat_coords, flat_targets, deadline=None
         )
 
 
 
     def prepare(self, components: PlatformComponents) -> None:
+        dataset = components.dataset
+        if self._mode == "tabular":
+            self._validate_tabular_config()
+            if dataset.topology is not DataTopology.TABULAR:
+                raise ValueError("SGA tabular mode requires a TABULAR dataset")
+            if components.task is not None:
+                raise ValueError("SGA tabular mode does not support a sketch task")
+            assert dataset.fields is not None
+            feature_order = tuple(
+                name for name in dataset.fields if name != dataset.lhs_field
+            )
+            if self._restore_pending and self._basis_feature_order != feature_order:
+                raise ValueError(
+                    "Restored SGA basis_feature_order differs from current features"
+                )
+        elif dataset.topology is DataTopology.TABULAR:
+            raise ValueError("A TABULAR dataset requires SGA mode='tabular'")
+        restored_vars = list(self._vars) if self._restore_pending else None
         self._prepared = False
         self._clear_pending_generation()
         self._ops = OPS
@@ -538,8 +678,15 @@ class SGAPlugin:
                 "lookup); got None (a provider_kind='none' light bundle)."
             )
         self._recorder = components.recorder
-        self._trajectory_lhs_label = render_lhs_label(
-            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+        if self._mode == "tabular":
+            self._basis_feature_order = feature_order
+            self._basis_context = context
+        self._trajectory_lhs_label = (
+            dataset.lhs_field
+            if self._mode == "tabular"
+            else render_lhs_label(
+                LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+            )
         )
 
 
@@ -553,14 +700,20 @@ class SGAPlugin:
 
         if dataset.fields is not None:
             for field_name in dataset.fields:
+                if self._mode == "tabular" and field_name == dataset.lhs_field:
+                    continue
                 data_dict[field_name] = _numeric_flatten(
                     context.get_variable(field_name)
                 )
 
         axis_names = self._ordered_axes(dataset)
-        self._den = build_den(axis_names, dataset.lhs_axis or "")
-        delta = self._build_delta_map(dataset, axis_names)
-        if field_shape is not None:
+        if self._mode == "tabular":
+            self._den = ()
+            delta = {}
+        else:
+            self._den = build_den(axis_names, dataset.lhs_axis or "")
+            delta = self._build_delta_map(dataset, axis_names)
+        if field_shape is not None and self._mode == "default":
             axis_map = {axis_name: idx for idx, axis_name in enumerate(axis_names)}
             self._diff_ctx = DiffContext(
                 field_shape=field_shape,
@@ -598,7 +751,7 @@ class SGAPlugin:
                     "use_autograd=True requires dataset.fields with grid shape."
                 )
             self._autograd_provider = self._build_autograd_provider(
-                dataset, field_shape
+                dataset, field_shape, components.deadline
             )
 
 
@@ -614,11 +767,16 @@ class SGAPlugin:
                 self._surrogate_training_result,
             )
 
-        self._add_derivatives(dataset, context, data_dict)
+        if self._mode == "tabular":
+            data_dict[UNITY_TOKEN] = _numeric_flatten(context.unity_column())
+        else:
+            self._add_derivatives(dataset, context, data_dict)
         self._data_dict = data_dict
 
 
         self._vars = sorted(data_dict.keys())
+        if self._mode == "tabular":
+            self._prepare_tabular_pools(restored_vars)
 
         task = components.task
         if task is not None:
@@ -720,15 +878,11 @@ class SGAPlugin:
         results: list[EvaluationResult] = []
         for i, expr_str in enumerate(candidates):
             if i < len(offspring):
+                if not self._candidate_admissible(offspring[i]):
+                    results.append(self._invalid_result(expr_str))
+                    continue
                 try:
-                    cr = evaluate_candidate(
-                        offspring[i],
-                        self._data_dict,
-                        self._default_terms,
-                        self._y if self._y is not None else torch.zeros(1),
-                        self._config,
-                        diff_ctx=self._diff_ctx,
-                    )
+                    cr = self._fit_candidate(offspring[i])
 
                     offspring[i] = cr.pruned_pde
                     results.append(self._to_eval_result(cr, expr_str))
@@ -736,7 +890,8 @@ class SGAPlugin:
 
 
                     raise
-                except Exception:
+                except Exception as exc:
+                    self._raise_tabular_resource_failure(exc)
                     logger.debug("Evaluation failed for candidate %d", i)
 
                     results.append(
@@ -760,6 +915,8 @@ class SGAPlugin:
 
         for i, result in enumerate(results):
             if i < len(offspring):
+                if not self._candidate_admissible(offspring[i]):
+                    continue
                 aic = result.score if result.score is not None else _INVALID_AIC
                 if not result.is_valid or not math.isfinite(aic):
                     aic = _INVALID_AIC
@@ -840,29 +997,36 @@ class SGAPlugin:
             return self._invalid_final_result(
                 "No best PDE available for final result", reason="no_candidate"
             )
+        if not self._candidate_admissible(best_pde):
+            return self._invalid_final_result(
+                "SGA tabular candidate has a zero subtree or exceeds basis width",
+                reason="structural_reject",
+            )
 
         try:
-            candidate = evaluate_candidate(
-                best_pde,
-                self._data_dict,
-                self._default_terms,
-                self._y,
-                self._config,
-                diff_ctx=self._diff_ctx,
-            )
-            predicted = self._predict_rhs(candidate.pruned_pde, candidate.coefficients)
+            candidate = self._fit_candidate(best_pde)
+            if candidate.fitted_terms is None:
+                predicted = self._predict_rhs(
+                    candidate.pruned_pde, candidate.coefficients
+                )
+            else:
+                _, theta = self._tabular_columns(candidate.fitted_terms)
+                predicted = (theta @ candidate.coefficients).detach()
         except SearchInterrupted:
 
 
             raise
         except Exception as exc:
+            self._raise_tabular_resource_failure(exc)
             logger.debug("Failed to build final result", exc_info=exc)
             return self._invalid_final_result(
                 f"Final result evaluation failed: {exc}", reason="evaluation_error"
             )
 
         residuals = (predicted - self._y).detach()
-        is_valid = _is_valid_aic(candidate.aic_score) and math.isfinite(candidate.mse)
+        is_valid = _is_valid_aic(candidate.aic_score, self._mode) and math.isfinite(
+            candidate.mse
+        )
         return EvaluationResult(
             mse=candidate.mse,
             nmse=metrics_nmse(candidate.mse, self._target_variance()),
@@ -879,8 +1043,13 @@ class SGAPlugin:
             ),
             selected_indices=list(candidate.selected_indices),
             residuals=residuals,
-            terms=self._build_term_list(candidate.pruned_pde),
+            terms=(
+                self._build_term_list(candidate.pruned_pde)
+                if candidate.fitted_terms is None
+                else list(candidate.fitted_terms)
+            ),
             expression=self._best_expression,
+            lhs_name=self._trajectory_lhs_label if self._mode == "tabular" else None,
         )
 
     def build_result_target(self) -> Tensor:
@@ -890,7 +1059,8 @@ class SGAPlugin:
 
     @property
     def state(self) -> dict[str, Any]:
-        return {
+        state: dict[str, Any] = {
+            "mode": self._mode,
             "population": self._population,
             "scores": self._scores,
             "best_score": self._best_score,
@@ -908,6 +1078,11 @@ class SGAPlugin:
             "sketch_capacity_checked": self._sketch_capacity_checked,
             "sketch_capacity_rejected": self._sketch_capacity_rejected,
         }
+        if self._mode == "tabular":
+            state["score_policy"] = _TABULAR_SCORE_POLICY
+            state["vocabulary"] = self._vocabulary()
+            state["basis_feature_order"] = list(self._basis_feature_order)
+        return state
 
     @state.setter
     def state(self, value: dict[str, Any]) -> None:
@@ -916,7 +1091,33 @@ class SGAPlugin:
             self._clear_pending_generation()
             self._restore_pending = False
             return
+        if value.get("mode", "default") != self._mode:
+            raise ValueError("Cannot restore an SGA checkpoint from another mode")
+        if (
+            self._mode == "tabular"
+            and value.get("score_policy") != _TABULAR_SCORE_POLICY
+        ):
+            raise ValueError(
+                "SGA tabular checkpoint score_policy must be "
+                f"{_TABULAR_SCORE_POLICY!r}; an older scoring policy cannot be resumed"
+            )
+        if self._mode == "tabular" and "vocabulary" not in value:
+            raise ValueError("SGA tabular checkpoint requires its vocabulary")
+        if (
+            self._mode == "tabular"
+            and {key: list(names) for key, names in value["vocabulary"].items()}
+            != self._vocabulary()
+        ):
+            raise ValueError(
+                "SGA tabular checkpoint vocabulary "
+                f"{value['vocabulary']!r} differs from the configured "
+                f"{self._vocabulary()!r}"
+            )
+        if self._mode == "tabular" and "basis_feature_order" not in value:
+            raise ValueError("SGA tabular checkpoint requires basis_feature_order")
         self._reset_search_state()
+        if self._mode == "tabular":
+            self._basis_feature_order = tuple(value["basis_feature_order"])
         if "population" in value:
             self._population = value["population"]
         if "scores" in value:
@@ -955,8 +1156,154 @@ class SGAPlugin:
 
 
 
+    def _vocabulary(self) -> dict[str, list[Any]]:
+        return {
+            "functions": list(self._config.functions),
+            "constants": list(self._config.constants),
+        }
+
+    def _candidate_admissible(self, pde: PDE) -> bool:
+        if self._mode != "tabular":
+            return True
+        assert self._basis_compiler is not None
+        terms = self._basis_compiler.compile(pde, self._basis_feature_order)
+        return terms is not None and len(terms) <= self._config.width
+
+    def _raise_tabular_resource_failure(self, exc: Exception) -> None:
+        if self._mode == "tabular" and (
+            isinstance(exc, (MemoryError, torch.OutOfMemoryError))
+            or is_cpu_alloc_failure(exc)
+        ):
+            raise exc
+
+    def _tabular_columns(
+        self, terms: tuple[str, ...]
+    ) -> tuple[tuple[str, ...], Tensor]:
+        assert self._basis_executor is not None and self._basis_context is not None
+        assert self._y is not None
+        kept: list[str] = []
+        columns: list[Tensor] = []
+        with torch.no_grad():
+            for term in terms:
+                try:
+                    column = self._basis_executor.execute(
+                        term, self._basis_context
+                    ).value.flatten()
+                except (KeyError, ValueError, RuntimeError) as exc:
+                    self._raise_tabular_resource_failure(exc)
+                    logger.debug(
+                        "Canonical SGA term execution failed, skipping %s", term
+                    )
+                    continue
+                if _is_column_valid(column):
+                    kept.append(term)
+                    columns.append(column)
+        theta = (
+            torch.stack(columns, dim=1)
+            if columns
+            else torch.empty(
+                (self._y.numel(), 0), dtype=self._y.dtype, device=self._y.device
+            )
+        )
+        return tuple(kept), theta
+
+    def _fit_candidate(self, pde: PDE) -> CandidateResult:
+        if self._mode == "default":
+            return evaluate_candidate(
+                self._one_column_per_anchor(pde),
+                self._data_dict,
+                self._default_terms,
+                self._y if self._y is not None else torch.zeros(1),
+                self._config,
+                diff_ctx=self._diff_ctx,
+            )
+        assert self._basis_compiler is not None and self._y is not None
+        terms = self._basis_compiler.compile(pde, self._basis_feature_order)
+        assert terms is not None and len(terms) <= self._config.width
+        fitted_terms, theta = self._tabular_columns(terms)
+        train_result = train_sweep(
+            theta, self._y, self._config, active_support_only=True, tabular_scoring=True
+        )
+
+
+        if _skeletons_collide(fitted_terms, train_result.selected_indices):
+            train_result.aic_score = _INVALID_AIC
+        return CandidateResult(
+            train_result=train_result,
+            pruned_pde=pde.copy(),
+            valid_term_indices=list(range(pde.width)),
+            fitted_terms=fitted_terms,
+        )
+
+    def _one_column_per_anchor(self, pde: PDE) -> PDE:
+        sketch = self._sketch
+        if sketch is None or not sketch.anchored:
+            return pde
+        kept = anchor_basis([tree_to_kd_expr(tree) for tree in pde.terms], sketch)
+        if len(kept) == pde.width:
+            return pde
+        return PDE(terms=[pde.terms[index].copy() for index in kept])
+
+    def _safe_candidate_aic(self, pde: PDE) -> tuple[float, PDE]:
+        if self._mode == "default":
+            return _safe_evaluate_aic(
+                self._one_column_per_anchor(pde),
+                self._data_dict,
+                self._default_terms,
+                self._y,
+                self._config,
+                self._diff_ctx,
+            )
+        try:
+            result = self._fit_candidate(pde)
+            return result.aic_score, result.pruned_pde
+        except SearchInterrupted:
+            raise
+        except Exception as exc:
+            self._raise_tabular_resource_failure(exc)
+            logger.debug("Canonical SGA evaluation failed, assigning inf AIC")
+            return _INVALID_AIC, pde
+
+    def _prepare_tabular_pools(self, restored_vars: list[str] | None) -> None:
+        unary = tuple((name, 1) for name in self._config.functions)
+        root_leaves = tuple((name, 0) for name in self._vars)
+        self._vars = [*self._vars, *(repr(value) for value in self._config.constants)]
+        if restored_vars is not None and restored_vars != self._vars:
+            raise ValueError(
+                "Restored SGA tabular vars differ from the feature vocabulary"
+            )
+        self._ops = TABULAR_OPS + unary
+        self._root = TABULAR_ROOT + unary + root_leaves
+        self._op1 = TABULAR_OP1 + unary
+        self._op2 = TABULAR_OP2
+
+    def _validate_tabular_config(self) -> None:
+        defaults = SGAConfig()
+        fields = (
+            "use_autograd",
+            "field_model",
+            "autograd_train_epochs",
+            "autograd_train_lr",
+            "autograd_train_patience",
+            "autograd_train_val_ratio",
+            "training_dtype",
+        )
+        conflicts = [
+            name
+            for name in fields
+            if getattr(self._config, name) != getattr(defaults, name)
+        ]
+        if conflicts:
+            raise ValueError(
+                "SGA tabular mode takes fixed columns; configure NN training in "
+                f"trajectory preprocessing instead: {', '.join(conflicts)}"
+            )
+
     def _reset_search_state(self) -> None:
         self._population = None
+        self._basis_feature_order = ()
+        if self._basis_compiler is not None:
+            self._basis_compiler.clear()
         self._scores = None
         self._segment_generations = 0
         self._restart_count = 0
@@ -1100,7 +1447,7 @@ class SGAPlugin:
         ]
         seats: dict[str, set[str]] = {hole.id: set() for hole in sketch.holes}
         for key in active:
-            if column_fingerprint(features_by_key[key]) in compiled.anchor_fingerprints:
+            if anchor_spelled_by(key, sketch) is not None:
                 continue
             for hole in sketch.holes:
                 if constraint_admits(hole.constraint, features_by_key[key]):
@@ -1115,7 +1462,13 @@ class SGAPlugin:
         res = self.build_final_result()
 
         if res.is_valid and res.coefficients is not None and res.terms:
-            rhs = self._format_rhs_with_coefficients(res.coefficients, res.terms)
+            rhs = self._format_rhs_with_coefficients(
+                res.coefficients,
+                res.terms,
+                selected_indices=res.selected_indices
+                if self._mode == "tabular"
+                else None,
+            )
             if rhs:
                 lhs = self._lhs_label_str()
                 return f"{lhs} = {rhs}" if lhs else rhs
@@ -1127,19 +1480,27 @@ class SGAPlugin:
         return ""
 
     def _lhs_label_str(self) -> str:
+        if self._mode == "tabular":
+            return self._trajectory_lhs_label
         if self._default_term_name and self._lhs_axis:
             return f"{self._default_term_name}_{self._lhs_axis}"
         return ""
 
     @staticmethod
-    def _format_rhs_with_coefficients(coefficients: Tensor, terms: list[str]) -> str:
+    def _format_rhs_with_coefficients(
+        coefficients: Tensor,
+        terms: list[str],
+        *,
+        selected_indices: list[int] | None = None,
+    ) -> str:
         if coefficients.numel() == 0 or not terms:
             return ""
         n = min(coefficients.numel(), len(terms))
         active: list[tuple[float, str]] = []
-        for i in range(n):
+        indices = range(n) if selected_indices is None else selected_indices
+        for i in indices:
             c = float(coefficients[i].item())
-            if abs(c) < 1e-10:
+            if selected_indices is None and abs(c) < 1e-10:
                 continue
             active.append((c, terms[i]))
         if not active:
@@ -1165,12 +1526,15 @@ class SGAPlugin:
         reason: str = "unclassified",
     ) -> EvaluationResult:
 
-        return invalid_evaluation_result(
+        result = invalid_evaluation_result(
             error_message,
             score=float("inf"),
             expression=self._best_expression,
             reason=reason,
         )
+        if self._mode == "tabular":
+            result.lhs_name = self._trajectory_lhs_label
+        return result
 
     def _broadcast_coord(
         self,
@@ -1191,6 +1555,8 @@ class SGAPlugin:
         dataset: Any,
         context: Any,
     ) -> Tensor:
+        if self._mode == "tabular":
+            return _numeric_flatten(context.get_variable(dataset.lhs_field))
         if dataset.lhs_field and dataset.lhs_axis:
             lhs_order = getattr(dataset, "lhs_order", 1)
 
@@ -1304,6 +1670,7 @@ class SGAPlugin:
         self,
         dataset: Any,
         field_shape: tuple[int, ...],
+        deadline: float | None = None,
     ) -> AutogradProvider:
         coord_names, field_names, flat_coords, flat_targets = (
             self._autograd_training_data(dataset, field_shape)
@@ -1321,7 +1688,7 @@ class SGAPlugin:
 
 
             field_model, self._surrogate_training_result = self._train_field_model(
-                coord_names, field_names, flat_coords, flat_targets
+                coord_names, field_names, flat_coords, flat_targets, deadline=deadline
             )
 
         grad_coords = {
@@ -1367,6 +1734,8 @@ class SGAPlugin:
         field_names: list[str],
         flat_coords: dict[str, Tensor],
         flat_targets: dict[str, Tensor],
+        *,
+        deadline: float | None,
     ) -> tuple[FieldModel, TrainingResult]:
         field_model = FieldModel(
             coord_names=coord_names,
@@ -1393,6 +1762,8 @@ class SGAPlugin:
             patience=self._config.autograd_train_patience,
             val_ratio=self._config.autograd_train_val_ratio,
             seed=self._config.seed,
+            training_dtype=self._config.training_dtype,
+            deadline=deadline,
         )
         return field_model, result
 
@@ -1469,7 +1840,7 @@ class SGAPlugin:
             delta[axis_name] = first_diff
         return delta
 
-    def _draw_scored_individual(self) -> tuple[float, PDE]:
+    def _draw_scored_individual(self) -> tuple[float, PDE] | None:
         from kd.search.sga.genetic import random_pde
 
         pde = random_pde(
@@ -1480,15 +1851,10 @@ class SGAPlugin:
             self._den,
             self._rng,
         )
+        if not self._candidate_admissible(pde):
+            return None
         if self._sketch_compiled is None:
-            return _safe_evaluate_aic(
-                pde,
-                self._data_dict,
-                self._default_terms,
-                self._y,
-                self._config,
-                self._diff_ctx,
-            )
+            return self._safe_candidate_aic(pde)
         if not self._sketch_admissible(pde):
             return _INVALID_AIC, pde
         scored = self._score_pde(pde)
@@ -1499,35 +1865,49 @@ class SGAPlugin:
         return scored.score, scored.pde
 
     def _sample_valid_individual(self, slot: int) -> tuple[float, PDE]:
-        aic, pruned = self._draw_scored_individual()
+        refusals = 0
         retries = 0
-        while not _is_valid_aic(aic) and retries < _MAX_RESAMPLE_PER_INDIVIDUAL:
+        while True:
+            drawn = self._draw_scored_individual()
+            if drawn is None:
+                refusals += 1
+                if refusals == _MAX_ADMISSION_REFUSALS_PER_INDIVIDUAL:
+                    raise RuntimeError(
+                        "Init population failed: the tabular admission rule "
+                        f"refused {refusals} random draws for individual {slot} "
+                        "(a zero subexpression, a function of a constant "
+                        "argument, or more independent columns than width). "
+                        "The vocabulary leaves too few admissible trees; use "
+                        "fewer constants or more features."
+                    )
+                continue
+            aic, pruned = drawn
+            if _is_valid_aic(aic, self._mode):
+
+                return aic, pruned
+            if retries == _MAX_RESAMPLE_PER_INDIVIDUAL:
+                break
+            retries += 1
             logger.debug(
                 "Init individual %d: AIC=%s, resampling (retry %d/%d)",
                 slot,
                 aic,
-                retries + 1,
+                retries,
                 _MAX_RESAMPLE_PER_INDIVIDUAL,
             )
-            aic, pruned = self._draw_scored_individual()
-            retries += 1
-
-        if not _is_valid_aic(aic):
-            suspect = (
-                "the sketch's admissibility constraints (holes/anchors "
-                "against SGA's grammar), then data, derivative quality, "
-                "or STRidge config"
-                if self._sketch_compiled is not None
-                else "data, derivative quality, or STRidge config"
-            )
-            raise RuntimeError(
-                f"Init population failed: individual {slot} still has "
-                f"invalid AIC after {_MAX_RESAMPLE_PER_INDIVIDUAL} resample "
-                f"retries. All random candidates are pathological — "
-                f"check {suspect}."
-            )
-
-        return aic, pruned
+        suspect = (
+            "the sketch's admissibility constraints (holes/anchors "
+            "against SGA's grammar), then data, derivative quality, "
+            "or STRidge config"
+            if self._sketch_compiled is not None
+            else "data, derivative quality, or STRidge config"
+        )
+        raise RuntimeError(
+            f"Init population failed: individual {slot} still has "
+            f"invalid AIC after {_MAX_RESAMPLE_PER_INDIVIDUAL} resample "
+            f"retries. All random candidates are pathological — "
+            f"check {suspect}."
+        )
 
     def _enforce_structure_caps(self, population: list[PDE]) -> None:
         from kd.search.sga.genetic import max_generated_depth
@@ -1535,8 +1915,10 @@ class SGAPlugin:
         max_depth = max_generated_depth(self._config.depth)
 
         def within_caps(pde: PDE) -> bool:
-            return pde.width <= self._config.width and all(
-                term.depth <= max_depth for term in pde.terms
+            return (
+                pde.width <= self._config.width
+                and all(term.depth <= max_depth for term in pde.terms)
+                and self._candidate_admissible(pde)
             )
 
         if self._cross_segment_best is not None and not within_caps(
@@ -1587,17 +1969,8 @@ class SGAPlugin:
         population = self._population or []
         if not population:
             return
-        scored = [
-            _safe_evaluate_aic(
-                pde,
-                self._data_dict,
-                self._default_terms,
-                self._y,
-                self._config,
-                self._diff_ctx,
-            )
-            for pde in population
-        ]
+        scored = [self._safe_candidate_aic(pde) for pde in population]
+
 
 
 
@@ -1610,22 +1983,18 @@ class SGAPlugin:
 
 
         paired = sorted(
-            ((aic if _is_valid_aic(aic) else _INVALID_AIC, pde) for aic, pde in scored),
+            (
+                (aic if _is_valid_aic(aic, self._mode) else _INVALID_AIC, pde)
+                for aic, pde in scored
+            ),
             key=lambda item: item[0],
         )
         self._scores = [score for score, _ in paired]
         self._population = [pde for _, pde in paired]
         self._best_score = self._scores[0]
         if self._cross_segment_best is not None:
-            aic, pde = _safe_evaluate_aic(
-                self._cross_segment_best[1],
-                self._data_dict,
-                self._default_terms,
-                self._y,
-                self._config,
-                self._diff_ctx,
-            )
-            score = aic if _is_valid_aic(aic) else _INVALID_AIC
+            aic, pde = self._safe_candidate_aic(self._cross_segment_best[1])
+            score = aic if _is_valid_aic(aic, self._mode) else _INVALID_AIC
             self._cross_segment_best = (score, pde)
             self._best_score = min(self._best_score, score)
 
@@ -1774,6 +2143,8 @@ class SGAPlugin:
         candidate_pde: PDE,
         on_duplicate: Callable[[], None],
     ) -> _ScoredPDE | None:
+        if not self._candidate_admissible(candidate_pde):
+            return None
         if self._sketch_compiled is not None and not self._sketch_admissible(
             candidate_pde
         ):
@@ -1882,15 +2253,10 @@ class SGAPlugin:
 
     def _score_pde(self, pde: PDE) -> _ScoredPDE:
         expression = pde_to_kd_expr(pde)
+        if not self._candidate_admissible(pde):
+            return _ScoredPDE(pde, _INVALID_AIC, self._invalid_result(expression))
         try:
-            candidate = evaluate_candidate(
-                pde,
-                self._data_dict,
-                self._default_terms,
-                self._y if self._y is not None else torch.zeros(1),
-                self._config,
-                diff_ctx=self._diff_ctx,
-            )
+            candidate = self._fit_candidate(pde)
             pruned = candidate.pruned_pde
             result = self._to_eval_result(candidate, pde_to_kd_expr(pruned))
             aic = result.score if result.score is not None else _INVALID_AIC
@@ -1900,7 +2266,8 @@ class SGAPlugin:
 
 
             raise
-        except Exception:
+        except Exception as exc:
+            self._raise_tabular_resource_failure(exc)
             logger.debug("Evaluation failed for staged offspring")
             return _ScoredPDE(
                 pde,
@@ -1941,8 +2308,13 @@ class SGAPlugin:
 
 
             assert result.coefficients is not None
+            if self._mode == "tabular":
+                assert result.terms is not None
+                basis_terms = result.terms
+            else:
+                basis_terms = self._build_term_list(offspring[index])
             terms = active_fit_terms(
-                self._build_term_list(offspring[index]),
+                basis_terms,
                 result.coefficients,
                 result.selected_indices,
             )
@@ -2003,7 +2375,12 @@ class SGAPlugin:
 
         aic = result.aic_score
         mse = result.mse
-        is_valid = _is_valid_aic(aic) and math.isfinite(mse)
+        is_valid = _is_valid_aic(aic, self._mode) and math.isfinite(mse)
+        terms = None
+        if self._mode == "tabular":
+            fitted_terms = cast(CandidateResult, result).fitted_terms
+            assert fitted_terms is not None
+            terms = list(fitted_terms)
         return EvaluationResult(
             mse=mse,
             nmse=metrics_nmse(mse, self._target_variance()),
@@ -2018,8 +2395,9 @@ class SGAPlugin:
             ),
             selected_indices=result.selected_indices,
             residuals=None,
-            terms=None,
+            terms=terms,
             expression=expression,
+            lhs_name=self._trajectory_lhs_label if self._mode == "tabular" else None,
         )
 
     def _invalid_result(
@@ -2029,12 +2407,15 @@ class SGAPlugin:
         reason: str = "structural_reject",
     ) -> EvaluationResult:
 
-        return invalid_evaluation_result(
+        result = invalid_evaluation_result(
             "No corresponding PDE for evaluation",
             score=float("inf"),
             expression=expression,
             reason=reason,
         )
+        if self._mode == "tabular":
+            result.lhs_name = self._trajectory_lhs_label
+        return result
 
     def _evaluation_failed_result(self, expression: str) -> EvaluationResult:
         result = self._invalid_result(expression, reason="evaluation_error")

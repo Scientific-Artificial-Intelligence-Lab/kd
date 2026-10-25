@@ -35,7 +35,7 @@ whose ``selected_indices`` contains TWO PDE terms covering both ``x`` and
 Usage
 -----
     python examples/internals/03_sga_2d_diffusion.py
-    open examples/out/diffusion_2d/report.html
+    open examples/internals/out/diffusion_2d/report.html
 """
 
 from __future__ import annotations

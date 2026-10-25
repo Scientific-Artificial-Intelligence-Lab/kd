@@ -8,13 +8,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-REGISTRY_FORMAT = "kdagent-surrogates-v1"
+REGISTRY_FORMAT = "kdagent-surrogates-v2"
 
 REGISTRY_DIRNAME = "surrogates"
 
 REGISTRY_FILENAME = "registry.jsonl"
 
 _RECIPE_KEYS: frozenset[str] = frozenset({"dataset_id", "algorithm", "seed", "params"})
+
+NETWORK_ALGORITHM = "network"
 
 
 def recipe_key(recipe: dict[str, Any]) -> str:
@@ -31,6 +33,22 @@ def surrogate_id_of(recipe: dict[str, Any]) -> str:
     return f"{recipe['algorithm']}-{recipe_key(recipe)}"
 
 
+def trained_surrogate_id(recipe: dict[str, Any], run_dir_name: str) -> str:
+    canonical = json.dumps(
+        {"recipe": recipe, "run_dir": run_dir_name},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+    return f"{recipe['algorithm']}-{digest}"
+
+
+def stopped_at_deadline(entry: SurrogateEntry) -> bool:
+    return entry.identity is not None and bool(
+        entry.identity.get("stopped_at_deadline", False)
+    )
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -41,13 +59,15 @@ class SurrogateEntry:
     surrogate_id: str
     recipe: dict[str, Any]
     recipe_key: str
-    key: str
+    key: str | None
     file: str
     file_sha256: str
     train_seconds: float
     epochs: int
     final_loss: float
     created_at: str
+    identity: dict[str, Any] | None
+    source_run: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -65,6 +85,8 @@ def _entry_from_dict(payload: dict[str, Any]) -> SurrogateEntry:
         epochs=payload["epochs"],
         final_loss=payload["final_loss"],
         created_at=payload["created_at"],
+        identity=payload["identity"],
+        source_run=payload.get("source_run"),
     )
 
 
@@ -93,14 +115,18 @@ class SurrogateRegistry:
         self,
         *,
         recipe: dict[str, Any],
-        key: str,
+        key: str | None,
         file_sha256: str,
         train_seconds: float,
         epochs: int,
         final_loss: float,
         created_at: str,
+        identity: dict[str, Any] | None,
+        surrogate_id: str | None = None,
+        source_run: str | None = None,
     ) -> SurrogateEntry:
-        surrogate_id = surrogate_id_of(recipe)
+        if surrogate_id is None:
+            surrogate_id = surrogate_id_of(recipe)
         entry = SurrogateEntry(
             surrogate_id=surrogate_id,
             recipe=deepcopy(recipe),
@@ -112,13 +138,28 @@ class SurrogateRegistry:
             epochs=epochs,
             final_loss=final_loss,
             created_at=created_at,
+            identity=deepcopy(identity),
+            source_run=source_run,
         )
         self._append(entry.to_dict())
         self._entries[surrogate_id] = entry
         return entry
 
+    def trainings_of(self, recipe: dict[str, Any]) -> tuple[SurrogateEntry, ...]:
+        own = surrogate_id_of(recipe)
+        key = recipe_key(recipe)
+        rows = sorted(
+            (
+                entry
+                for entry in self._entries.values()
+                if entry.recipe_key == key and not stopped_at_deadline(entry)
+            ),
+            key=lambda entry: entry.surrogate_id != own,
+        )
+        return tuple(rows)
+
     def find_by_recipe(self, recipe: dict[str, Any]) -> SurrogateEntry | None:
-        return self._entries.get(surrogate_id_of(recipe))
+        return next(iter(self.trainings_of(recipe)), None)
 
     def entry(self, surrogate_id: str) -> SurrogateEntry:
         self._require_registered(surrogate_id)
@@ -157,13 +198,15 @@ class SurrogateRegistry:
             if tag != REGISTRY_FORMAT:
                 raise ValueError(
                     f"{where}format {tag!r} is not the {REGISTRY_FORMAT!r} this "
-                    "registry writes"
+                    "registry writes; a registry from an older controller does "
+                    "not replay, so retrain its surrogates in a fresh workspace"
                 )
             entry = _entry_from_dict(payload)
             self._entries[entry.surrogate_id] = entry
 
 
 __all__ = [
+    "NETWORK_ALGORITHM",
     "REGISTRY_DIRNAME",
     "REGISTRY_FILENAME",
     "REGISTRY_FORMAT",
@@ -171,5 +214,7 @@ __all__ = [
     "SurrogateRegistry",
     "file_sha256",
     "recipe_key",
+    "stopped_at_deadline",
     "surrogate_id_of",
+    "trained_surrogate_id",
 ]

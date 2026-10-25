@@ -4,10 +4,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from kd.core.equation.signature import law_term_key
-from kd.core.equation.sketch import Sketch, constraint_admits, pinned_monomials
+from kd.core.equation.sketch import (
+    Sketch,
+    anchor_carried_by,
+    anchor_spelled_by,
+    constraint_admits,
+    pinned_monomials,
+)
 from kd.core.expr.jet import Monomial, jet_monomials
 from kd.core.expr.term_features import analyze_term
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
+from kd.search.pysindy.hole_subset import HOLE_SUBSET_MAX
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
@@ -22,6 +29,8 @@ _PINNED = "pinned"
 _PINNED_ALIAS = "pinned-alias"
 _OUTSIDE_VOCABULARY = "outside-vocabulary"
 _HOLE_FILTERED = "hole-filtered"
+_ANCHOR_ALIAS = "anchor-alias"
+_ANCHOR_OVERLAP = "anchor-overlap"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,6 +39,7 @@ class PySINDyCompiled:
     effective_terms: tuple[str, ...]
     report: CompileReport
     dropped: tuple[tuple[str, str], ...]
+    hole_count_bounds: tuple[int, int] | None
 
 
 def _closed_compilation(
@@ -47,6 +57,7 @@ def _closed_compilation(
             ),
         ),
         dropped=(),
+        hole_count_bounds=None,
     )
 
 
@@ -141,16 +152,27 @@ def _filter_for_holes(
     dropped: list[tuple[str, str]],
 ) -> tuple[str, ...]:
     effective: list[str] = []
+    represented: set[str] = set()
     for term, key in remaining:
         if key in anchor_keys:
+            if key in represented:
+                dropped.append((term, _ANCHOR_ALIAS))
+                continue
+            represented.add(key)
             effective.append(term)
             continue
         try:
             features = analyze_term(term, sketch.vocabulary)
+            spelled = anchor_spelled_by(term, sketch)
+            carried = anchor_carried_by(term, sketch) if sketch.anchored else None
         except ValueError:
             dropped.append((term, _OUTSIDE_VOCABULARY))
             continue
-        if any(constraint_admits(hole.constraint, features) for hole in sketch.holes):
+        if spelled is not None:
+            dropped.append((term, _ANCHOR_ALIAS))
+        elif carried is not None:
+            dropped.append((term, _ANCHOR_OVERLAP))
+        elif any(constraint_admits(hole.constraint, features) for hole in sketch.holes):
             effective.append(term)
         else:
             dropped.append((term, _HOLE_FILTERED))
@@ -198,8 +220,19 @@ def _assert_hole_feasibility(
             )
 
 
+def _hole_count_bounds(sketch: Sketch) -> tuple[int, int] | None:
+    if not sketch.holes:
+        return None
+    max_terms = sum(hole.max_count for hole in sketch.holes)
+    if max_terms > HOLE_SUBSET_MAX:
+        return None
+    return sum(hole.min_count for hole in sketch.holes), max_terms
+
+
 def _compile_notes(
-    sketch: Sketch, dropped: tuple[tuple[str, str], ...]
+    sketch: Sketch,
+    dropped: tuple[tuple[str, str], ...],
+    hole_count_bounds: tuple[int, int] | None,
 ) -> tuple[str, ...]:
     anchors = ", ".join(anchor.term_ir for anchor in sketch.anchored) or "none"
     pins = ", ".join(pin.term_ir for pin in sketch.pinned) or "none"
@@ -212,6 +245,13 @@ def _compile_notes(
         f"pinned terms are owned by lower/lift: {pins}",
     ]
     notes.extend(f"dropped {term!r}: {reason}" for term, reason in dropped)
+    if hole_count_bounds is not None:
+        min_terms, max_terms = hole_count_bounds
+        notes.append(
+            "hole count enforced after the fit: a support outside "
+            f"{min_terms}..{max_terms} hole terms is replaced by the best subset "
+            "by aic_no_n"
+        )
     return tuple(notes)
 
 
@@ -232,13 +272,15 @@ def compile_for_pysindy(
     _assert_non_empty(sketch, effective_terms)
     _assert_hole_feasibility(sketch, effective_terms, anchor_keys)
     frozen_dropped = tuple(dropped)
+    hole_count_bounds = _hole_count_bounds(sketch)
     return PySINDyCompiled(
         effective_terms=effective_terms,
         report=CompileReport(
             levels=_LEVELS,
-            notes=_compile_notes(sketch, frozen_dropped),
+            notes=_compile_notes(sketch, frozen_dropped, hole_count_bounds),
         ),
         dropped=frozen_dropped,
+        hole_count_bounds=hole_count_bounds,
     )
 
 

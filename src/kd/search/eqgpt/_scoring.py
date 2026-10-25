@@ -9,6 +9,7 @@ from torch import Tensor, nn
 
 from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
+from kd.core.oom import is_cpu_alloc_failure
 from kd.search.eqgpt.gates import should_zero_reward
 from kd.search.eqgpt.reward import RewardResult, compute_reward
 from kd.search.eqgpt.vocab import E_ID, PAD_ID, S_ID
@@ -79,7 +80,15 @@ def score_candidate(
         else:
             lhs = lhs_flat.reshape(-1)
             matrix = torch.stack([lhs, *columns], dim=1)
+    except torch.cuda.OutOfMemoryError:
+
+
+
+        raise
     except (ValueError, KeyError, RuntimeError, IndexError) as exc:
+        if is_cpu_alloc_failure(exc):
+
+            raise
         return invalid_result(
             candidate, terms, f"execution error: {exc}", is_error=True
         )
@@ -205,7 +214,12 @@ def refit_final(
 
 
         solution = torch.linalg.lstsq(theta, target64.unsqueeze(1)).solution.squeeze(1)
+    except torch.cuda.OutOfMemoryError:
+
+        raise
     except (ValueError, KeyError, RuntimeError, IndexError) as exc:
+        if is_cpu_alloc_failure(exc):
+            raise
         return invalid_final_result(
             f"execution error: {exc}",
             best_reward,

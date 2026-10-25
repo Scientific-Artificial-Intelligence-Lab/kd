@@ -1,17 +1,26 @@
 ## Search space
 
 DISCOVER samples expression trees from operator and variable tokens, without
-a fixed candidate-term library. In the standard PDE vocabulary, products,
-quotients and trigonometric expressions can use `u`, `x` and `t`, with spatial
-derivatives represented by `diff_x(u)` and `diff2_x(u)`. Repeated multiplication
-forms powers. Priors restrict nesting of derivatives and trigonometric
+a fixed candidate-term library. In the PDE vocabulary, products, quotients
+and trigonometric expressions can use the dataset's fields and coordinates,
+with spatial derivatives represented by `diff_<axis>(...)` and
+`diff2_<axis>(...)` for each spatial axis (`diff_x(u)` and `diff2_x(u)` for a
+field `u` on an axis `x`). Repeated multiplication forms powers. Priors restrict nesting of derivatives and trigonometric
 functions. Coordinate tokens permit coordinate-dependent fits.
 
-The facade's grid vocabulary is fixed to `u`, `x`, `t`, `diff_x`, `diff2_x`.
-Other field names, extra fields and extra spatial axes are refused.
-An additional dataset axis does not add tokens automatically. The standard vocabulary contains no mixed derivative or
-third-order derivative token. `max_diff_order` can further restrict the
+The facade builds the grid vocabulary from the dataset: every field is a leaf,
+sorted by name (the target is the left-hand side, not a token); the spatial
+axes, in the dataset's order, and `t` are coordinate leaves; and each spatial
+axis adds `diff_<axis>` and `diff2_<axis>`. Spatial axes other than `x` and `y`
+are refused. A `library` set in the Python configuration is used as given and
+refuses a field or axis it does not name. The vocabulary contains no mixed
+derivative or third-order derivative token. `max_diff_order` can further restrict the
 vocabulary but cannot add an absent token or override another structural prior.
+The vocabulary a run searched is sealed in its result config as
+`searched_vocabulary` (operators, state and coordinate variables, and the
+engine's token names and arities; on a sketch run, the library narrowed to
+the sketch), so it is read there rather than reconstructed from the
+requested configuration.
 The facade controls iteration count with `generations`; `n_iterations` does
 not set its loop length. Without `pinn`, the PDE path evaluates derivatives
 from the observed grid by finite differences and requires no pretrained weights

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 
-from kd.viz.style import style_context
+from kd.viz.style import FIGSIZE_SINGLE, style_context
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -24,7 +24,7 @@ def plot_plugin(
     with style_context(style):
         if ax is None:
             _, ax = plt.subplots(
-                figsize=(8, 4),
+                figsize=FIGSIZE_SINGLE,
                 subplot_kw={"projection": info.projection},
                 layout="constrained",
             )

@@ -16,6 +16,7 @@ from kdagent.analysis.signals import (
     signal_s6,
     signal_s7,
     signal_s8,
+    signal_refine,
 )
 from kdagent.analysis.sources import (
     budget_params,
@@ -44,6 +45,7 @@ def report(root: Path) -> str:
         llm = llm_facts(rows)
         console = console_summary(root / f"{name}.log")
         free = free_observations(calls)
+        refine = signal_refine(calls)
         s1 = signal_s1(calls)
         s2 = signal_s2(calls)
         s3 = signal_s3(calls, budget, defaults)
@@ -64,7 +66,8 @@ def report(root: Path) -> str:
             f"| {name} | {minutes:.1f} min | {llm['model_calls']} | "
             f"{truncated_replies(rows)} | {tokens} | "
             f"{stop} | {console.get('answer_source', '')} | {free['tool_calls']} | "
-            f"{free['path_not_found']} | {free['skill_reads']} |"
+            f"{free['path_not_found']} | {free['skill_reads']} | "
+            f"{refine['refine_calls']} ({refine['succeeded']} succeeded) |"
         )
         budget_note = (
             f"{len(s3['requested'])} searches, {s3['with_budget']} with a budget"
@@ -121,8 +124,9 @@ def report(root: Path) -> str:
     out.insert(
         2,
         "| Dataset | Wall clock | Model calls | Truncated replies | Tokens in/out "
-        "| stop_reason | answer_source | Tool calls | path_not_found | Card reads |\n"
-        "|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(facts_rows),
+        "| stop_reason | answer_source | Tool calls | path_not_found | Card reads "
+        "| Refits |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(facts_rows),
     )
     out.insert(3, "\n## The four signals\n")
     out.insert(

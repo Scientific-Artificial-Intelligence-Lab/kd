@@ -23,8 +23,7 @@ def price_seconds(seconds: float, *, seconds_per_evaluation: float) -> int:
         raise ValueError(f"seconds must be >= 0, got {seconds!r}")
     if seconds_per_evaluation <= 0:
         raise ValueError(
-            "seconds_per_evaluation must be positive, got "
-            f"{seconds_per_evaluation!r}"
+            f"seconds_per_evaluation must be positive, got {seconds_per_evaluation!r}"
         )
     return math.ceil(seconds / seconds_per_evaluation)
 

@@ -5,7 +5,8 @@ import ast
 import logging
 import math
 from dataclasses import asdict, replace
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import torch
 import torch.nn as nn
@@ -19,11 +20,6 @@ from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN, UNITY_TOKEN, PythonExecutor
 from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.registry import FunctionRegistry
-from kd.core.expr.term_features import (
-    ColumnFingerprint,
-    analyze_term,
-    column_fingerprint,
-)
 from kd.core.expr.terms import split_terms
 from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import (
@@ -31,10 +27,15 @@ from kd.core.linear_solve import (
     SparseSolver,
     SVDNullSpaceSolver,
 )
+from kd.core.metrics import NMSE_EPS
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.schema import DataTopology, PDEDataset
+from kd.models._training_precision import omit_default_training_dtype
+from kd.models.field_model import FieldModel
+from kd.models.serialize import StoredSurrogate, load_stored_surrogate
 from kd.search import surrogate_log as _surrogate_log
 from kd.search._torch_module_artifact import (
     TORCH_MODULE_ARTIFACT_FORMAT,
@@ -60,7 +61,12 @@ from kd.search.dlga.genes import (
     random_population,
     select_survivors,
 )
-from kd.search.dlga.sketch_backend import compile_for_dlga
+from kd.search.dlga.sketch_backend import DLGACompiled, compile_for_dlga
+from kd.search.dlga.surrogate_store import (
+    TrainedSurrogate,
+    require_surrogate_identity,
+    save_dlga_surrogate,
+)
 from kd.search.protocol import DiscoveryTask, PlatformComponents
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
@@ -81,8 +87,28 @@ logger = logging.getLogger(__name__)
 _INVALID_FITNESS = float("inf")
 
 
+def _stored_surrogate(
+    surrogate_model: nn.Module | StoredSurrogate | str | Path | None,
+) -> StoredSurrogate | None:
+    if surrogate_model is None or isinstance(surrogate_model, nn.Module):
+        return None
+    stored = (
+        surrogate_model
+        if isinstance(surrogate_model, StoredSurrogate)
+        else load_stored_surrogate(surrogate_model)
+    )
+    if stored.identity is None:
+        raise ValueError(
+            f"stored surrogate {stored.path} carries no identity, so it cannot "
+            "be verified against the dataset; write it with "
+            "save_dlga_surrogate (or train_surrogate(save_to=)), or inject "
+            "its module directly to use it unverified"
+        )
+    return stored
+
+
 def _unmodeled_field_terms(
-    library: tuple[str, ...], dataset: PDEDataset
+    terms: tuple[str, ...], dataset: PDEDataset
 ) -> dict[str, set[str]]:
     assert dataset.fields is not None
     others = set(dataset.fields) - {dataset.lhs_field}
@@ -91,7 +117,7 @@ def _unmodeled_field_terms(
         return found
     fields = set(dataset.fields)
     axes = set(dataset.axis_order or ())
-    for term in library:
+    for term in terms:
         names = {
             node.id
             for node in ast.walk(ast.parse(term, mode="eval"))
@@ -108,14 +134,6 @@ def _unmodeled_field_terms(
             found[term] = used
     return found
 
-
-
-
-
-
-
-
-_NMSE_FALLBACK_EPS: float = 1e-15
 
 
 
@@ -155,6 +173,9 @@ class DLGAPlugin:
     config_cls: ClassVar[type[DLGAConfig]] = DLGAConfig
     one_shot: ClassVar[bool] = False
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset(
+        {"surrogate_model", "task"}
+    )
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="dlga",
@@ -168,7 +189,7 @@ class DLGAPlugin:
                     2: {"target_lhs_order": 2},
                 },
                 field_names=("u",),
-                spatial_axes=("x",),
+                spatial_axes=("x", "y"),
                 names_from="library",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
@@ -185,8 +206,8 @@ class DLGAPlugin:
                 lhs_orders=frozenset({1, 2}),
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
                 sketch=SketchClauseLevels(
-                    fixed_terms="unsupported",
-                    anchors="exit_checked",
+                    fixed_terms="lowered",
+                    anchors="fit_enforced",
                     hole_count="exit_checked",
                     derivative_order="generation_enforced",
                     operator_set="generation_enforced",
@@ -243,8 +264,16 @@ class DLGAPlugin:
 
 
 
+
+
         identity_breaking_fields=frozenset(
-            {"library", "lhs_auto_select", "target_lhs_order", "surrogate_model"}
+            {
+                "library",
+                "lhs_auto_select",
+                "target_lhs_order",
+                "surrogate_model",
+                "training_dtype",
+            }
         ),
 
 
@@ -263,6 +292,7 @@ class DLGAPlugin:
                 "surrogate_patience",
                 "surrogate_val_ratio",
                 "surrogate_restore_best",
+                "training_dtype",
             }
         ),
     )
@@ -271,7 +301,7 @@ class DLGAPlugin:
         self,
         config: DLGAConfig | None = None,
         *,
-        surrogate_model: nn.Module | None = None,
+        surrogate_model: nn.Module | StoredSurrogate | str | Path | None = None,
         task: DiscoveryTask | None = None,
     ) -> None:
         self._config = config or DLGAConfig()
@@ -292,9 +322,16 @@ class DLGAPlugin:
 
 
         self._sketch: Sketch | None = None if task is None else task.sketch
-        self._anchor_fingerprints: frozenset[ColumnFingerprint] = frozenset()
+        self._sketch_compiled: DLGACompiled | None = None
         self._require_constant_mode()
-        self._provided_model = surrogate_model
+        self._provided_stored = _stored_surrogate(surrogate_model)
+        self._provided_model: nn.Module | None
+        if self._provided_stored is not None:
+            self._provided_model = self._provided_stored.module
+        elif isinstance(surrogate_model, nn.Module):
+            self._provided_model = surrogate_model
+        else:
+            self._provided_model = None
         self._model: nn.Module | None = None
         self._provider: AutogradProvider | None = None
         self._context: SurrogateContext | None = None
@@ -316,12 +353,14 @@ class DLGAPlugin:
         self._restore_pending: bool = False
         self._last_fitness: list[float] | None = None
         self._restored_model: nn.Module | None = None
+        self._network_provenance: dict[str, Any] | None = None
+        self._restored_provenance: dict[str, Any] | None = None
         self._rng = torch.Generator()
         self._prepared = False
 
     @property
     def config(self) -> dict[str, Any]:
-        config = asdict(self._config)
+        config = omit_default_training_dtype(asdict(self._config))
         if self._provided_model is not None:
             config["surrogate_model"] = {
                 "artifact": "surrogate_model",
@@ -340,6 +379,17 @@ class DLGAPlugin:
     @property
     def sketch_compile_report(self) -> CompileReport | None:
         return self._sketch_compile_report
+
+    @property
+    def trained_surrogate(self) -> TrainedSurrogate | None:
+        if self._model is None or self._network_provenance is None:
+            return None
+        return TrainedSurrogate(
+            module=cast("FieldModel", self._model),
+            config=replace(self._config, seed=self._network_provenance["seed"]),
+            stopped_at_deadline=self._network_provenance["stopped_at_deadline"],
+            training=cast("SurrogateContext", self._context).training_result,
+        )
 
     @property
     def runner_batch_size(self) -> int:
@@ -368,11 +418,16 @@ class DLGAPlugin:
                 "val_ratio": self._config.surrogate_val_ratio,
                 "seed": self._config.seed,
                 "restore_best": self._config.surrogate_restore_best,
+                "training_dtype": self._config.training_dtype,
             },
         )
 
     def train_surrogate(
-        self, dataset: PDEDataset, *, device: str | None = None
+        self,
+        dataset: PDEDataset,
+        *,
+        device: str | None = None,
+        save_to: str | Path | None = None,
     ) -> tuple[nn.Module, TrainingResult]:
 
 
@@ -381,7 +436,17 @@ class DLGAPlugin:
         from kd.core.platform.builder import PlatformBuilder
 
         reqs = replace(self.derivative_requirements, surrogate_model=None)
-        return PlatformBuilder(dataset, reqs, device).train_surrogate()
+        model, result = PlatformBuilder(dataset, reqs, device).train_surrogate()
+        if save_to is not None:
+
+
+            save_dlga_surrogate(
+                cast("FieldModel", model),
+                save_to,
+                dataset=dataset,
+                config=self._config,
+            )
+        return model, result
 
     def prepare(self, components: PlatformComponents) -> None:
         self._prepared = False
@@ -399,22 +464,25 @@ class DLGAPlugin:
         self._max_module_length = self._config.max_module_length
         self._sketch_compile_report = None
         self._sketch = components.task.sketch if components.task is not None else None
-        self._anchor_fingerprints = frozenset()
+        self._sketch_compiled = None
         if self._sketch is not None:
             compiled = compile_for_dlga(self._sketch, self._config)
             self._library = compiled.library
             self._sketch_compile_report = compiled.report
-            self._anchor_fingerprints = frozenset(
-                column_fingerprint(
-                    analyze_term(anchor.term_ir, self._sketch.vocabulary)
-                )
-                for anchor in self._sketch.anchored
-            )
+            self._sketch_compiled = compiled
             if not compiled.allow_products:
                 self._max_module_length = 1
 
         dataset = components.dataset
         self._validate_dataset(dataset)
+        if self._provided_stored is not None:
+
+
+
+
+            require_surrogate_identity(
+                self._provided_stored, dataset, self._config, ignore=("seed",)
+            )
 
 
         self.refuse_unmodeled_fields(dataset)
@@ -447,6 +515,10 @@ class DLGAPlugin:
 
 
         self._model = getattr(provider, "model", None)
+        self._network_provenance = self._provenance_of(
+            components.context.training_result
+        )
+        self._restored_provenance = None
 
 
 
@@ -454,7 +526,7 @@ class DLGAPlugin:
 
 
         self._restored_model = None
-        self._build_evaluators(dataset)
+        self._build_evaluators(dataset, self._lowered_target(components))
 
 
         self._reprice_best()
@@ -491,6 +563,16 @@ class DLGAPlugin:
             getattr(components.context, "training_result", None),
         )
         self._prepared = True
+
+    def _provenance_of(self, training: TrainingResult | None) -> dict[str, Any] | None:
+        if self._provided_model is not None:
+            return None
+        if training is not None:
+            return {
+                "seed": self._config.seed,
+                "stopped_at_deadline": training.stopped_at_deadline,
+            }
+        return self._restored_provenance
 
     def propose(self, n: int) -> list[str]:
         del n
@@ -653,11 +735,15 @@ class DLGAPlugin:
             )
         try:
             result = self._evaluate_one(self._best_expression, self._best_genome)
-        except SearchInterrupted:
+        except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
 
 
             raise
         except Exception as exc:
+            if is_cpu_alloc_failure(exc):
+
+                raise
             logger.debug("Failed to build DLGA final result", exc_info=exc)
             return self._invalid_result(
                 self._best_expression,
@@ -708,6 +794,11 @@ class DLGAPlugin:
             "surrogate_model": (
                 self._model if self._model is not None else self._restored_model
             ),
+            "surrogate_provenance": (
+                self._network_provenance
+                if self._model is not None
+                else self._restored_provenance
+            ),
         }
 
     @state.setter
@@ -720,6 +811,7 @@ class DLGAPlugin:
         self._population = value.get("population")
         self._last_fitness = value.get("last_fitness")
         self._restored_model = value.get("surrogate_model")
+        self._restored_provenance = value.get("surrogate_provenance")
         self._best_score = value.get("best_score", float("inf"))
         self._best_expression = value.get("best_expression", "")
         self._best_lhs_name = value.get("best_lhs_name")
@@ -752,8 +844,23 @@ class DLGAPlugin:
 
         self._last_fitness = None
         self._restored_model = None
+        self._restored_provenance = None
 
-    def _build_evaluators(self, dataset: PDEDataset) -> None:
+    def _lowered_target(self, components: PlatformComponents) -> Tensor | None:
+        task = components.task
+        if task is None or not task.sketch.pinned or task.compiled.closed:
+            return None
+        if task.sketch.lhs_spec.order != self._config.target_lhs_order:
+            raise ValueError(
+                f"pinned sketch LHS order {task.sketch.lhs_spec.order} differs "
+                f"from target_lhs_order={self._config.target_lhs_order}, the "
+                "order of the target the platform lowered"
+            )
+
+        assert components.evaluator is not None
+        return components.evaluator.lhs_target
+
+    def _build_evaluators(self, dataset: PDEDataset, lowered: Tensor | None) -> None:
         if self._provider is None or self._context is None or self._executor is None:
             raise RuntimeError("DLGA internals not prepared")
         self._lhs_t_name = render_lhs_label(
@@ -768,9 +875,13 @@ class DLGAPlugin:
             name = render_lhs_label(LhsSpec(dataset.lhs_field, dataset.lhs_axis, order))
 
 
-            lhs = self._provider.get_derivative(
-                dataset.lhs_field, dataset.lhs_axis, order
-            ).detach()
+            lhs = (
+                self._provider.get_derivative(
+                    dataset.lhs_field, dataset.lhs_axis, order
+                ).detach()
+                if lowered is None
+                else lowered
+            )
             self._lhs_targets[name] = lhs.flatten().detach()
             self._evaluators[name] = Evaluator(
                 self._executor,
@@ -786,41 +897,61 @@ class DLGAPlugin:
             return (1, 2)
         return (self._config.target_lhs_order,)
 
-    def _sketch_admissible(self, expression: str) -> bool:
-        sketch = self._sketch
-        if sketch is None:
-            return True
+    def _admitted_terms(self, expression: str) -> list[str] | None:
+        sketch, compiled = self._sketch, self._sketch_compiled
+        assert sketch is not None and compiled is not None
         assert self._registry is not None
         try:
-            for term in split_terms(expression, self._registry):
+            terms = split_terms(expression, self._registry)
+            for term in terms:
                 reason = term_admission(
                     term,
                     sketch,
-                    pinned_keys=frozenset(),
-                    pinned_monomials=frozenset(),
-                    anchor_fingerprints=self._anchor_fingerprints,
+                    pinned_keys=compiled.pinned_keys,
+                    pinned_monomials=compiled.reserved_monomials,
+                    anchor_fingerprints=compiled.anchor_fingerprints,
                 )
                 if reason is not None:
-                    return False
+                    return None
         except ValueError:
-            return False
-        return True
+            return None
+        return terms
+
+    def _fit(
+        self, evaluator: Evaluator, expression: str, terms: list[str] | None
+    ) -> EvaluationResult:
+        compiled = self._sketch_compiled
+        if terms is None or compiled is None or not compiled.anchor_terms:
+            return evaluator.evaluate_expression(expression)
+        result = evaluator.evaluate_terms([*terms, *compiled.anchor_terms])
+        if not result.is_valid:
+            return result
+        own = len(terms)
+        selected = result.selected_indices
+        if selected is None:
+            return replace(result, complexity=own)
+        kept = [index for index in selected if index < own]
+        anchors = range(own, own + len(compiled.anchor_terms))
+        return replace(result, selected_indices=[*kept, *anchors], complexity=len(kept))
 
     def _evaluate_one(
         self,
         expression: str,
         genome: Genome | None = None,
     ) -> EvaluationResult:
-        if not self._sketch_admissible(expression):
-            return self._invalid_result(
-                expression,
-                "Candidate contains a term outside the sketch",
-                reason="structural_reject",
-            )
+        terms: list[str] | None = None
+        if self._sketch_compiled is not None and self._sketch_compiled.gated:
+            terms = self._admitted_terms(expression)
+            if terms is None:
+                return self._invalid_result(
+                    expression,
+                    "Candidate contains a term outside the sketch",
+                    reason="structural_reject",
+                )
         cross_lhs_mode = len(self._evaluators) > 1
         choices: list[EvaluationResult] = []
         for lhs_name, evaluator in self._evaluators.items():
-            result = evaluator.evaluate_expression(expression)
+            result = self._fit(evaluator, expression, terms)
             result.expression = expression
             if result.is_valid:
 
@@ -829,7 +960,7 @@ class DLGAPlugin:
 
 
 
-                if cross_lhs_mode and evaluator.lhs_variance <= _NMSE_FALLBACK_EPS:
+                if cross_lhs_mode and evaluator.lhs_variance <= NMSE_EPS:
                     result = replace(result, nmse=float("inf"))
                 length_penalty = _length_penalty(genome, result)
                 fitness = result.nmse + self._config.epsilon * length_penalty
@@ -887,7 +1018,8 @@ class DLGAPlugin:
     def refuse_unmodeled_fields(self, dataset: PDEDataset) -> None:
         fields = set(dataset.fields or {})
         axes = set(dataset.axis_order or ())
-        for term in self._library:
+        terms = self._evaluated_terms()
+        for term in terms:
             tree = ast.parse(term, mode="eval")
             heads = {
                 node.func.id
@@ -917,7 +1049,7 @@ class DLGAPlugin:
                     f"{sorted(fields)} and axes {sorted(axes)}; "
                     "set library from this input's fields and axes."
                 )
-        unmodeled = _unmodeled_field_terms(self._library, dataset)
+        unmodeled = _unmodeled_field_terms(terms, dataset)
         if unmodeled:
             uses = "; ".join(
                 f"{term!r} uses {sorted(fields)!r}"
@@ -925,10 +1057,16 @@ class DLGAPlugin:
             )
             raise ValueError(
                 "DLGA fits a surrogate of the left-hand field "
-                f"{dataset.lhs_field!r} only, so library terms on other dataset "
-                f"fields cannot be evaluated: {uses}. Remove these terms, or use "
-                "SGA, PySINDy or PySR, which read other fields from the data."
+                f"{dataset.lhs_field!r} only, so library or anchored terms on "
+                f"other dataset fields cannot be evaluated: {uses}. Remove these "
+                "terms, or use SGA, PySINDy or PySR, which read other fields "
+                "from the data."
             )
+
+    def _evaluated_terms(self) -> tuple[str, ...]:
+        if self._sketch is None:
+            return self._library
+        return (*self._library, *(item.term_ir for item in self._sketch.anchored))
 
     def refuse_lhs_terms(self, dataset: PDEDataset) -> None:
         if self._sketch is not None:

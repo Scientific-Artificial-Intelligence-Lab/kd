@@ -261,11 +261,14 @@ class EarlyStoppingCallback:
 
 class WallClockBudgetCallback:
 
-    def __init__(self, max_seconds: float) -> None:
-        if max_seconds <= 0:
-            raise ValueError(f"max_seconds must be > 0, got {max_seconds}")
+    def __init__(self, max_seconds: float, *, started_at: float | None = None) -> None:
+        if not math.isfinite(max_seconds) or max_seconds <= 0:
+            raise ValueError(
+                f"max_seconds must be positive and finite, got {max_seconds}"
+            )
         self._max_seconds = max_seconds
-        self._started: float = time.perf_counter()
+        self._fixed_origin = started_at is not None
+        self._started: float = time.perf_counter() if started_at is None else started_at
 
     @property
     def should_stop(self) -> bool:
@@ -275,10 +278,15 @@ class WallClockBudgetCallback:
     def max_seconds(self) -> float:
         return self._max_seconds
 
+    @property
+    def deadline(self) -> float:
+        return self._started + self._max_seconds
+
     def on_experiment_start(self, algorithm: Any) -> None:
-        self._started = time.perf_counter()
+        if not self._fixed_origin:
+            self._started = time.perf_counter()
         if isinstance(algorithm, DeadlineAwareSearchAlgorithm):
-            algorithm.set_wall_clock_deadline(self._started + self._max_seconds)
+            algorithm.set_wall_clock_deadline(self.deadline)
 
     def on_iteration_start(self, iteration: int, algorithm: Any) -> None:
         pass

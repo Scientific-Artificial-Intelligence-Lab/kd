@@ -21,11 +21,22 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
     "kd-tabular-npz-v1": SchemaEntry(1, "kd.data.tabular_file"),
     "kd-scattered-npz-v1": SchemaEntry(1, "kd.data.layouts.scattered_npz"),
+    "kd-trajectory-regression-v1": SchemaEntry(1, "kd.data.trajectory_regression"),
+    "kd-trajectories-v1": SchemaEntry(1, "kd.data.trajectory"),
+    "kd-network-smoothing-v1": SchemaEntry(1, "kd.data.network_smoothing"),
+
+
+
+    "kd-fd-v1": SchemaEntry(1, "kd._refit_frame"),
+    "kd-autograd-v1": SchemaEntry(1, "kd._refit_frame"),
+    "kd-weak-v1": SchemaEntry(1, "kd._weak_form"),
 
     "kd-term-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-termlib-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-lawsig-v2": SchemaEntry(2, "kd.core.equation.signature"),
     "kd-sketch-v1": SchemaEntry(1, "kd.core.equation.sketch"),
+    "kd-sketch-v2": SchemaEntry(2, "kd.core.equation.sketch"),
+    "kd-sketch-spec-v1": SchemaEntry(1, "kd.core.equation.sketch_input"),
     "kd-verification-v1": SchemaEntry(1, "kd.core.verify"),
 
     "kd-config-v1": SchemaEntry(1, "kd.search.run_spec"),

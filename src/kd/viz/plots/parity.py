@@ -9,7 +9,7 @@ import numpy as np
 
 from kd.viz._result_data import _fit_target_label, _sketch_fit_note
 from kd.viz.axes import _get_axes
-from kd.viz.style import style_context
+from kd.viz.style import INK_2, REF_LINE_WIDTH, SERIES, style_context
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -33,7 +33,16 @@ def plot_parity(
 
     with style_context(style):
 
-        ax.scatter(actual, predicted, s=8, alpha=0.6, label="Samples", rasterized=True)
+        ax.scatter(
+            actual,
+            predicted,
+            s=6,
+            alpha=0.35,
+            linewidths=0,
+            color=SERIES[0],
+            label="Samples",
+            rasterized=True,
+        )
 
 
         finite_vals = np.concatenate(
@@ -48,7 +57,10 @@ def plot_parity(
             if lo == hi:
                 lo -= 0.5
                 hi += 0.5
-            ax.plot([lo, hi], [lo, hi], "k--", linewidth=0.8, label="y = x")
+            ax.plot(
+                [lo, hi], [lo, hi], color=INK_2, linewidth=REF_LINE_WIDTH, label="y = x"
+            )
+            ax.set_aspect("equal", adjustable="box")
         else:
             warnings.append("All values are non-finite; 45-degree line omitted")
 
@@ -66,16 +78,18 @@ def plot_parity(
             transform=ax.transAxes,
             va="top",
             fontsize=10,
+            color=INK_2,
         )
+        ax.grid(True, axis="both")
 
         ax.set_xlabel("Actual")
         ax.set_ylabel("Predicted")
-        ax.set_title("Parity Plot")
+        ax.set_title("Parity")
         note = _sketch_fit_note(result)
         if note is not None:
             ax.set_xlabel(f"Actual ({_fit_target_label(result)})")
             ax.set_ylabel(f"Predicted ({_fit_target_label(result)})")
-            ax.set_title("Parity Plot (search fit)")
+            ax.set_title("Parity (search fit)")
             warnings.append(note)
 
     return warnings

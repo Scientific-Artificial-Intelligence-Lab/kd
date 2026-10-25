@@ -12,6 +12,7 @@ from typing import Literal, get_args
 
 
 
+from kd.models._training_precision import TrainingDtype, validate_training_dtype
 from kd.models.field_model import FieldModel
 
 DedupMode = Literal["none", "pre_prune", "post_prune", "dual"]
@@ -67,6 +68,16 @@ OP2: OperatorPool = (
     ("d^2", 2),
 )
 """Binary operators for mutation."""
+
+
+
+TABULAR_OPS: OperatorPool = tuple(item for item in OPS if item[0] not in ("d", "d^2"))
+TABULAR_ROOT: OperatorPool = tuple(item for item in ROOT if item[0] not in ("d", "d^2"))
+TABULAR_OP1: OperatorPool = OP1
+TABULAR_OP2: OperatorPool = tuple(item for item in OP2 if item[0] not in ("d", "d^2"))
+
+TABULAR_FUNCTIONS: tuple[str, ...] = ("sin", "cos", "exp", "log", "sqrt")
+"""Unary functions ``SGAConfig.functions`` may name (tabular mode only)."""
 
 
 def build_den(axes: list[str], lhs_axis: str) -> tuple[tuple[str, int], ...]:
@@ -214,6 +225,15 @@ class SGAConfig:
     ``use_autograd=True`` and ``field_model is None``; ignored in finite-diff
     mode (same handling as ``autograd_train_epochs``)."""
 
+    training_dtype: TrainingDtype | None = None
+    """Floating precision the auto-trained FieldModel is trained in: ``None``
+    (default) trains in the dataset's dtype; ``"float32"`` or ``"float64"`` names
+    one. The trained surrogate is cast back to the dataset's dtype, so SGA's
+    autograd terminals are computed in that dtype whatever the training
+    precision. Only used when ``use_autograd=True`` and ``field_model is None``.
+    The finite-difference and tabular modes train no surrogate and refuse any
+    value other than ``None``."""
+
     restart_interval: int | None = None
     """Number of committed generations between population re-draws.
 
@@ -230,18 +250,56 @@ class SGAConfig:
     independent fits at those seeds. With finite differences they are.
     """
 
-    def __post_init__(self) -> None:
-        """Validate restart intervals and autograd training-budget fields.
 
-        Restart intervals must be positive. Autograd validation rejects
-        patience without a validation signal, which the trainer only warns
-        about: a misconfigured budget must not reach training. These checks
-        also run when ``use_autograd=False``, even though finite differences
-        ignore the training fields, so switching to autograd keeps the
-        constraints intact.
+    functions: tuple[str, ...] = ()
+    """Unary functions added to the tabular grammar, in the order given.
+
+    Distinct names from ``TABULAR_FUNCTIONS``. They use ordinary (unprotected)
+    semantics; a column that is not finite on the table is dropped. Only the
+    tabular mode accepts a non-empty value."""
+
+    constants: tuple[float, ...] = ()
+    """Constant leaves added to the tabular grammar, in the order given.
+
+    Finite, distinct and different from 0 and 1 (``one`` is already a leaf).
+    A constant is an exact structural choice, not a fitted parameter: AIC
+    counts only the selected columns. Only the tabular mode accepts a
+    non-empty value."""
+
+    def __post_init__(self) -> None:
+        """Validate restart intervals, the tabular vocabulary and autograd fields.
+
+        Restart intervals must be positive. Functions must be distinct
+        registered tabular functions. Constants become plain Python floats, so
+        their leaf names and checkpoint record do not depend on the caller's
+        numeric type, and must be finite, distinct and neither 0 nor 1.
+        ``training_dtype`` must be ``None``, ``"float32"`` or ``"float64"``.
+        Autograd validation rejects patience without a validation signal,
+        which the trainer only warns about: a misconfigured budget must not
+        reach training. These checks also run when ``use_autograd=False``,
+        even though finite differences ignore the training fields, so
+        switching to autograd keeps the constraints intact.
         """
         if self.restart_interval is not None and self.restart_interval < 1:
             raise ValueError("restart_interval must be None or >= 1")
+        validate_training_dtype(self.training_dtype)
+        unknown = [name for name in self.functions if name not in TABULAR_FUNCTIONS]
+        if unknown or len(set(self.functions)) != len(self.functions):
+            raise ValueError(
+                f"functions must be distinct names from {TABULAR_FUNCTIONS}, "
+                f"got {self.functions}"
+            )
+        self.constants = tuple(float(value) for value in self.constants)
+        if (
+            not all(math.isfinite(value) for value in self.constants)
+            or len(set(self.constants)) != len(self.constants)
+            or 0.0 in self.constants
+            or 1.0 in self.constants
+        ):
+            raise ValueError(
+                "constants must be finite, distinct and different from 0 and 1, "
+                f"got {self.constants}"
+            )
         if (
             self.autograd_train_patience is not None
             and self.autograd_train_val_ratio == 0.0

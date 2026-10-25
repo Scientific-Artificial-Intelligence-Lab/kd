@@ -18,6 +18,7 @@ from kd.viz.equation_display import expression_display
 
 if TYPE_CHECKING:
     from kd.core.equation import TermDiff
+    from kd.core.expr.sympy_bridge import FormattedEquation
     from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
@@ -68,22 +69,27 @@ def _render_term_diff_cell(delta: TermDiff, label: str, warnings: list[str]) -> 
     )
 
 
-def _fitted_equation_text(result: ExperimentResult) -> str | None:
+def _fitted_formatted(result: ExperimentResult) -> FormattedEquation | None:
     try:
         if result.equation is not None:
-            formatted = format_equation(result.equation)
-        else:
-            terms, coefficients, selected = _equation_data(result)
-            if terms is None or coefficients is None:
-                return None
-            formatted = format_pde(
-                terms,
-                coefficients,
-                lhs=_equation_lhs(result),
-                selected_indices=selected,
-            )
+            return format_equation(result.equation)
+        terms, coefficients, selected = _equation_data(result)
+        if terms is None or coefficients is None:
+            return None
+        return format_pde(
+            terms,
+            coefficients,
+            lhs=_equation_lhs(result),
+            selected_indices=selected,
+        )
     except _RENDER_ERRORS:
         logger.exception("Failed to format summary-table equation as full PDE")
+        return None
+
+
+def _fitted_equation_text(result: ExperimentResult) -> str | None:
+    formatted = _fitted_formatted(result)
+    if formatted is None:
         return None
 
 

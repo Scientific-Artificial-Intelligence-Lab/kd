@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Final
 
+from kd.core.equation._sketch_terms import lower_term
 from kd.core.equation.canonical import canonicalize_expression
 
 
@@ -78,7 +79,7 @@ class TermLibrarySpec:
         seen: set[str] = set()
         for index, term in enumerate(terms):
             try:
-                canonical_term = canonicalize_expression(term)
+                canonical_term = canonicalize_expression(lower_term(term))
             except ValueError as exc:
                 raise ValueError(
                     f"Cannot canonicalize term at index {index}: {term!r}: {exc}"

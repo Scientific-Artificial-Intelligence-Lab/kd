@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+import os
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import combinations
 from typing import cast
 
@@ -19,7 +21,7 @@ from kd.core.equation.signature import (
     law_term_key,
 )
 from kd.core.equation.types import Equation, Evolution, LhsSpec
-from kd.core.expr.jet import Monomial, jet_monomials
+from kd.core.expr.jet import JetExpansion, Monomial, jet_expansion, jet_monomials
 from kd.core.expr.term_features import (
     ColumnFingerprint,
     TermFeatures,
@@ -28,7 +30,9 @@ from kd.core.expr.term_features import (
     column_fingerprint,
 )
 
-SKETCH_SCHEMA_TAG = "kd-sketch-v1"
+SKETCH_SCHEMA_TAG = "kd-sketch-v2"
+
+SKETCH_V1_SCHEMA_TAG = "kd-sketch-v1"
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,47 @@ def _validate_clauses(sketch: Sketch) -> None:
         analyze_term(term_ir, sketch.vocabulary)
 
 
+
+    for anchor in sketch.anchored:
+        jet_expansion(law_term_key(anchor.term_ir), sketch.vocabulary)
+    _monomial_owners(
+        [anchor.term_ir for anchor in sketch.anchored],
+        sketch.vocabulary,
+        _anchor_overlap,
+    )
+
+
+def _anchor_overlap(first: str, second: str, shared: list[str]) -> str:
+    return (
+        f"anchored terms {first!r} and {second!r} share the jet monomials "
+        f"{shared!r}; each anchor has one independently fitted coefficient, "
+        "so a column is anchored once"
+    )
+
+
+def _pin_overlap(first: str, second: str, shared: list[str]) -> str:
+    return (
+        f"pinned terms {first!r} and {second!r} are alias spellings of one "
+        f"physical column (shared monomials {shared!r}); pin it once"
+    )
+
+
+def _monomial_owners(
+    term_irs: Sequence[str],
+    vocabulary: TermVocabulary,
+    overlap: Callable[[str, str, list[str]], str],
+) -> dict[Monomial, str]:
+    owners: dict[Monomial, str] = {}
+    for term_ir in term_irs:
+        monomials = jet_monomials(law_term_key(term_ir), vocabulary)
+        shared = sorted(str(monomial) for monomial in monomials & owners.keys())
+        if shared:
+            first = next(owners[m] for m in monomials if m in owners)
+            raise ValueError(overlap(first, term_ir, shared))
+        owners.update(dict.fromkeys(monomials, term_ir))
+    return owners
+
+
 def _outside(values: frozenset[str] | None, allowed: frozenset[str]) -> set[str]:
     if values is None:
         return set()
@@ -268,21 +313,17 @@ class Sketch:
     def matches(self, eq: Equation) -> SketchVerdict:
         return _match_sketch(self, eq)
 
+    def save(self, path: str | os.PathLike[str]) -> None:
+
+        from kd.core.equation.sketch_input import save_sketch
+
+        save_sketch(self, path)
+
 
 def _assert_pins_disjoint(sketch: Sketch) -> dict[Monomial, str]:
-    owners: dict[Monomial, str] = {}
-    for pin in sketch.pinned:
-        monomials = jet_monomials(law_term_key(pin.term_ir), sketch.vocabulary)
-        shared = sorted(str(monomial) for monomial in monomials & owners.keys())
-        if shared:
-            first = next(owners[m] for m in monomials if m in owners)
-            raise ValueError(
-                f"pinned terms {first!r} and {pin.term_ir!r} are alias "
-                f"spellings of one physical column (shared monomials "
-                f"{shared!r}); pin it once"
-            )
-        owners.update(dict.fromkeys(monomials, pin.term_ir))
-    return owners
+    return _monomial_owners(
+        [pin.term_ir for pin in sketch.pinned], sketch.vocabulary, _pin_overlap
+    )
 
 
 def pinned_monomials(sketch: Sketch) -> frozenset[Monomial]:
@@ -298,6 +339,88 @@ def pinned_monomials(sketch: Sketch) -> frozenset[Monomial]:
                 f"pinned column {pinned!r}; a pinned column is never refit"
             )
     return frozenset(owners)
+
+
+@dataclass(frozen=True)
+class _AnchorColumn:
+
+    term_ir: str
+    fingerprint: ColumnFingerprint
+    expansion: JetExpansion
+
+
+@lru_cache(maxsize=256)
+def _anchor_columns(sketch: Sketch) -> tuple[_AnchorColumn, ...]:
+    columns: list[_AnchorColumn] = []
+    for anchor in sketch.anchored:
+        key = law_term_key(anchor.term_ir)
+        columns.append(
+            _AnchorColumn(
+                term_ir=anchor.term_ir,
+                fingerprint=column_fingerprint(analyze_term(key, sketch.vocabulary)),
+                expansion=jet_expansion(key, sketch.vocabulary),
+            )
+        )
+    return tuple(columns)
+
+
+def _spelled(key: str, features: TermFeatures, sketch: Sketch) -> _AnchorColumn | None:
+    fingerprint = column_fingerprint(features)
+    candidates = [
+        column
+        for column in _anchor_columns(sketch)
+        if column.fingerprint == fingerprint
+    ]
+    if not candidates:
+        return None
+    expansion = jet_expansion(key, sketch.vocabulary)
+    return next(
+        (column for column in candidates if column.expansion == expansion), None
+    )
+
+
+def _carried(key: str, sketch: Sketch) -> _AnchorColumn | None:
+    monomials = jet_monomials(key, sketch.vocabulary)
+    return next(
+        (
+            column
+            for column in _anchor_columns(sketch)
+            if any(monomial in monomials for monomial, _ in column.expansion)
+        ),
+        None,
+    )
+
+
+def anchor_spelled_by(term_ir: str, sketch: Sketch) -> str | None:
+    key = law_term_key(term_ir)
+    column = _spelled(key, analyze_term(key, sketch.vocabulary), sketch)
+    return None if column is None else column.term_ir
+
+
+def anchor_carried_by(term_ir: str, sketch: Sketch) -> str | None:
+    key = law_term_key(term_ir)
+    if _spelled(key, analyze_term(key, sketch.vocabulary), sketch) is not None:
+        return None
+    column = _carried(key, sketch)
+    return None if column is None else column.term_ir
+
+
+def anchor_basis(term_irs: Sequence[str], sketch: Sketch) -> tuple[int, ...]:
+    kept: list[int] = []
+    seen: set[tuple[ColumnFingerprint, JetExpansion]] = set()
+    for index, term_ir in enumerate(term_irs):
+        try:
+            key = law_term_key(term_ir)
+            column = _spelled(key, analyze_term(key, sketch.vocabulary), sketch)
+        except ValueError:
+            column = None
+        if column is not None:
+            identity = (column.fingerprint, column.expansion)
+            if identity in seen:
+                continue
+            seen.add(identity)
+        kept.append(index)
+    return tuple(kept)
 
 
 def constraint_admits(constraint: TermConstraint, features: TermFeatures) -> bool:
@@ -335,12 +458,21 @@ def term_admission(
             pinned_monomials
             and jet_monomials(key, sketch.vocabulary) & pinned_monomials
         )
+        spelled = (
+            column_fingerprint(features) in anchor_fingerprints
+            and _spelled(key, features, sketch) is not None
+        )
+        carried = None if spelled or not sketch.anchored else _carried(key, sketch)
     except ValueError:
         return f"term {term_ir!r} is outside the sketch vocabulary"
     if pinned:
         return f"term {term_ir!r} regenerates a pinned column"
-    if column_fingerprint(features) in anchor_fingerprints:
+    if spelled:
         return None
+    if carried is not None:
+        return (
+            f"term {term_ir!r} carries the column of anchored term {carried.term_ir!r}"
+        )
     if any(constraint_admits(hole.constraint, features) for hole in sketch.holes):
         return None
     return f"no sketch hole admits term {term_ir!r}"
@@ -394,38 +526,62 @@ def _pinned_verdicts(
     return tuple(verdicts)
 
 
+def _anchor_spellings(sketch: Sketch, active: dict[str, float]) -> dict[str, list[str]]:
+    spellings: dict[str, list[str]] = {anchor.term_ir: [] for anchor in sketch.anchored}
+    for key in active:
+        try:
+            features = analyze_term(key, sketch.vocabulary)
+            if _spelled(key, features, sketch) is None:
+                continue
+        except ValueError:
+
+            continue
+        expansion = jet_expansion(key, sketch.vocabulary)
+        for column in _anchor_columns(sketch):
+            if column.fingerprint == column_fingerprint(features) and (
+                column.expansion == expansion
+            ):
+                spellings[column.term_ir].append(key)
+    return spellings
+
+
 def _anchored_verdicts(
     sketch: Sketch, active: dict[str, float]
-) -> tuple[tuple[AnchoredVerdict, ...], set[str]]:
+) -> tuple[tuple[AnchoredVerdict, ...], set[str], list[UnassignedTerm]]:
+    spellings = _anchor_spellings(sketch, active)
     verdicts: list[AnchoredVerdict] = []
     reserved: set[str] = set()
+    repeated: list[UnassignedTerm] = []
     for anchor in sketch.anchored:
-        key = law_term_key(anchor.term_ir)
-        fingerprint = column_fingerprint(analyze_term(key, sketch.vocabulary))
-        observed_keys: list[str] = []
-        for observed_key in active:
-            try:
-                features = analyze_term(observed_key, sketch.vocabulary)
-            except ValueError:
-
-                continue
-            if column_fingerprint(features) == fingerprint:
-                observed_keys.append(observed_key)
-        observed = (
-            math.fsum(active[observed_key] for observed_key in observed_keys)
-            if observed_keys
-            else None
-        )
-        reserved.update(observed_keys)
+        keys = spellings[anchor.term_ir]
+        reserved.update(keys)
+        if len(keys) > 1:
+            reason = (
+                f"one of {len(keys)} spellings of anchored term "
+                f"{anchor.term_ir!r}; an anchor is one fitted column"
+            )
+            repeated.extend(UnassignedTerm(law_key=key, reason=reason) for key in keys)
+        observed = active[keys[0]] if len(keys) == 1 else None
         verdicts.append(
             AnchoredVerdict(
                 term_ir=anchor.term_ir,
-                law_key=key,
+                law_key=law_term_key(anchor.term_ir),
                 observed=observed,
                 matched=observed is not None,
             )
         )
-    return tuple(verdicts), reserved
+    return tuple(verdicts), reserved, repeated
+
+
+def _hole_refusal(key: str, sketch: Sketch) -> tuple[TermFeatures | None, str | None]:
+    try:
+        features = analyze_term(key, sketch.vocabulary)
+        carried = _carried(key, sketch) if sketch.anchored else None
+    except ValueError as exc:
+        return None, str(exc)
+    if carried is not None:
+        return None, f"carries the column of anchored term {carried.term_ir!r}"
+    return features, None
 
 
 def _assign_holes(
@@ -434,10 +590,10 @@ def _assign_holes(
     assignments: dict[str, list[str]] = {hole.id: [] for hole in sketch.holes}
     unassigned: list[UnassignedTerm] = []
     for key in remaining:
-        try:
-            features = analyze_term(key, sketch.vocabulary)
-        except ValueError as exc:
-            unassigned.append(UnassignedTerm(law_key=key, reason=str(exc)))
+        features, refusal = _hole_refusal(key, sketch)
+        if features is None:
+            assert refusal is not None
+            unassigned.append(UnassignedTerm(law_key=key, reason=refusal))
             continue
         admitted = [
             hole
@@ -463,13 +619,14 @@ def _assign_holes(
 
 def _match_sketch(sketch: Sketch, eq: Equation) -> SketchVerdict:
     if not isinstance(eq, Evolution):
-        raise TypeError("kd-sketch-v1 matches EVOLUTION equations only")
+        raise TypeError(f"{SKETCH_SCHEMA_TAG} matches EVOLUTION equations only")
     active = _aggregate_law(eq, sketch.match_policy.support_threshold)
     pinned = _pinned_verdicts(sketch, active)
-    anchored, anchored_keys = _anchored_verdicts(sketch, active)
+    anchored, anchored_keys, repeated = _anchored_verdicts(sketch, active)
     reserved = {entry.law_key for entry in pinned} | anchored_keys
     remaining = tuple(sorted(set(active) - reserved))
-    holes, unassigned = _assign_holes(sketch, remaining)
+    holes, outside = _assign_holes(sketch, remaining)
+    unassigned = tuple(sorted((*repeated, *outside), key=lambda entry: entry.law_key))
     lhs_matched = eq.lhs_spec == sketch.lhs_spec
     overall = (
         lhs_matched
@@ -489,8 +646,18 @@ def _match_sketch(sketch: Sketch, eq: Equation) -> SketchVerdict:
     )
 
 
+def require_complete_sketch(sketch: object, consumer: str) -> None:
+    if not isinstance(sketch, Sketch):
+        raise TypeError(
+            f"{consumer} takes a complete Sketch, got {type(sketch).__name__}; "
+            "bind a shorthand to its dataset with spec.resolve(dataset) first"
+        )
+
+
 def sketch_to_dict(sketch: Sketch) -> dict[str, object]:
     from kd.core.equation._sketch_serialize import sketch_to_dict_impl
+
+    require_complete_sketch(sketch, "sketch_to_dict")
 
     return sketch_to_dict_impl(sketch)
 
@@ -508,14 +675,19 @@ __all__ = [
     "PinnedTerm",
     "PinnedVerdict",
     "SKETCH_SCHEMA_TAG",
+    "SKETCH_V1_SCHEMA_TAG",
     "Sketch",
     "SketchMatchPolicy",
     "SketchVerdict",
     "TermConstraint",
     "TermHole",
     "UnassignedTerm",
+    "anchor_basis",
+    "anchor_carried_by",
+    "anchor_spelled_by",
     "constraint_admits",
     "pinned_monomials",
+    "require_complete_sketch",
     "sketch_from_dict",
     "sketch_to_dict",
     "term_admission",

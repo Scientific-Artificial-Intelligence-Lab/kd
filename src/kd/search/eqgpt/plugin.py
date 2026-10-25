@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 
 from kd.core.equation import HOMOGENEOUS_LHS_LABEL, Form, LhsSpec, render_lhs_label
-from kd.core.equation.sketch import Sketch
+from kd.core.equation.sketch import Sketch, anchor_basis
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
@@ -50,6 +50,7 @@ from kd.search.eqgpt.sampling import (
 from kd.search.eqgpt.sketch_backend import (
     EqGPTCompiled,
     compile_for_eqgpt,
+    fit_candidate,
     refuse_candidate,
 )
 from kd.search.eqgpt.vocab import VOCAB_SHA256, Vocab, load_vocab
@@ -126,6 +127,22 @@ _SKETCH_LEVELS = SketchClauseLevels(
 )
 
 
+def _optimizer_state_to_cpu(state: dict[str, Any]) -> dict[str, Any]:
+
+    def move(value: Any) -> Any:
+        if isinstance(value, torch.Tensor):
+            return value.detach().cpu().clone()
+        if isinstance(value, dict):
+            return {key: move(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [move(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(move(item) for item in value)
+        return value
+
+    return {key: move(item) for key, item in state.items()}
+
+
 class EqGPTPlugin:
 
     score_kind: ClassVar[str] = "EqGPT reward"
@@ -137,6 +154,7 @@ class EqGPTPlugin:
     config_cls: ClassVar[type[EqGPTConfig]] = EqGPTConfig
     one_shot: ClassVar[bool] = False
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset()
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="eqgpt",
@@ -405,7 +423,9 @@ class EqGPTPlugin:
 
 
             self._steady = None
-            self._multicase = MultiCaseEvaluator.from_config(self._config)
+            self._multicase = MultiCaseEvaluator.from_config(
+                self._config, device=components.device
+            )
             self._lhs_flat = None
             self._assert_primary_dataset(dataset)
         elif self._config.is_steady:
@@ -472,6 +492,8 @@ class EqGPTPlugin:
                 dataset,
                 components.executor,
                 self._config,
+                device=components.device,
+                deadline=components.deadline,
             )
 
         sampling_config = SamplingConfig(
@@ -614,6 +636,7 @@ class EqGPTPlugin:
     ) -> EvaluationResult:
         assert self._vocab is not None
         assert self._lhs_flat is not None and self._components is not None
+        fitted = candidate
         if self._sketch is not None:
             assert self._sketch_compiled is not None
             refusal = refuse_candidate(candidate, self._sketch, self._sketch_compiled)
@@ -625,12 +648,13 @@ class EqGPTPlugin:
                     terms=candidate.split(" + "),
                     reason="structural_reject",
                 )
+            fitted = fit_candidate(candidate, self._sketch)
         context = self._components.context
 
 
         assert context is not None
-        return _scoring.score_candidate(
-            candidate=candidate,
+        result = _scoring.score_candidate(
+            candidate=fitted,
             sentence=sentence,
             vocab=self._vocab,
             variables=self._gate_variables,
@@ -640,6 +664,7 @@ class EqGPTPlugin:
             sparsity_alpha=self._config.sparsity_alpha,
             term_cache=self._term_cache,
         )
+        return result if fitted == candidate else replace(result, expression=candidate)
 
     def _score_wave(
         self, candidate: str, sentence: list[int] | None
@@ -799,6 +824,8 @@ class EqGPTPlugin:
         assert self._lhs_flat is not None and self._components is not None
         context = self._components.context
         assert context is not None
+        if self._sketch is not None:
+            terms = [terms[index] for index in anchor_basis(terms, self._sketch)]
         return _scoring.refit_final(
             terms=terms,
             executor=self._components.executor,
@@ -844,7 +871,9 @@ class EqGPTPlugin:
             assert self._backend is not None and self._optimizer is not None
             return {
                 "backend_state": self._backend.state_dict(),
-                "optimizer_state": self._optimizer.state_dict(),
+                "optimizer_state": _optimizer_state_to_cpu(
+                    self._optimizer.state_dict()
+                ),
                 "top_k": {
                     "rewards": list(self._pool_rewards),
                     "sentences": [list(s) for s in self._pool_sentences],
@@ -1008,10 +1037,12 @@ class EqGPTPlugin:
 
     def _build_default_backend(self, vocab: Vocab) -> GPTBackend:
         gpt_config = GPTConfig(vocab_size=vocab.size)
+        device = self._components.device if self._components is not None else None
         return RealGPTBackend.from_assets(
             gpt_config,
             weights_path=self._config.weights_path,
             asset_dir=self._config.asset_dir,
+            device=device,
         )
 
     def _reset_search_state(self) -> None:

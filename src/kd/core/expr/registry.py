@@ -158,12 +158,28 @@ class FunctionRegistry:
         reg.register("cos", torch.cos, arity=1)
         reg.register("exp", safe_exp, arity=1)
         reg.register("log", safe_log, arity=1)
+        reg.register("sqrt", torch.sqrt, arity=1)
         reg.register("neg", _neg, arity=1)
         reg.register("n2", _square, arity=1)
         reg.register("n3", _cube, arity=1)
         reg.register("recip", _recip, arity=1)
         reg.register("lap", _lap_stub, arity=1)
 
+        return reg
+
+    @classmethod
+    def create_plain(cls) -> "FunctionRegistry":
+        reg = cls()
+        reg.register("add", torch.add, arity=2, commutative=True)
+        reg.register("mul", torch.mul, arity=2, commutative=True)
+        reg.register("sub", torch.sub, arity=2, commutative=False)
+        reg.register("div", torch.div, arity=2, commutative=False)
+        reg.register("neg", _neg, arity=1)
+        reg.register("n2", _raw_square, arity=1)
+        reg.register("n3", _raw_cube, arity=1)
+        reg.register("recip", _raw_recip, arity=1)
+        for name, function in _RAW_FUNCTIONS.items():
+            reg.register(name, function, arity=1)
         return reg
 
 
@@ -206,3 +222,30 @@ def _lap_stub(_x: Tensor) -> Tensor:
     raise NotImplementedError(
         "lap requires a context-aware executor and cannot run via registry"
     )
+
+
+
+
+
+def _raw_recip(x: Tensor) -> Tensor:
+    return 1.0 / x
+
+
+def _raw_square(x: Tensor) -> Tensor:
+    return x**2
+
+
+def _raw_cube(x: Tensor) -> Tensor:
+    return x**3
+
+
+
+_RAW_FUNCTIONS: Final[dict[str, Callable[[Tensor], Tensor]]] = {
+    "sin": torch.sin,
+    "cos": torch.cos,
+    "exp": torch.exp,
+    "log": torch.log,
+    "sqrt": torch.sqrt,
+}
+
+PLAIN_FUNCTION_NAMES: Final[frozenset[str]] = frozenset(_RAW_FUNCTIONS)

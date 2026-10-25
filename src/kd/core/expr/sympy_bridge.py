@@ -4,7 +4,8 @@ from __future__ import annotations
 import ast
 import logging
 import math
-from collections.abc import Callable, Sequence
+import re
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -39,6 +40,8 @@ _KD_OPS: dict[str, Callable[..., Any]] = {
     "exp": sympy.exp,
     "log": sympy.log,
 
+    "sqrt": sympy.sqrt,
+
 
 
     "lap": lambda value: _LAP_FUNC(value),
@@ -72,7 +75,7 @@ def _parse_expression(code: str) -> ast.Expression:
     if not code.strip():
         raise ValueError("Expression cannot be empty")
     try:
-        return ast.parse(code, mode="eval")
+        return ast.parse(code.replace("^", "**"), mode="eval")
     except SyntaxError as exc:
         raise ValueError(f"Invalid expression: {code!r}") from exc
 
@@ -236,6 +239,26 @@ def _build_rhs(
 _DEFAULT_SIG_FIGS = 4
 
 
+
+
+_TIME_DERIVATIVE_TARGET = re.compile(r"d(?P<state>[^\W\d]\w*)_dt")
+
+
+class _TimeDerivativeTarget(sympy.Symbol):
+
+    def _latex(self, printer: Any) -> str:
+        match = _TIME_DERIVATIVE_TARGET.fullmatch(self.name)
+        assert match is not None
+        return rf"\dot{{{printer._print(sympy.Symbol(match['state']))}}}"
+
+
+def _lhs_symbol(lhs: str, variables: Collection[str] | None) -> Expr:
+    match = _TIME_DERIVATIVE_TARGET.fullmatch(lhs)
+    if match is not None and (variables is None or match["state"] in variables):
+        return cast(Expr, _TimeDerivativeTarget(lhs))
+    return cast(Expr, sympy.Symbol(lhs))
+
+
 def format_pde(
     terms: Sequence[str],
     coefficients: Tensor | Sequence[float],
@@ -243,14 +266,14 @@ def format_pde(
     lhs: str = _DEFAULT_LHS_LABEL,
     selected_indices: Sequence[int] | None = None,
     sig_figs: int = _DEFAULT_SIG_FIGS,
+    variables: Collection[str] | None = None,
 ) -> FormattedEquation:
     coefficient_values = _coefficients_to_list(coefficients)
     if len(terms) != len(coefficient_values):
         raise ValueError("terms and coefficients must have the same length")
     indices = _selected_indices(len(terms), selected_indices)
     rhs = _build_rhs(terms, coefficient_values, indices, sig_figs=sig_figs)
-    lhs_symbol = cast(Expr, sympy.Symbol(lhs))
-    equation = sympy.Eq(lhs_symbol, rhs, evaluate=False)
+    equation = sympy.Eq(_lhs_symbol(lhs, variables), rhs, evaluate=False)
     return FormattedEquation(
         latex=str(sympy.latex(equation)),
         unicode=str(sympy.pretty(equation, use_unicode=True, wrap_line=False)),
@@ -286,8 +309,7 @@ def _repeat_mul(base: str, exponent: int) -> str:
     return _fold_funcall("mul", terms)
 
 
-def _serialize_pow(base: Expr, exponent: int) -> str:
-    base_ir = _sympy_to_ir(base)
+def _serialize_pow(base_ir: str, exponent: int) -> str:
     if exponent == 2:
         return f"n2({base_ir})"
     if exponent == 3:
@@ -300,7 +322,20 @@ def _serialize_pow(base: Expr, exponent: int) -> str:
 
 
 
-    return f"recip({_serialize_pow(base, -exponent)})"
+    return f"recip({_serialize_pow(base_ir, -exponent)})"
+
+
+def _serialize_power(expr: sympy.Pow) -> str:
+    exponent = expr.exp
+    if exponent.is_Rational and exponent.q in (1, 2):
+        base_ir = _sympy_to_ir(expr.base)
+        if exponent.q == 2:
+            base_ir = f"sqrt({base_ir})"
+        return _serialize_pow(base_ir, int(exponent.p))
+    raise ValueError(
+        f"Unsupported power for kd IR: {expr!r}; supported exponents are "
+        "integers and half-integers p/2 (spelled with sqrt)"
+    )
 
 
 def _sympy_to_ir(expr: Expr) -> str:
@@ -320,8 +355,8 @@ def _sympy_to_ir(expr: Expr) -> str:
             "mul",
             [_sympy_to_ir(arg) for arg in expr.as_ordered_factors()],
         )
-    if isinstance(expr, sympy.Pow) and expr.exp.is_Integer:
-        return _serialize_pow(expr.base, int(expr.exp))
+    if isinstance(expr, sympy.Pow):
+        return _serialize_power(expr)
     if isinstance(expr, sympy.Function) and DIFF_OPERATOR_PATTERN.match(
         type(expr).__name__
     ):

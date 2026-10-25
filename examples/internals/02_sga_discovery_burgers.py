@@ -25,7 +25,7 @@ try a few seeds before drawing conclusions.
 Usage
 -----
     python examples/internals/02_sga_discovery_burgers.py
-    open examples/out/burgers/report.html
+    open examples/internals/out/burgers/report.html
 """
 
 from __future__ import annotations

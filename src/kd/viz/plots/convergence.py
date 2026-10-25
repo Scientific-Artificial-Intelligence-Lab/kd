@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING, Any
 
 from kd.search.recorder import BEST_SCORE_KEY
 from kd.viz.axes import _get_axes, integer_ticks
-from kd.viz.style import style_context
+from kd.viz.style import (
+    FIGSIZE_SINGLE,
+    INK_2,
+    SERIES,
+    SURFACE,
+    isolated_point_marks,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -44,7 +51,7 @@ def plot_convergence(
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
-    ax = _get_axes(ax, style)
+    ax = _get_axes(ax, style, figsize=FIGSIZE_SINGLE)
     warnings: list[str] = []
     scores = result.recorder.get(BEST_SCORE_KEY)
 
@@ -104,7 +111,13 @@ def plot_convergence(
         return warnings
 
     with style_context(style):
-        ax.plot(iterations, finite_scores, marker=".", markersize=3)
+        ax.plot(
+            iterations,
+            finite_scores,
+            color=SERIES[0],
+            **isolated_point_marks(finite_scores),
+        )
+        _label_final_value(ax, finite_scores, finite_indices[-1])
         ax.set_xlabel("Iteration")
         ax.set_ylabel(ylabel)
         integer_ticks(ax)
@@ -132,3 +145,25 @@ def plot_convergence(
             )
 
     return warnings
+
+
+def _label_final_value(ax: Axes, scores: list[float], last: int) -> None:
+    value = scores[last]
+    ax.scatter(
+        [last],
+        [value],
+        s=36,
+        color=SERIES[0],
+        edgecolors=SURFACE,
+        linewidths=1.5,
+        zorder=3,
+    )
+    ax.annotate(
+        f"{value:.4g}",
+        (last, value),
+        xytext=(8, 0),
+        textcoords="offset points",
+        va="center",
+        color=INK_2,
+    )
+    ax.margins(x=0.08)

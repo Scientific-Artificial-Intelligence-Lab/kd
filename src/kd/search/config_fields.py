@@ -18,21 +18,17 @@ if TYPE_CHECKING:
     from kd.search.protocol import FacadeWiringContract
 
 
-FACADE_MAPPED: Final[dict[str, dict[str, str]]] = {
+
+
+_FACADE_MAPPED_BEYOND_SEED: Final[dict[str, dict[str, str]]] = {
     "sga": {
         "num": "population",
         "depth": "depth",
         "width": "width",
         "aic_ratio": "aic_ratio",
         "use_autograd": "derivatives",
-        "seed": "seed",
     },
-    "dlga": {"seed": "seed"},
-    "discover": {"seed": "seed"},
-    "pysr": {"niterations": "generations", "seed": "seed"},
-    "eqgpt": {"seed": "seed"},
-    "llm4ed": {"seed": "seed"},
-    "pysindy": {"seed": "seed"},
+    "pysr": {"niterations": "generations"},
 }
 _NONE_TYPE = type(None)
 _UNION_ORIGINS = frozenset({Union, types.UnionType})
@@ -235,12 +231,16 @@ def _object_rows(nested_cls: type[Any], resume_tier: str) -> list[dict[str, Any]
     ]
 
 
+def facade_mapped(algorithm: str) -> dict[str, str]:
+    return {**_FACADE_MAPPED_BEYOND_SEED.get(algorithm, {}), "seed": "seed"}
+
+
 def field_specs(plugin_cls: type[FacadeWiringContract]) -> list[dict[str, Any]]:
     algorithm = plugin_cls.descriptor.algorithm
     hints = _resolved_hints(typing.cast(Hashable, plugin_cls.config_cls))
     descriptions = _attribute_descriptions(typing.cast(Hashable, plugin_cls.config_cls))
     knobs = {knob.name: knob for knob in plugin_cls.descriptor.knobs}
-    mapped = FACADE_MAPPED[algorithm]
+    mapped = facade_mapped(algorithm)
     rows: list[dict[str, Any]] = []
     for field in dataclasses.fields(plugin_cls.config_cls):
         knob = knobs.get(field.name)
@@ -436,7 +436,7 @@ def normalize_config_kwargs(
 
 
 __all__ = [
-    "FACADE_MAPPED",
+    "facade_mapped",
     "field_specs",
     "normalize_config_kwargs",
 ]

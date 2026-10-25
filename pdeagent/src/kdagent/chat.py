@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from kdagent import orchestration
-from kdagent.config import DEFAULT_RECURSION_LIMIT, EndpointConfig
+from kdagent.config import DEFAULT_RECURSION_LIMIT, EndpointConfig, Llm4edConfig
 from kdagent.run import finish_run, prepare_run
 from kdagent.state import (
     ANSWER,
@@ -60,6 +60,14 @@ def chat(
     advice: Path | None = None,
     data: Path | None = None,
     load_options: dict[str, Any] | None = None,
+    task_kind: str | None = None,
+    target_state: str | None = None,
+    bare: bool = False,
+    shell: bool = False,
+    device: str = "cpu",
+    training_dtype: str | None = None,
+    initial_sketch: dict[str, Any] | None = None,
+    llm4ed: Llm4edConfig | None = None,
 ) -> None:
     session, agent, metadata, record = prepare_run(
         workspace,
@@ -69,7 +77,15 @@ def chat(
         time_budget_seconds=time_budget_seconds,
         data=data,
         load_options=load_options,
+        task_kind=task_kind,
+        target_state=target_state,
         advice=advice,
+        bare=bare,
+        shell=shell,
+        device=device,
+        training_dtype=training_dtype,
+        initial_sketch=initial_sketch,
+        llm4ed=llm4ed,
     )
 
 
@@ -114,7 +130,10 @@ def chat(
                 {"messages": [], "answer": None, "stop_reason": "conversation_reset"}
             )
             finish_run(captured, session, config=config, record=record)
-            _write("conversation cleared (the pinned dataset and run ledger stay)")
+            _write(
+                "conversation cleared (the pinned dataset, the run ledger and "
+                "the active Sketch stay)"
+            )
             continue
         history.append({"role": "user", "content": line})
         captured = RunLoopResult(
@@ -167,4 +186,6 @@ def chat(
             _write(f" !! turn crashed: {type(error).__name__}: {error}")
         if answer is not None and answer["source"] == "submitted":
             _write(f"=== answer submitted: {answer}")
+        elif answer is not None and answer["source"] == "abstained":
+            _write(f"=== ended without an answer: {answer['reason']}")
         finish_run(captured, session, config=config, record=record)

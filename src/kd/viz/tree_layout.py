@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from matplotlib.colors import to_rgba
+
+from kd.viz.style import AXIS, GRID, SERIES
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -12,14 +16,22 @@ if TYPE_CHECKING:
 _MAX_NODES = 60
 
 
-_KIND_STYLE: dict[str, dict[str, str]] = {
-    "op": {"facecolor": "#ececec", "edgecolor": "#888888"},
-    "var": {"facecolor": "#cfe8ff", "edgecolor": "#2f6f9f"},
-    "const": {"facecolor": "#fff3cd", "edgecolor": "#b9952f"},
-    "deriv": {"facecolor": "#e7d6ff", "edgecolor": "#7a4fb0"},
+_LEAF_FILL_ALPHA = 0.18
+
+
+def _leaf_style(colour: str) -> dict[str, Any]:
+    return {"facecolor": to_rgba(colour, _LEAF_FILL_ALPHA), "edgecolor": colour}
+
+
+
+_KIND_STYLE: dict[str, dict[str, Any]] = {
+    "op": {"facecolor": GRID, "edgecolor": AXIS},
+    "var": _leaf_style(SERIES[0]),
+    "const": _leaf_style(SERIES[3]),
+    "deriv": _leaf_style(SERIES[2]),
 }
 
-_EDGE_COLOR = "#666666"
+_EDGE_COLOR = AXIS
 _FONT_SIZE = 9
 _X_MARGIN = 0.6
 _Y_MARGIN = 0.4

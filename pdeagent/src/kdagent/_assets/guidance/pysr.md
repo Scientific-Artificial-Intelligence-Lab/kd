@@ -1,4 +1,5 @@
-Supply `terms` for grids other than one-field `u(x,t)`. Tabular mode derives
+Supply `terms` for grids other than one-field `u` with spatial axes `x`, `y` or
+both. Tabular mode derives
 its inputs from feature columns, preserves constants inside the whole
 expression and fits one outer coefficient without a separate outer intercept;
 a pure-constant expression is refused. The default tabular unary operators

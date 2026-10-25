@@ -18,6 +18,7 @@ from kd.viz.gap_notes import (
     band_measured_flags,
     measured_flags,
 )
+from kd.viz.style import CONTEXT, REF_LINE_WIDTH, SERIES, isolated_point_marks
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -28,11 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 NO_DATA_TEXT = "No data"
-
-
-
-_LINE_MARKER = "."
-_LINE_MARKER_SIZE = 3
 
 
 class Panel(Protocol):
@@ -171,13 +167,15 @@ def series_gap_annotator(vocab: GapVocabulary) -> Callable[[Axes, list[Any]], No
     return annotate
 
 
-def _plot_index_curve(ax: Axes, values: Any, *, label: str | None = None) -> None:
+def _plot_index_curve(
+    ax: Axes, values: Any, *, label: str | None = None, color: str = SERIES[0]
+) -> None:
     ax.plot(
         range(len(values)),
         values,
-        marker=_LINE_MARKER,
-        markersize=_LINE_MARKER_SIZE,
+        color=color,
         label=label,
+        **isolated_point_marks(values),
     )
 
 
@@ -262,9 +260,14 @@ class BandPanel:
         ax.set_title(self.title)
         if width == 0:
             return draw_no_data(ax, self.name, no_data_reason(recorder))
-        for metric in self.metrics:
+        for index, metric in enumerate(self.metrics):
             padded = pad_series(by_metric[metric], width)
-            _plot_index_curve(ax, mask_non_finite(padded), label=metric)
+            _plot_index_curve(
+                ax,
+                mask_non_finite(padded),
+                label=metric,
+                color=SERIES[index % len(SERIES)],
+            )
         ax.legend()
         annotate_gaps(ax, band_measured_flags(by_metric.values(), width), self.gaps)
         return []
@@ -321,26 +324,34 @@ class SurrogateCurvePanel:
             return draw_no_data(ax, self.name, reason)
         ax.set_yscale("log")
         train_x, train_y = self._aligned(epochs, train, self.train_key, warnings)
+        train_drawn = mask_for_log(train_y)
         ax.plot(
             train_x,
-            mask_for_log(train_y),
-            marker=_LINE_MARKER,
-            markersize=_LINE_MARKER_SIZE,
+            train_drawn,
+            color=SERIES[0],
             label=_SURROGATE_TRAIN_LABEL,
+            **isolated_point_marks(train_drawn),
         )
         val = last_logged_list(recorder, self.val_key)
         if val:
             val_x, val_y = self._aligned(epochs, val, self.val_key, warnings)
+            val_drawn = mask_for_log(val_y)
             ax.plot(
                 val_x,
-                mask_for_log(val_y),
-                marker=_LINE_MARKER,
-                markersize=_LINE_MARKER_SIZE,
+                val_drawn,
+                color=SERIES[1],
                 label=_SURROGATE_VAL_LABEL,
+                **isolated_point_marks(val_drawn),
             )
         best_epoch = last_logged_scalar(recorder, self.best_epoch_key)
         if isinstance(best_epoch, (int, float)) and not isinstance(best_epoch, bool):
-            ax.axvline(float(best_epoch), label=_SURROGATE_BEST_EPOCH_LABEL)
+            ax.axvline(
+                float(best_epoch),
+                color=CONTEXT,
+                linestyle="--",
+                linewidth=REF_LINE_WIDTH,
+                label=_SURROGATE_BEST_EPOCH_LABEL,
+            )
         ax.legend()
         return warnings
 

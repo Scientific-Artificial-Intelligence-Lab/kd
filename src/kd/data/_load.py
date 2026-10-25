@@ -1,56 +1,152 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 from collections.abc import Callable, Iterable, Sequence
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypeAlias, overload
 
 import h5py
 import numpy as np
 import torch
 
-from kd.data._factory import parse_lhs_spec
+from kd.data._factory import default_lhs, parse_lhs_spec
 from kd.data.catalog import DATASET_CATALOG, get_dataset
 from kd.data.containers import ArrayEntry, Inventory, as_axis_vector, read_inventory
 from kd.data.layouts import Layout, layout_by_name, recognize
 from kd.data.layouts.kd_npz import regularize_axis
+from kd.data.layouts.plain_grid import read_storage_order
+from kd.data.regression import TabularDataset
 from kd.data.schema import PDEDataset
-from kd.data.source import DatasetSource
+from kd.data.source import DatasetSource, file_sha256
+from kd.data.tabular_file import (
+    TABULAR_NPZ,
+    TABULAR_NPZ_LAYOUT,
+    load_table_columns,
+    load_tabular,
+)
+from kd.data.trajectory import TrajectorySet
+from kd.data.trajectory_file import load_trajectory_set
+
+DataKind: TypeAlias = Literal["pde", "trajectory", "tabular"]
+LoadedData: TypeAlias = PDEDataset | TrajectorySet | TabularDataset
 
 
 @dataclass(kw_only=True)
 class _FileOptions:
+    kind: DataKind | None
     coords: dict[str, str] | None
     fields: dict[str, str] | None
     field_axes: Sequence[str] | None
     select: dict[str, int] | None
     layout: str | None
     loader: Callable[[Path], PDEDataset] | None
-    lhs: str
+    lhs: str | None
+    trajectory_id: str | None
+    params: dict[str, str] | None
     periodic: Iterable[str] | None
     name: str | None
     dtype: torch.dtype
 
+    def pde_lhs(self) -> str:
+        if self.lhs is not None:
+            return self.lhs
+        return default_lhs(() if self.fields is None else self.fields)
 
+
+@overload
 def load(
     source: str | Path,
     *,
+    kind: Literal["pde"],
     coords: dict[str, str] | None = None,
     fields: dict[str, str] | None = None,
     field_axes: Sequence[str] | None = None,
     select: dict[str, int] | None = None,
     layout: str | None = None,
     loader: Callable[[Path], PDEDataset] | None = None,
-    lhs: str = "u_t",
+    lhs: str | None = None,
+    trajectory_id: str | None = None,
+    params: dict[str, str] | None = None,
     periodic: Iterable[str] | None = None,
     name: str | None = None,
     dtype: torch.dtype = torch.float64,
-) -> PDEDataset:
+) -> PDEDataset: ...
+@overload
+def load(
+    source: str | Path,
+    *,
+    kind: Literal["trajectory"],
+    coords: dict[str, str] | None = None,
+    fields: dict[str, str] | None = None,
+    field_axes: Sequence[str] | None = None,
+    select: dict[str, int] | None = None,
+    layout: str | None = None,
+    loader: Callable[[Path], PDEDataset] | None = None,
+    lhs: str | None = None,
+    trajectory_id: str | None = None,
+    params: dict[str, str] | None = None,
+    periodic: Iterable[str] | None = None,
+    name: str | None = None,
+    dtype: torch.dtype = torch.float64,
+) -> TrajectorySet: ...
+@overload
+def load(
+    source: str | Path,
+    *,
+    kind: Literal["tabular"],
+    coords: dict[str, str] | None = None,
+    fields: dict[str, str] | None = None,
+    field_axes: Sequence[str] | None = None,
+    select: dict[str, int] | None = None,
+    layout: str | None = None,
+    loader: Callable[[Path], PDEDataset] | None = None,
+    lhs: str | None = None,
+    trajectory_id: str | None = None,
+    params: dict[str, str] | None = None,
+    periodic: Iterable[str] | None = None,
+    name: str | None = None,
+    dtype: torch.dtype = torch.float64,
+) -> TabularDataset: ...
+@overload
+def load(
+    source: str | Path,
+    *,
+    kind: None = None,
+    coords: dict[str, str] | None = None,
+    fields: dict[str, str] | None = None,
+    field_axes: Sequence[str] | None = None,
+    select: dict[str, int] | None = None,
+    layout: str | None = None,
+    loader: Callable[[Path], PDEDataset] | None = None,
+    lhs: str | None = None,
+    trajectory_id: str | None = None,
+    params: dict[str, str] | None = None,
+    periodic: Iterable[str] | None = None,
+    name: str | None = None,
+    dtype: torch.dtype = torch.float64,
+) -> LoadedData: ...
+def load(
+    source: str | Path,
+    *,
+    kind: DataKind | None = None,
+    coords: dict[str, str] | None = None,
+    fields: dict[str, str] | None = None,
+    field_axes: Sequence[str] | None = None,
+    select: dict[str, int] | None = None,
+    layout: str | None = None,
+    loader: Callable[[Path], PDEDataset] | None = None,
+    lhs: str | None = None,
+    trajectory_id: str | None = None,
+    params: dict[str, str] | None = None,
+    periodic: Iterable[str] | None = None,
+    name: str | None = None,
+    dtype: torch.dtype = torch.float64,
+) -> LoadedData:
     options = _FileOptions(
+        kind=kind,
         coords=coords,
         fields=fields,
         field_axes=field_axes,
@@ -58,6 +154,8 @@ def load(
         layout=layout,
         loader=loader,
         lhs=lhs,
+        trajectory_id=trajectory_id,
+        params=params,
         periodic=periodic,
         name=name,
         dtype=dtype,
@@ -65,20 +163,59 @@ def load(
     return _load_source(source, options)
 
 
-def _load_source(source: str | Path, options: _FileOptions) -> PDEDataset:
+def _load_source(source: str | Path, options: _FileOptions) -> LoadedData:
     if isinstance(source, str) and source in DATASET_CATALOG:
-        _validate_catalog_options(options)
-        return get_dataset(source).loader()
+        spec = get_dataset(source)
+        _validate_catalog_options(options, declared_lhs=spec.lhs)
+        return spec.loader()
     path = Path(source).resolve()
     if not path.exists():
         raise FileNotFoundError(f"dataset file not found: {path}")
-    dataset, container, route, hints = _load_file(path, options)
+    kind = _declared_kind(options)
+    xlsx = path.suffix.lower() == ".xlsx"
+    if options.loader is not None or (
+        xlsx and (kind == "pde" or (kind is None and options.lhs is None))
+    ):
+        return _with_source(path, options, _load_pde(path, options, None))
+    inventory = read_inventory(path)
+    if TABULAR_NPZ.matches(inventory):
+        return _load_tabular_wire(path, options)
+    kind = _inferred_kind(options, inventory) if kind is None else kind
+    if kind == "pde":
+        return _with_source(path, options, _load_pde(path, options, inventory))
+
+    if inventory.container == "csv" and any(
+        len(entry.shape) != 1 for entry in inventory.entries.values()
+    ):
+        raise ValueError(f"{kind} CSV requires a header row")
+    loaded: TrajectorySet | TabularDataset
+    if kind == "trajectory":
+        loaded, route, hints = _load_trajectories(path, inventory, options)
+    else:
+        loaded, route, hints = _load_table(path, inventory, options)
+    file_source = DatasetSource(
+        path=str(path),
+        sha256=file_sha256(path),
+        container=inventory.container,
+        layout=route,
+        hints=hints,
+        select=None,
+    )
+    return replace(loaded, file_source=file_source)
+
+
+def _with_source(
+    path: Path,
+    options: _FileOptions,
+    loaded: tuple[PDEDataset, str, str, dict[str, Any]],
+) -> PDEDataset:
+    dataset, container, route, hints = loaded
 
 
     result = copy(dataset)
     result.source = DatasetSource(
         path=str(path),
-        sha256=_sha256(path),
+        sha256=file_sha256(path),
         container=container,
         layout=route,
         hints=hints,
@@ -93,41 +230,183 @@ def _reject_keywords(route: str, **keywords: object) -> None:
             raise ValueError(f"{route} takes no {keyword}=")
 
 
-def _validate_catalog_options(options: _FileOptions) -> None:
+def _validate_catalog_options(
+    options: _FileOptions, *, declared_lhs: str | None
+) -> None:
     _reject_keywords(
         "catalog dataset",
+        kind=None if options.kind == "pde" else options.kind,
         coords=options.coords,
         fields=options.fields,
         field_axes=options.field_axes,
         select=options.select,
         layout=options.layout,
         loader=options.loader,
+        trajectory_id=options.trajectory_id,
+        params=options.params,
         periodic=options.periodic,
         name=options.name,
     )
-    if options.lhs != "u_t":
-        raise ValueError("catalog dataset takes no nondefault lhs=")
+    if options.lhs not in (None, declared_lhs):
+        declared = (
+            "it declares no left side"
+            if declared_lhs is None
+            else f"it declares {declared_lhs!r}"
+        )
+        raise ValueError(f"catalog dataset takes no lhs={options.lhs!r}; {declared}")
     if options.dtype != torch.float64:
         raise ValueError("catalog dataset takes no nondefault dtype=")
 
 
-def _load_file(
+def _declared_kind(options: _FileOptions) -> DataKind | None:
+    implied: DataKind | None = None
+    if options.layout is not None:
+        implied = "tabular" if options.layout == TABULAR_NPZ_LAYOUT else "pde"
+    elif options.loader is not None:
+        implied = "pde"
+    if options.kind is not None:
+        if implied is not None and implied != options.kind:
+            stated = (
+                f"layout={options.layout!r}"
+                if options.layout is not None
+                else "loader="
+            )
+            raise ValueError(
+                f"kind={options.kind!r} conflicts with {stated}, which loads "
+                f"{implied} data"
+            )
+        return options.kind
+    if implied is not None:
+        return implied
+    if options.coords is not None:
+        time_only = set(options.coords) == {"t"} and bool(options.fields)
+        return "trajectory" if time_only else "pde"
+    return None
+
+
+def _inferred_kind(options: _FileOptions, inventory: Inventory) -> DataKind:
+    lhs = options.lhs
+    if lhs is None:
+        return "pde"
+    if options.fields is not None:
+        return "tabular" if lhs in options.fields else "pde"
+    if lhs not in inventory.entries:
+        return "pde"
+
+
+    try:
+        parse_lhs_spec(lhs, fields=inventory.entries, coords=inventory.entries)
+    except ValueError:
+        return "tabular"
+    raise ValueError(
+        f"ambiguous data kind; lhs {lhs!r} names a column and also the "
+        "derivative of one column along another. Pass kind='pde' or "
+        "kind='tabular'"
+    )
+
+
+def _load_tabular_wire(path: Path, options: _FileOptions) -> TabularDataset:
+    route = TABULAR_NPZ_LAYOUT
+    if options.kind not in (None, "tabular"):
+        raise ValueError(f"{route} holds a table; kind={options.kind!r} conflicts")
+    if options.layout not in (None, route):
+        raise ValueError(f"{route} holds a table; layout={options.layout!r} conflicts")
+    _reject_keywords(
+        route,
+        coords=options.coords,
+        fields=options.fields,
+        lhs=options.lhs,
+        field_axes=options.field_axes,
+        select=options.select,
+        trajectory_id=options.trajectory_id,
+        params=options.params,
+        periodic=options.periodic,
+    )
+    if options.dtype != torch.float64:
+        raise ValueError(f"{route} takes no nondefault dtype=")
+    return load_tabular(path, name=options.name)
+
+
+def _load_trajectories(
+    path: Path, inventory: Inventory, options: _FileOptions
+) -> tuple[TrajectorySet, str, dict[str, Any]]:
+    if options.lhs is not None:
+        raise ValueError(
+            "trajectory does not accept lhs; choose target_state when preparing "
+            "regression (trajectories_to_tabular)"
+        )
+    _reject_keywords(
+        "trajectory",
+        periodic=options.periodic,
+        field_axes=options.field_axes,
+        select=options.select,
+    )
+    if options.dtype != torch.float64:
+        raise ValueError("trajectory takes no nondefault dtype=")
+    if not options.coords or not options.fields:
+        raise ValueError("trajectory requires one time coordinate and non-empty fields")
+    trajectories = load_trajectory_set(
+        inventory,
+        coords=options.coords,
+        fields=options.fields,
+        trajectory_id=options.trajectory_id,
+        params=options.params,
+        name=options.name or path.stem,
+    )
+    hints = {
+        "kind": "trajectory",
+        "coords": options.coords,
+        "fields": options.fields,
+        "trajectory_id": options.trajectory_id,
+        "params": options.params,
+    }
+    return trajectories, "trajectory-mapping", hints
+
+
+def _load_table(
+    path: Path, inventory: Inventory, options: _FileOptions
+) -> tuple[TabularDataset, str, dict[str, Any]]:
+    _reject_keywords(
+        "tabular",
+        coords=options.coords,
+        periodic=options.periodic,
+        field_axes=options.field_axes,
+        select=options.select,
+        trajectory_id=options.trajectory_id,
+        params=options.params,
+    )
+    if options.dtype != torch.float64:
+        raise ValueError("tabular takes no nondefault dtype=")
+    if options.layout is not None:
+        raise ValueError(
+            f"layout {options.layout!r} does not match:\n{inventory.describe()}"
+        )
+    if options.lhs is None:
+        raise ValueError("tabular needs lhs= naming the target column")
+    table, mapping = load_table_columns(
+        inventory,
+        lhs=options.lhs,
+        fields=options.fields,
+        name=options.name or path.stem,
+    )
+    hints = {"kind": "tabular", "lhs": options.lhs, "fields": mapping}
+    return table, "tabular-columns", hints
+
+
+def _load_pde(
     path: Path,
     options: _FileOptions,
+    inventory: Inventory | None,
 ) -> tuple[PDEDataset, str, str, dict[str, Any]]:
+    _reject_keywords(
+        "PDE data", trajectory_id=options.trajectory_id, params=options.params
+    )
     if path.suffix.lower() == ".xlsx":
-        return (
-            _load_xlsx(path, options),
-            "xlsx",
-            "xlsx",
-            {
-                "coords": options.coords,
-                "fields": options.fields,
-            },
-        )
+        hints = {"coords": options.coords, "fields": options.fields}
+        return _load_xlsx(path, options), "xlsx", "xlsx", hints
     if options.loader is not None:
         return _load_custom(path, options)
-    inventory = read_inventory(path)
+    assert inventory is not None
     if inventory.container == "csv" and all(
         len(entry.shape) == 1 for entry in inventory.entries.values()
     ):
@@ -203,7 +482,7 @@ def _csv_mappings(
         coords, fields = options.coords, options.fields
     else:
         field, _, _ = parse_lhs_spec(
-            options.lhs,
+            options.pde_lhs(),
             fields=inventory.entries,
             coords=inventory.entries,
         )
@@ -242,7 +521,7 @@ def _csv_points(
         return PDEDataset.from_arrays(
             grid_axes,
             grid_fields,
-            lhs=options.lhs,
+            lhs=options.pde_lhs(),
             periodic=options.periodic,
             name=name,
             dtype=options.dtype,
@@ -250,7 +529,7 @@ def _csv_points(
     dataset = PDEDataset.from_scatter(
         dict(coords),
         dict(fields),
-        lhs=options.lhs,
+        lhs=options.pde_lhs(),
         name=name,
         dtype=options.dtype,
     )
@@ -278,7 +557,7 @@ def _load_xlsx(path: Path, options: _FileOptions) -> PDEDataset:
         path,
         coords=options.coords,
         fields=options.fields,
-        lhs=options.lhs,
+        lhs=options.pde_lhs(),
         name=options.name or path.stem,
     )
 
@@ -324,10 +603,13 @@ def _load_mapping(inventory: Inventory, options: _FileOptions) -> PDEDataset:
         axis: regularize_axis(axis, as_axis_vector(key, inventory.entries[key].read()))
         for axis, key in options.coords.items()
     }
+    lengths = {axis: len(values) for axis, values in coords.items()}
     extra_axes = _mapping_extra_axes(options, inventory)
     fields: dict[str, torch.Tensor | np.ndarray] = {
         field: _mapped_field(
             inventory.entries[key],
+            field=field,
+            lengths=lengths,
             inventory=inventory,
             options=options,
             extra_axes=extra_axes,
@@ -337,7 +619,7 @@ def _load_mapping(inventory: Inventory, options: _FileOptions) -> PDEDataset:
     return PDEDataset.from_arrays(
         coords=coords,
         fields=fields,
-        lhs=options.lhs,
+        lhs=options.pde_lhs(),
         periodic=options.periodic,
         name=options.name or inventory.path.stem,
         dtype=options.dtype,
@@ -381,13 +663,25 @@ def _mapping_extra_axes(options: _FileOptions, inventory: Inventory) -> set[str]
 def _mapped_field(
     entry: ArrayEntry,
     *,
+    field: str,
+    lengths: dict[str, int],
     inventory: Inventory,
     options: _FileOptions,
     extra_axes: set[str],
 ) -> np.ndarray:
+    assert options.coords is not None and options.fields is not None
     if options.field_axes is None:
-        return entry.read()
-    axes = list(options.field_axes)
+        axes = read_storage_order(
+            entry.shape,
+            lengths,
+            inventory=inventory,
+            route="mapping without field_axes",
+            coords=options.coords,
+            fields=options.fields,
+            field=field,
+        )
+    else:
+        axes = list(options.field_axes)
     selected = {} if options.select is None else options.select
     if axes and axes[0] in extra_axes and inventory.container in {"hdf5", "mat73"}:
         values = entry.read_index0(selected[axes.pop(0)])
@@ -398,7 +692,6 @@ def _mapped_field(
     )
     values = values[indices]
     remaining = [axis for axis in axes if axis not in extra_axes]
-    assert options.coords is not None
     return np.transpose(values, [remaining.index(axis) for axis in options.coords])
 
 
@@ -425,12 +718,4 @@ def _choose_layout(inventory: Inventory, name: str | None) -> Layout:
             'Name the arrays with kd.load(path, coords={"x": "<key>", "t": "<key>"}, '
             'fields={"u": "<key>"})'
         )
-    return matches[0]
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return layout_by_name(matches[0].name)

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import torch
 
@@ -9,27 +11,43 @@ from kd.data.regression import TabularDataset
 from kd.data.trajectory import Trajectory, TrajectorySet, derivative_target
 
 
-def _rows(
-    trajectory: Trajectory, index: int, param_names: tuple[str, ...], trim: int
-) -> tuple[np.ndarray, np.ndarray]:
-    n_points = trajectory.t.shape[0]
+def _trim_slice(n_points: int, trim: int, trajectory_id: str) -> slice:
     if n_points <= 2 * trim:
         raise ValueError(
-            f"trajectory {trajectory.id!r} has {n_points} points; trimming "
+            f"trajectory {trajectory_id!r} has {n_points} points; trimming "
             f"{trim} per end needs more than {2 * trim}"
         )
-    keep = slice(trim, n_points - trim)
+    return slice(trim, n_points - trim)
 
 
-    derivative = coordinate_diff(
-        torch.as_tensor(trajectory.state[index], dtype=torch.float64),
-        torch.as_tensor(trajectory.t, dtype=torch.float64),
+def _differentiate_state(t: np.ndarray, state: np.ndarray) -> np.ndarray:
+
+
+    return coordinate_diff(
+        torch.as_tensor(state, dtype=torch.float64),
+        torch.as_tensor(t, dtype=torch.float64),
         axis=0,
         order=1,
     ).numpy()
-    values = [trajectory.params[name] for name in param_names]
-    constants = np.tile(np.asarray(values, dtype=np.float64), (n_points, 1))
-    return np.hstack([trajectory.state.T, constants])[keep], derivative[keep]
+
+
+def _regression_rows(
+    state: np.ndarray,
+    derivative: np.ndarray,
+    parameters: Sequence[float] | np.ndarray,
+    keep: slice,
+) -> tuple[np.ndarray, np.ndarray]:
+    constants = np.tile(np.asarray(parameters, dtype=np.float64), (state.shape[1], 1))
+    return np.hstack([state.T, constants])[keep], derivative[keep]
+
+
+def _rows(
+    trajectory: Trajectory, index: int, param_names: tuple[str, ...], trim: int
+) -> tuple[np.ndarray, np.ndarray]:
+    keep = _trim_slice(len(trajectory.t), trim, trajectory.id)
+    derivative = _differentiate_state(trajectory.t, trajectory.state[index])
+    parameters = [trajectory.params[name] for name in param_names]
+    return _regression_rows(trajectory.state, derivative, parameters, keep)
 
 
 def trajectories_to_tabular(
@@ -61,6 +79,7 @@ def trajectories_to_tabular(
             f"{target} is the time derivative of {target_state}, estimated with "
             "kd's finite differences over each trajectory's time array."
         ),
+        file_source=trajectories.file_source,
     )
 
 

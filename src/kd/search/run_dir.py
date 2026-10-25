@@ -9,10 +9,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search._record_schema import validate_lineage
+from kd.search.iteration_events import IterationEvent
 from kd.search.result import ExperimentResult
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "RunDirPaths",
     "create_run_dir",
     "finalize_run_dir",
+    "last_completed_iteration",
     "new_run_id",
     "run_id_of_run_dir",
 ]
@@ -234,3 +236,21 @@ def run_id_of_run_dir(directory: Path | str) -> str | None:
         return None
     run_id = data.get("run_id")
     return run_id if isinstance(run_id, str) and run_id else None
+
+
+def last_completed_iteration(
+    run_dir: Path | str,
+) -> IterationEvent | Literal["no_events", "no_completed_iteration"]:
+    events = RunDirPaths(root=Path(run_dir)).events
+    if not events.is_file():
+        return "no_events"
+    lines = events.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return "no_events"
+    try:
+        payload = json.loads(lines[-1])
+    except json.JSONDecodeError:
+        if len(lines) == 1:
+            return "no_completed_iteration"
+        payload = json.loads(lines[-2])
+    return IterationEvent.from_dict(payload)

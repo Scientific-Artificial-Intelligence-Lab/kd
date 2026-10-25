@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import math
+import time
+from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, TypeVar
 
 import numpy as np
 import torch
@@ -12,6 +14,7 @@ from torch import Tensor, nn
 from kd.core.equation import Equation, Form, residual_program
 from kd.core.evaluator import EvaluationResult
 from kd.core.executor.surrogate_context import SurrogateContext
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.term_cache import TermColumnCache
 from kd.data.derivatives import AutogradProvider
 from kd.data.schema import PDEDataset, compute_dataset_fingerprint
@@ -44,6 +47,9 @@ _STEADY_ERRORS: Final = (
 )
 _STEADY_VIZ_ERRORS: Final = _STEADY_ERRORS + (NotImplementedError, TypeError)
 
+_T = TypeVar("_T")
+
+
 class SteadyEvaluator:
 
     def __init__(
@@ -59,6 +65,7 @@ class SteadyEvaluator:
         eval_dataset: PDEDataset,
         vocab: Vocab,
         cache: TermColumnCache | None = None,
+        stopped_at_deadline: bool = False,
     ) -> None:
         self._executor = executor
         self._context = context
@@ -74,6 +81,7 @@ class SteadyEvaluator:
 
         self._vocab = vocab
         self._cache = cache if cache is not None else TermColumnCache()
+        self._stopped_at_deadline = stopped_at_deadline
 
     @classmethod
     def from_components(
@@ -84,6 +92,7 @@ class SteadyEvaluator:
         *,
         device: torch.device | None = None,
         surrogate: FieldModel | None = None,
+        deadline: float | None = None,
     ) -> SteadyEvaluator:
         if not config.is_steady:
             raise ValueError("SteadyEvaluator requires an EqGPTConfig in steady mode")
@@ -107,8 +116,11 @@ class SteadyEvaluator:
             )
         resolved_device = device or torch.device("cpu")
         trained = surrogate
+        stopped_at_deadline = False
         if trained is None:
-            trained = _train_surrogate(dataset, config, resolved_device)
+            trained, stopped_at_deadline = _train_surrogate(
+                dataset, config, resolved_device, deadline
+            )
         else:
 
 
@@ -148,11 +160,16 @@ class SteadyEvaluator:
             training_dataset=dataset,
             eval_dataset=eval_dataset,
             vocab=load_vocab(),
+            stopped_at_deadline=stopped_at_deadline,
         )
 
     @property
     def n_points(self) -> int:
         return self._n_points
+
+    @property
+    def stopped_at_deadline(self) -> bool:
+        return self._stopped_at_deadline
 
     @property
     def surrogate(self) -> FieldModel:
@@ -174,39 +191,26 @@ class SteadyEvaluator:
         return np.asarray(self._assemble(terms), dtype=np.float64)
 
     def build_viz_data(self, equation: Equation | None) -> SteadyVizData:
-        observed: np.ndarray | None = None
-        predicted: np.ndarray | None = None
-        try:
-            observed, predicted = self._surrogate_fit_values()
-        except _STEADY_VIZ_ERRORS as exc:
-            logger.warning("EqGPT steady surrogate-fit data unavailable: %s", exc)
+        fit = _viz_step("surrogate-fit", self._surrogate_fit_values)
+        observed, predicted = (None, None) if fit is None else fit
         if equation is None or equation.form is not Form.HOMOGENEOUS:
             return SteadyVizData(observed=observed, predicted=predicted)
         terms = tuple(term for term, _coefficient in equation.terms)
         points = self.evaluation_points()
-        matrix: np.ndarray | None = None
-        residual: np.ndarray | None = None
-        try:
-            matrix = self.assemble_terms(list(terms))
-        except _STEADY_VIZ_ERRORS as exc:
-            logger.warning("EqGPT steady term-balance data unavailable: %s", exc)
-        try:
-            result = self._executor.execute(residual_program(equation), self._context)
-            residual = (
-                result.value.detach().cpu().numpy().reshape(-1).astype(np.float64)
-            )
-        except _STEADY_VIZ_ERRORS as exc:
-            logger.warning("EqGPT steady residual data unavailable: %s", exc)
         return SteadyVizData(
             x=points[:, 0],
             y=points[:, 1],
-            residual=residual,
-            matrix=matrix,
+            matrix=_viz_step("term-balance", lambda: self.assemble_terms(list(terms))),
+            residual=_viz_step("residual", lambda: self._residual_values(equation)),
             terms=terms,
             pivot_index=0,
             observed=observed,
             predicted=predicted,
         )
+
+    def _residual_values(self, equation: Equation) -> np.ndarray:
+        result = self._executor.execute(residual_program(equation), self._context)
+        return result.value.detach().cpu().numpy().reshape(-1).astype(np.float64)
 
     def _surrogate_fit_values(self) -> tuple[np.ndarray | None, np.ndarray | None]:
         observed = (
@@ -274,7 +278,11 @@ class SteadyEvaluator:
             matrix = self._assemble(matrix_terms)
             theta, target = matrix[:, 1:], -matrix[:, 0]
             coefficients = np.linalg.lstsq(theta, target, rcond=None)[0]
+        except torch.cuda.OutOfMemoryError:
+            raise
         except _STEADY_ERRORS as exc:
+            if is_cpu_alloc_failure(exc):
+                raise
             return _invalid_final(
                 f"execution error: {exc}",
                 best_reward,
@@ -312,10 +320,7 @@ class SteadyEvaluator:
     def result_target(self, terms: list[str] | None) -> Tensor:
         if not terms:
             return torch.zeros(self._n_points, dtype=torch.float32)
-        try:
-            matrix = self._assemble([terms[0]])
-        except _STEADY_ERRORS:
-            return torch.zeros(self._n_points, dtype=torch.float32)
+        matrix = self._assemble([terms[0]])
         return torch.from_numpy(-matrix[:, 0]).float().detach().clone()
 
     def _assemble(self, terms: list[str]) -> np.ndarray:
@@ -327,6 +332,18 @@ class SteadyEvaluator:
             cache=self._cache,
             cache_generation=0,
         )
+
+
+def _viz_step(step: str, compute: Callable[[], _T]) -> _T | None:
+    try:
+        return compute()
+    except torch.cuda.OutOfMemoryError:
+        raise
+    except _STEADY_VIZ_ERRORS as exc:
+        if is_cpu_alloc_failure(exc):
+            raise
+        logger.warning("EqGPT steady %s data unavailable: %s", step, exc)
+        return None
 
 
 def _invalid_final(
@@ -350,7 +367,8 @@ def _train_surrogate(
     dataset: PDEDataset,
     config: EqGPTConfig,
     device: torch.device,
-) -> FieldModel:
+    deadline: float | None,
+) -> tuple[FieldModel, bool]:
     activation = str(config.steady_activation)
     seed = config.steady_surrogate_seed
     with torch.random.fork_rng(devices=[]):
@@ -368,8 +386,18 @@ def _train_surrogate(
     snapshots: list[tuple[float, dict[str, Tensor]]] = []
     last_finite = _clone_state(model)
     iterations = config.steady_train_iters
+    stopped_at_deadline = False
     model.train()
     for iteration in range(iterations):
+        if iteration > 0 and deadline is not None and time.perf_counter() >= deadline:
+            stopped_at_deadline = True
+            logger.info(
+                "steady surrogate training stops at the deadline after %d of %d "
+                "iterations",
+                iteration,
+                iterations,
+            )
+            break
         optimizer.zero_grad()
         prediction = model(x=train["x"], y=train["y"])["u"]
         loss = torch.mean((prediction - train["u"]) ** 2)
@@ -410,7 +438,7 @@ def _train_surrogate(
             )
             model.load_state_dict(last_finite)
     model.eval()
-    return model
+    return model, stopped_at_deadline
 
 
 def _clone_state(model: FieldModel) -> dict[str, Tensor]:

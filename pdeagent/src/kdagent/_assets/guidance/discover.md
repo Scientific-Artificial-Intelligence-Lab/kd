@@ -1,6 +1,14 @@
-Input data selects between the grid modes and tabular mode; there is no `mode`
-parameter. The grid vocabulary is fixed to `u`, `x`, `t`, `diff_x`, `diff2_x`;
-other grid field names, extra fields and extra spatial axes are refused.
+Input data selects between the grid modes and tabular mode, and `pinn`
+selects between the two grid modes; there is no `mode` parameter. The grid
+vocabulary is built from the input: every field (the target is the
+left-hand side, not a token), the spatial axes and `t` as coordinates, and
+`diff_<axis>` and `diff2_<axis>` for each spatial axis. Spatial axes other
+than `x` and `y` are refused. The vocabulary a run actually searched is
+sealed in its record: `run_spec.config.searched_vocabulary` in `record.json`
+holds the operators, the state and coordinate variables, and the engine's
+token names and arities (on a sketch run, the library narrowed to the
+sketch). Read it there rather than reconstructing it from the parameters
+you passed.
 `library` requires the separate typed Python route and is unavailable through
 `run_discovery`. `savgol_window` is the available preprocessing control for
 noisy grids.
@@ -39,7 +47,14 @@ the run then ends after the next generation with a sealed record. A fork
 and the local samples follow the new seed.
 
 Plan evaluations as `batch_size` times generations. A small batch and a few
-generations are a probe, not a recovery budget. Reward combines fit with
+generations are a probe, not a recovery budget. On noise-free benchmark
+problems with batch 128 and epsilon 0.05 (not the defaults), eight
+cold-started segments found the equation on 6 seeds where one continuous run
+did not and the reverse on 22. Eight segments that carry the network and
+optimizer state gave 11 against 13 against one continuous run, and 23 against
+9 against eight cold-started segments. Raising the evaluation
+cap from 8000 to 96000 left four problems at 0/3, 0/3, 1/3 and 1/3, from 0/3
+each. Reward combines fit with
 complexity and is not a recovery criterion. Read the split law and its aligned
 coefficients when the display is a nested genotype. Valid proposals with an
 unchanged best score record no improvement; neither a flat curve nor an

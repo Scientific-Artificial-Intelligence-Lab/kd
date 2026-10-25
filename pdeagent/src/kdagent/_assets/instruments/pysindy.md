@@ -2,11 +2,14 @@
 
 The KD wrapper uses PySINDy's sparse optimizer over a supplied term library.
 `terms` contains KD function-call strings using the dataset's
-field and axis names. Supply `terms` for grids other than one-field `u(x,t)`.
+field and axis names. Supply `terms` for grids other than one-field `u` with
+spatial axes `x`, `y` or both; on those the default terms are `u` and, for each
+spatial axis `a`, `u_a`, `u_aa` and `mul(u, u_a)`.
 `mul` and `add` take two arguments; nest multiplication for a cube. Terms can contain coordinates, products such as
 `mul(u, u_x)`, and operators such as `sin`, `exp` or binary `div`. A compound
-derivative uses `u_x_t` or `diff_t(u_x)` rather than `u_xt`. Supply terms for
-all relevant axes and fields; dataset dimensions do not expand the library.
+derivative uses `u_x_t` or `diff_t(u_x)` rather than `u_xt`. Supplied terms
+are used as given: name all relevant axes and fields, since dataset
+dimensions do not expand them.
 
 Use uniformly spaced axes with at least five points per axis for the
 finite-difference stencil. Any number of spatial axes can supply columns. Atomic derivative names support orders through three per axis;

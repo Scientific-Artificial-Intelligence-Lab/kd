@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
+from kd.search.registry import execution_identity
 from kd.search.resume_policy import config_artifact_overlay
 from kd.search.run_spec import (
     CONFIG_CANON_SCHEME,
@@ -94,7 +95,9 @@ def _config_snapshot(algorithm: Any) -> dict[str, Any] | None:
             f"got {type(algorithm).__name__} without one"
         )
     try:
-        snapshot = canonicalize_config(dict(config))
+        snapshot = canonicalize_config(
+            {**config, **execution_identity(_algorithm_name(algorithm))}
+        )
     except ConfigCanonicalizationError:
         return None
     keys = descriptor.config_artifact_keys

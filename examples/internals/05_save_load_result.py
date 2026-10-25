@@ -19,7 +19,7 @@ Caveats
 Usage
 -----
     python examples/internals/05_save_load_result.py
-    open examples/out/burgers_loaded/report.html
+    open examples/internals/out/burgers_loaded/report.html
 """
 
 from __future__ import annotations

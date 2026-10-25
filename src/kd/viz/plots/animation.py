@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 import logging
+import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.animation import (
+    AbstractMovieWriter,
+    FFMpegWriter,
+    FuncAnimation,
+    PillowWriter,
+    writers,
+)
 from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 from numpy.typing import NDArray
@@ -18,21 +26,51 @@ from kd.viz.plots._dim_utils import (
     _slice_nd_to_2d,
 )
 from kd.viz.plots._field_panels import (
-    _colorbar_extend,
+    _RESIDUAL_SIGN,
+    FieldCmap,
+    _bare_panel,
+    _field_cmap,
+    _field_limits,
     _range_note,
-    _reference_limits,
+    _residual_limits,
+    _scale_colorbar,
 )
-from kd.viz.style import style_context
+from kd.viz.style import CMAP_DIV, DPI, INK_MUTED, PANEL_H, PANEL_W, style_context
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.colors import Colormap
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DPI = 150
+_DIFFERENCE_TITLE = f"Difference ({_RESIDUAL_SIGN})"
+
+_MP4_EXTRA_ARGS = ["-crf", "24"]
+_MAX_TIME_DECIMALS = 6
+
+
+def _movie_writer(path: Path, fps: int) -> AbstractMovieWriter:
+    suffix = path.suffix.lower()
+    if suffix == ".gif":
+        return PillowWriter(fps=fps)
+    if suffix == ".mp4":
+        if not writers.is_available("ffmpeg"):
+            raise RuntimeError(
+                "Requested MovieWriter (ffmpeg) not available: install ffmpeg "
+                "or set rcParams['animation.ffmpeg_path'] to write an .mp4"
+            )
+        return FFMpegWriter(fps=fps, codec="h264", extra_args=_MP4_EXTRA_ARGS)
+    raise ValueError(f"movie path must end in .gif or .mp4, got {path.name!r}")
+
+
+def _time_decimals(t: NDArray[np.floating]) -> int:
+    if t.size < 2:
+        return 2
+    step = float(np.min(np.diff(t)))
+    return min(max(math.ceil(-math.log10(step)), 0), _MAX_TIME_DECIMALS)
 
 
 def save_field_animation(
@@ -42,13 +80,20 @@ def save_field_animation(
     *,
     fps: int = 8,
     max_frames: int = 24,
+    field_cmap: FieldCmap = "sequential",
+    difference: bool = True,
 ) -> list[str]:
     if not integration_result.success:
         raise ValueError(
             f"Cannot animate failed integration: {integration_result.warning}"
         )
     animation, notes = plot_field_animation(
-        dataset, integration_result, fps=fps, max_frames=max_frames
+        dataset,
+        integration_result,
+        fps=fps,
+        max_frames=max_frames,
+        field_cmap=field_cmap,
+        difference=difference,
     )
     if animation is None:
         raise ValueError("; ".join(notes))
@@ -62,6 +107,24 @@ def save_field_animation(
     return notes
 
 
+@dataclass(frozen=True)
+class _Movie:
+
+    true_field: NDArray[np.floating]
+    pred_field: NDArray[np.floating] | None
+    difference: NDArray[np.floating] | None
+    time_dim: int
+    t_coords: NDArray[np.floating]
+    time_axis: str
+    field_name: str
+    extent: tuple[float, float, float, float]
+    xlabel: str
+    ylabel: str
+    limits: tuple[float, float]
+    cmap: str | Colormap
+    difference_limits: tuple[float, float] | None
+
+
 def plot_field_animation(
     dataset: PDEDataset,
     integration_result: IntegrationResult,
@@ -69,6 +132,8 @@ def plot_field_animation(
     style: dict[str, Any] | None = None,
     max_frames: int = 24,
     fps: int = 8,
+    field_cmap: FieldCmap = "sequential",
+    difference: bool = True,
 ) -> tuple[FuncAnimation | None, list[str]]:
     warnings: list[str] = []
     if dataset.axis_order is None:
@@ -81,13 +146,10 @@ def plot_field_animation(
     if fps < 1:
         raise ValueError(f"fps must be >= 1, got {fps}")
 
-    time_axis = dataset.lhs_axis
-    time_dim = dataset.axis_order.index(time_axis)
-    true_field = np.array(
-        dataset.get_field(dataset.lhs_field).detach().cpu().numpy(),
-        dtype=np.float64,
+    movie = _prepare_movie(
+        dataset, integration_result, warnings, field_cmap, difference=difference
     )
-    n_t = true_field.shape[time_dim]
+    n_t = movie.true_field.shape[movie.time_dim]
     frame_indices = _pick_animation_frames(n_t, max_frames)
     n_shown = len(frame_indices)
     suptitle = None
@@ -98,69 +160,73 @@ def plot_field_animation(
         warnings.append(
             f"Animation shows {n_shown} of {n_t} time steps (max_frames={max_frames})"
         )
-    t_coords = np.asarray(
-        dataset.get_coords(time_axis).detach().cpu().numpy(),
+
+    with style_context(style):
+        fig, axes, images = _init_animation_figure(
+            movie, frame_indices[0], suptitle=suptitle
+        )
+
+    def _update(frame_idx: int) -> list[AxesImage]:
+        _draw_frame(movie, axes, images, frame_idx)
+        return images
+
+    animation = FuncAnimation(
+        fig,
+        _update,
+        frames=frame_indices,
+        interval=1000.0 / float(fps),
+        blit=False,
+    )
+    return animation, warnings
+
+
+def _prepare_movie(
+    dataset: PDEDataset,
+    integration_result: IntegrationResult,
+    warnings: list[str],
+    field_cmap: FieldCmap,
+    *,
+    difference: bool,
+) -> _Movie:
+    assert dataset.axis_order is not None
+    time_axis = dataset.lhs_axis
+    true_field = np.array(
+        dataset.get_field(dataset.lhs_field).detach().cpu().numpy(),
         dtype=np.float64,
     )
-
     pred_field = _extract_prediction_for_animation(
         integration_result,
         true_field.shape,
         warnings,
     )
-
-
-
-
-
-
-
-    vmin, vmax = _reference_limits(true_field, pred_field)
-    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial_axes)
-
-    with style_context(style):
-        fig, axes, images = _init_animation_figure(
-            true_field,
-            pred_field,
-            time_dim,
-            frame_indices[0],
-            t_coords,
-            time_axis,
-            dataset.lhs_field,
-            extent,
-            xlabel,
-            ylabel,
-            vmin,
-            vmax,
-            suptitle=suptitle,
-        )
-
-    def _update(frame_idx: int) -> list[AxesImage]:
-        t_val = float(t_coords[frame_idx])
-        true_slice = _display_slice(true_field, frame_idx, time_dim)
-        images[0].set_data(true_slice)
-        axes[0].set_title(f"True ({time_axis}={t_val:.3g})")
-        if pred_field is not None and len(images) > 1:
-            pred_slice = _display_slice(pred_field, frame_idx, time_dim)
-            images[1].set_data(pred_slice)
-
-
-
-            axes[1].set_title(
-                f"Predicted ({time_axis}={t_val:.3g})"
-                + _range_note(pred_slice, (vmin, vmax))
-            )
-        return images
-
-    interval_ms = 1000.0 / float(fps)
-    animation = FuncAnimation(
-        fig,
-        _update,
-        frames=frame_indices,
-        interval=interval_ms,
-        blit=False,
+    diff = pred_field - true_field if difference and pred_field is not None else None
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(
+        dataset, dataset.spatial_axes
     )
-    return animation, warnings
+
+
+
+
+
+
+
+    return _Movie(
+        true_field=true_field,
+        pred_field=pred_field,
+        difference=diff,
+        time_dim=dataset.axis_order.index(time_axis),
+        t_coords=np.asarray(
+            dataset.get_coords(time_axis).detach().cpu().numpy(), dtype=np.float64
+        ),
+        time_axis=time_axis,
+        field_name=dataset.lhs_field,
+        extent=extent,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        limits=_field_limits(true_field, pred_field, field_cmap),
+        cmap=_field_cmap(field_cmap),
+        difference_limits=None if diff is None else _residual_limits(diff),
+    )
 
 
 def _extract_prediction_for_animation(
@@ -188,96 +254,104 @@ def _extract_prediction_for_animation(
     return pred
 
 
+def _panel_titles(movie: _Movie, frame_idx: int) -> list[str]:
+    when = f"{movie.time_axis}={float(movie.t_coords[frame_idx]):.3g}"
+    titles = [f"True ({when})"]
+    if movie.pred_field is not None:
+        pred_slice = _display_slice(movie.pred_field, frame_idx, movie.time_dim)
+        titles.append(f"Predicted ({when})" + _range_note(pred_slice, movie.limits))
+    if movie.difference is not None:
+        titles.append(_DIFFERENCE_TITLE)
+    return titles
+
+
+def _panel_fields(movie: _Movie) -> list[NDArray[np.floating]]:
+    fields = [movie.true_field]
+    if movie.pred_field is not None:
+        fields.append(movie.pred_field)
+    if movie.difference is not None:
+        fields.append(movie.difference)
+    return fields
+
+
+def _draw_frame(
+    movie: _Movie, axes: list[Axes], images: list[AxesImage], frame_idx: int
+) -> None:
+    titles = _panel_titles(movie, frame_idx)
+    for ax, image, field, title in zip(
+        axes, images, _panel_fields(movie), titles, strict=True
+    ):
+        image.set_data(_display_slice(field, frame_idx, movie.time_dim))
+        ax.set_title(title)
+
+
 def _init_animation_figure(
-    true_field: NDArray[np.floating],
-    pred_field: NDArray[np.floating] | None,
-    time_dim: int,
+    movie: _Movie,
     frame_idx: int,
-    t_coords: NDArray[np.floating],
-    time_axis: str,
-    field_name: str,
-    extent: tuple[float, float, float, float],
-    xlabel: str,
-    ylabel: str,
-    vmin: float,
-    vmax: float,
     *,
     suptitle: str | None = None,
 ) -> tuple[Figure, list[Axes], list[AxesImage]]:
-    n_cols = 2 if pred_field is not None else 1
+    fields = _panel_fields(movie)
+    n_cols = len(fields)
     fig, axes_arr = plt.subplots(
         1,
         n_cols,
-        figsize=(5 * n_cols, 4),
-        dpi=_DEFAULT_DPI,
-        constrained_layout=True,
+        figsize=(PANEL_W * n_cols, PANEL_H + 0.4),
+        dpi=DPI,
+        layout="constrained",
         squeeze=False,
     )
     axes: list[Axes] = list(axes_arr.flat)
     images: list[AxesImage] = []
-    t_val = float(t_coords[frame_idx])
-
-    images.append(
-        _add_image(
-            axes[0],
-            _display_slice(true_field, frame_idx, time_dim),
-            f"True ({time_axis}={t_val:.3g})",
-            extent,
-            xlabel,
-            ylabel,
-            vmin,
-            vmax,
-        )
-    )
-    if pred_field is not None:
-        pred_slice = _display_slice(pred_field, frame_idx, time_dim)
+    for index, (ax, field) in enumerate(zip(axes, fields, strict=True)):
+        is_difference = movie.difference is not None and index == n_cols - 1
+        limits = movie.difference_limits if is_difference else movie.limits
+        assert limits is not None
         images.append(
             _add_image(
-                axes[1],
-                pred_slice,
-                f"Predicted ({time_axis}={t_val:.3g})"
-                + _range_note(pred_slice, (vmin, vmax)),
-                extent,
-                xlabel,
-                ylabel,
-                vmin,
-                vmax,
+                ax,
+                _display_slice(field, frame_idx, movie.time_dim),
+                movie,
+                CMAP_DIV if is_difference else movie.cmap,
+                limits,
             )
         )
+    _draw_frame(movie, axes, images, frame_idx)
 
     if suptitle is not None:
-        fig.suptitle(suptitle)
-    extend = (
-        _colorbar_extend(pred_field, vmin, vmax)
-        if pred_field is not None
-        else "neither"
+        fig.suptitle(suptitle, color=INK_MUTED, fontsize="medium")
+    n_fields = 1 if movie.pred_field is None else 2
+    _scale_colorbar(
+        images[:n_fields],
+        axes[:n_fields],
+        data=fields[:n_fields],
+        label=movie.field_name,
     )
-    fig.colorbar(images[0], ax=axes, label=field_name, extend=extend)
+    if movie.difference is not None:
+        _scale_colorbar(images[-1:], axes[-1:], data=[movie.difference])
     return fig, axes, images
 
 
 def _add_image(
     ax: Axes,
     data: NDArray[np.floating],
-    title: str,
-    extent: tuple[float, float, float, float],
-    xlabel: str,
-    ylabel: str,
-    vmin: float,
-    vmax: float,
+    movie: _Movie,
+    cmap: str | Colormap,
+    limits: tuple[float, float],
 ) -> AxesImage:
     image = ax.imshow(
         data,
         aspect="auto",
         origin="lower",
-        extent=extent,
-        vmin=vmin,
-        vmax=vmax,
+        extent=movie.extent,
+        cmap=cmap,
+        vmin=limits[0],
+        vmax=limits[1],
         rasterized=True,
     )
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    _bare_panel(ax)
+    ax.set_xlabel(movie.xlabel)
+    ax.set_ylabel(movie.ylabel)
     return image
 
 

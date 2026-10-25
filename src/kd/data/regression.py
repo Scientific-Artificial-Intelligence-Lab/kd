@@ -15,6 +15,8 @@ from typing import Literal
 
 import numpy as np
 
+from kd.data.source import DatasetSource
+
 _TLC_CC_FILES = {
     "start": "tlc_cc_Rf_t1.npy",
     "end": "tlc_cc_Rf_t2.npy",
@@ -43,6 +45,10 @@ class TabularDataset:
         name: Stable dataset identifier.
         source: Citation for where the data comes from.
         description: What the rows and columns physically mean.
+        file_source: The file ``kd.load`` or ``kd.load_tabular`` read the
+            table from (path, sha256, container, route, hints); ``None`` for a
+            table built in memory. In-memory provenance only, never part of a
+            fingerprint or a sealed record.
     """
 
     X: np.ndarray
@@ -52,6 +58,7 @@ class TabularDataset:
     name: str
     source: str
     description: str
+    file_source: DatasetSource | None = None
 
 
 def _assets_data_dir() -> Path:

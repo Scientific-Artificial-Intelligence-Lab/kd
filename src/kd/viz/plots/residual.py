@@ -13,11 +13,22 @@ from kd.viz.axes import integer_ticks
 from kd.viz.plots._field_panels import (
     _RESIDUAL_PERCENTILE,
     _RESIDUAL_SIGN,
-    _colorbar_extend,
+    _bare_panel,
     _range_note,
     _resolve_shape,
+    _scale_colorbar,
 )
-from kd.viz.style import style_context
+from kd.viz.style import (
+    CMAP_DIV,
+    DPI,
+    INK_2,
+    INK_MUTED,
+    OBSERVED,
+    PANEL_H,
+    PANEL_W,
+    SURFACE,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -27,7 +38,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HISTOGRAM_BINS = 30
-_DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 12
 
 
@@ -42,14 +52,18 @@ def plot_residual(
     residuals = result.final_eval.residuals
 
     with style_context(style):
-        fig, axes_arr = plt.subplots(1, 2, figsize=(12, 5), dpi=_DEFAULT_DPI)
+        fig, axes_arr = plt.subplots(
+            1,
+            2,
+            figsize=(1.5 * PANEL_W * 2, 1.2 * PANEL_H),
+            dpi=DPI,
+            layout="constrained",
+        )
         ax_hist: Axes = axes_arr[0]
         ax_spatial: Axes = axes_arr[1]
         note = _sketch_fit_note(result)
         if note is not None:
-            fig.suptitle(
-                f"Search-fit residuals: {_fit_target_label(result)}", fontsize=11
-            )
+            fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
             warnings.append(note)
 
         if residuals is None:
@@ -95,8 +109,9 @@ def _render_histogram(
         data,
         bins=_HISTOGRAM_BINS,
         range=(-xlim, xlim),
-        edgecolor="black",
-        alpha=0.7,
+        color=OBSERVED,
+        edgecolor=SURFACE,
+        linewidth=0.6,
     )
     ax.set_xlim(-xlim, xlim)
 
@@ -115,6 +130,9 @@ def _render_histogram(
         va="top",
         ha="right",
         fontsize=9,
+        color=INK_2,
+
+        bbox={"facecolor": SURFACE, "edgecolor": "none", "alpha": 0.85, "pad": 2},
     )
 
 
@@ -185,21 +203,16 @@ def _render_spatial(
         display,
         aspect="auto",
         origin="lower",
-        cmap="RdBu_r",
+        cmap=CMAP_DIV,
         vmin=vmin,
         vmax=vmax,
         rasterized=True,
     )
+    _bare_panel(ax)
 
 
 
-    ax.figure.colorbar(
-        im,
-        ax=ax,
-        fraction=0.046,
-        pad=0.04,
-        extend=_colorbar_extend(display, vmin, vmax),
-    )
+    _scale_colorbar([im], [ax])
 
 
 
@@ -233,7 +246,9 @@ def _empty_panel(ax: Axes, text: str, title: str) -> None:
         ha="center",
         va="center",
         fontsize=_WARNING_FONTSIZE,
+        color=INK_MUTED,
     )
     ax.set_title(title)
     ax.set_xticks([])
     ax.set_yticks([])
+    _bare_panel(ax)

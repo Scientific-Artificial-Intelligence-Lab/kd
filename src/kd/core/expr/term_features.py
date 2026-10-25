@@ -10,6 +10,7 @@ from kd.core.expr.executor import (
     DIFF_OPERATOR_PATTERN,
     UNITY_TOKEN,
 )
+from kd.core.expr.field_power import field_power
 from kd.core.expr.naming import parse_compound_derivative
 
 
@@ -52,6 +53,7 @@ ColumnFingerprint = tuple[
     frozenset[str],
     frozenset[DerivativeMultiindex],
     frozenset[str],
+    int,
 ]
 
 
@@ -63,6 +65,7 @@ class TermFeatures:
     derivative_multiindices: frozenset[DerivativeMultiindex]
     max_total_derivative_order: int
     operators: frozenset[str]
+    power_degree: int
 
 
 class _FeatureCollector:
@@ -155,7 +158,7 @@ class _FeatureCollector:
         if multiindex:
             self.derivatives.add((field, multiindex))
 
-    def features(self) -> TermFeatures:
+    def features(self, power_degree: int) -> TermFeatures:
         max_order = max(
             (
                 sum(order for _axis, order in multiindex)
@@ -169,6 +172,7 @@ class _FeatureCollector:
             derivative_multiindices=frozenset(self.derivatives),
             max_total_derivative_order=max_order,
             operators=frozenset(self.operators),
+            power_degree=power_degree,
         )
 
 
@@ -179,7 +183,8 @@ def analyze_term(term_ir: str, vocabulary: TermVocabulary) -> TermFeatures:
     parsed = ast.parse(normalized, mode="eval")
     collector = _FeatureCollector(vocabulary)
     collector.visit(parsed.body, {})
-    return collector.features()
+    power = field_power(parsed.body, vocabulary.fields)
+    return collector.features(0 if power is None else power.degree)
 
 
 def column_fingerprint(features: TermFeatures) -> ColumnFingerprint:
@@ -188,6 +193,7 @@ def column_fingerprint(features: TermFeatures) -> ColumnFingerprint:
         features.coordinate_dependencies,
         features.derivative_multiindices,
         features.operators,
+        features.power_degree,
     )
 
 

@@ -6,6 +6,7 @@ import logging
 import os
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Any, Final
 
 from kd.llm.protocol import LLMBackendError, LLMRequest, LLMResponse, LLMUsage
@@ -31,6 +32,12 @@ def _retryable_exceptions_from_sdk(sdk: Any) -> tuple[type[BaseException], ...]:
         sdk.RateLimitError,
         sdk.InternalServerError,
     )
+
+
+def _describe_failure(exc: BaseException) -> str:
+    status_code = getattr(exc, "status_code", None)
+    name = type(exc).__name__
+    return name if status_code is None else f"{name} (HTTP {status_code})"
 
 
 class OpenAICompatProvider:
@@ -71,6 +78,7 @@ class OpenAICompatProvider:
 
         self._client: Any | None = client
         self._retryable_exceptions = retryable_exceptions
+        self._transport_errors: tuple[type[BaseException], ...] = ()
         self._prepared = False
 
     def prepare(self) -> None:
@@ -85,11 +93,15 @@ class OpenAICompatProvider:
                 timeout=self._timeout,
                 max_retries=0,
             )
-            if self._retryable_exceptions is None:
-                self._retryable_exceptions = _retryable_exceptions_from_sdk(sdk)
+            self._adopt_sdk_errors(sdk)
         elif self._retryable_exceptions is None:
-            self._retryable_exceptions = _retryable_exceptions_from_sdk(_import_sdk())
+            self._adopt_sdk_errors(_import_sdk())
         self._prepared = True
+
+    def _adopt_sdk_errors(self, sdk: Any) -> None:
+        self._transport_errors = (sdk.APIError,)
+        if self._retryable_exceptions is None:
+            self._retryable_exceptions = _retryable_exceptions_from_sdk(sdk)
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         if not self._prepared:
@@ -99,15 +111,16 @@ class OpenAICompatProvider:
         assert client is not None and retryable is not None
         retryable = (_EmptyCompletionError, *retryable)
 
-        last_exc: BaseException | None = None
         total_attempts = self._max_retries_per_call + 1
+        discarded_reply = False
         for attempt in range(total_attempts):
             try:
-                return self._call_api(client, request)
+                response = self._call_api(client, request)
             except LLMBackendError:
                 raise
             except retryable as exc:
-                last_exc = exc
+                failure: BaseException = exc
+                discarded_reply |= isinstance(exc, _EmptyCompletionError)
                 if attempt == self._max_retries_per_call:
                     break
                 delay = self._backoff_initial_seconds * (self._backoff_factor**attempt)
@@ -115,13 +128,23 @@ class OpenAICompatProvider:
                     "LLM call failed (attempt %d/%d): %s; backing off %.2fs",
                     attempt + 1,
                     total_attempts,
-                    exc,
+                    _describe_failure(exc),
                     delay,
                 )
                 self._sleep_fn(delay)
+            except self._transport_errors as exc:
+                failure = exc
+                break
+            else:
+                return replace(response, usage=None) if discarded_reply else response
+        if isinstance(failure, _EmptyCompletionError):
+            raise LLMBackendError(
+                f"OpenAI-compatible LLM provider exhausted {total_attempts} attempt(s)"
+            ) from failure
         raise LLMBackendError(
-            f"OpenAI-compatible LLM provider exhausted {total_attempts} attempt(s)"
-        ) from last_exc
+            f"OpenAI-compatible LLM provider failed after {attempt + 1} attempt(s): "
+            f"{_describe_failure(failure)}"
+        ) from None
 
     def _resolve_api_key(self) -> str:
         key = os.environ.get(self._api_key_env_var)
@@ -161,6 +184,12 @@ class OpenAICompatProvider:
         if content is None:
             raise _EmptyCompletionError(
                 "OpenAI-compatible LLM provider received an empty completion"
+            )
+        if getattr(choices[0], "finish_reason", None) == "length":
+            logger.warning(
+                "LLM reply was cut at the token limit (finish_reason='length', "
+                "max_tokens=%s); the truncated text is returned as sent",
+                request.params.max_tokens,
             )
         return LLMResponse(
             text=str(content),

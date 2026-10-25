@@ -4,153 +4,295 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Experiment Report: {{ dataset_name }} ({{ algorithm_name }})</title>
+<script>
+  // The page carries every equation as plain text. Once MathJax has loaded,
+  // each .math element is swapped for its TeX and typeset; without MathJax
+  // (offline, blocked CDN) the plain text stays, never raw TeX.
+  window.MathJax = {
+    startup: {
+      pageReady: () => {
+        document.querySelectorAll(".math[data-tex]").forEach((node) => {
+          node.textContent = "\\(" + node.dataset.tex + "\\)";
+        });
+        return MathJax.startup.defaultPageReady();
+      },
+    },
+  };
+</script>
 <script id="MathJax-script" async
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <style>
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 Helvetica, Arial, sans-serif;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
-    color: #333;
-    background: #fafafa;
-    line-height: 1.6;
+  :root {
+    color-scheme: light dark;
+    --page: #f6f5f9;
+    --card: #ffffff;
+    --figure-card: #ffffff;
+    --figure-ink: #4a4660;
+    --ink: #1b1035;
+    --ink-2: #4a4660;
+    --ink-muted: #6b6880;
+    --rule: #46256b29;
+    --accent: #0e6763;
+    --code-bg: #efedf4;
+    --warn-rule: #b58a00;
+    --warn-bg: #fbf3e4;
   }
-  h1 { color: #1a1a2e; border-bottom: 2px solid #0f3460; padding-bottom: 0.5rem; }
-  h2 { color: #16213e; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: 0.3rem; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --page: #14101f;
+      --card: #1c1730;
+      --ink: #e8e6f0;
+      --ink-2: #b9b5c9;
+      --ink-muted: #9a96ad;
+      --rule: #e8e6f029;
+      --accent: #4fd1c9;
+      --code-bg: #241e3a;
+      --warn-rule: #a87a00;
+      --warn-bg: #2a2214;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #14101f;
+    --card: #1c1730;
+    --ink: #e8e6f0;
+    --ink-2: #b9b5c9;
+    --ink-muted: #9a96ad;
+    --rule: #e8e6f029;
+    --accent: #4fd1c9;
+    --code-bg: #241e3a;
+    --warn-rule: #a87a00;
+    --warn-bg: #2a2214;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2.5rem 1rem 3rem;
+  }
+  .run-line {
+    margin: 0 0 0.25rem;
+    color: var(--ink-2);
+    font-size: 0.9rem;
+  }
+  h1 {
+    margin: 0 0 1rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+  }
+  h2 {
+    margin: 2.25rem 0 0.6rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  h3 {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+
+  .law { padding: 1.4rem 1.5rem 1.2rem; }
+  .equation {
+    margin: 0;
+    font-size: 1.55rem;
+    line-height: 1.4;
+    overflow-x: auto;
+  }
+  table.reads {
+    width: 100%;
+    margin: 1.2rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    border-collapse: collapse;
+  }
+  table.reads tbody, table.reads tr {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: auto auto;
+    grid-auto-columns: minmax(0, 1fr);
+    column-gap: 1.5rem;
+  }
+  table.reads th {
+    padding: 0;
+    color: var(--ink-2);
+    font-size: 0.85rem;
+    font-weight: 400;
+    text-align: left;
+  }
+  table.reads td {
+    padding: 0.1rem 0 0;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .truth {
+    margin: 0.9rem 0 0;
+  }
+  .truth .label {
+    display: block;
+    color: var(--ink-2);
+    font-size: 0.85rem;
+  }
+  .note {
+    margin: 0.6rem 0 0;
+    color: var(--ink-2);
+    font-size: 0.85rem;
+  }
+  table.terms {
+    border-collapse: collapse;
+    margin-top: 1.1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  table.terms th, table.terms td {
+    padding: 0.3rem 1.4rem 0.3rem 0;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+  }
+  table.terms th {
+    color: var(--ink-2);
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  table.terms td.number { text-align: right; }
+
+  figure.card {
+    margin: 0;
+    padding: 0.9rem 1rem 0.8rem;
+    background: var(--figure-card);
+  }
+  figure.card img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+  figcaption.figure-description {
+    margin-top: 0.6rem;
+    color: var(--figure-ink);
+    font-size: 0.85rem;
+  }
+
+  .warning {
+    margin: 0.5rem 0;
+    padding: 0.5rem 0.9rem;
+    border-left: 3px solid var(--warn-rule);
+    background: var(--warn-bg);
+    color: var(--ink);
+    font-size: 0.9rem;
+  }
+
+  details {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.8rem;
+  }
+  details > summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
   table.metadata {
     border-collapse: collapse;
     width: 100%;
-    margin: 1rem 0;
+    margin: 0.8rem 0 0;
+    font-size: 0.9rem;
   }
   table.metadata th, table.metadata td {
-    border: 1px solid #ddd;
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.8rem 0.35rem 0;
+    border-bottom: 1px solid var(--rule);
     text-align: left;
+    vertical-align: top;
   }
   table.metadata th {
-    background: #f0f0f0;
-    width: 30%;
-    font-weight: 600;
-  }
-  .figure-container {
-    text-align: center;
-    margin: 1.5rem 0;
-  }
-  .figure-container img {
-    max-width: 100%;
-    height: auto;
-  }
-  span.expression-note {
-    color: #a15c00;
-    font-size: 0.85rem;
-  }
-  p.figure-description {
-    margin: -0.5rem 0 1.5rem 0;
-    color: #555;
-    font-size: 0.9rem;
+    width: 32%;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 400;
+    color: var(--ink-2);
   }
   pre.json-summary {
-    background: #f5f5f5;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 1rem;
-    overflow-x: auto;
-    font-size: 0.85rem;
+    margin: 0.8rem 0 0;
+    padding: 0.8rem 1rem;
     max-height: 400px;
-  }
-  details.data-summary {
-    margin-top: 2rem;
-  }
-  details.data-summary > summary {
-    color: #16213e;
-    font-size: 1.5rem;
-    font-weight: bold;
-    cursor: pointer;
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 0.3rem;
-    list-style: none;
-  }
-  details.data-summary > summary::-webkit-details-marker {
-    display: none;
-  }
-  details.data-summary > summary::before {
-    content: "▶ ";
-    font-size: 0.8em;
-    color: #999;
-  }
-  details.data-summary[open] > summary::before {
-    content: "▼ ";
-  }
-  .warning {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 4px;
-    padding: 0.5rem 1rem;
-    margin: 0.5rem 0;
-    font-size: 0.9rem;
+    overflow: auto;
+    background: var(--code-bg);
+    border-radius: 6px;
+    font-size: 0.8rem;
   }
   footer {
-    margin-top: 3rem;
-    padding-top: 1rem;
-    border-top: 1px solid #ddd;
+    margin-top: 2.5rem;
+    color: var(--ink-muted);
     font-size: 0.8rem;
-    color: #999;
   }
 </style>
 </head>
 <body>
+<main>
 
-<h1>Experiment Report: {{ dataset_name }} ({{ algorithm_name }})</h1>
+<header>
+  <p class="run-line">{{ run_sentence }}</p>
+  <h1>Discovered law</h1>
+</header>
 
-<h2>Metadata</h2>
-<table class="metadata">
-  <tr><th>Algorithm</th><td>{{ algorithm_name }}</td></tr>
-  <tr><th>Dataset</th><td>{{ dataset_name }}</td></tr>
-  <tr><th>Expression</th><td>
-  {%- if best_expression_is_math -%}
-    \( {{ best_expression_latex }} \)
-  {%- else -%}
-    {{ best_expression_latex }}
-  {%- endif -%}
-  {%- if best_expression_note %}
-    <span class="expression-note">({{ best_expression_note }})</span>
-  {%- endif -%}
-  </td></tr>
-  <tr><th>Best {{ score_label | default("Score") }}</th><td>{{ best_score }}</td></tr>
-  <tr><th>R&sup2;</th><td>{{ r2 }}</td></tr>
-  <tr><th>NMSE</th><td>{{ nmse }}</td></tr>
-{% if fit_note %}
-  <tr><th>Metric domain</th><td>{{ fit_note }}</td></tr>
+<section class="card law">
+  <p class="equation"><span class="math"{% if law.tex %} data-tex="{{ law.tex }}"{% endif %}>{{ law.text }}</span></p>
+{% if law_note %}
+  <p class="note">{{ law_note }}</p>
 {% endif %}
-  <tr><th>Iterations</th><td>{{ iterations }}</td></tr>
-  <tr><th>Early Stopped</th><td>{{ early_stopped }}</td></tr>
-{% for key, value in config.items() %}
-  <tr><th>config.{{ key }}</th><td>{{ value }}</td></tr>
+  <table class="reads">
+    <tr><th>Best {{ score_label | default("Score") }}</th><td>{{ best_score }}</td><th>R&sup2; on {{ lhs_label }}</th><td>{{ r2 }}</td><th>NMSE</th><td>{{ nmse }}</td></tr>
+  </table>
+{% if truth %}
+  <p class="truth"><span class="label">Ground truth</span><span class="math"{% if truth.tex %} data-tex="{{ truth.tex }}"{% endif %}>{{ truth.text }}</span></p>
+{% endif %}
+{% if fit_note %}
+  <p class="note">{{ fit_note }}</p>
+{% endif %}
+{% if term_rows %}
+  <table class="terms">
+    <thead><tr><th>Term</th><th>Published</th><th>Ground truth</th></tr></thead>
+    <tbody>
+{% for row in term_rows %}
+      <tr><td><span class="math" data-tex="{{ row.term.tex }}">{{ row.term.text }}</span></td><td class="number">{{ row.published }}</td><td class="number">{{ row.truth }}</td></tr>
 {% endfor %}
-</table>
+    </tbody>
+  </table>
+{% endif %}
+{% for note in term_notes %}
+  <p class="note">{{ note }}</p>
+{% endfor %}
+</section>
 
 {% for fig in figures %}
 <h2>{{ fig.title }}</h2>
-<div class="figure-container">
+<figure class="card">
   <img src="{{ fig.data_uri }}" alt="{{ fig.title }}"/>
-</div>
 {% if fig.description %}
-<p class="figure-description">{{ fig.description }}</p>
+  <figcaption class="figure-description">{{ fig.description }}</figcaption>
 {% endif %}
+</figure>
 {% endfor %}
 
 {% if plugin_figures %}
-<h2>Plugin Plots</h2>
+<h2>Plugin plots</h2>
 {% for fig in plugin_figures %}
 <h3>{{ fig.title }}</h3>
-<div class="figure-container">
+<figure class="card">
   <img src="{{ fig.data_uri }}" alt="{{ fig.title }}"/>
-</div>
 {% if fig.description %}
-<p class="figure-description">{{ fig.description }}</p>
+  <figcaption class="figure-description">{{ fig.description }}</figcaption>
 {% endif %}
+</figure>
 {% endfor %}
 {% endif %}
 
@@ -161,14 +303,26 @@
 {% endfor %}
 {% endif %}
 
+<details class="config">
+  <summary>Run configuration ({{ config | length }} parameters)</summary>
+  <table class="metadata">
+    <tr><th>Algorithm</th><td>{{ algorithm_name }}</td></tr>
+    <tr><th>Dataset</th><td>{{ dataset_name }}</td></tr>
+    <tr><th>Iterations</th><td>{{ iterations }}</td></tr>
+    <tr><th>Early stopped</th><td>{{ early_stopped }}</td></tr>
+{% for key, value in config.items() %}
+    <tr><th>config.{{ key }}</th><td>{{ value }}</td></tr>
+{% endfor %}
+  </table>
+</details>
+
 <details class="data-summary">
-  <summary>Full result (JSON, for debugging) — click to expand</summary>
+  <summary>Full result (JSON, for debugging)</summary>
   <pre class="json-summary">{{ json_summary }}</pre>
 </details>
 
-<footer>
-  Generated by kd visualization engine
-</footer>
+<footer>Generated by kd</footer>
 
+</main>
 </body>
 </html>

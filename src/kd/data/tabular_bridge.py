@@ -50,6 +50,7 @@ def dataset_from_tabular(tabular: TabularDataset) -> PDEDataset:
         lhs_field=tabular.target_name,
         lhs_axis="",
         lhs_order=0,
+        source=tabular.file_source,
     )
 
 

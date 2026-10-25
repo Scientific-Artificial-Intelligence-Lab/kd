@@ -16,11 +16,16 @@ Sanctioned direct-import module paths beyond this facade:
 ``Segmentation`` / ``tool_schema``)
 are re-exported here, but each module carries more than
 what is promoted (e.g. ``mini_table``'s ``escape_cell``) and stays
-direct-import-sanctioned at its own module path.
+direct-import-sanctioned at its own module path. ``kd.search.protocol`` is
+the plugin author's path: ``kd.register_algorithm`` takes a
+``FacadeWiringContract`` subclass, and that contract and its base
+``ScoreContract`` are imported from there (the protocols this facade
+re-exports, such as ``SearchAlgorithm``, come from the same module).
 """
 
 from __future__ import annotations
 
+from kd._registry import registering_builtins
 from kd.core.platform.sketch_compile import (
     SKETCH_CLAUSES,
     SketchClauseLevels,
@@ -60,7 +65,13 @@ from kd.search.descriptor import (
     tool_schema,
 )
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin, PINNConfig
-from kd.search.dlga import DLGAConfig, DLGAPlugin
+from kd.search.dlga import (
+    DLGAConfig,
+    DLGAPlugin,
+    dlga_surrogate_identity,
+    load_dlga_surrogate,
+    save_dlga_surrogate,
+)
 from kd.search.eqgpt import EqGPTConfig, EqGPTPlugin
 from kd.search.iteration_events import (
     ITEREVENT_DIAGNOSTICS_KEYS,
@@ -84,6 +95,7 @@ from kd.search.protocol import (
     IterativeSearchAlgorithm,
     PlatformComponents,
     SearchAlgorithm,
+    SearchedVocabularyAlgorithm,
     SurrogateTrainer,
     TerminatingSearchAlgorithm,
 )
@@ -91,6 +103,7 @@ from kd.search.pysindy import PySINDyConfig, PySINDyPlugin
 from kd.search.pysr import PySRConfig, PySRPlugin
 from kd.search.recorder import BEST_SCORE_KEY, VizRecorder
 from kd.search.records import RunRecord
+from kd.search.registry import register_algorithm
 from kd.search.result import (
     ExperimentResult,
     ParetoEntry,
@@ -110,6 +123,7 @@ from kd.search.run_dir import (
     RunDirPaths,
     create_run_dir,
     finalize_run_dir,
+    last_completed_iteration,
     new_run_id,
     run_id_of_run_dir,
 )
@@ -117,6 +131,16 @@ from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig, SGAPlugin
 from kd.search.sketch_outcome import SketchOutcome, write_sketch_artifact
 from kd.search.trajectory import SearchTrajectoryCandidate
+
+
+with registering_builtins():
+    register_algorithm("sga", SGAPlugin)
+    register_algorithm("dlga", DLGAPlugin)
+    register_algorithm("discover", DISCOVERPlugin)
+    register_algorithm("pysr", PySRPlugin)
+    register_algorithm("eqgpt", EqGPTPlugin)
+    register_algorithm("llm4ed", Llm4edPlugin)
+    register_algorithm("pysindy", PySINDyPlugin)
 
 __all__ = [
     "BEST_SCORE_KEY",
@@ -180,6 +204,7 @@ __all__ = [
     "SGAPlugin",
     "SKETCH_CLAUSES",
     "SearchAlgorithm",
+    "SearchedVocabularyAlgorithm",
     "Segmentation",
     "SketchClauseLevels",
     "SketchOutcome",
@@ -194,14 +219,18 @@ __all__ = [
     "catalog_row_from_result",
     "create_run_dir",
     "default_final_result",
+    "dlga_surrogate_identity",
     "eligible_checkpoint_iterations",
     "finalize_run_dir",
+    "last_completed_iteration",
     "load_checkpoint_manifest",
+    "load_dlga_surrogate",
     "mode_accepts",
     "mode_inputs",
     "new_run_id",
     "resolve_checkpoint",
     "run_id_of_run_dir",
+    "save_dlga_surrogate",
     "tool_schema",
     "used_clauses",
     "write_sketch_artifact",

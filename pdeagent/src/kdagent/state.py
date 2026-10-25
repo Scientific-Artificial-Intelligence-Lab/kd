@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Final, Literal, TypedDict
+from typing import Annotated, Any, Final, Literal, NotRequired, TypedDict
 
 from deepagents import DeepAgentState
 from langchain.agents.middleware.types import PrivateStateAttr
@@ -15,12 +15,18 @@ TRUNCATION_NUDGES: Final = "truncation_nudges"
 
 class Answer(TypedDict):
 
-    law: dict[str, Any]
-    source: Literal["submitted", "selected"]
+    law: dict[str, Any] | None
+    source: Literal["submitted", "selected", "abstained"]
     provenance: dict[str, Any] | None
+    reason: NotRequired[str]
+    evidence_run_ids: NotRequired[list[str]]
+    selection: NotRequired[dict[str, Any]]
+    system: NotRequired[dict[str, Any]]
 
 
-_ANSWER_RANK: Final = {"selected": 0, "submitted": 1}
+TERMINAL_SOURCES: Final = frozenset({"submitted", "abstained"})
+
+_ANSWER_RANK: Final = {"selected": 0, **dict.fromkeys(TERMINAL_SOURCES, 1)}
 
 
 def _answer_precedence(current: Answer | None, incoming: Answer) -> Answer:

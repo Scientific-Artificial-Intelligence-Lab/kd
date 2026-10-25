@@ -17,6 +17,7 @@ from torch import Tensor
 from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
+from kd.core.platform.sketch_compile import CompileReport
 from kd.data.schema import DataTopology
 from kd.llm import (
     BudgetedProvider,
@@ -33,23 +34,30 @@ from kd.search.descriptor import (
     Segmentation,
 )
 from kd.search.llm4ed import viz as _viz_helpers
+from kd.search.llm4ed.columns import evaluate_ir_column
 from kd.search.llm4ed.config import (
     ALGORITHM_NAME,
     Llm4edConfig,
     config_to_json_safe_dict,
 )
-from kd.search.llm4ed.fd import build_operand_columns
+from kd.search.llm4ed.fd import build_operand_columns_axes
 from kd.search.llm4ed.filter_score import filter_score
-from kd.search.llm4ed.parse import parse_equation
+from kd.search.llm4ed.parse import is_placeholder, parse_equation, reads_as_symbol
 from kd.search.llm4ed.pool import ElitePool, PoolItem
 from kd.search.llm4ed.prompts import (
+    DEFAULT_PDE_OPERATORS,
     EVOLUTION,
     INITIALIZATION,
     OPTIMIZE,
     build_evolution_prompt,
     build_initialization_prompt,
     build_optimize_prompt,
+    build_tabular_evolution_prompt,
+    build_tabular_initialization_prompt,
+    build_tabular_optimize_prompt,
     parse_response,
+    parse_tabular_response,
+    pde_operands,
     permute_terms,
 )
 from kd.search.llm4ed.score import (
@@ -58,11 +66,17 @@ from kd.search.llm4ed.score import (
     ERROR_LSTSQ,
     ERROR_NON_FINITE,
     ERROR_PARSE,
+    ERROR_SKETCH,
     ERROR_UNDEFINED_OPERANDS,
     ERROR_UNDEFINED_OPERATORS,
     MAX_TERMS,
     EquationScore,
     score_equation,
+)
+from kd.search.llm4ed.sketch_backend import (
+    SKETCH_LEVELS,
+    Llm4edCompiled,
+    compile_for_llm4ed,
 )
 from kd.search.recorder import log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
@@ -87,11 +101,16 @@ logger = logging.getLogger(__name__)
 
 FloatArray = npt.NDArray[np.float64]
 
+
+
+SPATIAL_AXES: Final[tuple[str, ...]] = ("x", "y")
+
 _STRUCTURAL_SCORE_ERRORS: Final[frozenset[str]] = frozenset(
     {
         ERROR_ABNORMAL_COEF,
         ERROR_INEXPRESSIBLE,
         ERROR_PARSE,
+        ERROR_SKETCH,
         ERROR_UNDEFINED_OPERANDS,
         ERROR_UNDEFINED_OPERATORS,
     }
@@ -184,9 +203,7 @@ class _Member:
     terms: tuple[str, ...]
 
 
-def _dataset_columns(
-    dataset: PDEDataset,
-) -> tuple[FloatArray, dict[str, FloatArray], str]:
+def _spatial_axes_of(dataset: PDEDataset) -> list[str]:
     lhs_field = dataset.lhs_field
     lhs_axis = dataset.lhs_axis
     if not lhs_field or not lhs_axis:
@@ -200,30 +217,77 @@ def _dataset_columns(
             "Llm4edPlugin requires a grid dataset with axis_order, axes, "
             "and fields populated."
         )
-    axis_order = list(dataset.axis_order)
-    spatial_axes = [name for name in axis_order if name != lhs_axis]
-    if len(spatial_axes) != 1:
-        raise ValueError(
-            "Llm4edPlugin supports exactly one spatial axis plus the lhs "
-            f"axis {lhs_axis!r}; dataset has axes {axis_order!r}."
-        )
-    spatial_axis = spatial_axes[0]
     if lhs_field != "u":
         raise ValueError(
             f"Llm4edPlugin requires field 'u'; dataset has lhs_field={lhs_field!r}."
         )
-    if spatial_axis != "x":
+    spatial_axes = [name for name in dataset.axis_order if name != lhs_axis]
+    if not spatial_axes or any(name not in SPATIAL_AXES for name in spatial_axes):
         raise ValueError(
-            "Llm4edPlugin requires spatial axis 'x'; "
-            f"dataset has spatial axis {spatial_axis!r}."
+            f"Llm4edPlugin requires spatial axes drawn from {list(SPATIAL_AXES)} "
+            f"plus the lhs axis {lhs_axis!r}; dataset has spatial axes "
+            f"{spatial_axes!r}."
         )
-    u = dataset.fields[lhs_field].values.detach().cpu().numpy().astype(np.float64)
-    if axis_order[0] == lhs_axis:
-        u = np.ascontiguousarray(u.T)
-    x = dataset.axes[spatial_axis].values.detach().cpu().numpy().astype(np.float64)
-    t = dataset.axes[lhs_axis].values.detach().cpu().numpy().astype(np.float64)
-    lhs, features = build_operand_columns(u, x, t)
-    return lhs, features, f"{lhs_field}_{lhs_axis}"
+    return [name for name in SPATIAL_AXES if name in spatial_axes]
+
+
+def _dataset_columns(
+    dataset: PDEDataset,
+) -> tuple[FloatArray, dict[str, FloatArray], str]:
+    spatial_axes = _spatial_axes_of(dataset)
+    assert dataset.axis_order and dataset.fields and dataset.axes
+    lhs_axis = dataset.lhs_axis
+    axis_order = list(dataset.axis_order)
+    axis_info = dataset.axes
+    u = dataset.fields["u"].values.detach().cpu().numpy().astype(np.float64)
+    perm = [axis_order.index(name) for name in (*spatial_axes, lhs_axis)]
+    u = np.ascontiguousarray(np.transpose(u, perm))
+
+    def values(name: str) -> FloatArray:
+        return axis_info[name].values.detach().cpu().numpy().astype(np.float64)
+
+    axes = {name: values(name) for name in spatial_axes}
+    lhs, features = build_operand_columns_axes(u, axes, values(lhs_axis))
+    return lhs, features, f"u_{lhs_axis}"
+
+
+def _lower_target(
+    lhs: FloatArray,
+    pinned: tuple[tuple[str, float], ...],
+    features: dict[str, FloatArray],
+) -> FloatArray:
+    lowered = lhs.reshape(-1).copy()
+    for key, signed_value in pinned:
+        column = evaluate_ir_column(key, features)
+        if not np.isfinite(column).all():
+            raise ValueError(
+                f"pinned sketch term {key!r} evaluates to a non-finite column on "
+                "the LLM4ED finite-difference footing; fix the pin or the dataset"
+            )
+        lowered = lowered - signed_value * column
+    variance = float(np.var(lowered))
+    if not math.isfinite(variance) or variance <= 0.0:
+        raise ValueError(
+            "lowered LLM4ED sketch target variance must be finite and positive; "
+            "the pinned terms leave no residual to regress"
+        )
+    return lowered.reshape(-1, 1)
+
+
+def _tabular_columns(
+    components: PlatformComponents,
+) -> tuple[FloatArray, dict[str, FloatArray], str]:
+    dataset = components.dataset
+    context = components.context
+    assert context is not None and dataset.fields is not None
+    target = dataset.lhs_field
+
+    def column(name: str) -> FloatArray:
+        values = context.get_variable(name).detach().cpu().numpy()
+        return np.ascontiguousarray(values, dtype=np.float64).reshape(-1)
+
+    features = {name: column(name) for name in dataset.fields if name != target}
+    return column(target), features, target
 
 
 class Llm4edPlugin:
@@ -237,22 +301,37 @@ class Llm4edPlugin:
 
     config_cls: ClassVar[type[Llm4edConfig]] = Llm4edConfig
     one_shot: ClassVar[bool] = False
-    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+
+
+    sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "native"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset({"provider", "mode"})
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="llm4ed",
-        summary="Budgeted LLM proposal and sparse-reward PDE search.",
+        summary="Budgeted LLM proposal and sparse-reward PDE and tabular search.",
         cost_class="medium",
         modes=(
             InstrumentMode(
                 name="default",
                 field_names=("u",),
-                spatial_axes=("x",),
-                description="LLM proposals over field u and spatial axis x.",
+                spatial_axes=SPATIAL_AXES,
+                description="LLM proposals over field u and spatial axes x and y.",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
                 lhs_orders=frozenset({1}),
+                refused_fields={"functions": "non_default"},
+                sketch=SKETCH_LEVELS,
+            ),
+            InstrumentMode(
+                name="tabular",
+                description=(
+                    "LLM formula proposals over the feature columns of a table."
+                ),
+                forms=frozenset({Form.REGRESSION}),
+                topologies=frozenset({DataTopology.TABULAR}),
+                provider_kind="none",
+                lhs_orders=frozenset({0}),
             ),
         ),
         knobs=(
@@ -309,7 +388,9 @@ class Llm4edPlugin:
         segmentation=Segmentation(
             archive="progress", unit="rounds", reseed=True
         ),
-        identity_breaking_fields=frozenset(),
+
+
+        identity_breaking_fields=frozenset({"functions"}),
 
 
 
@@ -318,8 +399,20 @@ class Llm4edPlugin:
     )
 
     def __init__(
-        self, config: Llm4edConfig, *, provider: LLMProvider | None = None
+        self,
+        config: Llm4edConfig,
+        *,
+        provider: LLMProvider | None = None,
+        mode: Literal["default", "tabular"] = "default",
     ) -> None:
+        if mode not in ("default", "tabular"):
+            raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
+        if mode == "default" and config.functions:
+            raise ValueError(
+                f"functions={list(config.functions)} applies to the LLM4ED tabular "
+                "mode only; the default PDE mode takes none"
+            )
+        self._mode = mode
         self._config = config
         self._provider = provider
 
@@ -335,9 +428,16 @@ class Llm4edPlugin:
         self._recorder: VizRecorder | None = None
 
 
+
         self._lhs: FloatArray | None = None
         self._features: dict[str, FloatArray] | None = None
         self._lhs_name: str | None = None
+
+
+        self._operands: tuple[str, ...] = ()
+        self._spatial_axes: tuple[str, ...] = ()
+
+        self._sketch_compiled: Llm4edCompiled | None = None
 
 
 
@@ -396,6 +496,13 @@ class Llm4edPlugin:
 
     @property
     def derivative_requirements(self) -> DerivativeReqs:
+        if self._mode == "tabular":
+            return DerivativeReqs(
+                provider_kind="none",
+                lhs_source="field",
+                lhs_order=0,
+                supported_topologies=frozenset({DataTopology.TABULAR}),
+            )
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=3,
@@ -421,6 +528,19 @@ class Llm4edPlugin:
 
 
     def refuse_unsupported_names(self, dataset: PDEDataset) -> None:
+        if self._mode == "tabular":
+            for name in dataset.fields or {}:
+                if is_placeholder(name):
+                    raise ValueError(
+                        f"LLM4ED tabular field {name!r} has the form of a constant "
+                        "placeholder c<k>; rename the field"
+                    )
+                if not reads_as_symbol(name):
+                    raise ValueError(
+                        f"LLM4ED tabular field {name!r} is not read back as a plain "
+                        "symbol by the equation parser; rename the field"
+                    )
+            return
         fields = set(dataset.fields or {})
         if fields != {"u"}:
             raise ValueError(
@@ -432,9 +552,18 @@ class Llm4edPlugin:
         self.refuse_unsupported_names(components.dataset)
         self._components = components
         self._recorder = components.recorder
-        self._lhs, self._features, self._lhs_name = _dataset_columns(
-            components.dataset
+        self._lhs, self._features, self._lhs_name = (
+            _tabular_columns(components)
+            if self._mode == "tabular"
+            else _dataset_columns(components.dataset)
         )
+        self._operands = tuple(self._features)
+        self._spatial_axes = (
+            ()
+            if self._mode == "tabular"
+            else tuple(_spatial_axes_of(components.dataset))
+        )
+        self._prepare_sketch(components)
 
 
 
@@ -480,6 +609,23 @@ class Llm4edPlugin:
         self._reseed_pending = False
         self._pending_state = None
         self._prepared = True
+
+    def _prepare_sketch(self, components: PlatformComponents) -> None:
+        self._sketch_compiled = None
+        task = components.task
+        if task is None:
+            return
+        assert self._lhs is not None and self._features is not None
+        compiled = compile_for_llm4ed(task.sketch, self._operands)
+        self._sketch_compiled = compiled
+        self._operands = compiled.operands
+        if not task.compiled.closed:
+            self._lhs = _lower_target(self._lhs, compiled.pinned, self._features)
+
+    @property
+    def sketch_compile_report(self) -> CompileReport | None:
+        compiled = self._sketch_compiled
+        return None if compiled is None else compiled.report
 
     def propose(self, n: int) -> list[str]:
         self._require_prepared()
@@ -622,8 +768,7 @@ class Llm4edPlugin:
         recorder = self._recorder
         if recorder is None or not recorder.enabled or recorder.trajectory_top_k == 0:
             return
-        assert self._features is not None
-        operands = tuple(self._features)
+        operands = self._operands
 
         def project(index: int) -> tuple[str, tuple[str, ...], str]:
             result = results[index]
@@ -632,7 +777,15 @@ class Llm4edPlugin:
             terms = active_fit_terms(
                 result.terms, result.coefficients, result.selected_indices
             )
-            parsed = parse_equation(result.expression, operands)
+            tabular = self._mode == "tabular"
+            parsed = parse_equation(
+                result.expression,
+                operands,
+                functions=frozenset(self._config.functions),
+                placeholders=tabular,
+                constant_term=tabular,
+                target=self._lhs_name if tabular else None,
+            )
             expression = fold_add([term.ir for term in parsed.terms])
             return expression, terms, result.lhs_name
 
@@ -655,8 +808,7 @@ class Llm4edPlugin:
                 score=self._best_reward,
                 reason="no_candidate",
             )
-        assert self._lhs is not None and self._features is not None
-        rescored = score_equation(self._best_expression, self._lhs, self._features)
+        rescored = self._score(self._best_expression)
         if not rescored.valid:
 
             return invalid_evaluation_result(
@@ -706,7 +858,7 @@ class Llm4edPlugin:
     @property
     def state(self) -> dict[str, Any]:
         if self._prepared:
-            return {
+            state: dict[str, Any] = {
                 "population": [
                     {
                         "score": member.score,
@@ -766,6 +918,10 @@ class Llm4edPlugin:
                     "expression": self._best_expression,
                 },
             }
+            if self._mode == "tabular":
+                state["mode"] = self._mode
+                state["functions"] = list(self._config.functions)
+            return state
         if self._pending_state is not None:
             return dict(self._pending_state)
         raise RuntimeError("prepare() must be called before reading state.")
@@ -776,6 +932,20 @@ class Llm4edPlugin:
             self._pending_state = None
             self._restore_pending = False
             return
+        archived_mode = value.get("mode", "default")
+        if archived_mode != self._mode:
+            raise ValueError(
+                f"Cannot restore an LLM4ED {archived_mode!r}-mode checkpoint into "
+                f"the {self._mode!r} mode"
+            )
+        if self._mode == "tabular":
+            archived_functions = list(value["functions"])
+            if archived_functions != list(self._config.functions):
+                raise ValueError(
+                    "Cannot restore an LLM4ED tabular checkpoint with "
+                    f"functions={archived_functions} under "
+                    f"functions={list(self._config.functions)}"
+                )
         self._pending_state = dict(value)
         self._restore_pending = True
 
@@ -902,12 +1072,45 @@ class Llm4edPlugin:
         ]
 
     def _build_prompt(self, phase: str, n: int) -> str:
+        if self._mode == "tabular":
+            return self._build_tabular_prompt(phase, n)
+        compiled = self._sketch_compiled
+        operators = DEFAULT_PDE_OPERATORS if compiled is None else compiled.operators
+        library = {"operators": operators, "operands": pde_operands(self._operands)}
+        hint = "" if compiled is None else compiled.hint
         if phase == INITIALIZATION:
-            return build_initialization_prompt(self._config.init_num)
+            prompt = build_initialization_prompt(
+                self._config.init_num, spatial_axes=self._spatial_axes, **library
+            )
+        else:
+            history = self._assemble_history(phase)
+            if phase == EVOLUTION:
+                prompt = build_evolution_prompt(history, n, **library)
+            else:
+                prompt = build_optimize_prompt(history, n, **library)
+        return prompt + hint
+
+    def _build_tabular_prompt(self, phase: str, n: int) -> str:
+        assert self._lhs_name is not None and self._features is not None
+        target = self._lhs_name
+        variables = tuple(self._features)
+        functions = self._config.functions
+        if phase == INITIALIZATION:
+            return build_tabular_initialization_prompt(
+                self._config.init_num,
+                target=target,
+                variables=variables,
+                functions=functions,
+            )
         history = self._assemble_history(phase)
-        if phase == EVOLUTION:
-            return build_evolution_prompt(history, n)
-        return build_optimize_prompt(history, n)
+        build = (
+            build_tabular_evolution_prompt
+            if phase == EVOLUTION
+            else build_tabular_optimize_prompt
+        )
+        return build(
+            history, n, target=target, variables=variables, functions=functions
+        )
 
     def _assemble_history(self, phase: str) -> str:
         members = list(self._population)
@@ -956,10 +1159,14 @@ class Llm4edPlugin:
         return response.text
 
     def _score_response(self, text: str) -> list[PoolItem]:
-        assert self._lhs is not None and self._features is not None
         scored: list[PoolItem] = []
-        for candidate in parse_response(text):
-            result = score_equation(candidate, self._lhs, self._features)
+        lines = (
+            parse_tabular_response(text)
+            if self._mode == "tabular"
+            else parse_response(text)
+        )
+        for candidate in lines:
+            result = self._score(candidate)
             self._round_cache[candidate] = result
             if not result.valid:
                 self._round_invalid += 1
@@ -973,6 +1180,23 @@ class Llm4edPlugin:
             assert result.reward is not None
             scored.append(PoolItem(score=result.reward, expression=candidate))
         return scored
+
+    def _score(self, equation: str) -> EquationScore:
+        assert self._lhs is not None and self._features is not None
+        tabular = self._mode == "tabular"
+        return score_equation(
+            equation,
+            self._lhs,
+            self._features,
+            operands=self._operands,
+            functions=frozenset(self._config.functions),
+            placeholders=tabular,
+            constant_term=tabular,
+            elementwise_dedup=tabular or len(self._spatial_axes) > 1,
+            target=self._lhs_name if tabular else None,
+            distinct_skeletons=tabular,
+            gate=self._sketch_compiled,
+        )
 
     def _member_for(self, item: PoolItem, result: EvaluationResult) -> _Member:
         display = self._display.get(item.expression)

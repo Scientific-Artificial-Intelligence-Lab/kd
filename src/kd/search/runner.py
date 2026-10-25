@@ -5,6 +5,7 @@ import copy
 import logging
 import pickle
 import time
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, cast
@@ -34,7 +35,13 @@ from kd.core.platform.requirements import (
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY, CompileReport
 from kd.core.verify import verify_equation
 from kd.data.schema import DataTopology, compute_dataset_fingerprint
-from kd.search.callbacks import RunnerCallback, VizDataCollector
+from kd.search.callbacks import (
+    EarlyStoppingCallback,
+    EvaluationBudgetCallback,
+    RunnerCallback,
+    VizDataCollector,
+    WallClockBudgetCallback,
+)
 from kd.search.checkpoint_payload import (
     CHECKPOINT_VERSION,
     _algorithm_name,
@@ -53,15 +60,19 @@ from kd.search.protocol import (
     PlatformComponents,
     ScoreContract,
     SearchAlgorithm,
+    SearchedVocabularyAlgorithm,
     TerminatingSearchAlgorithm,
 )
 from kd.search.record_assembly import (
     assemble_run_record,
     cpu_seconds_now,
+    cuda_peak_bytes,
     drop_small_terms,
+    peak_rss_bytes,
 )
 from kd.search.recorder import VizRecorder
 from kd.search.records import RecordSchemaError, RunCost
+from kd.search.registry import execution_identity
 from kd.search.result import (
     DEFAULT_SCORE_DIRECTION,
     DEFAULT_SCORE_KIND,
@@ -107,6 +118,10 @@ _SEARCH_ALGORITHM_MEMBERS: tuple[str, ...] = (
 
 
 
+_SEARCHED_VOCABULARY_KEY: Final = "searched_vocabulary"
+
+
+
 
 _MISSING_ATTR: object = object()
 
@@ -116,6 +131,25 @@ def _implements_member(algorithm: object, member: str) -> bool:
     if attr is not _MISSING_ATTR and attr is not getattr(SearchAlgorithm, member, None):
         return True
     return member in getattr(algorithm, "__dict__", {})
+
+
+def _stop_reason(fired: list[RunnerCallback], *, spent_before_search: bool) -> str:
+    if any(isinstance(cb, WallClockBudgetCallback) for cb in fired):
+        if spent_before_search:
+            return "wall_clock_budget_before_search"
+        return "wall_clock_budget"
+    if any(isinstance(cb, EvaluationBudgetCallback) for cb in fired):
+        return "evaluation_budget"
+    if any(isinstance(cb, EarlyStoppingCallback) for cb in fired):
+        return "early_stopping"
+    return "callback" if fired else "algorithm_done"
+
+
+def _wall_clock_budget(callbacks: list[RunnerCallback]) -> float | None:
+    for cb in callbacks:
+        if isinstance(cb, WallClockBudgetCallback):
+            return cb.max_seconds
+    return None
 
 
 
@@ -172,6 +206,7 @@ class ExperimentRunner:
         self._assert_sketch_capability()
         self._assert_dataset_supported(components)
         self._assert_run_identity_serializable()
+        self._warn_if_small_term_drop_unused()
         self._current_iteration = 0
         self._boundary_results = 0
         self._boundary_invalid_results = 0
@@ -213,11 +248,19 @@ class ExperimentRunner:
 
 
         self._pending_restore_state = None
+        searched_vocabulary = self._sealed_searched_vocabulary()
 
         for cb in callbacks:
             cb.on_experiment_start(self._algorithm)
 
-        early_stopped = False
+
+
+        spent_before_search = any(
+            isinstance(cb, WallClockBudgetCallback) and cb.should_stop
+            for cb in callbacks
+        )
+
+        stop_reason = "iterations_exhausted"
         iterative_alg = (
             self._algorithm
             if isinstance(self._algorithm, IterativeSearchAlgorithm)
@@ -259,10 +302,13 @@ class ExperimentRunner:
             for iteration in range(self._max_iterations):
                 self._run_iteration(iteration, callbacks)
                 self._current_iteration = iteration + 1
-                if any(cb.should_stop for cb in callbacks) or (
-                    terminating_alg is not None and terminating_alg.is_done
-                ):
-                    early_stopped = True
+                fired = [cb for cb in callbacks if cb.should_stop]
+
+
+                if fired or (terminating_alg is not None and terminating_alg.is_done):
+                    stop_reason = _stop_reason(
+                        fired, spent_before_search=spent_before_search
+                    )
                     break
                 if iterative_alg is not None and iteration < self._max_iterations - 1:
                     iterative_alg.between_iterations()
@@ -279,12 +325,22 @@ class ExperimentRunner:
         result = self._build_experiment_result(
             components,
             recorder,
-            early_stopped,
+            stop_reason,
             preprocessing_seconds,
             finalize_failures,
+            searched_vocabulary,
         )
         self._emit_safety_counter_summary()
         return result
+
+    def _sealed_searched_vocabulary(self) -> dict[str, Any] | None:
+        if not _implements_member(self._algorithm, _SEARCHED_VOCABULARY_KEY):
+            return None
+        vocabulary = cast(
+            SearchedVocabularyAlgorithm, self._algorithm
+        ).searched_vocabulary
+        sealed = canonicalize_config({_SEARCHED_VOCABULARY_KEY: vocabulary})
+        return cast("dict[str, Any]", sealed[_SEARCHED_VOCABULARY_KEY])
 
     def _emit_safety_counter_summary(self) -> None:
         safety_counters.emit_run_summary(
@@ -464,9 +520,10 @@ class ExperimentRunner:
         self,
         components: PlatformComponents,
         recorder: VizRecorder,
-        early_stopped: bool,
+        stop_reason: str,
         preprocessing_seconds: float | None,
         finalize_failures: list[str],
+        searched_vocabulary: dict[str, Any] | None,
     ) -> ExperimentResult:
         final_eval = self._final_eval()
         if self._drops_small_terms():
@@ -494,6 +551,8 @@ class ExperimentRunner:
             lhs_label = self._lhs_label(components, final_eval)
         manifest = self._build_manifest(components)
         config = self._result_config()
+        if searched_vocabulary is not None:
+            config[_SEARCHED_VOCABULARY_KEY] = searched_vocabulary
         library_fingerprint = config.get("library_fingerprint")
         run_spec = RunSpec(
             kd_version=manifest.kd_version,
@@ -502,6 +561,61 @@ class ExperimentRunner:
             dataset_cache_fingerprint=manifest.dataset_cache_fingerprint,
             artifacts=manifest.artifacts,
         )
+        cost = self._build_cost(components, preprocessing_seconds, stop_reason)
+        dataset_name = self._dataset_name(components)
+        run_record = assemble_run_record(
+            instrument=(
+                _algorithm_name(self._algorithm) or type(self._algorithm).__name__
+            ),
+            dataset_name=dataset_name,
+            dataset_cache_fingerprint=manifest.dataset_cache_fingerprint,
+            seed=manifest.seed,
+            final_eval=final_eval,
+            equation=equation,
+            best_expression=self._algorithm.best_expression,
+            best_score=self._algorithm.best_score,
+            score_kind=score_kind,
+            score_direction=score_direction,
+
+
+            headline_coefficient_source=getattr(
+                self._algorithm,
+                "headline_coefficient_source",
+                "undeclared",
+            ),
+            run_spec=run_spec,
+            manifest_terms=manifest.terms,
+            cost=cost,
+            support_from_equation=self._task is not None,
+        )
+        return ExperimentResult(
+            best_expression=self._algorithm.best_expression,
+            best_score=self._algorithm.best_score,
+            iterations=self._current_iteration,
+            early_stopped=stop_reason != "iterations_exhausted",
+            final_eval=final_eval,
+            actual=actual,
+            predicted=predicted,
+            dataset_name=dataset_name,
+            algorithm_name=type(self._algorithm).__name__,
+            config=config,
+            recorder=recorder,
+            lhs_label=lhs_label,
+            equation=equation,
+            manifest=manifest,
+            run_record=run_record,
+            score_kind=score_kind,
+            score_direction=score_direction,
+            finalize_failures=tuple(finalize_failures),
+            sketch_outcome=sketch_outcome,
+        )
+
+    def _build_cost(
+        self,
+        components: PlatformComponents,
+        preprocessing_seconds: float | None,
+        stop_reason: str,
+    ) -> RunCost:
         search_seconds = time.perf_counter() - self._run_started
         cpu_now = cpu_seconds_now()
         cpu_seconds = (
@@ -538,7 +652,7 @@ class ExperimentRunner:
         )
         tokens_in = None if token_totals is None else token_totals["tokens_in"]
         tokens_out = None if token_totals is None else token_totals["tokens_out"]
-        cost = RunCost(
+        return RunCost(
             wallclock_seconds=search_seconds + (preprocessing_seconds or 0.0),
             search_seconds=search_seconds,
             preprocessing_seconds=preprocessing_seconds,
@@ -548,53 +662,11 @@ class ExperimentRunner:
             boundary_invalid_results=self._boundary_invalid_results,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
-        )
-        dataset_name = self._dataset_name(components)
-        run_record = assemble_run_record(
-            instrument=(
-                _algorithm_name(self._algorithm) or type(self._algorithm).__name__
-            ),
-            dataset_name=dataset_name,
-            dataset_cache_fingerprint=manifest.dataset_cache_fingerprint,
-            seed=manifest.seed,
-            final_eval=final_eval,
-            equation=equation,
-            best_expression=self._algorithm.best_expression,
-            best_score=self._algorithm.best_score,
-            score_kind=score_kind,
-            score_direction=score_direction,
-
-
-            headline_coefficient_source=getattr(
-                self._algorithm,
-                "headline_coefficient_source",
-                "undeclared",
-            ),
-            run_spec=run_spec,
-            manifest_terms=manifest.terms,
-            cost=cost,
-            support_from_equation=self._task is not None,
-        )
-        return ExperimentResult(
-            best_expression=self._algorithm.best_expression,
-            best_score=self._algorithm.best_score,
-            iterations=self._current_iteration,
-            early_stopped=early_stopped,
-            final_eval=final_eval,
-            actual=actual,
-            predicted=predicted,
-            dataset_name=dataset_name,
-            algorithm_name=type(self._algorithm).__name__,
-            config=config,
-            recorder=recorder,
-            lhs_label=lhs_label,
-            equation=equation,
-            manifest=manifest,
-            run_record=run_record,
-            score_kind=score_kind,
-            score_direction=score_direction,
-            finalize_failures=tuple(finalize_failures),
-            sketch_outcome=sketch_outcome,
+            stop_reason=stop_reason,
+            max_seconds=_wall_clock_budget(self._callbacks),
+            peak_rss_bytes=peak_rss_bytes(),
+            cuda_max_memory_allocated_bytes=cuda_peak_bytes(components.device),
+            device="cpu" if components.device is None else str(components.device),
         )
 
     def _build_sketch_outcome(
@@ -762,8 +834,18 @@ class ExperimentRunner:
     def _drops_small_terms(self) -> bool:
         return self._small_term_rtol > 0 and self._task is None
 
+    def _warn_if_small_term_drop_unused(self) -> None:
+        if self._small_term_rtol > 0 and self._task is not None:
+            warnings.warn(
+                f"small_term_rtol={self._small_term_rtol} is not applied on a "
+                "sketch fit; no term of the result is dropped.",
+                UserWarning,
+                stacklevel=3,
+            )
+
     def _result_config(self) -> dict[str, Any]:
         config = dict(self._algorithm.config)
+        config.update(execution_identity(_algorithm_name(self._algorithm)))
         if _implements_member(self._algorithm, "derivative_source"):
             config["provider_kind"] = cast(
                 DerivativeSourceAlgorithm, self._algorithm
@@ -940,7 +1022,7 @@ class ExperimentRunner:
     @staticmethod
     def _torch_load_checkpoint(path: Path) -> object:
         try:
-            return torch.load(path, weights_only=False)
+            return torch.load(path, map_location="cpu", weights_only=False)
         except FileNotFoundError:
             raise
         except (OSError, RuntimeError, EOFError, pickle.UnpicklingError) as exc:

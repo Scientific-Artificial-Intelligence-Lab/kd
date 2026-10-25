@@ -24,16 +24,20 @@ Of the modes for this task kind, dlga (always) and sga (with
 search, on every fresh call without an injected surrogate. For dlga, set
 `surrogate_max_epochs` explicitly. `train_surrogate` trains and registers a
 surrogate once; `run_discovery(surrogate=<id>)` injects it, so later fresh
-lineages of that algorithm do not retrain.
+lineages of that algorithm do not retrain. `smooth_input(method="network")`
+trains a network once per input, recipe and seed and writes its field as a
+derived input that every mode searches like the input itself; it is no
+mode's surrogate. Weak-form measurements (`method="weak"`) take this task's
+first-order time derivative and one spatial axis only.
 
 discover with `pinn` also trains a network before the search: pretraining on
 a fresh call, or one owed retraining phase on a resumed call whose parent
 stopped at a retraining boundary. For all three, the training runs before
 the search, and a time cap reached during it returns no candidate.
 
-LLM4ED needs its own endpoint (`base_url` in `params`) and a provider key in
-the environment of the run; the controller's endpoint and key are not reused.
-Without them the call fails at once naming what is missing.
+LLM4ED calls a language-model endpoint of its own (`base_url` in its
+parameters and a provider key in the search's environment). The controller
+configures none, so the table lists LLM4ED as unavailable.
 
 ### Availability
 

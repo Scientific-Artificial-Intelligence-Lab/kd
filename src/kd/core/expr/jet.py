@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 import operator
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 from typing import TypeAlias
 
@@ -12,10 +12,12 @@ import sympy
 from sympy import Expr
 
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN, UNITY_TOKEN
-from kd.core.expr.naming import parse_compound_derivative
+from kd.core.expr.naming import build_derivative_name, parse_compound_derivative
 from kd.core.expr.term_features import TermVocabulary
 
 Monomial: TypeAlias = Expr
+
+JetExpansion: TypeAlias = frozenset[tuple[Monomial, Expr]]
 
 
 _EPS = sympy.Rational(1, 10**10)
@@ -39,12 +41,17 @@ def _log(argument: Expr) -> Expr:
     return sympy.log(argument)
 
 
+def _divide(numerator: Expr, denominator: Expr) -> Expr:
+    return numerator * _recip(denominator)
+
+
 
 
 _OPERATIONS: dict[tuple[str, int], Callable[..., Expr]] = {
     ("add", 2): operator.add,
     ("sub", 2): operator.sub,
     ("mul", 2): operator.mul,
+    ("div", 2): _divide,
     ("neg", 1): operator.neg,
     ("n2", 1): lambda base: base**2,
     ("n3", 1): lambda base: base**3,
@@ -53,11 +60,36 @@ _OPERATIONS: dict[tuple[str, int], Callable[..., Expr]] = {
     ("cos", 1): sympy.cos,
     ("exp", 1): sympy.exp,
     ("log", 1): _log,
+    ("sqrt", 1): sympy.sqrt,
+}
+
+
+
+_BINARY: dict[type[ast.operator], Callable[[Expr, Expr], Expr]] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: _divide,
 }
 
 
 def _multiindex(orders: dict[str, int]) -> _Multiindex:
     return tuple(sorted((axis, order) for axis, order in orders.items() if order))
+
+
+def _jet_name(field: str, multiindex: _Multiindex) -> str:
+
+
+    return ",".join([field, *(f"{axis}:{order}" for axis, order in multiindex)])
+
+
+def _kd_name(jet_name: str) -> str:
+    field, *segments = jet_name.split(",")
+    name = field
+    for segment in segments:
+        axis, order = segment.split(":")
+        name = build_derivative_name(name, axis, int(order))
+    return name
 
 
 class _Jet:
@@ -68,10 +100,7 @@ class _Jet:
         self.index: dict[Expr, tuple[str, _Multiindex]] = {}
 
     def symbol(self, field: str, multiindex: _Multiindex) -> Expr:
-
-
-        name = ",".join([field, *(f"{axis}:{order}" for axis, order in multiindex)])
-        symbol = sympy.Symbol(name)
+        symbol = sympy.Symbol(_jet_name(field, multiindex))
         self.index[symbol] = (field, multiindex)
         return symbol
 
@@ -125,10 +154,44 @@ def _derivative(
     return expression
 
 
+def _exponent(node: ast.expr) -> Expr:
+    if isinstance(node, ast.Constant) and type(node.value) is int:
+        return sympy.Integer(node.value)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_exponent(node.operand)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return sympy.Rational(_exponent(node.left), _exponent(node.right))
+    raise ValueError(
+        f"Exponent {ast.unparse(node)!r} is not an integer or a ratio of "
+        "integer literals"
+    )
+
+
+def _infix(node: ast.expr, jet: _Jet) -> Expr:
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+
+        return sympy.Rational(repr(node.value))
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
+        operand = _expression(node.operand, jet)
+        return -operand if isinstance(node.op, ast.USub) else operand
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+        base, exponent = _expression(node.left, jet), _exponent(node.right)
+
+        return _recip(base**-exponent) if exponent < 0 else base**exponent
+    if isinstance(node, ast.BinOp) and type(node.op) in _BINARY:
+        left = _expression(node.left, jet)
+        return _BINARY[type(node.op)](left, _expression(node.right, jet))
+    raise ValueError(
+        f"Unsupported term syntax {type(node).__name__} in {ast.unparse(node)!r}"
+    )
+
+
 def _expression(node: ast.expr, jet: _Jet) -> Expr:
     if isinstance(node, ast.Name):
         return jet.name(node.id)
-    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+    if not isinstance(node, ast.Call):
+        return _infix(node, jet)
+    if not isinstance(node.func, ast.Name):
         raise ValueError(f"Unsupported term syntax: {type(node).__name__}")
     head = node.func.id
     arguments = [_expression(argument, jet) for argument in node.args]
@@ -143,24 +206,62 @@ def _expression(node: ast.expr, jet: _Jet) -> Expr:
     return operation(*arguments)
 
 
-@lru_cache(maxsize=_CACHE_SIZE)
-def jet_monomials(term_ir: str, vocabulary: TermVocabulary) -> frozenset[Monomial]:
-
-    from kd.core.equation.signature import law_term_key
-
-    parsed = ast.parse(law_term_key(term_ir), mode="eval").body
-    expanded = sympy.expand(_expression(parsed, _Jet(vocabulary)))
-    monomials: set[Monomial] = set()
-    for addend in sympy.Add.make_args(expanded):
+def _addends(expression: Expr) -> Iterator[tuple[Expr, Monomial]]:
+    for addend in sympy.Add.make_args(sympy.expand(expression)):
         if addend == 0:
             continue
         symbols = addend.free_symbols
         if not symbols:
-            monomials.add(sympy.Integer(1))
+            yield addend, sympy.Integer(1)
             continue
-        _coefficient, monomial = addend.as_independent(*symbols, as_Add=False)
-        monomials.add(monomial)
-    return frozenset(monomials)
+        yield addend.as_independent(*symbols, as_Add=False)
 
 
-__all__ = ["Monomial", "jet_monomials"]
+@lru_cache(maxsize=_CACHE_SIZE)
+def jet_expansion(term_ir: str, vocabulary: TermVocabulary) -> JetExpansion:
+
+    from kd.core.equation.signature import law_term_key
+
+    parsed = ast.parse(law_term_key(term_ir), mode="eval").body
+    summed: dict[Monomial, Expr] = {}
+    for coefficient, monomial in _addends(_expression(parsed, _Jet(vocabulary))):
+        summed[monomial] = summed.get(monomial, sympy.Integer(0)) + coefficient
+    return frozenset(
+        (monomial, coefficient)
+        for monomial, coefficient in summed.items()
+        if coefficient != 0
+    )
+
+
+@lru_cache(maxsize=_CACHE_SIZE)
+def jet_monomials(term_ir: str, vocabulary: TermVocabulary) -> frozenset[Monomial]:
+    return frozenset(monomial for monomial, _ in jet_expansion(term_ir, vocabulary))
+
+
+def jet_polynomial(
+    expression: str, vocabulary: TermVocabulary
+) -> dict[Monomial, float]:
+    parsed = ast.parse(expression, mode="eval").body
+    polynomial: dict[Monomial, float] = {}
+    for coefficient, monomial in _addends(_expression(parsed, _Jet(vocabulary))):
+        polynomial[monomial] = polynomial.get(monomial, 0.0) + float(coefficient)
+    return polynomial
+
+
+def monomial_label(monomial: Monomial) -> str:
+    names = {
+        symbol: sympy.Symbol(_kd_name(symbol.name))
+        for symbol in monomial.free_symbols
+        if "," in symbol.name
+    }
+    return str(monomial.xreplace(names))
+
+
+__all__ = [
+    "JetExpansion",
+    "Monomial",
+    "jet_expansion",
+    "jet_monomials",
+    "jet_polynomial",
+    "monomial_label",
+]

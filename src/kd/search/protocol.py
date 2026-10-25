@@ -10,6 +10,7 @@ from kd.core.verify import SKETCH_EXIT_VERIFY, VerifyPolicy
 from kd.search.descriptor import InstrumentDescriptor
 
 if TYPE_CHECKING:
+    import torch
     from torch import Tensor
     from torch.nn import Module
 
@@ -21,6 +22,20 @@ if TYPE_CHECKING:
     from kd.data.schema import PDEDataset
     from kd.models.trainer import TrainingResult
     from kd.search.recorder import VizRecorder
+
+__all__ = [
+    "DeadlineAwareSearchAlgorithm",
+    "DerivativeSourceAlgorithm",
+    "DiscoveryTask",
+    "FacadeWiringContract",
+    "IterativeSearchAlgorithm",
+    "PlatformComponents",
+    "ScoreContract",
+    "SearchAlgorithm",
+    "SearchedVocabularyAlgorithm",
+    "SurrogateTrainer",
+    "TerminatingSearchAlgorithm",
+]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,6 +68,8 @@ class PlatformComponents:
     registry: FunctionRegistry
     recorder: VizRecorder | None = None
     task: DiscoveryTask | None = None
+    device: torch.device | None = None
+    deadline: float | None = None
 
 
 @runtime_checkable
@@ -70,6 +87,7 @@ class FacadeWiringContract(ScoreContract, Protocol):
     one_shot: ClassVar[bool]
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]]
     sketch_lower_owner: ClassVar[Literal["platform", "native"]]
+    constructor_kwargs: ClassVar[frozenset[str]]
 
     @property
     def runner_batch_size(self) -> int:
@@ -144,6 +162,14 @@ class DerivativeSourceAlgorithm(SearchAlgorithm, Protocol):
 
     @property
     def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+        ...
+
+
+@runtime_checkable
+class SearchedVocabularyAlgorithm(SearchAlgorithm, Protocol):
+
+    @property
+    def searched_vocabulary(self) -> dict[str, object]:
         ...
 
 

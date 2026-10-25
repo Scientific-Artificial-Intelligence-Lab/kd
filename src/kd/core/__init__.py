@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.interrupt import SearchInterrupted
+from kd.core.law_judge import ParsedLaw, TermVerdict, judge_law, law_from_equation
 from kd.core.metrics import (
     ScorerFn,
     aic,
@@ -40,9 +41,19 @@ from kd.core.verify import (
 )
 
 if TYPE_CHECKING:
-    from kd.core.integrator import IntegrationResult, assemble_rhs, integrate_pde
+    from kd.core.integrator import (
+        IntegrationResult,
+        assemble_rhs,
+        integrate_pde,
+        integrate_trajectory,
+    )
 
-_LAZY_INTEGRATOR = {"IntegrationResult", "assemble_rhs", "integrate_pde"}
+_LAZY_INTEGRATOR = {
+    "IntegrationResult",
+    "assemble_rhs",
+    "integrate_pde",
+    "integrate_trajectory",
+}
 
 
 def __getattr__(name: str) -> object:
@@ -72,6 +83,7 @@ __all__ = [
     "IntegrationResult",
     "assemble_rhs",
     "integrate_pde",
+    "integrate_trajectory",
     "ScorerFn",
     "aic",
     "aic_no_n",
@@ -94,6 +106,10 @@ __all__ = [
     "load_bearing_recall",
     "span_floor",
     "term_set_jaccard",
+    "ParsedLaw",
+    "TermVerdict",
+    "judge_law",
+    "law_from_equation",
     "RateSummary",
     "paired_exact_test",
     "rate_summary",

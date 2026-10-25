@@ -421,6 +421,18 @@ class ExperimentResult(RunResult):
 
     sketch_outcome: SketchOutcome | None = None
 
+    @property
+    def stop_reason(self) -> str | None:
+        """What ended the search loop (``kd.search.records.STOP_REASON_VOCAB``).
+
+        Read from the sealed record's cost, the one place the runner writes
+        it, so a loaded result reports the reason its run ended with. None for
+        a result without a record or whose record predates the field.
+        """
+        if self.run_record is None:
+            return None
+        return self.run_record.cost.stop_reason
+
     def search_trajectory(self) -> list[list[SearchTrajectoryCandidate]]:
         """Return distinct fitted-structure observations by recorded iteration.
 

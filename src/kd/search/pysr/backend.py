@@ -7,6 +7,8 @@ import pickle
 import subprocess
 import sys
 import tempfile
+import warnings
+from collections.abc import Mapping
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import numpy as np
@@ -24,6 +26,24 @@ _WORKER_MODULE = "kd.search.pysr._worker"
 
 _JULIA_SIGNALS_ENV_VAR = "PYTHON_JULIACALL_HANDLE_SIGNALS"
 _JULIA_SIGNALS_ENV_VALUE = "yes"
+
+
+
+
+
+_JULIA_THREADS_ENV_VARS = ("PYTHON_JULIACALL_THREADS", "JULIA_NUM_THREADS")
+
+_BLAS_THREADS_ENV_VAR = "OMP_NUM_THREADS"
+
+
+
+
+
+
+_PYSR_THREADS_WARNING_FILTER = (
+    "ignore:PYTHON_JULIACALL_THREADS environment variable is set"
+    ":UserWarning:pysr.julia_import"
+)
 
 
 _REQUIRED_HOF_COLUMNS = ("complexity", "loss", "sympy_format")
@@ -187,6 +207,47 @@ class _PySRRegressorBackend:
         return pickle.dumps(self._model)
 
 
+def _worker_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    env = dict(environ)
+    source = next(
+        (
+            name
+            for name in (*_JULIA_THREADS_ENV_VARS, _BLAS_THREADS_ENV_VAR)
+            if name in env
+        ),
+        None,
+    )
+    if source is None:
+        return env
+    _warn_on_julia_thread_conflict(env)
+    threads = env[source].split(",", 1)[0]
+    for name in _JULIA_THREADS_ENV_VARS:
+        env.setdefault(name, threads)
+    env["PYTHONWARNINGS"] = ",".join(
+        entry
+        for entry in (env.get("PYTHONWARNINGS"), _PYSR_THREADS_WARNING_FILTER)
+        if entry
+    )
+    logger.debug("PySR worker: %s Julia threads, from %s", threads, source)
+    return env
+
+
+def _warn_on_julia_thread_conflict(environ: Mapping[str, str]) -> None:
+    juliacall = environ.get("PYTHON_JULIACALL_THREADS")
+    julia_num = environ.get("JULIA_NUM_THREADS")
+    if juliacall is None or julia_num is None:
+        return
+    if juliacall.split(",", 1)[0] != julia_num.split(",", 1)[0]:
+        warnings.warn(
+            f"PYTHON_JULIACALL_THREADS={juliacall!r} and "
+            f"JULIA_NUM_THREADS={julia_num!r} disagree: juliacall starts the "
+            f"PySR worker's Julia with --threads={juliacall}, so "
+            "JULIA_NUM_THREADS is ignored",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
 class _SubprocessBackend:
 
     def __init__(self, config: PySRConfig) -> None:
@@ -219,7 +280,11 @@ class _SubprocessBackend:
                 pickle.dump(request, f)
             cmd = [sys.executable, "-m", _WORKER_MODULE, request_path, result_path]
             logger.debug("launching PySR worker: %s", cmd)
-            proc = subprocess.run(cmd, stdin=subprocess.DEVNULL)
+            proc = subprocess.run(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                env=_worker_environment(os.environ),
+            )
             if proc.returncode != 0:
                 raise RuntimeError(
                     "PySR worker process exited with return code "

@@ -5,6 +5,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from kd.core.equation._sketch_terms import lower_term
+
 _DEFAULT_TERMS: tuple[str, ...] = ("u", "u_x", "u_xx", "mul(u, u_x)")
 
 
@@ -36,6 +38,9 @@ class PySINDyConfig:
             raise ValueError(f"degree must be >= 1, got {self.degree}")
         if not self.terms:
             raise ValueError("terms must be a non-empty tuple of candidate terms")
+
+
+        object.__setattr__(self, "terms", tuple(map(lower_term, self.terms)))
         if not (math.isfinite(self.threshold) and self.threshold >= 0):
             raise ValueError(f"threshold must be finite and >= 0, got {self.threshold}")
         if self.max_iter <= 0:

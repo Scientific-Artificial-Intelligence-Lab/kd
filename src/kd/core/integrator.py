@@ -4,9 +4,10 @@ from __future__ import annotations
 import ast
 import logging
 import math
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -15,15 +16,19 @@ from scipy.integrate import solve_ivp
 from torch import Tensor
 
 from kd.core.executor.context import ExecutionContext
+from kd.core.expr.columns import ColumnContext
 from kd.core.expr.executor import (
     UNITY_TOKEN,
     PythonExecutor,
     _is_diff_operator,
     _parse_diff_name,
     _parse_expression,
+    _value_leaf_names,
 )
 from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.registry import FunctionRegistry
+from kd.core.interrupt import SearchInterrupted
+from kd.core.oom import is_cpu_alloc_failure
 from kd.data.derivatives.base import DerivativeProvider
 from kd.data.derivatives.finite_diff import (
     DX_ZERO_FLOOR,
@@ -33,6 +38,7 @@ from kd.data.derivatives.finite_diff import (
     is_uniform_grid,
 )
 from kd.data.schema import AxisInfo, DataTopology, FieldData, PDEDataset
+from kd.data.trajectory import Trajectory, derivative_target
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +104,11 @@ class IntegrationResult:
     predicted_field: Tensor | None = None
     warning: str = ""
     diverged_at_t: float | None = None
+    timed_out: bool = False
+
+
+class _DeadlineExpired(Exception):
+    pass
 
 
 @dataclass
@@ -166,168 +177,251 @@ def _check_spatial_uniformity(
     return None
 
 
+def _add_unique(bucket: list[str], name: str) -> None:
+    if name not in bucket:
+        bucket.append(name)
+
+
+@dataclass(frozen=True)
+class _RHSSymbols:
+
+    diff_calls: tuple[str, ...]
+    unsupported_calls: tuple[str, ...]
+    names: tuple[str, ...]
+
+
+def _syntax_rejection(node: ast.AST, entry: str) -> str | None:
+    if not isinstance(node, _ALLOWED_NODE_TYPES):
+        return (
+            f"Unsupported syntax in RHS expression for {entry}: "
+            f"{type(node).__name__} nodes are not part of the platform "
+            "expression IR."
+        )
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            return (
+                f"Unsupported constant in RHS expression for {entry}: "
+                f"{node.value!r} (only numeric literals are supported)."
+            )
+        return None
+    if not isinstance(node, ast.Call):
+        return None
+    if node.keywords:
+        return (
+            f"Unsupported syntax in RHS expression for {entry}: keyword "
+            "arguments are not part of the platform expression IR."
+        )
+    if not isinstance(node.func, ast.Name):
+        return (
+            f"Unsupported syntax in RHS expression for {entry}: only simple "
+            "function calls are supported."
+        )
+
+
+
+    if _is_diff_operator(node.func.id) and len(node.args) != 1:
+        return (
+            f"Malformed derivative call in RHS expression for {entry}: "
+            f"'{node.func.id}' expects exactly 1 argument, got {len(node.args)}."
+        )
+    return None
+
+
+def _rhs_symbols(
+    tree: ast.Expression,
+    registry: FunctionRegistry,
+    entry: str,
+) -> _RHSSymbols | str:
+    diff_calls: list[str] = []
+    unsupported_calls: list[str] = []
+    for node in ast.walk(tree):
+        rejection = _syntax_rejection(node, entry)
+        if rejection is not None:
+            return rejection
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            func_name = node.func.id
+            if _is_diff_operator(func_name):
+                _add_unique(diff_calls, func_name)
+            elif func_name == "lap" or not registry.has(func_name):
+                _add_unique(unsupported_calls, func_name)
+    names = sorted(_value_leaf_names(tree.body) - {UNITY_TOKEN})
+    return _RHSSymbols(tuple(diff_calls), tuple(unsupported_calls), tuple(names))
+
+
 def _classify_rhs(
     tree: ast.Expression,
     dataset: PDEDataset,
     registry: FunctionRegistry,
 ) -> tuple[_RHSClassification | None, str | None]:
     assert dataset.fields is not None and dataset.axes is not None
+    symbols = _rhs_symbols(tree, registry, "integrate_pde")
+    if isinstance(symbols, str):
+        return None, symbols
+    spatial_axes = set(dataset.spatial_axes)
+    buckets: dict[str, list[str]] = {
+        "bad_axis": [],
+        "cross_field": [],
+        "unknown": [],
+        "over_order": [],
+    }
+    references_derivatives = False
+    for func_name in symbols.diff_calls:
+        try:
+            axis, order = _parse_diff_name(func_name)
+        except ValueError:
+            _add_unique(buckets["bad_axis"], func_name)
+            continue
+        if axis not in spatial_axes:
+            _add_unique(buckets["bad_axis"], func_name)
+        elif order > _MAX_STENCIL_ORDER:
+            _add_unique(buckets["over_order"], func_name)
+        else:
+            references_derivatives = True
+    orders = _classify_grid_names(symbols.names, dataset, buckets)
+    rejection = _grid_rejection(symbols.unsupported_calls, buckets, dataset.lhs_field)
+    if rejection is not None:
+        return None, rejection
+    return (
+        _RHSClassification(
+            provider_max_order=max(orders, default=0),
+            references_derivatives=references_derivatives or bool(orders),
+        ),
+        None,
+    )
+
+
+def _classify_grid_names(
+    names: Sequence[str],
+    dataset: PDEDataset,
+    buckets: dict[str, list[str]],
+) -> list[int]:
+    assert dataset.fields is not None and dataset.axes is not None
     lhs_field = dataset.lhs_field
     field_names = set(dataset.fields.keys())
     axis_names = set(dataset.axes.keys())
     spatial_axes = set(dataset.spatial_axes)
-
-    unsupported_calls: list[str] = []
-    bad_axis_derivatives: list[str] = []
-    cross_field: list[str] = []
-    unknown_symbols: list[str] = []
-    over_order: list[str] = []
     orders: list[int] = []
-    references_derivatives = False
-
-
-
-    call_func_ids = {
-        id(node.func)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-
-    def _add_unique(bucket: list[str], name: str) -> None:
-        if name not in bucket:
-            bucket.append(name)
-
-    for node in ast.walk(tree):
-        if not isinstance(node, _ALLOWED_NODE_TYPES):
-            return None, (
-                "Unsupported syntax in RHS expression for integrate_pde: "
-                f"{type(node).__name__} nodes are not part of the platform "
-                "expression IR."
-            )
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, bool) or not isinstance(
-                node.value, (int, float)
-            ):
-                return None, (
-                    "Unsupported constant in RHS expression for "
-                    f"integrate_pde: {node.value!r} (only numeric literals "
-                    "are supported)."
-                )
+    for name in names:
+        if name == lhs_field:
             continue
-        if isinstance(node, ast.Call):
-            if node.keywords:
-                return None, (
-                    "Unsupported syntax in RHS expression for integrate_pde: "
-                    "keyword arguments are not part of the platform "
-                    "expression IR."
-                )
-            if not isinstance(node.func, ast.Name):
-                return None, (
-                    "Unsupported syntax in RHS expression for integrate_pde: "
-                    "only simple function calls are supported."
-                )
-            func_name = node.func.id
-            if _is_diff_operator(func_name):
-
-
-
-
-                if len(node.args) != 1:
-                    return None, (
-                        f"Malformed derivative call in RHS expression for "
-                        f"integrate_pde: '{func_name}' expects exactly 1 "
-                        f"argument, got {len(node.args)}."
-                    )
-                try:
-                    axis, order = _parse_diff_name(func_name)
-                except ValueError:
-                    _add_unique(bad_axis_derivatives, func_name)
-                    continue
-                if axis not in spatial_axes:
-                    _add_unique(bad_axis_derivatives, func_name)
-                    continue
-                if order > _MAX_STENCIL_ORDER:
-                    _add_unique(over_order, func_name)
-                    continue
-                references_derivatives = True
-                continue
-            if func_name == "lap" or not registry.has(func_name):
-                _add_unique(unsupported_calls, func_name)
+        if name in field_names:
+            _add_unique(buckets["cross_field"], name)
             continue
-        if isinstance(node, ast.Name) and id(node) not in call_func_ids:
-            name = node.id
-            if name == UNITY_TOKEN:
-                continue
-            if name == lhs_field:
-                continue
-            if name in field_names:
-                _add_unique(cross_field, name)
-                continue
-            derivative = parse_compound_derivative(
-                name,
-                known_fields=field_names,
-                known_axes=axis_names,
-            )
-            if derivative is not None:
-                deriv_field, segments = derivative
-                if deriv_field != lhs_field:
-                    _add_unique(cross_field, name)
-                    continue
-                if any(axis not in spatial_axes for axis, _ in segments):
-                    _add_unique(bad_axis_derivatives, name)
-                    continue
-                if any(order > _MAX_STENCIL_ORDER for _, order in segments):
-                    _add_unique(over_order, name)
-                    continue
+        derivative = parse_compound_derivative(
+            name, known_fields=field_names, known_axes=axis_names
+        )
+        if derivative is not None:
+            deriv_field, segments = derivative
+            if deriv_field != lhs_field:
+                _add_unique(buckets["cross_field"], name)
+            elif any(axis not in spatial_axes for axis, _ in segments):
+                _add_unique(buckets["bad_axis"], name)
+            elif any(order > _MAX_STENCIL_ORDER for _, order in segments):
+                _add_unique(buckets["over_order"], name)
+            else:
 
 
 
                 orders.append(segments[0][1])
-                references_derivatives = True
-                continue
-            if name in spatial_axes:
-                continue
-            _add_unique(unknown_symbols, name)
+            continue
+        if name not in spatial_axes:
+            _add_unique(buckets["unknown"], name)
+    return orders
 
+
+def _grid_rejection(
+    unsupported_calls: Sequence[str],
+    buckets: dict[str, list[str]],
+    lhs_field: str,
+) -> str | None:
     if unsupported_calls:
-        return None, (
+        return (
             "Unsupported function calls in RHS expression for integrate_pde: "
             f"{sorted(unsupported_calls)}. integrate_pde supports field, "
             "coordinate, and explicit derivative symbols only. Expand "
             "context-aware operators such as lap(...) to explicit "
             "derivative symbols."
         )
-    if bad_axis_derivatives:
-        return None, (
+    if buckets["bad_axis"]:
+        return (
             "integrate_pde skipped: RHS contains derivatives along "
-            f"non-spatial or unknown axes {sorted(bad_axis_derivatives)}. "
+            f"non-spatial or unknown axes {sorted(buckets['bad_axis'])}. "
             "Time integration supports spatial-axis derivatives of the "
             "LHS field only."
         )
-    if cross_field:
-        return None, (
-            f"Cross-field references not supported: {sorted(cross_field)} "
+    if buckets["cross_field"]:
+        return (
+            f"Cross-field references not supported: {sorted(buckets['cross_field'])} "
             f"reference fields other than LHS field '{lhs_field}'"
         )
-    if unknown_symbols:
-        return None, (
+    if buckets["unknown"]:
+        return (
             "integrate_pde skipped: RHS contains unrecognised symbols "
-            f"{sorted(unknown_symbols)}. Time integration supports field, "
+            f"{sorted(buckets['unknown'])}. Time integration supports field, "
             "spatial-coordinate, and explicit-derivative symbols only."
         )
-    if over_order:
-        return None, (
+    if buckets["over_order"]:
+        return (
             "integrate_pde skipped: derivative order exceeds the supported "
-            f"stencil maximum ({_MAX_STENCIL_ORDER}): {sorted(over_order)}."
+            f"stencil maximum ({_MAX_STENCIL_ORDER}): {sorted(buckets['over_order'])}."
         )
+    return None
 
+
+def _trajectory_rejection(
+    rhs: Mapping[str, str],
+    params: Collection[str],
+    time_var: str,
+    registry: FunctionRegistry,
+) -> str | None:
+    admitted = {*rhs, *params, time_var}
+    refusals: list[str] = []
+    for state, code in rhs.items():
+        refusal = _trajectory_law_refusal(code, rhs, admitted, registry)
+        if refusal:
+            refusals.append(f"{derivative_target(state)}: {refusal}")
+    if not refusals:
+        return None
     return (
-        _RHSClassification(
-            provider_max_order=max(orders, default=0),
-            references_derivatives=references_derivatives,
-        ),
-        None,
+        f"integrate_trajectory refused {'; '.join(refusals)}. A right-hand side "
+        f"may use the states {list(rhs)}, the parameters {list(params)}, the "
+        f"time '{time_var}', 'one', numeric literals and registry functions."
     )
+
+
+def _trajectory_law_refusal(
+    code: str,
+    states: Collection[str],
+    admitted: Collection[str],
+    registry: FunctionRegistry,
+) -> str:
+    try:
+        tree = _parse_expression(code).tree
+    except ValueError as exc:
+        return f"invalid expression ({exc})"
+    symbols = _rhs_symbols(tree, registry, "integrate_trajectory")
+    if isinstance(symbols, str):
+        return symbols
+    targets = {derivative_target(state) for state in states}
+    derivatives = list(symbols.diff_calls)
+    target_names: list[str] = []
+    unknown: list[str] = []
+    for name in symbols.names:
+        if name in admitted:
+            continue
+        if name in targets:
+            target_names.append(name)
+        elif parse_compound_derivative(name, known_fields=set(states)) is not None:
+            derivatives.append(name)
+        else:
+            unknown.append(name)
+    found = (
+        ("unsupported function calls", symbols.unsupported_calls),
+        ("derivatives", derivatives),
+        ("target names", target_names),
+        ("unrecognised symbols", unknown),
+    )
+    return ", ".join(f"{label} {sorted(names)}" for label, names in found if names)
 
 
 def _build_spatial_slice(
@@ -396,6 +490,7 @@ def integrate_pde(
     *,
     method: str = DEFAULT_METHOD,
     max_step: float | None = None,
+    deadline: float | None = None,
 ) -> IntegrationResult:
 
     if dataset.topology != DataTopology.GRID:
@@ -444,7 +539,6 @@ def integrate_pde(
         )
 
     t_vals = dataset.axes[time_axis].values.detach().cpu().numpy().astype(np.float64)
-    t_span = (float(t_vals[0]), float(t_vals[-1]))
 
 
     field_name = dataset.lhs_field
@@ -555,40 +649,85 @@ def integrate_pde(
 
         return dudt.ravel()
 
+    return _solve_with_deadline(
+        ode_rhs,
+        t_vals,
+        u0,
+        lambda y: _reconstruct_field(
+            y, spatial_shape, y.shape[1], time_dim, torch.device("cpu")
+        ),
+        method=method,
+        max_step=max_step,
+        deadline=deadline,
+    )
+
+
+def _solve_with_deadline(
+    rhs: Callable[[float, NDArray[np.floating[Any]]], NDArray[np.floating[Any]]],
+    t_eval: NDArray[np.float64],
+    y0: NDArray[np.float64],
+    to_field: Callable[[NDArray[np.floating[Any]]], Tensor],
+    *,
+    method: str,
+    max_step: float | None,
+    deadline: float | None,
+    rtol: float | None = None,
+    atol: float | None = None,
+) -> IntegrationResult:
+
+    def timed_rhs(t: float, y: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise _DeadlineExpired
+        return rhs(t, y)
+
+    t_span = (float(t_eval[0]), float(t_eval[-1]))
     solve_kwargs: dict[str, object] = {
         "method": method,
-        "t_eval": t_vals,
+        "t_eval": t_eval,
         "dense_output": False,
     }
-    if max_step is not None:
-        solve_kwargs["max_step"] = max_step
+    optional = {"max_step": max_step, "rtol": rtol, "atol": atol}
+    solve_kwargs.update(
+        {key: value for key, value in optional.items() if value is not None}
+    )
 
     try:
-        sol = solve_ivp(ode_rhs, t_span, u0, **solve_kwargs)
+        if not np.all(np.isfinite(timed_rhs(t_span[0], y0))):
+            raise ValueError(
+                "RHS evaluation produced non-finite values at the initial state"
+            )
+        sol = solve_ivp(timed_rhs, t_span, y0, **solve_kwargs)
+    except _DeadlineExpired:
+        return IntegrationResult(
+            success=False,
+            warning="integration stopped at its deadline during an RHS evaluation",
+            timed_out=True,
+        )
+    except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
+        raise
     except Exception as exc:
+        if is_cpu_alloc_failure(exc):
+            raise
         return IntegrationResult(
             success=False,
             warning=f"solve_ivp failed: {exc}",
         )
+    return _solution_result(sol, to_field)
 
+
+def _solution_result(
+    sol: Any,
+    to_field: Callable[[NDArray[np.floating[Any]]], Tensor],
+) -> IntegrationResult:
     if sol.status == -1:
         return IntegrationResult(
             success=False,
             warning=f"solve_ivp integration failed: {sol.message}",
         )
 
-
     diverged_at_t = _check_divergence(sol.y, sol.t)
-
-    device = torch.device("cpu")
-    predicted = _reconstruct_field(
-        sol.y,
-        spatial_shape,
-        len(sol.t),
-        time_dim,
-        device,
-    )
-
+    predicted = to_field(sol.y)
     if diverged_at_t is not None:
         return IntegrationResult(
             success=False,
@@ -596,12 +735,57 @@ def integrate_pde(
             diverged_at_t=diverged_at_t,
             warning=f"Integration diverged at t={diverged_at_t:.4g}",
         )
-
     return IntegrationResult(success=True, predicted_field=predicted)
+
+
+def integrate_trajectory(
+    rhs: Mapping[str, str],
+    trajectory: Trajectory,
+    *,
+    time_var: str,
+    method: str = DEFAULT_METHOD,
+    max_step: float | None = None,
+    deadline: float | None = None,
+    rtol: float,
+    atol: float,
+) -> IntegrationResult:
+    registry = FunctionRegistry.create_default()
+    rejection = _trajectory_rejection(rhs, tuple(trajectory.params), time_var, registry)
+    if rejection is not None:
+        return IntegrationResult(success=False, warning=rejection)
+    executor = PythonExecutor(registry)
+    state = torch.zeros(len(rhs), dtype=torch.float64, device="cpu")
+    clock = torch.zeros(1, dtype=torch.float64, device="cpu")
+    columns = {name: state[row: row + 1] for row, name in enumerate(rhs)}
+    for name, value in trajectory.params.items():
+        columns[name] = torch.tensor([value], dtype=torch.float64, device="cpu")
+    columns[time_var] = clock
+    unity = torch.ones(1, dtype=torch.float64, device="cpu")
+    context = cast(ExecutionContext, ColumnContext(columns, unity))
+    programs = tuple(rhs.values())
+
+    def ode_rhs(t: float, y: NDArray[np.floating[Any]]) -> NDArray[np.float64]:
+        state.copy_(torch.from_numpy(np.ascontiguousarray(y, dtype=np.float64)))
+        clock.fill_(t)
+        values = [executor.execute(code, context).value.item() for code in programs]
+        return np.array(values, dtype=np.float64)
+
+    return _solve_with_deadline(
+        ode_rhs,
+        np.asarray(trajectory.t, dtype=np.float64),
+        np.array(trajectory.state[:, 0], dtype=np.float64),
+        lambda y: torch.from_numpy(np.array(y, dtype=np.float64)),
+        method=method,
+        max_step=max_step,
+        deadline=deadline,
+        rtol=rtol,
+        atol=atol,
+    )
 
 
 __all__ = [
     "IntegrationResult",
     "assemble_rhs",
     "integrate_pde",
+    "integrate_trajectory",
 ]

@@ -34,17 +34,39 @@ from kd.search.records import RunRecord
 logger = logging.getLogger(__name__)
 
 
-def environment_fingerprint() -> dict[str, str]:
-    return {
+_UNKNOWN = "unknown"
+
+
+class _UnknownFieldError(Exception):
+    pass
+
+
+def environment_fingerprint(*, strict: bool = False) -> dict[str, str]:
+    fingerprint = {
         "kd_version": kd.__version__,
         "python": platform.python_version(),
         "platform": platform.platform(),
-        "git_sha": _git_sha(),
-        "torch_version": _torch_version(),
     }
+    reasons: dict[str, str] = {}
+    for field, read in (
+        ("git_sha", _git_sha),
+        ("git_status", _git_status),
+        ("torch_version", _torch_version),
+    ):
+        try:
+            fingerprint[field] = read()
+        except _UnknownFieldError as exc:
+            fingerprint[field] = _UNKNOWN
+            reasons[field] = str(exc)
+    if strict and reasons:
+        raise RuntimeError(
+            "environment fingerprint has unknown fields: "
+            + "; ".join(f"{field}: {reason}" for field, reason in reasons.items())
+        )
+    return fingerprint
 
 
-def _git_sha() -> str:
+def _git_output(*args: str) -> bytes:
     module_file = Path(__file__).resolve()
     cwd = module_file.parent
     try:
@@ -54,13 +76,26 @@ def _git_sha() -> str:
             stderr=subprocess.DEVNULL,
         )
         output = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
+            ["git", *args],
             cwd=cwd,
             stderr=subprocess.DEVNULL,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return "unknown"
-    return output.decode("utf-8").strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+        raise _UnknownFieldError(
+            f"git cannot read the checkout holding {module_file}: {exc}"
+        ) from exc
+    return output.strip()
+
+
+def _git_sha() -> str:
+    return _git_output("rev-parse", "HEAD").decode("utf-8")
+
+
+def _git_status() -> str:
+    porcelain = _git_output(
+        "--no-optional-locks", "status", "--porcelain", "--untracked-files=no"
+    )
+    return "dirty" if porcelain else "clean"
 
 
 def _torch_version() -> str:
@@ -68,8 +103,8 @@ def _torch_version() -> str:
         import torch
 
         return str(torch.__version__)
-    except Exception:
-        return "unknown"
+    except Exception as exc:
+        raise _UnknownFieldError(f"torch could not be imported: {exc!r}") from exc
 
 
 class EvidenceStore:

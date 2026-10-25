@@ -34,6 +34,7 @@ from kd.search.pysindy.backend import (
     default_backend_factory,
 )
 from kd.search.pysindy.config import PySINDyConfig
+from kd.search.pysindy.hole_subset import HOLE_SUBSET_MAX, select_hole_subset
 from kd.search.pysindy.sketch_backend import compile_for_pysindy
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.term_utils import infer_max_atomic_order
@@ -67,6 +68,10 @@ _STATE_TERMS = "terms"
 _STATE_SUPPORT = "support"
 _STATE_COEFFICIENT_VALUES = "coefficient_values"
 _CONFIG_LIBRARY_FINGERPRINT = "library_fingerprint"
+_EMPTY_LAW_MESSAGE = (
+    "PySINDy hole-count selection chose the empty law: every admitted subset "
+    "scored worse than no term"
+)
 
 
 class PySINDyPlugin:
@@ -79,6 +84,7 @@ class PySINDyPlugin:
     config_cls: ClassVar[type[PySINDyConfig]] = PySINDyConfig
     one_shot: ClassVar[bool] = True
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset({"task", "mode"})
 
 
 
@@ -93,7 +99,7 @@ class PySINDyPlugin:
             InstrumentMode(
                 name="default",
                 field_names=("u",),
-                spatial_axes=("x",),
+                spatial_axes=("x", "y"),
                 names_from="terms",
                 refused_fields={"degree": "non_default"},
                 description="Grid evolution regression over explicit kd terms.",
@@ -190,11 +196,13 @@ class PySINDyPlugin:
             effective_terms = self._config.terms
             self._sketch_compile_report: CompileReport | None = None
             self._pinned_terms: tuple[str, ...] = ()
+            self._hole_count_bounds: tuple[int, int] | None = None
         else:
             compiled = compile_for_pysindy(task.sketch, self._config.terms)
             effective_terms = compiled.effective_terms
             self._sketch_compile_report = compiled.report
             self._pinned_terms = tuple(pin.term_ir for pin in task.sketch.pinned)
+            self._hole_count_bounds = compiled.hole_count_bounds
         self._library = TermLibrarySpec.from_terms(effective_terms)
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
@@ -466,7 +474,9 @@ class PySINDyPlugin:
             backend.fit(x_matrix, y_vector)
             xi = np.asarray(backend.coefficients(), dtype=np.float64)
         self._validate_xi(xi, len(valid_terms))
-        support = support_from_coefficients(xi)
+        xi, support = self._enforce_hole_count(
+            xi, support_from_coefficients(xi), x_matrix, y_vector, valid_terms
+        )
         if not support:
             raise RuntimeError(
                 "PySINDy STLSQ selected empty support; lower threshold "
@@ -494,6 +504,55 @@ class PySINDyPlugin:
         self._best_expression = expression
         self._final_eval = final_eval
         self._best_score = final_eval.nmse
+
+    def _enforce_hole_count(
+        self,
+        xi: np.ndarray,
+        support: list[int],
+        theta: np.ndarray,
+        target: np.ndarray,
+        terms: list[str],
+    ) -> tuple[np.ndarray, list[int]]:
+        if self._hole_count_bounds is None:
+            return xi, support
+        min_terms, max_terms = self._hole_count_bounds
+        anchor_indices = [
+            index
+            for index, term in enumerate(terms)
+            if law_term_key(term) in self._anchor_keys
+        ]
+        hole_terms = len(set(support) - set(anchor_indices))
+        if support and min_terms <= hole_terms <= max_terms:
+            return xi, support
+        candidate_indices = self._identifiable_columns(theta, terms, anchor_indices)
+        if len(candidate_indices) < min_terms:
+            return xi, support
+        choice = select_hole_subset(
+            theta,
+            target,
+            anchor_indices=anchor_indices,
+            min_terms=min_terms,
+            max_terms=max_terms,
+            candidate_indices=candidate_indices,
+        )
+        chosen = support_from_coefficients(choice.coefficients)
+        if not chosen:
+            raise RuntimeError(_EMPTY_LAW_MESSAGE)
+        return choice.coefficients, chosen
+
+    def _identifiable_columns(
+        self, theta: np.ndarray, terms: list[str], anchor_indices: list[int]
+    ) -> list[int]:
+        rest_indices = [i for i in range(len(terms)) if i not in anchor_indices]
+        anchors, rest = theta[:, anchor_indices], theta[:, rest_indices]
+        deflated = rest
+        if anchor_indices:
+            _unit, _scales, q = self._unit_anchor_basis(
+                anchors, [terms[index] for index in anchor_indices]
+            )
+            deflated = rest - q @ (q.T @ rest)
+        kept = self._outside_anchor_span(rest, deflated, anchors.shape)
+        return [index for index, keep in zip(rest_indices, kept, strict=True) if keep]
 
     def _fit_with_anchors(
         self,
@@ -589,4 +648,4 @@ class PySINDyPlugin:
         return self._evaluator
 
 
-__all__ = ["PySINDyConfig", "PySINDyPlugin"]
+__all__ = ["HOLE_SUBSET_MAX", "PySINDyConfig", "PySINDyPlugin"]

@@ -10,6 +10,8 @@ from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermHole,
+    anchor_basis,
+    anchor_spelled_by,
     constraint_admits,
     pinned_monomials,
     term_admission,
@@ -27,6 +29,7 @@ from kd.core.expr.terms import split_terms
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.convert import build_feature_names, pysr_sympy_to_kd_terms
+from kd.search.term_utils import fold_add
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
@@ -77,13 +80,16 @@ _UNARY_FEATURES: dict[str, str] = {
     "square": "n2",
     "cube": "n3",
     "inv": "recip",
+    "sqrt": "sqrt",
 }
 
 
 
 
 
-_ADD_KEEPERS = frozenset({"/", "inv", "sin", "cos", "log"})
+
+_ADD_KEEPERS = frozenset({"/", "inv", "sin", "cos", "log", "sqrt"})
+
 
 
 _POWERS = frozenset({"n2", "n3"})
@@ -109,13 +115,15 @@ _FILTER_BOUNDARY_NOTE = (
     "column judged without a field, a column that converts to a pinned "
     "column) both err toward refusal, except that a product of two column "
     "terms sharing a base is judged on its literal IR while PySR merges it "
-    "into a power, where the required-hole check errs toward admission"
+    "into a power, and an anchored sqrt-bearing column's square is credited "
+    "as n2(sqrt(.)) while PySR converts c0*c0 to the column under the root; "
+    "there the required-hole check errs toward admission"
 )
 _OPERATOR_NOTE = (
     "operator_set is exit-checked: the law features a PySR operator emits "
     "depend on its operands ('*' emits mul, n2 or n3; '/' emits recip, "
     "mul+recip, mul, n2 or n3; '+' or '-' leaves a nested add only under "
-    "'/', inv, sin, cos or log, and '-' only when it cancels its own sign, "
+    "'/', inv, sin, cos, log or sqrt, and '-' only when it cancels its own sign, "
     "since c0-c1 leaves mul(-1,.) outside the vocabulary), so no configured "
     "operator set bounds a hole's operator clause; the pre-score gate judges "
     "operators as well"
@@ -135,7 +143,10 @@ _PIN_NOTES = (
     "terms: terms are judged one at a time, so u*u*u_x/(u+x) + x*u*u_x/(u+x) "
     "adds up to the pinned column with '/' and '+'; function identities "
     "(sin or cos squared, log of exp) respell a pin when unary_operators "
-    "configures sin, cos or log (cos alone or log alone suffices)",
+    "configures sin, cos or log (cos alone or log alone suffices); sqrt of a "
+    "square keeps a monomial of its own although its column is |u|, so with "
+    "sqrt configured, sqrt(c0*c0)*c1 respells the pin u*u_x on a field that "
+    "is never negative",
 )
 _SPELLING_MAP = (
     "PySR's square, cube and inv arrive as n2, n3 and recip; '*' as mul, n2 "
@@ -392,23 +403,18 @@ def _pair_products(parts: list[str], units: list[frozenset[str]]) -> list[str]:
 
 
 def _composed_filler(
-    composed: str,
-    vocabulary: TermVocabulary,
-    anchor_fingerprints: frozenset[ColumnFingerprint],
-    pin_monomials: frozenset[Monomial],
+    composed: str, sketch: Sketch, pin_monomials: frozenset[Monomial]
 ) -> TermFeatures | None:
-    if _on_a_pin(composed, vocabulary, pin_monomials):
+    if _on_a_pin(composed, sketch.vocabulary, pin_monomials):
         return None
-    features = analyze_term(composed, vocabulary)
-    if column_fingerprint(features) in anchor_fingerprints:
+    if anchor_spelled_by(composed, sketch) is not None:
         return None
-    return features
+    return analyze_term(composed, sketch.vocabulary)
 
 
 def _hole_fillers(
-    vocabulary: TermVocabulary,
+    sketch: Sketch,
     effective: list[tuple[str, _Parts]],
-    anchor_fingerprints: frozenset[ColumnFingerprint],
     pin_monomials: frozenset[Monomial],
     units: list[frozenset[str]],
 ) -> list[TermFeatures]:
@@ -416,18 +422,16 @@ def _hole_fillers(
     composed: list[str] = []
     for _term, parts in effective:
         for part, features in parts:
-            if _on_a_pin(part, vocabulary, pin_monomials):
+            if _on_a_pin(part, sketch.vocabulary, pin_monomials):
                 continue
-            if column_fingerprint(features) not in anchor_fingerprints:
+            if anchor_spelled_by(part, sketch) is None:
                 fillers.append(features)
             elif not features.operators & _POWERS:
                 composed.extend(_self_compositions(part, units))
     column_terms = [part for _term, column in effective for part, _ in column]
     composed.extend(_pair_products(column_terms, units))
     for candidate in composed:
-        filler = _composed_filler(
-            candidate, vocabulary, anchor_fingerprints, pin_monomials
-        )
+        filler = _composed_filler(candidate, sketch, pin_monomials)
         if filler is not None:
             fillers.append(filler)
     return fillers
@@ -437,13 +441,10 @@ def _assert_required_holes_live(
     sketch: Sketch,
     config: PySRConfig,
     effective: list[tuple[str, _Parts]],
-    anchor_fingerprints: frozenset[ColumnFingerprint],
     pin_monomials: frozenset[Monomial],
 ) -> None:
     units = _pysr_units(_binary_symbols(config), config.unary_operators)
-    fillers = _hole_fillers(
-        sketch.vocabulary, effective, anchor_fingerprints, pin_monomials, units
-    )
+    fillers = _hole_fillers(sketch, effective, pin_monomials, units)
     for hole in sketch.holes:
         if hole.min_count < 1:
             continue
@@ -493,7 +494,7 @@ def _column_notes(columns: dict[str, _Converted]) -> list[str]:
         elif len(parts) > 1:
             notes.append(
                 f"configured column {term!r} converts into {len(parts)} law "
-                "terms: it carries add only under '/', inv, sin, cos or log, "
+                "terms: it carries add only under '/', inv, sin, cos, log or sqrt, "
                 "and the one-law-term check without '+' or '-' does not count "
                 "its split, so that check errs toward refusal"
             )
@@ -544,9 +545,7 @@ def compile_for_pysr(sketch: Sketch, config: PySRConfig) -> PySRCompiled:
     _assert_operator_clauses_generable(sketch, config, remaining)
     effective = _filter_for_holes(sketch, remaining, anchor_fingerprints, dropped)
     _assert_non_empty(sketch, effective, dropped)
-    _assert_required_holes_live(
-        sketch, config, effective, anchor_fingerprints, pin_monomials
-    )
+    _assert_required_holes_live(sketch, config, effective, pin_monomials)
     _assert_separator_capacity(sketch, config, anchor_fingerprints)
     frozen_dropped = tuple(dropped)
     return PySRCompiled(
@@ -586,4 +585,17 @@ def candidate_refusal(
     return None
 
 
-__all__ = ["PySRCompiled", "candidate_refusal", "compile_for_pysr"]
+def fit_expression(
+    expression: str, *, sketch: Sketch, registry: FunctionRegistry
+) -> str:
+    try:
+        terms = split_terms(expression, registry)
+    except ValueError:
+        return expression
+    kept = anchor_basis(terms, sketch)
+    if len(kept) == len(terms):
+        return expression
+    return fold_add([terms[index] for index in kept])
+
+
+__all__ = ["PySRCompiled", "candidate_refusal", "compile_for_pysr", "fit_expression"]

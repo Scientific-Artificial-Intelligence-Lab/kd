@@ -14,7 +14,7 @@ ScorerFn = Callable[[float, int], float]
 
 
 
-_NMSE_EPS: float = 1e-15
+NMSE_EPS: float = 1e-15
 
 _MSE_FLOOR: float = 1e-15
 
@@ -60,7 +60,7 @@ def bic(mse: float, k: int, n: int) -> float:
     return n * math.log(mse) + k * math.log(n)
 
 
-def nmse(mse: float, target_var: float, eps: float = _NMSE_EPS) -> float:
+def nmse(mse: float, target_var: float, eps: float = NMSE_EPS) -> float:
     if not math.isfinite(mse):
         return mse
     if target_var > eps:

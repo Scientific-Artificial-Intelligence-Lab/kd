@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import torch
 from torch import nn
@@ -23,6 +25,8 @@ _PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "state_dict",
     }
 )
+_IDENTITY_KEY: Final[str] = "identity"
+
 
 
 _DTYPES: Final[dict[str, torch.dtype]] = {
@@ -64,9 +68,22 @@ def _activation_name(model: FieldModel) -> str:
     raise ValueError("FieldModel trunk carries no activation module")
 
 
-def save_field_model(model: FieldModel, path: str | Path) -> Path:
+@dataclass(frozen=True)
+class StoredSurrogate:
+
+    module: FieldModel
+    identity: dict[str, Any] | None
+    path: Path
+
+
+def save_field_model(
+    model: FieldModel,
+    path: str | Path,
+    *,
+    identity: Mapping[str, Any] | None = None,
+) -> Path:
     dtype = next(model.parameters()).dtype
-    payload = {
+    payload: dict[str, Any] = {
         "scheme": SURROGATE_SCHEME,
         "coord_names": list(model.coord_names),
         "field_names": list(model.field_names),
@@ -78,6 +95,8 @@ def save_field_model(model: FieldModel, path: str | Path) -> Path:
             for name, tensor in model.state_dict().items()
         },
     }
+    if identity is not None:
+        payload[_IDENTITY_KEY] = dict(identity)
     target = Path(path)
     tmp_path = target.with_name(f"{target.name}.tmp.{os.getpid()}")
     torch.save(payload, tmp_path)
@@ -85,8 +104,17 @@ def save_field_model(model: FieldModel, path: str | Path) -> Path:
     return target
 
 
-def load_field_model(path: str | Path) -> FieldModel:
-    payload = torch.load(Path(path), map_location="cpu", weights_only=True)
+def load_field_model(
+    path: str | Path, *, device: str | torch.device | None = None
+) -> FieldModel:
+    return load_stored_surrogate(path, device=device).module
+
+
+def load_stored_surrogate(
+    path: str | Path, *, device: str | torch.device | None = None
+) -> StoredSurrogate:
+    source = Path(path)
+    payload = torch.load(source, map_location="cpu", weights_only=True)
     if not isinstance(payload, dict):
         raise ValueError(
             f"{SURROGATE_SCHEME} file must hold a mapping, got "
@@ -95,7 +123,7 @@ def load_field_model(path: str | Path) -> FieldModel:
     missing = sorted(_PAYLOAD_KEYS - payload.keys())
     if missing:
         raise ValueError(f"{SURROGATE_SCHEME} payload is missing keys: {missing}")
-    extra = sorted(payload.keys() - _PAYLOAD_KEYS)
+    extra = sorted(payload.keys() - _PAYLOAD_KEYS - {_IDENTITY_KEY})
     if extra:
         raise ValueError(f"{SURROGATE_SCHEME} payload has unexpected keys: {extra}")
     scheme = payload["scheme"]
@@ -122,8 +150,21 @@ def load_field_model(path: str | Path) -> FieldModel:
             f"{SURROGATE_SCHEME} state_dict does not fit the declared "
             f"architecture: {exc}"
         ) from exc
+    if device is not None:
+        model = model.to(device=device)
     model.eval()
-    return model
+    identity = payload.get(_IDENTITY_KEY)
+    return StoredSurrogate(
+        module=model,
+        identity=None if identity is None else dict(identity),
+        path=source,
+    )
 
 
-__all__ = ["SURROGATE_SCHEME", "load_field_model", "save_field_model"]
+__all__ = [
+    "SURROGATE_SCHEME",
+    "StoredSurrogate",
+    "load_field_model",
+    "load_stored_surrogate",
+    "save_field_model",
+]

@@ -6,6 +6,9 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from kd.models._training_precision import TrainingDtype, validate_training_dtype
+from kd.models.field_recipe import DLGA_NN_1
+
 
 @dataclass
 class DLGAConfig:
@@ -50,7 +53,9 @@ class DLGAConfig:
     """Ordered vocabulary of tokens that candidate terms are built from, defaulting to
     ``["u", "u_x", "u_xx", "u_xxx"]``. Each term is a product of tokens drawn from
     this list, and the ordering matters: one of the mutation operators shifts a token
-    to an adjacent entry.
+    to an adjacent entry. On a grid whose spatial axes are ``x`` and ``y``,
+    ``kd.Model`` builds the default over both axes,
+    ``u, u_x, u_xx, u_xxx, u_y, u_yy, u_yyy``.
     """
     solver: Literal["svd_null_space", "ols"] = "svd_null_space"
     """Solver used to fit each candidate's coefficients against the left-hand side:
@@ -192,22 +197,23 @@ class DLGAConfig:
 
 
 
+
     surrogate_hidden_sizes: list[int] = field(
-        default_factory=lambda: [50, 50, 50, 50, 50]
+        default_factory=lambda: list(DLGA_NN_1.hidden_sizes)
     )
     """Widths of the hidden layers in the neural network fitted to the field data, one
     hidden layer per entry (default five layers of 50 units). The search
     differentiates this network for the derivatives it scores, so its capacity bounds
     their accuracy.
     """
-    surrogate_activation: Literal["tanh", "sin", "relu"] = "sin"
+    surrogate_activation: Literal["tanh", "sin", "relu"] = DLGA_NN_1.activation
     """Activation applied after each hidden layer of the fitted network: ``tanh``,
     ``sin``, or ``relu``. The default ``sin`` stays smooth under the repeated
     differentiation the search relies on, which ``relu`` does not.
     """
-    surrogate_lr: float = 1e-3
+    surrogate_lr: float = DLGA_NN_1.lr
     """Learning rate of the Adam optimizer used to fit the network to the field data."""
-    surrogate_max_epochs: int = 50000
+    surrogate_max_epochs: int = DLGA_NN_1.max_epochs
     """Maximum number of epochs to spend fitting the network, one full-batch Adam step
     per epoch. It trades run time against derivative accuracy: dropping the default
     50000 to a few thousand finishes much sooner with coarser derivatives.
@@ -219,26 +225,36 @@ class DLGAConfig:
 
 
 
-    surrogate_patience: int | None = None
+    surrogate_patience: int | None = DLGA_NN_1.patience
     """Number of consecutive epochs without validation-loss improvement after which the
     fit stops early. ``None``, the default, disables early stopping and runs the full
     ``surrogate_max_epochs`` budget; other values need ``surrogate_val_ratio`` above
     0 to take effect.
     """
-    surrogate_val_ratio: float = 0.2
+    surrogate_val_ratio: float = DLGA_NN_1.val_ratio
     """Fraction of the samples held out to measure validation loss while fitting the
     network, from 0 up to but not including 1. Setting it to 0 trains on every sample
     and leaves ``surrogate_patience`` and ``surrogate_restore_best`` with no signal
     to act on.
     """
-    surrogate_restore_best: bool = True
+    surrogate_restore_best: bool = DLGA_NN_1.restore_best
     """If True, the weights from the epoch with the lowest validation loss are restored
     at the end of the fit instead of keeping the last epoch's weights. Has no effect
     when ``surrogate_val_ratio`` is 0, since there is no validation loss to rank
     epochs by.
     """
+    training_dtype: TrainingDtype | None = DLGA_NN_1.training_dtype
+    """Floating precision the network is trained in: ``None``, the default, trains in
+    the dataset's dtype; ``"float32"`` or ``"float64"`` names one. The trained network
+    is cast back to the dataset's dtype, so the search differentiates and scores it in
+    that dtype whatever the training precision. On float64 data, ``"float32"``
+    shortens training on GPUs whose float64 arithmetic is slow. The value is part of
+    a stored surrogate's identity, so a network trained in one precision does not
+    serve a configuration that names another.
+    """
 
     def __post_init__(self) -> None:
+        validate_training_dtype(self.training_dtype)
         if self.mode not in {"constant", "adaptive", "auto"}:
             raise ValueError(f"mode must be constant/adaptive/auto, got {self.mode!r}")
         if self.solver not in {"svd_null_space", "ols"}:

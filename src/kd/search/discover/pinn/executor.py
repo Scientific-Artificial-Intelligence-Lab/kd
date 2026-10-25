@@ -171,6 +171,8 @@ def _normalize_coefficients(
     coefficients: Sequence[float] | Tensor,
     reference: Tensor,
 ) -> Tensor:
+    if isinstance(coefficients, Tensor) and coefficients.requires_grad:
+        return coefficients.to(device=reference.device, dtype=reference.dtype)
     if isinstance(coefficients, Tensor):
         return coefficients.detach().to(
             device=reference.device,

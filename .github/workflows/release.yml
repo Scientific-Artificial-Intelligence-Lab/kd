@@ -264,9 +264,10 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             flags+=(--prerelease)
           fi
+          # No --target: the tag already exists (--verify-tag), and the API
+          # rejects a tag name as target_commitish (422, v0.8.2 run).
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag \
-            --target "$GITHUB_REF_NAME" \
             --title "KD $VERSION" \
             --notes-file notes/notes.md \
             "${flags[@]}"

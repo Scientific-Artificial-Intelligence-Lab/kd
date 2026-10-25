@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
-from kd import instrument_schemas
+from kd import extension_source, instrument_schemas
 from kd.search import CATALOG_FILENAME, DEFAULT_RUNS_ROOT, RunDirPaths
 from kdagent import criteria
 from kdagent.instrument_doc import instrument_doc_sections
 from kdagent.lineage import TREE_FILENAME
+from kdagent.surrogate_training import surrogate_parameter_names
 
 DEFAULT_SEED = 0
 DEFAULT_GENERATIONS = 10
@@ -158,7 +160,7 @@ def _sketch_markdown(schema: dict[str, Any]) -> str:
         else ""
     )
     return (
-        "Pass a `kd-sketch-v1` payload as `run_discovery(sketch=...)` to narrow "
+        "Pass a `kd-sketch-v2` payload as `run_discovery(sketch=...)` to narrow "
         "the search (pinned terms, anchored terms, and holes over a vocabulary; "
         "the common kd-tools card shows the payload). Each clause is enforced at "
         "the level kd declares for the mode the search runs in; a clause the "
@@ -171,18 +173,10 @@ def _sketch_markdown(schema: dict[str, Any]) -> str:
 
 
 def _surrogate_markdown(schema: dict[str, Any]) -> str:
-    if not schema["config_artifact_keys"]:
-        return ""
-    fields = sorted(
-        set(schema["surrogate_fields"])
-        | {
-            name
-            for mode in schema["modes"]
-            for params in mode["order_params"].values()
-            for name in params
-        }
-    )
     modes = [mode for mode in schema["modes"] if mode["provider_kind"] == "autograd"]
+    if not schema["config_artifact_keys"] or not modes:
+        return ""
+    fields = surrogate_parameter_names(schema)
     selections = "; ".join(
         json.dumps(mode["selected_by"], sort_keys=True) for mode in modes
     )
@@ -228,7 +222,7 @@ def applicability_line(schema: dict[str, Any]) -> str:
             f"{mode['name']}: {', '.join(mode['topologies'])}, "
             f"{', '.join(mode['forms'])}, LHS orders {mode['lhs_orders']}"
         )
-        for key in ("field_names", "spatial_axes"):
+        for key in ("field_names", "spatial_axes", "field_counts", "spatial_dims"):
             if mode[key] is not None:
                 text += f", {key}={json.dumps(mode[key])}"
         if mode["names_from"] is not None:
@@ -264,6 +258,8 @@ def _capabilities_markdown(schema: dict[str, Any]) -> str:
                 "refused_fields",
                 "field_names",
                 "spatial_axes",
+                "field_counts",
+                "spatial_dims",
                 "names_from",
             )
         ]
@@ -312,6 +308,9 @@ def instrument_briefs() -> list[dict[str, str]]:
 
             "narrowing": _sketch_markdown(schema),
             "surrogate": _surrogate_markdown(schema),
+
+
+            "source": extension_source("algorithm", schema["algorithm"]),
         }
         for schema in instrument_schemas()
     ]
@@ -320,11 +319,18 @@ def instrument_briefs() -> list[dict[str, str]]:
 PARAMETERS_HEADING = "## Parameters"
 NARROWING_HEADING = "## Narrowing with a sketch"
 SURROGATE_HEADING = "## Surrogate"
-_PARAMETERS_PREAMBLE = (
+_PROSE_SENTENCE = (
     "Generated from kd's instrument schema when this skill was installed; the "
-    "card prose above is hand-written, this table is not. Pass these as the "
-    "`params` mapping of `run_discovery`. `seed` is a separate argument of "
-    "that tool, not a `params` key.\n\n"
+    "card prose above is hand-written, this table is not. "
+)
+_GENERATED_SENTENCE = (
+    "Generated from kd's instrument schema when this skill was installed, as "
+    "is the whole card: an extension registered this algorithm through "
+    "`kd.register_algorithm`, and no hand-written prose describes it. "
+)
+_PARAMETERS_PREAMBLE = (
+    "Pass these as the `params` mapping of `run_discovery`. `seed` is a "
+    "separate argument of that tool, not a `params` key.\n\n"
     "`Resume` is kd's classification of changing that parameter: `resume_safe` "
     "can take effect on a search restored from a checkpoint, `init_only` "
     "cannot, and `identity_breaking` makes it a different run rather than the "
@@ -345,13 +351,14 @@ _CONCLUSION_RESUME_SENTENCE = (
 )
 
 
-def _parameters_preamble(segmentation_archive: str) -> str:
+def _parameters_preamble(segmentation_archive: str, *, builtin: bool) -> str:
     sentence = (
         _PROGRESS_RESUME_SENTENCE
         if segmentation_archive == _RESUMABLE_ARCHIVE
         else _CONCLUSION_RESUME_SENTENCE
     )
-    return f"{_PARAMETERS_PREAMBLE}{sentence}"
+    opening = _PROSE_SENTENCE if builtin else _GENERATED_SENTENCE
+    return f"{opening}{_PARAMETERS_PREAMBLE}{sentence}"
 
 
 
@@ -359,24 +366,32 @@ def _parameters_preamble(segmentation_archive: str) -> str:
 _ASSETS_DIR = Path(__file__).resolve().parent / "_assets"
 
 
-def algorithm_card(brief: dict[str, str]) -> str:
-    algorithm = brief["algorithm"]
+def _prose_sections(algorithm: str) -> tuple[list[str], str]:
     sections = instrument_doc_sections(algorithm)
     guidance = (_ASSETS_DIR / "guidance" / f"{algorithm}.md").read_text(
         encoding="utf-8"
     )
     guidance, _, narrowing_note = guidance.partition("\n### Narrowing with a sketch\n")
-    description = (
-        f"{brief['summary']} Cost class {brief['cost_class']}. {brief['applicability']}"
-    )
-    parts = [
-        f"---\nname: {algorithm}\ndescription: >-\n {description}\n---",
-        f"## Capabilities\n\n{brief['capabilities']}",
+    return [
         f"## Search space\n\n{sections['search_space']}",
         f"## Method\n\n{sections['method']}",
         f"## Tool notes\n\n{guidance.strip()}",
-        f"{PARAMETERS_HEADING}\n\n{_parameters_preamble(brief['segmentation_archive'])}"
-        f"\n\n{brief['parameters']}"
+    ], narrowing_note
+
+
+def algorithm_card(brief: dict[str, str]) -> str:
+    algorithm = brief["algorithm"]
+    builtin = brief["source"] == "builtin"
+    prose, narrowing_note = _prose_sections(algorithm) if builtin else ([], "")
+    description = (
+        f"{brief['summary']} Cost class {brief['cost_class']}. {brief['applicability']}"
+    )
+    preamble = _parameters_preamble(brief["segmentation_archive"], builtin=builtin)
+    parts = [
+        f"---\nname: {algorithm}\ndescription: >-\n {description}\n---",
+        f"## Capabilities\n\n{brief['capabilities']}",
+        *prose,
+        f"{PARAMETERS_HEADING}\n\n{preamble}\n\n{brief['parameters']}"
         + (f"\n\n{brief['parameter_objects']}" if brief["parameter_objects"] else ""),
     ]
     for heading, key in (
@@ -391,14 +406,20 @@ def algorithm_card(brief: dict[str, str]) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-def common_card() -> str:
-    return (
-        (_ASSETS_DIR / "kd-tools.md")
-        .read_text(encoding="utf-8")
-        .format(
-            DEFAULT_GENERATIONS=DEFAULT_GENERATIONS,
-            DEFAULT_SEED=DEFAULT_SEED,
-        )
+SHELL_PASSAGE = re.compile(
+    r"^<!-- shell -->\n(?P<body>.*?)^<!-- /shell -->\n(?P<gap>\n?)",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def common_card(*, shell: bool = False) -> str:
+    text = (_ASSETS_DIR / "kd-tools.md").read_text(encoding="utf-8")
+    text = SHELL_PASSAGE.sub(
+        (lambda match: match["body"] + match["gap"]) if shell else "", text
+    )
+    return text.format(
+        DEFAULT_GENERATIONS=DEFAULT_GENERATIONS,
+        DEFAULT_SEED=DEFAULT_SEED,
     )
 
 

@@ -8,7 +8,7 @@ from typing import Final, Literal, cast
 
 from kd.core.equation.construct import build_equation
 from kd.core.equation.signature import law_term_entry
-from kd.core.equation.sketch import Sketch
+from kd.core.equation.sketch import Sketch, require_complete_sketch
 from kd.core.equation.types import Equation, LhsSpec
 from kd.core.evaluator import EvaluationResult
 
@@ -62,9 +62,7 @@ class SketchClauseLevels:
         for clause in SKETCH_CLAUSES:
             declared = getattr(self, clause)
             if declared not in _ENFORCEMENT_LEVELS:
-                raise ValueError(
-                    f"{clause} has unknown enforcement level {declared!r}"
-                )
+                raise ValueError(f"{clause} has unknown enforcement level {declared!r}")
 
     def level(self, clause: SketchClause) -> EnforcementLevel:
         return cast("EnforcementLevel", getattr(self, clause))
@@ -168,8 +166,7 @@ def _aggregate_candidate_values(
     for term_ir, coefficient in entries:
         if not math.isfinite(coefficient):
             logger.warning(
-                "Skipping sketch lift: non-finite candidate coefficient "
-                "for %r",
+                "Skipping sketch lift: non-finite candidate coefficient for %r",
                 term_ir,
             )
             return None
@@ -186,9 +183,7 @@ def _aggregate_candidate_values(
     try:
         return {key: math.fsum(values) for key, values in grouped.items()}
     except (OverflowError, ValueError) as exc:
-        logger.warning(
-            "Skipping sketch lift: candidate aggregation failed (%s)", exc
-        )
+        logger.warning("Skipping sketch lift: candidate aggregation failed (%s)", exc)
         return None
 
 
@@ -214,6 +209,7 @@ def used_clauses(sketch: Sketch) -> frozenset[SketchClause]:
 
 
 def compile_sketch(sketch: Sketch) -> CompiledSketch:
+    require_complete_sketch(sketch, "compile_sketch")
     return CompiledSketch(
         sketch=sketch,
         report=CompileReport(

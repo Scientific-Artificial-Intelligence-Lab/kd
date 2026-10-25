@@ -426,6 +426,14 @@ def signal_s8(calls: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def signal_refine(calls: list[dict[str, Any]]) -> dict[str, int]:
+    refines = [c for c in calls if c["name"] == "refine_candidate"]
+    succeeded = sum(
+        1 for c in refines if (c["envelope"] or {}).get("status") == "success"
+    )
+    return {"refine_calls": len(refines), "succeeded": succeeded}
+
+
 def free_observations(calls: list[dict[str, Any]]) -> dict[str, Any]:
     path_errors = sum(1 for c in calls if "path_not_found" in c["content"])
     skill_reads = sum(

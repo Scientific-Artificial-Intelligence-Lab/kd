@@ -7,14 +7,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from kd.core import VerifyPolicy, law_agreement
-from kd.core.equation import Equation, from_dict, law_signature
 from kd.search import RunDirPaths, RunRecord
 
-from kdagent.lineage import SegmentEntry, SegmentLedger
+from kdagent.lineage import (
+    SegmentEntry,
+    SegmentLedger,
+    sketch_identity,
+    standing_verification,
+)
 from kdagent.segment_report import law_from_evidence, sealed_equation, sealed_lhs_label
-
-SEALED_COPY_POLICY = VerifyPolicy(coeff_atol=1e-12)
+from kdagent.surrogates import SurrogateRegistry, stopped_at_deadline
 
 
 def _cell(value: Any) -> str:
@@ -129,8 +131,10 @@ def _answer_sections(
     ledger: SegmentLedger,
 ) -> str:
     answer = result["answer"]
+    if answer is None and result["answer_source"] == "abstained":
+        return _abstention_section(result)
     if answer is None:
-        return "## Answer\n\nNo answer was produced.\n"
+        return "## Answer\n\nNo answer was produced.\n" + _selection_section(result)
     provenance = result["answer_provenance"]
     run_dir = workspace / provenance["run_dir"]
     record = RunRecord.load(RunDirPaths(root=run_dir).record)
@@ -139,30 +143,21 @@ def _answer_sections(
     title = (
         "Submitted law" if result["answer_source"] == "submitted" else "Selected law"
     )
-    is_sealed = _is_sealed_law(answer, sealed, catalog_fit)
-    lines = [
-        f"## {title}\n",
-        _law(answer, catalog_fit=catalog_fit, sealed=is_sealed),
-    ]
-    lines.append(
-        "\nThis law matches the cited sealed law: the same LHS and terms, and coefficients "
-        "that kd's law comparison reads as the same law. Its native measurements are below.\n"
-        if is_sealed
-        else "\nUnevaluated: this law differs from the cited sealed law. The measurements below "
-        "do not evaluate the submitted law.\n"
-    )
-    lines.extend(
-        [
-            f"Cited run: `{provenance['run_id']}`\n",
-            _sealed_section(record, run_dir, workspace),
-        ]
-    )
 
 
     entry = next(
         (entry for entry in ledger.segments() if entry.run_id == provenance["run_id"]),
         None,
     )
+    lines = [
+        f"## {title}\n",
+        _attributed_law(answer, result, catalog_fit=catalog_fit),
+        f"Cited run: `{provenance['run_id']}`\n",
+        _answer_system(result.get("answer_system")),
+        _answer_sketch(entry),
+        _selection_section(result),
+        _sealed_section(record, run_dir, workspace),
+    ]
     lines.append("## Platform refit of cited support\n")
     if entry is None:
         lines.append(
@@ -172,6 +167,10 @@ def _answer_sections(
         lines.append(_platform_section(entry, sealed, catalog_fit=catalog_fit))
         lines.extend(
             [
+                "## Forward measurement of the cited sealed law\n",
+                "The measurement the default selection ranks on, recorded on the "
+                "ledger row when the search sealed; nothing is measured here.\n",
+                _json(entry.selection_forward),
                 "### Cited archive lineage cost\n",
                 _json(ledger.lineage_cost(entry.run_id)),
             ]
@@ -179,55 +178,132 @@ def _answer_sections(
     return "\n".join(lines)
 
 
-def _is_sealed_law(
-    answer: dict[str, Any],
-    sealed: dict[str, Any] | None,
-    catalog_fit: dict[str, Any] | None,
-) -> bool:
-    if (
-        sealed is None
-        or answer.keys() != sealed.keys()
-        or answer["lhs"] != sealed["lhs"]
-        or answer["support"] != sealed["support"]
-    ):
-        return False
-    submitted = answer["coefficients"]
-    native = sealed["coefficients"]
-    if submitted == native:
-        return True
-    if (
-        catalog_fit is None
-        or submitted is None
-        or native is None
-        or None in submitted
-        or None in native
-    ):
-        return False
-    submitted_law = _equation(answer, catalog_fit)
-    sealed_law = _equation(sealed, catalog_fit)
-    try:
-        signatures = law_signature(submitted_law), law_signature(sealed_law)
-    except ValueError:
+def _answer_system(system: dict[str, Any] | None) -> str:
+    if system is None:
+        return ""
+    standing = system["verification_id"]
+    return (
+        f"The law is published as a member of system `{system['system_id']}` "
+        + (
+            f"(verification `{standing}`)"
+            if standing is not None
+            else "(no verification of it has a result)"
+        )
+        + ", whose members are "
+        + ", ".join(
+            f"`{run_id}` for `{target}`" for target, run_id in system["members"].items()
+        )
+        + "; its verifications are under ODE systems.\n"
+    )
 
 
+def _answer_sketch(entry: SegmentEntry | None) -> str:
+    if entry is None:
+        return ""
+    if entry.sketch is None:
+        return "The cited search ran under no Sketch.\n"
+    sketch_id, digest = sketch_identity(entry.sketch)
+    return (
+        f"The cited search ran under Sketch `{sketch_id}` (sha256 `{digest}`, "
+        "its segment's payload below); the active Sketch is under Sketches.\n"
+    )
 
 
-
-
-
-
-
-        return False
-    agreement = law_agreement(*signatures, policy=SEALED_COPY_POLICY)
-    return agreement.coefficient is True
-
-
-def _equation(law: dict[str, Any], catalog_fit: dict[str, Any]) -> Equation:
-    terms = [
-        [term, {"kind": "Scalar", "value": value}]
-        for term, value in zip(law["support"], law["coefficients"], strict=True)
+def _sketch_section(sketches: dict[str, Any]) -> str:
+    active = sketches["active_sketch_id"]
+    lines = [
+        "## Sketches\n",
+        (
+            f"Active Sketch: `{active}`; a search that names no Sketch runs under it."
+            if active is not None
+            else "No Sketch is active."
+        )
+        + " Each search keeps the Sketch it ran under (its segment row), "
+        "and the answer names its own.\n",
+        "| Sketch | sha256 | Origin | Input | Evidence | Reason | Registered at |",
+        "|---|---|---|---|---|---|---|",
     ]
-    return from_dict({**catalog_fit, "terms": terms, "active_indices": None})
+    for record in sketches["registered"]:
+        for entry in record["registrations"]:
+            evidence = ", ".join(entry["evidence_ids"])
+            lines.append(
+                f"| `{record['sketch_id']}` | `{record['sketch_sha256']}` "
+                f"| {_cell(entry['origin'])} | `{_cell(entry['input_id'])}` "
+                f"| {_cell(evidence or 'none')} | {_cell(entry['reason'] or 'none')} "
+                f"| {_cell(entry['created_at'])} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def _selection_section(result: dict[str, Any]) -> str:
+    if "answer_selection" not in result:
+        return ""
+    return "\n".join(["### Default selection\n", _json(result["answer_selection"])])
+
+
+def _abstention_section(result: dict[str, Any]) -> str:
+    evidence = ", ".join(f"`{_cell(run_id)}`" for run_id in result["evidence_run_ids"])
+    return "\n".join(
+        [
+            "## Answer\n",
+            "No answer: the run ended with an explicit unresolved result "
+            "(`finish_without_answer`), and no selected search is published "
+            "in its place.\n",
+            f"Reason: {_cell(result['reason'])}\n",
+            f"Evidence runs: {evidence or 'none cited'}.\n",
+        ]
+    )
+
+
+def _attributed_law(
+    answer: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    catalog_fit: dict[str, Any] | None,
+) -> str:
+    producer = result["answer_provenance"].get("producer_ref", {"kind": "search"})
+    if producer["kind"] == "search":
+        return _law(answer, catalog_fit=catalog_fit, sealed=True) + (
+            "\nThis law matches the cited sealed law exactly: the search produced "
+            "its coefficients, so the native measurements below are its own.\n"
+        )
+    lines = [_law(answer, catalog_fit=catalog_fit, sealed=False)]
+    if producer["kind"] == "edited":
+        lines.append(
+            "\nUnevaluated: no search or refinement of this run produced exactly "
+            "these coefficients (`producer_ref` `edited`). The measurements below "
+            "do not evaluate the submitted law.\n"
+        )
+        return "\n".join(lines)
+    receipt = result["answer_receipt"]
+    lines.extend(
+        [
+            f"\nProduced by refinement `{receipt['refinement_id']}` of the cited "
+            f"search: method `{receipt['method']}`, support "
+            f"`{receipt['support_origin']}`, measured on input "
+            f"`{receipt['evaluation_input_record']['dataset_id']}`. This measurement "
+            "is the submitted law's own; the cited search's native measurements "
+            "below describe its sealed law, not this one.\n",
+            _json(
+                {
+                    key: receipt[key]
+                    for key in (
+                        "refinement_id",
+                        "parent_ref",
+                        "support_origin",
+                        "method",
+                        "parameters",
+                        "measurement",
+                        "evaluation_input_record",
+                        "output_input_record",
+                        "law_sha256",
+                        "artifact_sha256",
+                    )
+                }
+            ),
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _platform_section(
@@ -253,7 +329,22 @@ def _platform_section(
     return "\n".join(lines)
 
 
+def _trained_network(
+    registry: SurrogateRegistry, surrogate_id: str | None
+) -> dict[str, Any] | None:
+    if surrogate_id is None:
+        return None
+    entry = registry.entry(surrogate_id)
+    return {
+        "surrogate_id": surrogate_id,
+        "stopped_at_deadline": stopped_at_deadline(entry),
+        "recipe": entry.recipe,
+        "file": entry.file,
+    }
+
+
 def _segments(workspace: Path, ledger: SegmentLedger) -> str:
+    registry = SurrogateRegistry(workspace)
     lines = [
         "## Workspace segments\n",
         "Includes earlier invocations when this workspace was reopened. Archive parent names the "
@@ -278,10 +369,14 @@ def _segments(workspace: Path, ledger: SegmentLedger) -> str:
                 _json(
                     {
                         "run_dir": entry.run_dir,
+                        "reason": entry.reason,
                         "resume_from": entry.resume_from,
                         "params": entry.params,
                         "sketch": entry.sketch,
                         "surrogate": entry.surrogate,
+                        "trained_surrogate": _trained_network(
+                            registry, entry.trained_surrogate
+                        ),
                         "summary": None
                         if entry.summary is None
                         else {
@@ -291,6 +386,7 @@ def _segments(workspace: Path, ledger: SegmentLedger) -> str:
                         },
                         "report_projection": entry.report_projection,
                         "cost": entry.cost,
+                        "selection_forward": entry.selection_forward,
                     }
                 ),
                 _link(workspace / entry.run_dir, workspace),
@@ -306,25 +402,129 @@ def _segments(workspace: Path, ledger: SegmentLedger) -> str:
                     "selected": events["selected"],
                 }
             ),
+            _decision_log(events["actions"]),
         ]
     )
     return "\n".join(lines) + "\n"
 
 
-def _tool_outcomes(trace_path: Path) -> str:
-    lines = ["## Tool outcomes from this invocation\n"]
-    tools = {
+def _systems(ledger: SegmentLedger) -> str:
+    payload = ledger.systems_dict()
+    if not payload["systems"]:
+        return ""
+    selected = payload["selected_system"]
+    lines = [
+        "## ODE systems\n",
+        "A system integrates one sealed law per state together along every raw "
+        "trajectory, from its first to its last observation, and compares the "
+        "result with those observations (kd's `forward_error_trajectories`). "
+        "Its current result is its latest verification kd classified; a "
+        "timeout or a failed worker stays in its history. `intervals` are the "
+        "integration intervals of the trajectories; a default selection's "
+        "`window` is the bound on the system error, another number.\n",
+        "Selected system: "
+        + ("none" if selected is None else f"`{selected['system_id']}`")
+        + ".\n",
+    ]
+    for system in payload["systems"]:
+        lines.append(_system_rows(ledger, system))
+    return "\n".join(lines) + "\n"
+
+
+def _system_rows(ledger: SegmentLedger, system: dict[str, Any]) -> str:
+    standing = standing_verification(system)
+    lines = [
+        f"### System `{system['system_id']}`\n",
+        f"Raw trajectories `{system['raw_fingerprint']}`; current result: "
+        + ("none" if standing is None else f"`{standing['verification_id']}`")
+        + ".\n",
+        "| Target | Member run | Input | Sketch | Law |",
+        "|---|---|---|---|---|",
+    ]
+    for target, run_id in system["members"].items():
+        entry = ledger.entry(run_id)
+        sketch = "none" if entry.sketch is None else sketch_identity(entry.sketch)[0]
+        law = system["laws"][target]
+        terms = " + ".join(
+            f"{coefficient} * {term}"
+            for term, coefficient in zip(
+                law["support"], law["coefficients"], strict=True
+            )
+        )
+        lines.append(
+            f"| `{target}` | `{run_id}` | `{_cell(entry.dataset)}` | `{sketch}` "
+            f"| {_cell(terms)} |"
+        )
+    verifications = [
+        {
+            key: verification[key]
+            for key in (
+                "verification_id",
+                "input_id",
+                "status",
+                "forward",
+                "error",
+                "budget",
+                "seconds",
+                "reason",
+                "created_at",
+            )
+        }
+        for verification in system["verifications"]
+    ]
+    lines.extend(["\nVerifications:\n", _json(verifications)])
+    return "\n".join(lines)
+
+
+def _decision_log(actions: list[dict[str, Any]]) -> str:
+    lines = [
+        "\n## Decision log\n",
+        "Calls that ran, other than searches (whose reasons are on their "
+        "segments above). A refused call is not listed.\n",
+        "| Verb | Produced | Cited run | Status | Reason |",
+        "|---|---|---|---|---|",
+    ]
+    for action in actions:
+        produced = ", ".join(
+            f"{key} {json.dumps(value, ensure_ascii=False)}"
+            for key, value in action["ref"].items()
+        )
+        lines.append(
+            f"| {_cell(action['verb'])} | {_cell(produced or 'none')} "
+            f"| {_cell(action['run_id'] or 'none')} | {_cell(action['status'])} "
+            f"| {_cell(action['reason'] or 'none')} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+REPORTED_TOOLS = frozenset(
+    {
         "run_discovery",
         "train_surrogate",
         "prune_node",
         "select_node",
         "submit_answer",
+        "refine_candidate",
+        "smooth_input",
+        "ablate_candidate",
+        "score_term_sets",
+        "verify_candidate",
+        "verify_system",
+        "vote_terms",
+        "make_sketch",
+        "set_sketch",
+        "finish_without_answer",
     }
+)
+
+
+def _tool_outcomes(trace_path: Path) -> str:
+    lines = ["## Tool outcomes from this invocation\n"]
     rows = [
         json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()
     ]
     for row in sorted(rows, key=lambda row: row["start_time"]):
-        if row["run_type"] != "tool" or row["name"] not in tools:
+        if row["run_type"] != "tool" or row["name"] not in REPORTED_TOOLS:
             continue
         lines.append(f"### `{row['name']}` — `{row['id']}`\n")
         output = row["outputs"]
@@ -340,11 +540,11 @@ def _tool_outcomes(trace_path: Path) -> str:
         if message.get("status") == "error":
             lines.extend(["Framework tool error:\n", _code(content)])
         else:
-            lines.append(_outcome_details(json.loads(content)))
+            lines.append(_outcome_details(row["name"], json.loads(content)))
     return "\n".join(lines) + "\n"
 
 
-def _outcome_details(outcome: dict[str, Any]) -> str:
+def _outcome_details(name: str, outcome: dict[str, Any]) -> str:
     provenance = outcome["provenance"]
     diagnostics = outcome["diagnostics"]
     lines = [f"Status: `{outcome['status']}`.\n"]
@@ -365,9 +565,20 @@ def _outcome_details(outcome: dict[str, Any]) -> str:
     }
     if limits:
         lines.append(_json(limits))
+    if "surrogate" in diagnostics:
+        lines.extend(
+            ["Network this search trained:\n", _json(diagnostics["surrogate"])]
+        )
     if "segment_report" in diagnostics:
         lines.extend(
             ["Recorded segment diagnostics:\n", _json(diagnostics["segment_report"])]
+        )
+    if name != "run_discovery" and (outcome["primary"] or diagnostics):
+        lines.extend(
+            [
+                "Result:\n",
+                _json({"primary": outcome["primary"], "diagnostics": diagnostics}),
+            ]
         )
     return "\n".join(lines)
 
@@ -385,8 +596,27 @@ def write_report(
         f"Endpoint: `{result['endpoint']}`; model: `{result['model']}`.\n",
         f"Stop reason: `{result['stop_reason']}`; answer source: `{result['answer_source']}`.\n",
         f"Session elapsed seconds: {elapsed_seconds}.\n",
+        *(
+            [
+                "User Sketch (origin `user`), sha256 "
+                f"`{result['sketch_sha256']}`: every search this invocation "
+                "started ran under it.\n"
+            ]
+            if "sketch_sha256" in result
+            else []
+        ),
+        *(
+            [
+                "LLM4ED was on, through its own endpoint (public configuration, "
+                f"no key): `{json.dumps(result['llm4ed'], ensure_ascii=False)}`.\n"
+            ]
+            if "llm4ed" in result
+            else []
+        ),
+        *([_sketch_section(result["sketches"])] if "sketches" in result else []),
         _answer_sections(workspace, result, ledger),
         _segments(workspace, ledger),
+        _systems(ledger),
         _tool_outcomes(trace_path),
         "## Workspace artifacts\n",
     ]

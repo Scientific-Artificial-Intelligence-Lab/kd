@@ -4,10 +4,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import kd
-from kd.core.equation import sketch_from_dict
+from kd.core.equation import SKETCH_SCHEMA_TAG, sketch_from_dict
 from kd.search import (
     SKETCH_CLAUSES,
     RunDirPaths,
@@ -156,6 +156,9 @@ def _record_segment(
     platform_frame: str | None = None,
     platform_coefficients: list[float] | None = None,
     cost: dict[str, Any] | None = None,
+    selection_forward: dict[str, Any] | None = None,
+    reason: str | None = None,
+    trained_surrogate: str | None = None,
 ) -> None:
     if outcome.run_dir is None or outcome.run_id is None:
         return
@@ -212,6 +215,9 @@ def _record_segment(
         platform_frame=platform_frame,
         platform_coefficients=platform_coefficients,
         cost=cost,
+        selection_forward=selection_forward,
+        reason=reason,
+        trained_surrogate=trained_surrogate,
     )
 
 
@@ -523,8 +529,8 @@ def _resolve_surrogate(
         return None, _failure(
             "surrogate_file_missing",
             f"the file of surrogate {surrogate_id!r} ({entry.file}) is missing "
-            "or no longer hashes to its registry row; run train_surrogate again "
-            "with the same recipe to rebuild it, then pass the id again",
+            "or no longer hashes to its registry row; run train_surrogate "
+            "with the same recipe to rebuild it, then pass the id it returns",
         )
     if schema is not None and any(
         mode["provider_kind"] != "autograd" for mode in schema["modes"]
@@ -549,9 +555,30 @@ def _resolve_surrogate(
             surrogate_id=surrogate_id,
             path=path,
             sha256=entry.file_sha256,
-            key=entry.key,
+
+
+
+            key=cast(str, entry.key),
         ),
         None,
+    )
+
+
+def sketch_lineage_refusal(ledger: SegmentLedger, run_id: str) -> dict[str, Any] | None:
+    source = next(
+        (entry for entry in ledger.segments() if entry.run_id == run_id), None
+    )
+    if source is None or source.sketch is None:
+        return None
+    tag = source.sketch["schema"]
+    if tag == SKETCH_SCHEMA_TAG:
+        return None
+    return _failure(
+        "sketch_format_not_resumable",
+        f"run {run_id!r} was recorded under a Sketch in the {tag} format; a "
+        "lineage recorded in that format is history and is not continued. "
+        "Drop resume_from_run_id and start a fresh search: a Sketch in the "
+        f"{tag} format is accepted there and recorded as {SKETCH_SCHEMA_TAG}",
     )
 
 
@@ -562,13 +589,7 @@ def _sketch_failure(
     *,
     params: dict[str, Any],
 ) -> dict[str, Any] | None:
-    try:
-        decoded = sketch_from_dict(sketch)
-    except ValueError as exc:
-        return _failure(
-            "invalid_sketch",
-            f"sketch is not a kd-sketch-v1 payload kd can decode: {exc}",
-        )
+    decoded = sketch_from_dict(sketch)
     if schema is None:
         return None
     order = decoded.lhs_spec.order

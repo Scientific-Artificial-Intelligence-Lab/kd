@@ -101,9 +101,7 @@ def load_prior(path: Path) -> Prior:
 
 
 
-    if min_support is not None and (
-        type(min_support) is not int or min_support < 2
-    ):
+    if min_support is not None and (type(min_support) is not int or min_support < 2):
         raise ValueError(
             f"{path} declares min_support {min_support!r}; the support floor a "
             "build applied to its `capable` words is an integer of at least 2, "

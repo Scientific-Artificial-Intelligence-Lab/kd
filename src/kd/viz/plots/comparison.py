@@ -15,7 +15,18 @@ from kd.viz._result_data import _sketch_fit_note
 from kd.viz.axes import _get_axes, integer_ticks
 from kd.viz.gap_notes import append_subtitle
 from kd.viz.plots._comparison_cells import _expression_cell, _render_term_diff_cell
-from kd.viz.style import style_context
+from kd.viz.style import (
+    BAND,
+    BAND_ALPHA,
+    CONTEXT,
+    CONTEXT_WIDTH,
+    INK_MUTED,
+    REF_LINE_WIDTH,
+    SERIES,
+    isolated_point_marks,
+    style_context,
+    style_table,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -44,7 +55,7 @@ def plot_structure_comparison(
         warnings.extend(_normalized_progress(comparison.results, progress_ax))
         names = list(comparison.evaluations)
         values = [comparison.evaluations[name].nmse for name in names]
-        bars = score_ax.bar(names, values, color="darkorange", alpha=0.85)
+        bars = score_ax.bar(names, values, color=SERIES[0], width=0.5)
         score_ax.bar_label(
             bars, labels=[f"{value:.2e}" for value in values], padding=3, fontsize=9
         )
@@ -53,11 +64,13 @@ def plot_structure_comparison(
             ylabel="NMSE (shared structure refit)", title="One ruler: lower is better"
         )
         score_ax.tick_params(axis="x", labelrotation=20, labelsize=8)
-        score_ax.grid(axis="y", alpha=0.25)
         title = "One dataset, one ruler: structure refits"
         if comparison.reference is not None:
             title += f"\nReference: {comparison.reference}"
         fig.suptitle(title)
+        if comparison.fixed:
+            pins = ", ".join(f"{t} = {v}" for t, v in comparison.fixed.items())
+            note = "\n".join(filter(None, [note, f"Fixed coefficients: {pins}"]))
         if note:
             fig.supxlabel(note, fontsize=9)
     return fig, warnings
@@ -93,10 +106,10 @@ def _structure_comparison_table(comparison: ComparisonResult, ax: Axes) -> None:
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     table.scale(1, 2)
+    style_table(table)
     for (row, _), cell in table.get_celld().items():
         if row == 0:
             cell.set_text_props(weight="bold")
-            cell.set_facecolor("#eef2f7")
 
 
 def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list[str]:
@@ -112,14 +125,18 @@ def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list
         progress[finite] = (
             1.0 if start == end else (scores[finite] - start) / (end - start)
         )
-        ax.plot(np.arange(len(scores)), progress, marker=".", markersize=4, label=name)
+        ax.plot(
+            np.arange(len(scores)),
+            progress,
+            color=SERIES[len(ax.lines) % len(SERIES)],
+            label=name,
+        )
     ax.set(
         xlabel="Iteration",
         ylabel="Normalized best-score progress",
         title="Per-run progress from first to last finite score",
     )
     integer_ticks(ax)
-    ax.grid(alpha=0.25)
     if ax.lines:
         ax.legend(fontsize=8, loc="lower right")
     if notes:
@@ -245,9 +262,8 @@ def render_overlaid_convergence(
                 iterations,
                 finite_scores,
                 label=label,
-                marker=".",
-                markersize=2,
-                alpha=0.6,
+                color=SERIES[(len(all_scores) - 1) % len(SERIES)],
+                **isolated_point_marks(finite_scores),
             )
 
 
@@ -293,8 +309,17 @@ def render_overlaid_convergence(
                 mean = np.nanmean(padded, axis=0)
                 std = np.nanstd(padded, axis=0)
                 x = np.arange(max_len)
-                ax.fill_between(x, mean - std, mean + std, alpha=0.2, color="gray")
-                ax.plot(x, mean, "--", color="gray", linewidth=1.5, label="mean")
+                ax.fill_between(
+                    x, mean - std, mean + std, color=BAND, alpha=BAND_ALPHA, linewidth=0
+                )
+                ax.plot(
+                    x,
+                    mean,
+                    linestyle="--",
+                    color=CONTEXT,
+                    linewidth=CONTEXT_WIDTH,
+                    label="mean",
+                )
 
         if not any_data:
             warnings.append("No convergence data in any result; skipped overlaid plot")
@@ -368,7 +393,7 @@ def plot_score_bar(
 
     positions = np.arange(len(results), dtype=float)
     with style_context(style):
-        ax.bar(positions, r2_values, color="steelblue", alpha=0.7)
+        ax.bar(positions, r2_values, color=SERIES[0], width=0.5)
         ax.set_xticks(positions)
         ax.set_xticklabels(run_labels)
         for i in invalid_positions:
@@ -388,11 +413,11 @@ def plot_score_bar(
                 ha="center",
                 va="bottom",
                 fontsize=8,
-                color="gray",
+                color=INK_MUTED,
             )
         ax.set_ylabel("$R^2$")
         ax.set_title("Score Comparison")
-        ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=0.5)
+        ax.axhline(y=1.0, color=CONTEXT, linewidth=REF_LINE_WIDTH)
         _annotate_sketch_metrics(ax, results, run_labels, warnings)
 
     return warnings
@@ -445,6 +470,7 @@ def plot_summary_table(
         table.auto_set_font_size(False)
         table.set_fontsize(8)
         table.scale(1.0, 1.4)
+        style_table(table)
         _annotate_sketch_metrics(ax, results, run_labels, warnings)
 
     return warnings

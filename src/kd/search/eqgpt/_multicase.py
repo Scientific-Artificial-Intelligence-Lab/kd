@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 
 from kd.core.evaluator import EvaluationResult
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.term_cache import TermColumnCache
 from kd.data.loaders.wave_breaking_eval import WaveBreakingFit
 from kd.search.eqgpt._scoring import PENALTY, invalid_final_result, invalid_result
@@ -33,6 +34,7 @@ WAVE_LHS_ORDER: Final[int] = 1
 
 
 _COEFF_GENERATION_BASE: Final[int] = 1000
+
 
 
 _CASE_ERRORS: Final = (ValueError, KeyError, RuntimeError, IndexError)
@@ -218,7 +220,11 @@ class MultiCaseEvaluator:
     ) -> RewardResult | None:
         try:
             matrix = self._assemble(terms, bundle)
+        except torch.cuda.OutOfMemoryError:
+            raise
         except _CASE_ERRORS as exc:
+            if is_cpu_alloc_failure(exc):
+                raise
             logger.debug("case %s skipped: %s", bundle.case_name, exc)
             return None
         return compute_reward(matrix, sparsity_alpha=self._sparsity_alpha)
@@ -292,7 +298,11 @@ class MultiCaseEvaluator:
             matrix = self._assemble(terms, bundle)
             theta, target = matrix[:, 1:], matrix[:, 0]
             coefficients = np.linalg.lstsq(theta, target, rcond=None)[0]
+        except torch.cuda.OutOfMemoryError:
+            raise
         except _CASE_ERRORS as exc:
+            if is_cpu_alloc_failure(exc):
+                raise
             return invalid_final_result(
                 f"execution error: {exc}",
                 best_reward,
@@ -338,7 +348,11 @@ class MultiCaseEvaluator:
                 matrix = self._assemble(terms, bundle)
                 theta, u_t = matrix[:, 1:], matrix[:, 0]
                 coefficients = np.linalg.lstsq(theta, u_t, rcond=None)[0]
+            except torch.cuda.OutOfMemoryError:
+                raise
             except _CASE_ERRORS as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
                 logger.warning("per_case_fits: %s failed: %s", bundle.case_name, exc)
                 continue
             resid = u_t - theta @ coefficients

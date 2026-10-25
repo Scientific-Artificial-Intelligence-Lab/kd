@@ -16,7 +16,17 @@ from kd.core.expr.sympy_bridge import to_latex
 from kd.viz._result_data import _sketch_fit_note
 from kd.viz.axes import integer_ticks
 from kd.viz.equation_display import RENDER_ERRORS, UNRENDERABLE_NOTE
-from kd.viz.style import style_context
+from kd.viz.style import (
+    AXIS,
+    INK_2,
+    INK_MUTED,
+    NO_DATA,
+    PANEL_W,
+    SERIES,
+    SURFACE,
+    isolated_point_marks,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -28,21 +38,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _TermKey = tuple[str, str]
-_PRESENT = "#2878b5"
-_EMPTY = "#bdbdbd"
+_PRESENT = SERIES[0]
+_EMPTY = NO_DATA
+_WIDTH = 3 * PANEL_W
+_NOTE_WRAP = 95
 
 
 def _figure(height: float, notes: list[str]) -> tuple[Figure, Axes]:
     if not notes:
-        return plt.subplots(figsize=(12, height), layout="constrained")
-    wrapped = "\n".join(textwrap.fill(note, width=115) for note in notes)
+        return plt.subplots(figsize=(_WIDTH, height), layout="constrained")
+    wrapped = "\n".join(textwrap.fill(note, width=_NOTE_WRAP) for note in notes)
     note_height = max(0.7, 0.2 * (wrapped.count("\n") + 1))
-    figure = plt.figure(figsize=(12, height + note_height), layout="constrained")
+    figure = plt.figure(figsize=(_WIDTH, height + note_height), layout="constrained")
     grid = figure.add_gridspec(2, 1, height_ratios=[height, note_height])
     ax = figure.add_subplot(grid[0])
     text_ax = figure.add_subplot(grid[1])
     text_ax.axis("off")
-    text_ax.text(0, 0.5, wrapped, va="center", fontsize=10, transform=text_ax.transAxes)
+    text_ax.text(
+        0,
+        0.5,
+        wrapped,
+        va="center",
+        fontsize=10,
+        color=INK_2,
+        transform=text_ax.transAxes,
+    )
     return figure, ax
 
 
@@ -83,7 +103,7 @@ def _draw_presence(
         values = np.zeros((1, len(present)), dtype=bool)
         labels = ["No active fitted terms"]
     mask = np.broadcast_to(empty, values.shape)
-    cmap = ListedColormap(["white", _PRESENT])
+    cmap = ListedColormap([SURFACE, _PRESENT])
     cmap.set_bad(_EMPTY)
     ax.imshow(
         np.ma.array(values, mask=mask),
@@ -95,9 +115,10 @@ def _draw_presence(
     )
     ax.set_yticks(range(len(labels)), labels)
     ax.set_ylabel("Fitted term by target")
+    ax.grid(False)
     ax.legend(
         handles=[
-            Patch(facecolor="white", edgecolor="gray", label="Absent"),
+            Patch(facecolor=SURFACE, edgecolor=AXIS, label="Absent"),
             Patch(facecolor=_PRESENT, label="Present"),
             Patch(facecolor=_EMPTY, label="No eligible candidates"),
         ],
@@ -157,11 +178,12 @@ def plot_term_presence(
                 0.5,
                 "No recorded search trajectory",
                 ha="center",
+                color=INK_MUTED,
                 transform=ax.transAxes,
             )
         ax.set_xlabel("Recorded iteration")
         integer_ticks(ax)
-        ax.set_title("Active fitted term presence\nTop-k distinct structures")
+        ax.set_title("Active fitted terms\nTop-k distinct structures")
     return figure, notes
 
 
@@ -182,15 +204,15 @@ def _draw_score_quantiles(
             quantiles[high],
             color=_PRESENT,
             alpha=alpha,
+            linewidth=0,
             label=label,
         )
     ax.plot(
         iterations,
         quantiles[2],
         color=_PRESENT,
-        marker=".",
-        markersize=3,
         label="Median",
+        **isolated_point_marks(quantiles[2]),
     )
     ax.legend()
 
@@ -214,7 +236,14 @@ def plot_search_score_distribution(
         if any(history):
             _draw_score_quantiles(ax, history)
         else:
-            ax.text(0.5, 0.5, notes[0], ha="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                notes[0],
+                ha="center",
+                color=INK_MUTED,
+                transform=ax.transAxes,
+            )
         better = "lower" if result.score_direction == "min" else "higher"
         ax.set_ylabel(f"{result.score_kind} ({better} is better)")
         ax.set_xlabel("Recorded iteration")

@@ -13,9 +13,11 @@ The two-call agent pattern:
   2. ``kd.evaluate_terms(dataset, valid)`` -> coefficients + NMSE / R^2
 
 Both calls never mutate your dataset, and the same inputs give the same
-outputs (no hidden state). Terms use canonical funcall IR - ``"u_xx"``,
-``"mul(u, diff_x(u))"`` - so an infix string like ``"u * u_x"`` is rejected
-with a reason instead of being mis-fitted as one opaque column.
+outputs (no hidden state). A term is written in funcall IR (``"u_xx"``,
+``"mul(u, diff_x(u))"``) or in the product notation of ``kd.Sketch``
+(``"u*u_x"``, ``"u**2"``). A sum, ``/``, ``^`` or a unary minus inside one
+term string, such as ``"u + u_x"``, is rejected with a reason instead of
+being fitted as one opaque column.
 
 Run: python examples/11_evaluate_terms.py
 """
@@ -32,9 +34,9 @@ print(f"Ground truth: {dataset.ground_truth}")
 # 2. A candidate list as an agent might propose it: the two real Burgers
 # terms plus four flawed entries, one per rejection category.
 candidates = [
-    "mul(u, diff_x(u))", # valid: the convection term u*u_x
+    "u*u_x", # valid: the convection term, in product notation
     "u_xx", # valid: the diffusion term
-    "u * u_x", # syntax: infix, not canonical funcall IR
+    "u + u_x", # syntax: infix "+" is neither funcall IR nor a product
     "add(u, u_xx)", # composite: two terms in one string -> split hint
     "u_xxx", # beyond max_order=2 -> actionable retry hint
     "diff_t(u)", # tautology: duplicates the u_t LHS target

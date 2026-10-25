@@ -14,6 +14,7 @@ from kd.core.interrupt import SearchInterrupted
 from kd.core.jsonsafe import make_json_safe, sanitize_float
 from kd.core.metrics import ScorerFn, make_aic_scorer
 from kd.core.metrics import nmse as _metrics_nmse
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.term_cache import TermColumnCache
 
 logger = logging.getLogger(__name__)
@@ -209,23 +210,10 @@ class Evaluator:
 
 
 
-
-
-
-        try:
-            with torch.no_grad():
-                return self._evaluate_terms_impl(
-                    terms, skip_invalid=skip_invalid, rows=indices
-                )
-        except torch.cuda.OutOfMemoryError as exc:
-            logger.warning(
-                "Autograd OOM during evaluate_terms; returning invalid "
-                "result. terms=%s error=%s",
-                terms[:3],
-                exc,
+        with torch.no_grad():
+            return self._evaluate_terms_impl(
+                terms, skip_invalid=skip_invalid, rows=indices
             )
-            release_cuda_memory()
-            return self._make_invalid_result("autograd OOM", reason="evaluation_error")
 
     def _row_indices(self, rows: Tensor | None) -> Tensor | None:
         if rows is None:
@@ -292,10 +280,13 @@ class Evaluator:
 
 
 
-
-
                     raise
                 except Exception as e:
+                    if is_cpu_alloc_failure(e):
+
+
+
+                        raise
                     if not skip_invalid:
                         raise ValueError(f"Execution error for '{term}': {e}") from e
                     logger.debug("skip_invalid: skipping '%s' (execution error)", term)
@@ -331,10 +322,14 @@ class Evaluator:
 
         try:
             theta = torch.stack(theta_columns, dim=1)
-        except torch.cuda.OutOfMemoryError:
+        except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
+
 
             raise
         except Exception as e:
+            if is_cpu_alloc_failure(e):
+                raise
             raise ValueError(f"Failed to build theta matrix: {e}") from e
 
 
@@ -381,6 +376,11 @@ class Evaluator:
 
             raise
         except Exception as e:
+            if is_cpu_alloc_failure(e):
+
+
+
+                raise
             return self._make_invalid_result(f"Solver error: {e}")
 
         if not solve_result.is_valid:
@@ -465,8 +465,3 @@ class Evaluator:
             terms=None,
             expression="",
         )
-
-
-def release_cuda_memory() -> None:
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()

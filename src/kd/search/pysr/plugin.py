@@ -33,6 +33,7 @@ from kd.search.pysr.sketch_backend import (
     PySRCompiled,
     candidate_refusal,
     compile_for_pysr,
+    fit_expression,
 )
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
@@ -135,6 +136,7 @@ class PySRPlugin:
 
     one_shot: ClassVar[bool] = True
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset({"mode", "task"})
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="pysr",
@@ -147,7 +149,7 @@ class PySRPlugin:
             InstrumentMode(
                 name="default",
                 field_names=("u",),
-                spatial_axes=("x",),
+                spatial_axes=("x", "y"),
                 names_from="terms",
                 description="Grid evolution search over explicit kd terms.",
                 forms=frozenset({Form.EVOLUTION}),
@@ -250,6 +252,7 @@ class PySRPlugin:
 
 
         self._gate: Callable[[str], str | None] | None = None
+        self._fit_expression: Callable[[str], str] | None = None
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
         self._recorder: VizRecorder | None = None
@@ -312,6 +315,9 @@ class PySRPlugin:
                 compiled=compiled,
                 registry=components.registry,
             )
+            self._fit_expression = partial(
+                fit_expression, sketch=sketch, registry=components.registry
+            )
 
     def propose(self, n: int) -> list[str]:
         evaluator = self._require_evaluator()
@@ -325,8 +331,7 @@ class PySRPlugin:
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
         evaluator = self._require_evaluator()
         return [
-            self._evaluate_candidate(evaluator, candidate)
-            for candidate in candidates
+            self._evaluate_candidate(evaluator, candidate) for candidate in candidates
         ]
 
     def update(self, results: list[EvaluationResult]) -> None:
@@ -687,6 +692,12 @@ class PySRPlugin:
                     score=None,
                     expression=expression,
                     reason="structural_reject",
+                )
+            assert self._fit_expression is not None
+            fitted = self._fit_expression(expression)
+            if fitted != expression:
+                return replace(
+                    evaluator.evaluate_expression(fitted), expression=expression
                 )
         return evaluator.evaluate_expression(expression)
 

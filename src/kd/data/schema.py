@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
@@ -38,13 +38,16 @@ from kd.data._factory import (
     build_axes_dict,
     build_fields_dict,
     build_scatter_axes_dict,
+    default_lhs,
     parse_lhs_spec,
+    to_float_tensor,
     validate_scatter_point_shapes,
 )
 from kd.data._field_names import (
     is_reserved_field_name,
     reserved_field_name_message,
 )
+from kd.data.regression import TabularDataset
 from kd.data.source import DatasetSource
 from kd.data.trajectory import TrajectorySet, trajectory_set_fingerprint
 from kd.data.xlsx import read_xlsx_columns
@@ -479,13 +482,126 @@ class PDEDataset:
             raise KeyError(f"Field '{name}' not found in fields")
         return self.fields[name].values
 
+    def retarget(self, target: str) -> PDEDataset:
+        """Return a copy of this dataset whose left-hand side is ``target``.
+
+        On a GRID or SCATTERED dataset ``target`` is a field derivative in the
+        kd naming convention (``"v_t"``: field ``v``, axis ``t``, order 1;
+        ``"v_tt"``: order 2), parsed against this dataset's fields and axes
+        the way :meth:`from_arrays` parses ``lhs``. On a TABULAR dataset it is
+        the name of the target column. Axes, fields, name, task type,
+        topology, axis order, noise level, ground truth and source carry over,
+        the tensors are the same objects, and the input is not modified. The
+        copy's fingerprint differs from this dataset's through the left-hand
+        side alone: :func:`compute_dataset_fingerprint` hashes the field, axis
+        and order next to the data bytes.
+
+        Raises:
+            ValueError: ``target`` is not one of this dataset's fields
+                (TABULAR), or not one field differentiated along one of its
+                axes.
+        """
+        if self.topology is DataTopology.TABULAR:
+            return replace(self, lhs_field=target)
+        field, axis, order = parse_lhs_spec(
+            target, fields=self.fields or {}, coords=self.axes or {}
+        )
+        return replace(self, lhs_field=field, lhs_axis=axis, lhs_order=order)
+
+    def _require_grid(self, operation: str) -> None:
+        """Refuse ``operation`` on a dataset whose topology is not GRID."""
+        if self.topology is not DataTopology.GRID:
+            raise ValueError(
+                f"{operation} needs a GRID dataset, got {self.topology.name} "
+                f"({self.name!r})"
+            )
+
+    def with_field(self, name: str, values: torch.Tensor | np.ndarray) -> PDEDataset:
+        """Return a copy of this GRID dataset whose field ``name`` holds ``values``.
+
+        ``values`` (a tensor or a numpy array) is converted to the dtype and
+        device of the field it replaces and must have that field's shape. The
+        replaced field keeps its ``allow_nan`` flag, so NaN is accepted only
+        where the field already permits it. Everything else is carried as in
+        :meth:`retarget`: axes with their periodicity and ``allow_nan``, the
+        other fields, the left-hand side, name, task type, noise level,
+        ground truth and source. The other tensors are the same objects and
+        the input is not modified.
+
+        Raises:
+            KeyError: ``name`` is not one of this dataset's fields.
+            ValueError: the dataset is SCATTERED or TABULAR, or ``values``
+                does not have the field's shape, holds Inf, or holds NaN in a
+                field that does not permit it.
+        """
+        self._require_grid("with_field")
+        current = self.get_field(name)
+        fields = dict(self.fields or {})
+        tensor = to_float_tensor(values, current.dtype, kind="field", label=name)
+        if tensor.shape != current.shape:
+            raise ValueError(
+                f"with_field: values for field {name!r} have shape "
+                f"{tuple(tensor.shape)}, expected {tuple(current.shape)}"
+            )
+        fields[name] = replace(fields[name], values=tensor.to(device=current.device))
+        return replace(self, fields=fields)
+
+    def window(
+        self, axis: str, *, start: float | None = None, stop: float | None = None
+    ) -> PDEDataset:
+        """Return a copy of this GRID dataset restricted to a range on ``axis``.
+
+        The copy keeps the points whose coordinate ``c`` on ``axis`` satisfies
+        ``start <= c <= stop``. Both bounds are inclusive, in coordinate
+        units and compared exactly with the stored grid values; ``None``
+        leaves that side open. Every field is sliced along ``axis`` the same
+        way into new tensors. The other axes, the left-hand side, name, task
+        type, noise level, ground truth and source are carried as in
+        :meth:`retarget`. A periodic ``axis`` stays periodic only when the
+        window keeps all of its points: a window that cuts it no longer wraps
+        around, so the copy marks that axis as not periodic.
+
+        Raises:
+            KeyError: ``axis`` is not one of this dataset's axes.
+            ValueError: the dataset is SCATTERED or TABULAR, or the range
+                keeps fewer than two points of ``axis``.
+        """
+        self._require_grid("window")
+        coords = self.get_coords(axis)
+        keep = torch.ones_like(coords, dtype=torch.bool)
+        if start is not None:
+            keep &= coords >= start
+        if stop is not None:
+            keep &= coords <= stop
+        kept = int(keep.sum())
+        if kept < 2:
+            raise ValueError(
+                f"window on axis {axis!r} with start={start!r}, stop={stop!r} "
+                f"keeps {kept} of its {coords.numel()} points; a window needs "
+                "at least two"
+            )
+        assert self.axes is not None and self.axis_order is not None
+        index = tuple(keep if name == axis else slice(None) for name in self.axis_order)
+        info = self.axes[axis]
+        axes = dict(self.axes)
+        axes[axis] = replace(
+            info,
+            values=coords[keep],
+            is_periodic=info.is_periodic and kept == coords.numel(),
+        )
+        fields = {
+            name: replace(field, values=field.values[index])
+            for name, field in (self.fields or {}).items()
+        }
+        return replace(self, axes=axes, fields=fields)
+
     @classmethod
     def from_arrays(
         cls,
         coords: dict[str, torch.Tensor | np.ndarray | Sequence[float]],
         fields: dict[str, torch.Tensor | np.ndarray],
         *,
-        lhs: str = "u_t",
+        lhs: str | None = "u_t",
         periodic: Iterable[str] | None = None,
         name: str = "custom",
         ground_truth: str | None = None,
@@ -544,6 +660,7 @@ class PDEDataset:
         if not fields:
             raise ValueError("fields must be a non-empty mapping")
 
+        lhs = default_lhs(fields) if lhs is None else lhs
         lhs_field_parsed, lhs_axis_parsed, lhs_order_parsed = parse_lhs_spec(
             lhs, fields=fields, coords=coords
         )
@@ -581,7 +698,7 @@ class PDEDataset:
         coords: dict[str, torch.Tensor | np.ndarray | Sequence[float]],
         fields: dict[str, torch.Tensor | np.ndarray],
         *,
-        lhs: str = "u_t",
+        lhs: str | None = "u_t",
         name: str = "custom",
         ground_truth: str | None = None,
         dtype: torch.dtype = torch.float64,
@@ -639,6 +756,7 @@ class PDEDataset:
 
         validate_scatter_point_shapes(axes_dict, axis_order, fields_dict)
 
+        lhs = default_lhs(fields) if lhs is None else lhs
         if lhs == "":
             lhs_field_parsed, lhs_axis_parsed, lhs_order_parsed = "", "", 0
         else:
@@ -737,17 +855,21 @@ class PDEDataset:
         )
 
 
-def compute_dataset_fingerprint(dataset: PDEDataset | TrajectorySet) -> str:
-    """Compute dataset fingerprint for cache isolation.
+def compute_dataset_fingerprint(
+    dataset: PDEDataset | TrajectorySet | TabularDataset,
+) -> str:
+    """Return the content fingerprint of a grid dataset, trajectory set or table.
 
-    For a ``PDEDataset`` the fingerprint includes:
-    - Meta info: name, topology, lhs_field, lhs_axis
-    - Shape info: field shapes
-    - Content hash: sampled data hash (for large datasets)
+    For a ``PDEDataset`` the fingerprint covers the name, topology, left-hand
+    side and its order, axis order, periodic axes, field shapes, and a hash of
+    the coordinate arrays and field values (field values sampled at a fixed
+    stride for large fields).
 
     A ``TrajectorySet`` gets ``kd-trajectories-v1:<sha256>`` over every text
-    field, every parameter value and every array's dtype, shape and bytes
-    (:func:`kd.data.trajectory.trajectory_set_fingerprint`).
+    field, every parameter value and every array's dtype, shape and bytes. A
+    ``TabularDataset`` gets the fingerprint of the internal dataset
+    ``Model.fit`` builds from the table, the identity ``Model.fit`` and the
+    harness use for that table.
 
     Args:
         dataset: The dataset to fingerprint.
@@ -757,6 +879,11 @@ def compute_dataset_fingerprint(dataset: PDEDataset | TrajectorySet) -> str:
     """
     if isinstance(dataset, TrajectorySet):
         return trajectory_set_fingerprint(dataset)
+    if isinstance(dataset, TabularDataset):
+
+        from kd.data.tabular_bridge import dataset_from_tabular
+
+        dataset = dataset_from_tabular(dataset)
 
     meta = f"{dataset.name}:{dataset.topology.value}"
     meta += f":{dataset.lhs_field}:{dataset.lhs_axis}"

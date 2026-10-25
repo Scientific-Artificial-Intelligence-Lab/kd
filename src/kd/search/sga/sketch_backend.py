@@ -8,6 +8,8 @@ from kd.core.equation.signature import law_term_entry, law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
+    anchor_carried_by,
+    anchor_spelled_by,
     constraint_admits,
     pinned_monomials,
 )
@@ -16,7 +18,7 @@ from kd.core.equation.sketch import (
 
 
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
-from kd.core.expr.jet import Monomial
+from kd.core.expr.jet import Monomial, jet_expansion
 from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.term_features import (
     ColumnFingerprint,
@@ -60,6 +62,7 @@ _DIFF_HEAD = DIFF_OPERATOR_PATTERN
 _OUTSIDE_VOCABULARY = "outside-vocabulary"
 _CONSTRAINT_FILTERED = "constraint-filtered"
 _PINNED = "pinned"
+_ANCHOR_OVERLAP = "anchor-overlap"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -229,14 +232,20 @@ def _parse_anchors(
     for anchor in sketch.anchored:
         key = law_term_key(anchor.term_ir)
         tree = _parse_term_tree(anchor.term_ir, variables, sketch)
-        round_trip = law_term_key(tree_to_kd_expr(tree))
-        if key != default_key and (tree.root.is_leaf or round_trip != key):
+        anchor_features = analyze_term(anchor.term_ir, sketch.vocabulary)
+        rendered = law_term_key(tree_to_kd_expr(tree))
+        same_column = column_fingerprint(
+            analyze_term(rendered, sketch.vocabulary)
+        ) == column_fingerprint(anchor_features) and jet_expansion(
+            rendered, sketch.vocabulary
+        ) == jet_expansion(key, sketch.vocabulary)
+        if key != default_key and (tree.root.is_leaf or not same_column):
             raise ValueError(
                 f"SGA anchor {anchor.term_ir!r} is not reachable; use the "
                 f"operator-rooted spelling "
                 f"{_operator_rooted_hint(anchor.term_ir, tree, sketch)!r}"
             )
-        features.append(analyze_term(anchor.term_ir, sketch.vocabulary))
+        features.append(anchor_features)
     return tuple(features)
 
 
@@ -250,12 +259,18 @@ def _default_decision(
     try:
         key = law_term_key(default_term_name)
         features = analyze_term(default_term_name, sketch.vocabulary)
+        spelled = anchor_spelled_by(key, sketch)
+        carried = anchor_carried_by(key, sketch) if sketch.anchored else None
     except ValueError:
         return False, None, None, (default_term_name, _OUTSIDE_VOCABULARY)
     if key in pinned_keys:
         return False, key, None, (default_term_name, _PINNED)
-    if any(key == law_term_key(anchor.term_ir) for anchor in sketch.anchored):
+    if spelled is not None:
         return True, key, None, None
+
+
+    if carried is not None:
+        return False, key, None, (default_term_name, _ANCHOR_OVERLAP)
     for hole in sketch.holes:
         if constraint_admits(hole.constraint, features):
             return True, key, hole.id, None

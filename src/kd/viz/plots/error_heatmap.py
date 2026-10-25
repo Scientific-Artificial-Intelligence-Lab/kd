@@ -17,12 +17,21 @@ from kd.viz.plots._dim_utils import (
 )
 from kd.viz.plots._field_panels import (
     _RESIDUAL_SIGN,
-    _colorbar_extend,
+    _bare_panel,
     _diverged_tag,
     _range_note,
     _robust_abs_max,
+    _scale_colorbar,
 )
-from kd.viz.style import style_context
+from kd.viz.style import (
+    CMAP_DIV,
+    DPI,
+    FIGSIZE_SINGLE,
+    PANEL_H,
+    PANEL_W,
+    WARNING_INK,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from kd.core.integrator import IntegrationResult
@@ -30,7 +39,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DPI = 150
 _WARNING_FONTSIZE = 11
 _WARNING_WRAP_WIDTH = 60
 _N_TIME_SNAPSHOTS = 3
@@ -50,7 +58,7 @@ def plot_error_heatmap(
         msg = integration_result.warning or "Integration failed"
         warnings.append(msg)
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             wrapped = textwrap.fill(
                 f"Cannot compute error: {msg}", width=_WARNING_WRAP_WIDTH
             )
@@ -62,7 +70,7 @@ def plot_error_heatmap(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
             ax.set_xticks([])
@@ -88,7 +96,7 @@ def plot_error_heatmap(
             f"Shape mismatch: true {true_field.shape} vs predicted {pred_field.shape}"
         )
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             ax.text(
                 0.5,
                 0.5,
@@ -97,7 +105,7 @@ def plot_error_heatmap(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
         return fig, warnings
@@ -111,7 +119,7 @@ def plot_error_heatmap(
     if dataset.axis_order is None:
         warnings.append("axis_order is None; skipping error heatmap")
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             ax.text(
                 0.5,
                 0.5,
@@ -120,7 +128,7 @@ def plot_error_heatmap(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
             ax.set_xticks([])
@@ -135,7 +143,7 @@ def plot_error_heatmap(
     if n_spatial == 0:
         warnings.append("No spatial dimensions; skipping error heatmap")
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             ax.text(
                 0.5,
                 0.5,
@@ -144,7 +152,7 @@ def plot_error_heatmap(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
             ax.set_xticks([])
@@ -198,23 +206,19 @@ def _render_1d_error(
 
     vmax = _robust_abs_max(error_2d)
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 5), dpi=_DEFAULT_DPI)
+    fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI, layout="constrained")
     im = ax.pcolormesh(
         t_coords,
         s_coords,
         error_2d,
         shading="nearest",
-        cmap="RdBu_r",
+        cmap=CMAP_DIV,
         vmin=-vmax,
         vmax=vmax,
         rasterized=True,
     )
-    fig.colorbar(
-        im,
-        ax=ax,
-        label=_COLORBAR_LABEL,
-        extend=_colorbar_extend(error_2d, -vmax, vmax),
-    )
+    _bare_panel(ax)
+    _scale_colorbar([im], [ax], label=_COLORBAR_LABEL)
     ax.set_xlabel(time_axis)
     ax.set_ylabel(s_name)
     ax.set_title(f"Error Heatmap{div_tag}" + _range_note(error_2d, (-vmax, vmax)))
@@ -251,9 +255,9 @@ def _render_2d_error(
     fig, axes_arr = plt.subplots(
         1,
         n_cols,
-        figsize=(5 * n_cols, 4),
-        dpi=_DEFAULT_DPI,
-        constrained_layout=True,
+        figsize=(PANEL_W * n_cols, PANEL_H),
+        dpi=DPI,
+        layout="constrained",
         squeeze=False,
     )
     mappable: Any | None = None
@@ -267,11 +271,12 @@ def _render_2d_error(
             aspect="auto",
             origin="lower",
             extent=extent,
-            cmap="RdBu_r",
+            cmap=CMAP_DIV,
             vmin=-vmax,
             vmax=vmax,
             rasterized=True,
         )
+        _bare_panel(ax)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(
@@ -280,11 +285,8 @@ def _render_2d_error(
         )
 
     if mappable is not None:
-        fig.colorbar(
-            mappable,
-            ax=list(axes_arr.flat),
-            label=_COLORBAR_LABEL,
-            extend=_colorbar_extend(displayed, -vmax, vmax),
+        _scale_colorbar(
+            [mappable], list(axes_arr.flat), data=[displayed], label=_COLORBAR_LABEL
         )
 
     return fig

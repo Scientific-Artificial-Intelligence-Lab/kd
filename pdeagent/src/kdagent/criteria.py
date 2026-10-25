@@ -1,11 +1,18 @@
 
 from __future__ import annotations
 
+import json
 import math
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Callable, Collection, Sequence
+from typing import Any, cast
 
-from kdagent.lineage import SegmentEntry, SegmentLedger
+from kdagent.lineage import (
+    FORWARD_FRAME,
+    SegmentEntry,
+    SegmentLedger,
+    lhs_inapplicable,
+    standing_verification,
+)
 
 _FORK_SEED_STRIDE = 1000
 
@@ -97,42 +104,120 @@ def sketch_supported(modes: Sequence[dict[str, Any]]) -> bool:
     )
 
 
-def default_selection(ledger: SegmentLedger, *, dataset_id: str | None) -> str | None:
+SELECTION_POLICY = "kd-agent-default-selection-v2"
+
+FORWARD_WINDOW = 2.0
+
+
+def selection_decision(
+    ledger: SegmentLedger,
+    *,
+    dataset_id: str | None,
+    exclude: Collection[str] = (),
+) -> dict[str, Any]:
     domain = [
         entry
         for entry in ledger.segments()
         if entry.dataset == dataset_id
+        and entry.run_id not in exclude
         and entry.status == "completed"
         and entry.law is not None
         and not ledger.is_pruned(entry.run_id)
     ]
+    coverage = {
+        "candidates": len(domain),
+        "measured": sum(_forward_value(entry) is not None for entry in domain),
+    }
+    decision: dict[str, Any] = {
+        "policy": SELECTION_POLICY,
+        "run_id": None,
+        "axis": "native_score",
+        "reason": None,
+        "window": None,
+        "coverage": coverage,
+    }
     if not domain:
-        return None
-    by_nmse = len({entry.instrument for entry in domain}) > 1
-    if by_nmse:
-        use_platform = any(entry.platform_nmse is not None for entry in domain)
-        ranked = [
-            (loss, index, entry.run_id)
-            for index, entry in enumerate(domain)
-            if (loss := (_loss(entry, by_nmse=True) if use_platform else entry.nmse))
-            is not None
-        ]
-        if not ranked:
-            return domain[-1].run_id
-        return min(ranked)[-1]
-    same_instrument_ranked = [
-        (
-            loss,
-            math.inf if entry.nmse is None else entry.nmse,
-            index,
-            entry.run_id,
-        )
-        for index, entry in enumerate(domain)
-        if (loss := _loss(entry, by_nmse=False)) is not None
+        return {**decision, "reason": "empty_domain"}
+    if len({_target(entry) for entry in domain}) > 1:
+        return {**decision, "axis": None, "reason": "incomparable_targets"}
+    if len({entry.instrument for entry in domain}) == 1:
+        return {**decision, "run_id": _native_winner(domain)}
+    if coverage["measured"]:
+        run_id, window = _forward_winner(domain)
+        return {**decision, "run_id": run_id, "axis": "forward_error", "window": window}
+    if all(_forward_inapplicable(entry) for entry in domain):
+        platform_run, platform_window = _platform_winner(domain)
+        return {
+            **decision,
+            "run_id": platform_run,
+            "axis": "platform_nmse",
+            "reason": "forward_inapplicable",
+            "window": platform_window,
+        }
+    return {**decision, "axis": "forward_error", "reason": "no_forward_value"}
+
+
+SYSTEM_POLICY = "kd-agent-ode-system-selection-v1"
+
+
+def system_decision(
+    ledger: SegmentLedger, *, raw_fingerprint: str, target: str
+) -> dict[str, Any] | None:
+    candidates = [
+        (system, standing)
+        for system in ledger.systems()
+        if system["raw_fingerprint"] == raw_fingerprint
+        and not ledger.system_pruned(system["system_id"])
+        and (standing := standing_verification(system)) is not None
     ]
-    if not same_instrument_ranked:
-        return domain[-1].run_id
-    return min(same_instrument_ranked)[-1]
+    if not candidates:
+        return None
+    measured = [
+        (value, index, system, standing)
+        for index, (system, standing) in enumerate(candidates)
+        if (value := standing["forward"]["value"]) is not None
+    ]
+    decision: dict[str, Any] = {
+        "policy": SYSTEM_POLICY,
+        "system_id": None,
+        "verification_id": None,
+        "run_id": None,
+        "axis": "system_forward_error",
+        "reason": None,
+        "window": None,
+        "coverage": {"candidates": len(candidates), "measured": len(measured)},
+    }
+    if not measured:
+        return {**decision, "reason": "no_forward_value"}
+    window = FORWARD_WINDOW * min(value for value, *_rest in measured)
+    _terms, _value, _index, system, standing = min(
+        (_system_terms(system), value, index, system, standing)
+        for value, index, system, standing in measured
+        if value <= window
+    )
+    return {
+        **decision,
+        "system_id": system["system_id"],
+        "verification_id": standing["verification_id"],
+        "run_id": system["members"][target],
+        "window": window,
+    }
+
+
+def _system_terms(system: dict[str, Any]) -> int:
+    return sum(len(law["support"]) for law in system["laws"].values())
+
+
+def default_selection(
+    ledger: SegmentLedger,
+    *,
+    dataset_id: str | None,
+    exclude: Collection[str] = (),
+) -> str | None:
+    run_id: str | None = selection_decision(
+        ledger, dataset_id=dataset_id, exclude=exclude
+    )["run_id"]
+    return run_id
 
 
 def recommend(
@@ -231,9 +316,89 @@ def _fork(
     }
 
 
-def _loss(entry: SegmentEntry, *, by_nmse: bool) -> float | None:
-    if by_nmse:
-        return entry.platform_nmse
+RULE_B_NMSE_SLACK = 2.0
+
+RULE_B_NMSE_FLOOR = 1e-9
+
+
+def _target(entry: SegmentEntry) -> str:
+    return json.dumps(cast(dict[str, Any], entry.law).get("lhs"), sort_keys=True)
+
+
+def _term_count(entry: SegmentEntry) -> int:
+    return len(cast(dict[str, Any], entry.law)["support"])
+
+
+def _native_winner(domain: Sequence[SegmentEntry]) -> str:
+    ranked = [
+        (
+            loss,
+            math.inf if entry.nmse is None else entry.nmse,
+            index,
+            entry.run_id,
+        )
+        for index, entry in enumerate(domain)
+        if (loss := _loss(entry)) is not None
+    ]
+    if not ranked:
+        return domain[-1].run_id
+    return min(ranked)[-1]
+
+
+def _forward_status(entry: SegmentEntry) -> str:
+    forward = entry.selection_forward
+    return "not_measured" if forward is None else str(forward["status"])
+
+
+def _forward_inapplicable(entry: SegmentEntry) -> bool:
+    if _forward_status(entry) == "inapplicable":
+        return True
+    law = cast(dict[str, Any], entry.law)
+    return "lhs" in law and lhs_inapplicable(law["lhs"]) is not None
+
+
+def _forward_value(entry: SegmentEntry) -> float | None:
+    forward = entry.selection_forward
+    if forward is None or forward["frame"] != FORWARD_FRAME:
+        return None
+    value = forward["value"]
+    return None if value is None else float(value)
+
+
+def _forward_winner(domain: Sequence[SegmentEntry]) -> tuple[str, float]:
+    measured = [
+        (value, index, entry)
+        for index, entry in enumerate(domain)
+        if (value := _forward_value(entry)) is not None
+    ]
+    window = FORWARD_WINDOW * min(value for value, _index, _entry in measured)
+    ranked = [
+        (_term_count(entry), value, index, entry.run_id)
+        for value, index, entry in measured
+        if value <= window
+    ]
+    return min(ranked)[-1], window
+
+
+def _platform_winner(domain: Sequence[SegmentEntry]) -> tuple[str | None, float | None]:
+    measured = [
+        (entry.platform_nmse, index, entry)
+        for index, entry in enumerate(domain)
+        if entry.platform_nmse is not None
+    ]
+    if not measured:
+        return None, None
+    best = min(nmse for nmse, _index, _entry in measured)
+    window = max(RULE_B_NMSE_SLACK * best, RULE_B_NMSE_FLOOR)
+    ranked = [
+        (_term_count(entry), nmse, index, entry.run_id)
+        for nmse, index, entry in measured
+        if nmse <= window
+    ]
+    return min(ranked)[-1], window
+
+
+def _loss(entry: SegmentEntry) -> float | None:
     summary = entry.summary
     if summary is None or summary.segment_best is None:
         return None

@@ -96,8 +96,7 @@ def assert_dataset_supported(
             f"Algorithm '{algorithm}' does not support {dataset_topology.value} "
             f"data (topology): it supports [{supported}] only. Use a dataset with "
             f"a supported topology, or a plugin that declares "
-            f"'{dataset_topology.value}' in its derivative_requirements "
-            f"(arch041 step 3b / C-A)."
+            f"'{dataset_topology.value}' in its derivative_requirements."
         )
     if dataset_lhs_order != reqs.lhs_order:
 

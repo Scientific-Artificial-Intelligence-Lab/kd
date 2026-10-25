@@ -33,6 +33,11 @@ def is_floating_dtype(dtype: torch.dtype) -> bool:
     return torch.empty(0, dtype=dtype).is_floating_point()
 
 
+def default_lhs(fields: Iterable[str]) -> str:
+    names = list(fields)
+    return f"{names[0]}_t" if len(names) == 1 else "u_t"
+
+
 def parse_lhs_spec(
     lhs: str,
     *,

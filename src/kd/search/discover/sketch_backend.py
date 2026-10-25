@@ -11,6 +11,7 @@ from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
+    anchor_basis,
     constraint_admits,
     pinned_monomials,
     term_admission,
@@ -35,6 +36,7 @@ from kd.search.discover.tokens.library import (
     LibraryConfig,
 )
 from kd.search.result import invalid_evaluation_result
+from kd.search.term_utils import fold_add
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
@@ -491,8 +493,11 @@ def _notes(
         "anchors and hole counts are exit-checked",
         "token narrowing bounds generation; the evaluator gate refuses, before "
         "scoring, any term outside the sketch vocabulary, any term on a pinned "
-        "law key or sharing a jet monomial with a pin, and any term no hole "
-        "admits unless it matches an anchor fingerprint",
+        "law key or sharing a jet monomial with a pin, any term carrying an "
+        "anchor's jet monomial without spelling the anchor, and any term no "
+        "hole admits unless it spells an anchor (column fingerprint and jet "
+        "expansion); a candidate's later spellings of one anchor are left out "
+        "of its fit",
         f"max_diff_order effective={effective} (config={config.max_diff_order}, "
         f"sketch={sketch_cap})",
     ]
@@ -631,7 +636,13 @@ class SketchGatedEvaluator:
                     terms=terms,
                     reason="structural_reject",
                 )
-        return self._inner.evaluate_expression(expr)
+        kept = anchor_basis(terms, self._sketch)
+        if len(kept) == len(terms):
+            return self._inner.evaluate_expression(expr)
+        fitted = fold_add([terms[index] for index in kept])
+        return dataclasses.replace(
+            self._inner.evaluate_expression(fitted), expression=expr
+        )
 
     def _refusal(self, term: str) -> str | None:
         compiled = self._compiled

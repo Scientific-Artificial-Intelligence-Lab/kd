@@ -24,9 +24,10 @@ dataset = kd.generate_burgers_data(nx=64, nt=32, nu=0.1, seed=0)
 print(f"Ground truth: {dataset.ground_truth}")
 
 # 2. Configure the model. ``algorithm="discover"`` selects the LSTM-controller
-# plugin; the facade exposes ``seed`` and ``generations`` directly. For
-# other hyperparameters (operators, batch_size, entropy weight, etc.)
-# pass a full ``kd.DiscoverConfig`` via ``config=``.
+# plugin. Besides ``generations`` and ``seed``, every ``kd.DiscoverConfig``
+# field (``library``, ``batch_size``, ``entropy_weight``, ...) is a
+# ``kd.Model`` keyword, or pass a complete ``kd.DiscoverConfig`` via
+# ``config=``.
 model = kd.Model(
     algorithm="discover",
     generations=20,

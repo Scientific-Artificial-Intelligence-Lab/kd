@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -93,6 +94,7 @@ def _stridge(
     maxit: int,
     tol: float,
     normalize: int,
+    protected: Sequence[int] = (),
 ) -> FloatArray:
     n, d = x0.shape
     x = np.zeros((n, d))
@@ -110,10 +112,12 @@ def _stridge(
     else:
         w = np.linalg.lstsq(x, y)[0]
 
+    keep = np.zeros((d, 1), dtype=bool)
+    keep[list(protected), 0] = True
     num_relevant = d
-    biginds: Any = np.where(abs(w) > tol)[0]
+    biginds: Any = np.where((abs(w) > tol) | keep)[0]
     for j in range(maxit):
-        smallinds = np.where(abs(w) < tol)[0]
+        smallinds = np.where((abs(w) < tol) & ~keep)[0]
         new_biginds = [i for i in range(d) if i not in smallinds]
 
         if num_relevant == len(new_biginds):
@@ -154,6 +158,7 @@ def train_stridge(
     str_iters: int = DEFAULT_STR_ITERS,
     l0_penalty: float = DEFAULT_L0_PENALTY,
     normalize: int = DEFAULT_NORMALIZE,
+    protected: Sequence[int] = (),
 ) -> TrainStridgeResult:
     y2d = _validate_theta_y(theta, y)
     d_tol = float(d_tol)
@@ -177,7 +182,7 @@ def train_stridge(
 
             w = w0_norm
         else:
-            w = _stridge(theta, y2d, lam, str_iters, tol, normalize)
+            w = _stridge(theta, y2d, lam, str_iters, tol, normalize, protected)
 
         err = float(
             np.mean((y2d - theta.dot(w)) ** 2) + l0_penalty * np.count_nonzero(w)
@@ -215,6 +220,7 @@ def sparse_solve(
     y: FloatArray,
     *,
     l0_penalty: float = DEFAULT_L0_PENALTY,
+    protected: Sequence[int] = (),
 ) -> SparseSolveResult:
     y2d = _validate_theta_y(theta, y)
     try:
@@ -227,7 +233,7 @@ def sparse_solve(
             valid=False, error_type=ERROR_LSTSQ, coefficients=None, y_hat=None
         )
 
-    result = train_stridge(theta, y2d, l0_penalty=l0_penalty)
+    result = train_stridge(theta, y2d, l0_penalty=l0_penalty, protected=protected)
     w = result.coefficients
 
 

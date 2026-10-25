@@ -47,19 +47,21 @@ print(f"Best NMSE: {pysr_model.best_score_:.6g}")
 
 # --- DISCOVER ---------------------------------------------------------------
 # RL-guided expression search with per-candidate constant fitting. Budget:
-# 100 generations x batch 500, a few minutes of CPU; a heavier 200 x 1000
-# run recovers the same law at the same seed.
+# 200 generations x batch 1000: about 17 minutes with OMP_NUM_THREADS=1,
+# about 30 minutes with PyTorch's default thread count on a 24-core CPU.
 #
 # Tabular scoring is scale-free: each Pareto entry's expression is the raw
 # candidate and the fitted outer coefficient is published in ``entry.scale``.
-# At seed 0 this budget recovers the published law on the front: the
-# complexity-5 entry ``div(r, add(0.0737, R_F))`` with scale 6.634 normalizes
-# to r/(0.151*R_F + 0.0111), matching the paper's r/(0.147*R_F + 0.0114).
+# At seed 0 this budget puts the published law on the front: the
+# complexity-5 entry ``div(r, add(0.0737, R_F))`` with scale 6.634
+# normalizes to r/(0.151*R_F + 0.0111), next to the paper's
+# r/(0.147*R_F + 0.0114). At 100 generations x batch 500 the seed-0 front
+# does not contain the form r/(a*R_F + b).
 discover_model = Model(
     "discover",
-    generations=100,
+    generations=200,
     seed=0,
-    batch_size=500,
+    batch_size=1000,
     reward_alpha=0.005,
     max_length=15,
     verbose=False,

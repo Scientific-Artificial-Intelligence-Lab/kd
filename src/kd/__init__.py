@@ -1,11 +1,33 @@
 """kd - Symbolic regression platform for PDE discovery."""
 
+from kd import _registry
+from kd._registry import extension_origin, extension_source
 from kd.api import Model, instrument_schema_digest, instrument_schemas
-from kd.core.equation import LhsSpec, Sketch, law_signature
+from kd.core.equation import (
+    LhsSpec,
+    law_signature,
+    sketch_from_dict,
+    sketch_to_dict,
+)
 from kd.core.equation.rendering import render_lhs_label
+from kd.core.equation.sketch_builder import sketch_from_anchors
+from kd.core.equation.sketch_input import (
+    Hole,
+    Sketch,
+    SketchSpec,
+    load_sketch,
+    save_sketch,
+)
 from kd.core.evaluator import EvaluationResult
-from kd.core.expr.sympy_bridge import FormattedEquation, format_pde
+from kd.core.expr.jet import jet_polynomial
+from kd.core.expr.sympy_bridge import (
+    FormattedEquation,
+    format_pde,
+    from_sympy,
+    to_sympy,
+)
 from kd.core.interrupt import SearchInterrupted
+from kd.core.law_judge import ParsedLaw, TermVerdict, judge_law, law_from_equation
 from kd.core.rates import RateSummary, paired_exact_test, rate_summary, wilson_interval
 from kd.core.recovery import (
     RecoveryVerdict,
@@ -27,10 +49,16 @@ from kd.data import (
     DatasetSpec,
     DataTopology,
     FieldData,
+    NetworkSmoothing,
+    NetworkSmoothingQuality,
     PDEDataset,
     TabularDataset,
     TaskType,
+    Trajectory,
+    TrajectorySet,
     add_noise,
+    compute_dataset_fingerprint,
+    derivative_target,
     generate_advection_data,
     generate_burgers_data,
     generate_diffusion_data,
@@ -57,17 +85,38 @@ from kd.data import (
     load_wave,
     load_wave_breaking,
     load_wave_breaking_datasets,
+    lowpass_smooth,
+    lowpass_spectrum,
+    network_smooth,
+    select_lowpass_modes,
+    surrogate_field,
+    trajectories_to_tabular,
 )
 from kd.data.tabular_file import load_tabular
 from kd.evaluate import (
+    AblationResult,
+    AblationRow,
+    ConstantRefit,
     EvaluationFailedError,
     ForwardError,
     InvalidTermsError,
+    RefitFrame,
+    RefitResult,
     TermRejection,
+    TermSetEntry,
+    TermSetScores,
     TermValidationReport,
+    TrajectoryForwardError,
+    WeakFormDiagnostics,
+    WeakFormOptions,
+    ablate_terms,
     block_dispersion,
     evaluate_terms,
     forward_error,
+    forward_error_trajectories,
+    refit_constants,
+    refit_terms,
+    score_term_sets,
     validate_terms,
 )
 from kd.inspect import (
@@ -80,6 +129,8 @@ from kd.inspect import (
     preview,
     preview_report,
 )
+from kd.pinn_refine import PinnRefinement, refine_pinn
+from kd.prediction import predict_terms
 from kd.search.checkpoint_manifest import (
     FINAL_STATUS_COMPLETED,
     KIND_FINAL,
@@ -100,11 +151,13 @@ from kd.search.eqgpt import EqGPTConfig
 from kd.search.llm4ed import Llm4edConfig
 from kd.search.pysindy import PySINDyConfig
 from kd.search.pysr import PySRConfig
+from kd.search.registry import register_algorithm
 from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
+from kd.term_votes import TermVoteResult, TermVoteRow, vote_terms
 from kd.viz.engine import VizEngine
 
-__version__ = "0.8.2"
+__version__ = "0.9.0"
 
 
 
@@ -113,12 +166,15 @@ __version__ = "0.8.2"
 
 
 __all__ = [
+    "AblationResult",
+    "AblationRow",
     "ArrayReport",
     "AxisInfo",
     "AxisReport",
     "CheckpointManifestEntry",
     "CheckpointManifestError",
     "CheckpointSelectionError",
+    "ConstantRefit",
     "DATASET_CATALOG",
     "DLGAConfig",
     "DataTopology",
@@ -135,37 +191,62 @@ __all__ = [
     "FieldReport",
     "FormattedEquation",
     "ForwardError",
+    "Hole",
     "InvalidTermsError",
     "KIND_FINAL",
     "LhsSpec",
     "Llm4edConfig",
     "ModeVerdict",
     "Model",
+    "NetworkSmoothing",
+    "NetworkSmoothingQuality",
     "PDEDataset",
+    "ParsedLaw",
+    "PinnRefinement",
     "PySINDyConfig",
     "PySRConfig",
     "RateSummary",
     "RecoveryVerdict",
+    "RefitFrame",
+    "RefitResult",
     "ResolvedCheckpoint",
     "SGAConfig",
     "SKETCH_EXIT_VERIFY",
     "SearchInterrupted",
     "Sketch",
+    "SketchSpec",
     "SourceReport",
     "TabularDataset",
     "TaskType",
     "TermRejection",
+    "TermSetEntry",
+    "TermSetScores",
     "TermValidationReport",
+    "TermVerdict",
+    "TermVoteResult",
+    "TermVoteRow",
+    "Trajectory",
+    "TrajectoryForwardError",
+    "TrajectorySet",
     "VerificationReport",
     "VerifyPolicy",
     "VizEngine",
+    "WeakFormDiagnostics",
+    "WeakFormOptions",
     "__version__",
+    "ablate_terms",
     "add_noise",
     "block_dispersion",
+    "compute_dataset_fingerprint",
+    "derivative_target",
     "eligible_checkpoint_iterations",
     "evaluate_terms",
+    "extension_origin",
+    "extension_source",
     "format_pde",
     "forward_error",
+    "forward_error_trajectories",
+    "from_sympy",
     "generate_advection_data",
     "generate_burgers_data",
     "generate_diffusion_data",
@@ -173,7 +254,10 @@ __all__ = [
     "inspect_file",
     "instrument_schema_digest",
     "instrument_schemas",
+    "jet_polynomial",
+    "judge_law",
     "judge_recovery",
+    "law_from_equation",
     "law_signature",
     "list_datasets",
     "list_datasets_answer_blind",
@@ -195,21 +279,44 @@ __all__ = [
     "load_llm4ed_heat",
     "load_pde_compound",
     "load_pde_divide",
+    "load_sketch",
     "load_tabular",
     "load_tlc_cc",
     "load_wave",
     "load_wave_breaking",
     "load_wave_breaking_datasets",
+    "lowpass_smooth",
+    "lowpass_spectrum",
     "mode_accepts",
+    "network_smooth",
     "paired_exact_test",
+    "predict_terms",
     "preview",
     "preview_report",
     "rate_summary",
+    "refine_pinn",
+    "refit_constants",
+    "refit_terms",
+    "register_algorithm",
     "render_lhs_label",
     "resolve_checkpoint",
+    "save_sketch",
+    "score_term_sets",
+    "select_lowpass_modes",
+    "sketch_from_anchors",
+    "sketch_from_dict",
+    "sketch_to_dict",
     "span_floor",
+    "surrogate_field",
     "term_set_jaccard",
+    "to_sympy",
+    "trajectories_to_tabular",
     "validate_terms",
     "verify_equation",
+    "vote_terms",
     "wilson_interval",
 ]
+
+
+
+_registry.load_extensions()

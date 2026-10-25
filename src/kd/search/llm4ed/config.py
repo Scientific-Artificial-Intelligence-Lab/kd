@@ -26,6 +26,8 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from kd.search.llm4ed.columns import FUNCTION_NAMES
+
 
 
 
@@ -129,6 +131,12 @@ class Llm4edConfig:
     """Optional request body options forwarded unchanged to the default provider.
     ``None`` omits the SDK keyword; unused when a provider is injected.
     """
+    functions: tuple[str, ...] = ()
+    """Unary functions the tabular mode offers the LLM and parses (``sin``,
+    ``cos``, ``exp``, ``log``, ``sqrt``), evaluated without protection: a
+    candidate with a non-finite column is dropped. The default PDE mode refuses
+    a non-empty value.
+    """
 
     def __post_init__(self) -> None:
         temperature = _validated_float(
@@ -172,6 +180,12 @@ class Llm4edConfig:
             raise ValueError(
                 f"extra_body must be None or a dict, got {self.extra_body!r}"
             )
+        unknown = sorted(set(self.functions) - FUNCTION_NAMES)
+        if unknown:
+            raise ValueError(
+                f"functions {unknown} are not LLM4ED functions; choose from "
+                f"{sorted(FUNCTION_NAMES)}"
+            )
         if self.tape_record_path is not None:
             if not isinstance(self.tape_record_path, str):
                 raise ValueError(
@@ -203,7 +217,8 @@ def config_to_json_safe_dict(config: Llm4edConfig) -> dict[str, Any]:
     """Return ``config`` as a JSON-safe dict (EqGPT ``config_to_json_safe_dict``).
 
     All ``Llm4edConfig`` fields are already JSON-native (float / int / str /
-    dict / ``None``), so this is ``dataclasses.asdict`` plus a stable key order;
+    dict / ``None``, and the ``functions`` tuple of str), so this is
+    ``dataclasses.asdict`` plus a stable key order;
     it exists as the single serialization seam the ``config`` property and the
     plugin share (and to keep parity with the EqGPT module API).
     """

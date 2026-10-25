@@ -70,6 +70,16 @@ ENVELOPE_VERBS = frozenset(
         "prune_node",
         "select_node",
         "submit_answer",
+        "refine_candidate",
+        "smooth_input",
+        "ablate_candidate",
+        "score_term_sets",
+        "verify_candidate",
+        "verify_system",
+        "vote_terms",
+        "make_sketch",
+        "set_sketch",
+        "finish_without_answer",
     }
 )
 
@@ -193,14 +203,17 @@ def catalog_rows(workspace: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in catalog.open()]
 
 
-def tree_rows(workspace: Path) -> list[dict[str, Any]]:
+def tree_events(workspace: Path) -> list[dict[str, Any]]:
 
 
     tree = workspace / "tree.jsonl"
     if not tree.exists():
         return []
-    rows = [json.loads(line) for line in tree.open() if line.strip()]
-    return [row for row in rows if row["event"] == "segment"]
+    return [json.loads(line) for line in tree.open() if line.strip()]
+
+
+def tree_rows(workspace: Path) -> list[dict[str, Any]]:
+    return [row for row in tree_events(workspace) if row["event"] == "segment"]
 
 
 def search_rows(workspace: Path) -> list[dict[str, Any]]:

@@ -65,7 +65,11 @@ def resolve_field_tier(
 ) -> ResumeTier:
     from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 
-    if field == SKETCH_CONFIG_KEY:
+
+
+    from kd.search.registry import EXTENSION_CONFIG_KEY
+
+    if field in (SKETCH_CONFIG_KEY, EXTENSION_CONFIG_KEY):
         return "identity_breaking"
     for knob in plugin_cls.descriptor.knobs:
         if knob.name == field:
@@ -160,6 +164,7 @@ def check_resume_config(
 
 
     if stored_config is None:
+        _refuse_extension_without_snapshot(algorithm, live_config)
         return
 
 
@@ -252,14 +257,28 @@ def check_resume_config(
             )
         return
 
-    err = ValueError(
-        _build_message(algorithm, identity_changes, init_changes, init_has_missing)
+    raise _tier_error(
+        _build_message(algorithm, identity_changes, init_changes, init_has_missing),
+        identity_detail + init_detail,
     )
 
 
+def _refuse_extension_without_snapshot(
+    algorithm: str, live_config: Mapping[str, Any]
+) -> None:
+    from kd.search.registry import EXTENSION_CONFIG_KEY
+
+    if EXTENSION_CONFIG_KEY not in live_config:
+        return
+    live = live_config[EXTENSION_CONFIG_KEY]
+    rendered = _render_change(EXTENSION_CONFIG_KEY, _MISSING, live)
+    raise _tier_error(
+        _build_message(algorithm, [rendered], [], False),
+        [_change_detail(EXTENSION_CONFIG_KEY, "identity_breaking", _MISSING, live)],
+    )
 
 
-
-
-    setattr(err, "changes", tuple(identity_detail + init_detail))
-    raise err
+def _tier_error(message: str, details: list[dict[str, object]]) -> ValueError:
+    err = ValueError(message)
+    setattr(err, "changes", tuple(details))
+    return err

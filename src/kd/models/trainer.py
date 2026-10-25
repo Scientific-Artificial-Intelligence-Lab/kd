@@ -9,6 +9,11 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from kd.models._training_precision import (
+    TrainingDtype,
+    resolve_training_dtype,
+    validate_training_dtype,
+)
 from kd.models.field_model import FieldModel
 
 logger = logging.getLogger(__name__)
@@ -27,6 +32,7 @@ class TrainingResult:
     loss_history: list[float] = field(default_factory=list)
     val_loss_history: list[float] | None = None
     elapsed_seconds: float | None = None
+    stopped_at_deadline: bool = False
 
 
 class FieldModelTrainer:
@@ -51,23 +57,28 @@ class FieldModelTrainer:
         seed: int = 0,
         restore_best: bool = False,
         device: str | torch.device | None = None,
+        training_dtype: TrainingDtype | None = None,
+        deadline: float | None = None,
     ) -> TrainingResult:
         started = time.perf_counter()
+        validate_training_dtype(training_dtype)
         _validate_val_ratio(val_ratio)
         entry_device = next(self._model.parameters()).device
         target_device = _normalize_device(device)
         _validate_device_available(target_device)
 
 
-        _data_dtype = _infer_dtype(coords, targets)
-        _model_dtype = next(self._model.parameters()).dtype
-        if _data_dtype != _model_dtype:
+
+        data_dtype = _infer_dtype(coords, targets)
+        compute_dtype = resolve_training_dtype(training_dtype, data_dtype)
+        model_dtype = next(self._model.parameters()).dtype
+        if compute_dtype != model_dtype:
             logger.debug(
-                "Casting model from %s to %s to match input data",
-                _model_dtype,
-                _data_dtype,
+                "Casting model from %s to %s for training",
+                model_dtype,
+                compute_dtype,
             )
-            self._model = self._model.to(dtype=_data_dtype)
+            self._model = self._model.to(dtype=compute_dtype)
 
 
 
@@ -87,10 +98,15 @@ class FieldModelTrainer:
                     seed,
                     restore_best,
                     target_device,
+                    None if training_dtype is None else compute_dtype,
                     started,
+                    deadline,
                 )
         finally:
-            self._model = self._model.to(entry_device)
+            if training_dtype is None:
+                self._model = self._model.to(entry_device)
+            else:
+                self._model = self._model.to(device=entry_device, dtype=data_dtype)
         return result
 
 
@@ -105,7 +121,9 @@ class FieldModelTrainer:
         seed: int,
         restore_best: bool,
         target_device: torch.device | None,
+        cast_dtype: torch.dtype | None,
         started: float,
+        deadline: float | None,
     ) -> TrainingResult:
 
         _reinit_parameters(self._model)
@@ -119,6 +137,9 @@ class FieldModelTrainer:
 
         coords = {k: v.detach() for k, v in coords.items()}
         targets = {k: v.detach() for k, v in targets.items()}
+        if cast_dtype is not None:
+            coords = _cast_tensors(coords, cast_dtype)
+            targets = _cast_tensors(targets, cast_dtype)
         if target_device is not None:
             self._model = self._model.to(target_device)
             coords = _move_tensors(coords, target_device)
@@ -163,6 +184,7 @@ class FieldModelTrainer:
         final_loss = float("inf")
         final_val_loss: float | None = None
         early_stopped = False
+        stopped_at_deadline = False
         epoch = 0
         track_best = restore_best and val_coords is not None
         has_val = val_coords is not None and val_targets is not None
@@ -209,6 +231,18 @@ class FieldModelTrainer:
                             patience,
                         )
                         break
+            if (
+                deadline is not None
+                and epoch < max_epochs
+                and time.perf_counter() >= deadline
+            ):
+                stopped_at_deadline = True
+                logger.info(
+                    "Training stops at the deadline after %d of %d epochs",
+                    epoch,
+                    max_epochs,
+                )
+                break
 
 
         best_restored = False
@@ -227,6 +261,7 @@ class FieldModelTrainer:
             loss_history=loss_history,
             val_loss_history=val_loss_history,
             elapsed_seconds=time.perf_counter() - started,
+            stopped_at_deadline=stopped_at_deadline,
         )
 
     def _set_normalization(
@@ -313,6 +348,10 @@ def _validate_device_available(device: torch.device | None) -> None:
 
 def _move_tensors(data: dict[str, Tensor], device: torch.device) -> dict[str, Tensor]:
     return {k: v.to(device) for k, v in data.items()}
+
+
+def _cast_tensors(data: dict[str, Tensor], dtype: torch.dtype) -> dict[str, Tensor]:
+    return {k: v.to(dtype=dtype) for k, v in data.items()}
 
 
 def _get_n_samples(data: dict[str, Tensor]) -> int:

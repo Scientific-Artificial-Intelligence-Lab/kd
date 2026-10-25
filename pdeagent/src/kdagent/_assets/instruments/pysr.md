@@ -8,12 +8,12 @@ result into KD's equation representation.
 For PDE data, `terms` names the candidate columns in KD's
 function-call notation. PySR combines those columns but does not differentiate
 or invent another input column. Use the field and axis names in the dataset;
-adding an axis does not expand the configured library. An unresolvable term
-fails the fit. Compound derivatives use `u_x_t` or `diff_t(u_x)`, not `u_xt`.
+supplied terms are used as given, and adding an axis does not expand them. An
+unresolvable term fails the fit. Compound derivatives use `u_x_t` or `diff_t(u_x)`, not `u_xt`.
 
 Tabular data selects tabular mode, where feature columns supply the inputs
-automatically and `terms` is refused. Grids other than one-field `u(x,t)`
-require explicit `terms`. Both modes read `binary_operators` and
+automatically and `terms` is refused. Grids other than one-field `u` with
+spatial axes `x`, `y` or both require explicit `terms`. Both modes read `binary_operators` and
 `unary_operators` from the configuration. These operators let the search form
 nonlinear combinations beyond a linear fit of the original columns.
 

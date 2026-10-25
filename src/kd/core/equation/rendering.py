@@ -13,7 +13,7 @@ from kd.core.equation.types import (
     Scalar,
 )
 from kd.core.expr.naming import build_derivative_name
-from kd.core.expr.sympy_bridge import FormattedEquation, format_pde
+from kd.core.expr.sympy_bridge import FormattedEquation, format_pde, to_sympy
 
 HOMOGENEOUS_LHS_LABEL: Final[str] = "0"
 
@@ -54,16 +54,22 @@ def scalar_equation_terms(equation: Equation) -> tuple[list[str], list[float]]:
 
 def format_equation(equation: Equation) -> FormattedEquation:
     terms, coefficients = scalar_equation_terms(equation)
+    variables: set[str] | None = None
     match equation:
         case Evolution():
             lhs = render_lhs_label(equation.lhs_spec)
         case Regression():
             lhs = equation.lhs_spec.field
+            variables = {
+                symbol.name
+                for term, _coefficient in equation.terms
+                for symbol in to_sympy(term).free_symbols
+            }
         case Homogeneous():
             lhs = HOMOGENEOUS_LHS_LABEL
         case _:
             assert_never(equation)
-    return format_pde(terms, coefficients, lhs=lhs)
+    return format_pde(terms, coefficients, lhs=lhs, variables=variables)
 
 
 def equation_text(equation: Equation) -> str:

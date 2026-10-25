@@ -10,12 +10,14 @@ import h5py
 import numpy as np
 
 from kd.data._columns import column_indices
+from kd.data.xlsx import read_xlsx_inventory_columns
 
-ContainerKind = Literal["npy", "npz", "mat", "mat73", "hdf5", "csv"]
+ContainerKind = Literal["npy", "npz", "mat", "mat73", "hdf5", "csv", "xlsx"]
 KEYLESS_ARRAY_KEY: Final[str] = "array"
+MATLAB_CONTAINERS: Final[frozenset[ContainerKind]] = frozenset({"mat", "mat73"})
 
 _MATLAB_METADATA_KEYS = frozenset({"__header__", "__version__", "__globals__"})
-_SUPPORTED_SUFFIXES = (".npy", ".npz", ".mat", ".h5", ".hdf5", ".csv")
+_SUPPORTED_SUFFIXES = (".npy", ".npz", ".mat", ".h5", ".hdf5", ".csv", ".xlsx")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,6 +38,13 @@ class Inventory:
     container: ContainerKind
     entries: dict[str, ArrayEntry]
 
+    def entry(self, key: str) -> ArrayEntry:
+        if key not in self.entries:
+            raise ValueError(
+                f"unknown column/array {key!r}; available: {list(self.entries)}"
+            )
+        return self.entries[key]
+
     def describe(self) -> str:
         lines = [f"{self.container} {self.path}"]
         lines.extend(
@@ -52,7 +61,7 @@ def read_inventory(path: str | Path) -> Inventory:
 
     suffix = resolved.suffix.lower()
     if suffix == ".xlsx":
-        raise ValueError(f"xlsx is not an array container: {resolved}")
+        return _read_xlsx_inventory(resolved)
     if suffix == ".npy":
         return _read_npy_inventory(resolved)
     if suffix == ".npz":
@@ -70,6 +79,20 @@ def read_inventory(path: str | Path) -> Inventory:
         f"unsupported container suffix '{resolved.suffix}' for {resolved}; "
         f"supported suffixes: {supported}"
     )
+
+
+def read_real(
+    entry: ArrayEntry, container: ContainerKind, *, advice: str = ""
+) -> np.ndarray:
+    if not entry.numeric or np.issubdtype(np.dtype(entry.dtype), np.complexfloating):
+        raise ValueError(
+            f"column/array {entry.key!r} must be real numeric; got shape "
+            f"{entry.shape} and dtype {entry.dtype}{advice}"
+        )
+    values = np.asarray(entry.read(), dtype=np.float64)
+    if container in MATLAB_CONTAINERS and values.ndim == 2 and 1 in values.shape:
+        return values.reshape(-1)
+    return values
 
 
 def as_axis_vector(key: str, values: np.ndarray) -> np.ndarray:
@@ -234,7 +257,7 @@ def _read_csv_array(path: Path) -> np.ndarray:
 def _read_csv_inventory(path: Path) -> Inventory:
     columns = _read_csv_columns(path)
     if columns is not None:
-        entries = {key: _csv_entry(key, values) for key, values in columns.items()}
+        entries = {key: _column_entry(key, values) for key, values in columns.items()}
         return Inventory(path=path, container="csv", entries=entries)
     array = _read_csv_array(path)
     entry = _entry(
@@ -246,13 +269,19 @@ def _read_csv_inventory(path: Path) -> Inventory:
     return Inventory(path=path, container="csv", entries={KEYLESS_ARRAY_KEY: entry})
 
 
-def _csv_entry(key: str, values: np.ndarray) -> ArrayEntry:
+def _column_entry(key: str, values: np.ndarray) -> ArrayEntry:
     return _entry(
         key,
         values,
         read=lambda: values,
         read_index0=lambda index: np.asarray(values[index]),
     )
+
+
+def _read_xlsx_inventory(path: Path) -> Inventory:
+    columns = read_xlsx_inventory_columns(path)
+    entries = {key: _column_entry(key, values) for key, values in columns.items()}
+    return Inventory(path=path, container="xlsx", entries=entries)
 
 
 def _read_csv_columns(path: Path) -> dict[str, np.ndarray] | None:
@@ -304,6 +333,8 @@ __all__ = [
     "ContainerKind",
     "Inventory",
     "KEYLESS_ARRAY_KEY",
+    "MATLAB_CONTAINERS",
     "as_axis_vector",
     "read_inventory",
+    "read_real",
 ]

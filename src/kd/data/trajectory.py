@@ -10,7 +10,11 @@ from typing import Any, Final
 
 import numpy as np
 
-_FINGERPRINT_PREFIX: Final = "kd-trajectories-v1:"
+from kd.data._field_names import is_reserved_field_name, reserved_field_name_message
+from kd.data.source import DatasetSource
+
+TRAJECTORY_FINGERPRINT_DOMAIN: Final = "kd-trajectories-v1"
+_FINGERPRINT_PREFIX: Final = TRAJECTORY_FINGERPRINT_DOMAIN + ":"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,6 +56,7 @@ class TrajectorySet:
     state_vars: tuple[str, ...]
     param_names: tuple[str, ...]
     trajectories: tuple[Trajectory, ...]
+    file_source: DatasetSource | None = None
 
     def __post_init__(self) -> None:
         self._check_names()
@@ -86,6 +91,13 @@ class TrajectorySet:
                 f"set {self.name!r}: state, parameter and time names must be "
                 f"distinct; got {names}"
             )
+        for name in names:
+            if is_reserved_field_name(name):
+                label = "state, parameter or time name"
+                raise ValueError(
+                    f"set {self.name!r}: "
+                    + reserved_field_name_message(name, label=label)
+                )
 
 
 def derivative_target(state: str) -> str:

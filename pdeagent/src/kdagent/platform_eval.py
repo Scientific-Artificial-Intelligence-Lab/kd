@@ -36,10 +36,9 @@ def platform_evaluation(
 ) -> PlatformEvaluation:
     if lhs_order == 0 or isinstance(dataset, kd.TabularDataset):
         return PlatformEvaluation(None, None, None, None, "unsupported_form")
-    terms = list(support)
     try:
-        result = kd.evaluate_terms(
-            dataset, terms, max_order=3, skip_invalid=True, lhs_order=lhs_order
+        result = kd.refit_terms(
+            dataset, list(support), max_order=3, lhs_order=lhs_order
         )
     except kd.SearchInterrupted:
         raise
@@ -49,18 +48,4 @@ def platform_evaluation(
         )
     except Exception as exc:
         return PlatformEvaluation(None, None, f"{type(exc).__name__}: {exc}", None)
-    dropped = len(terms) - len(result.terms or ())
-    if dropped > 0:
-        return PlatformEvaluation(
-            None,
-            None,
-            f"DroppedTerms: evaluate_terms dropped {dropped} of {len(terms)} "
-            "support terms",
-            dropped,
-        )
-    coefficients = (
-        None
-        if result.coefficients is None
-        else result.coefficients.detach().flatten().tolist()
-    )
-    return PlatformEvaluation(float(result.nmse), coefficients, None, 0)
+    return PlatformEvaluation(result.nmse, list(result.coefficients), None, 0)

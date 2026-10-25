@@ -2,18 +2,28 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import sympy
 
-from kd.core.equation import Homogeneous
-from kd.core.expr import from_sympy, structure_term_key
+from kd.core.equation import Homogeneous, Regression
+from kd.core.expr import (
+    TermVocabulary,
+    from_sympy,
+    jet_polynomial,
+    monomial_label,
+    structure_term_key,
+)
+from kd.core.expr.executor import DIFF_OPERATOR_PATTERN, UNITY_TOKEN
+from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.sympy_bridge import to_latex, to_sympy
+from kd.core.law_judge import judge_law, law_from_equation
 from kd.viz._result_data import _equation_data, _equation_lhs, _sketch_fit_note
 from kd.viz.equation_display import RENDER_ERRORS, latex_display
 from kd.viz.plots.equation import plot_equation
-from kd.viz.style import style_context
+from kd.viz.style import FIGSIZE_SINGLE, INK_2, style_context, style_table
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -22,6 +32,126 @@ if TYPE_CHECKING:
 
     from kd.data.schema import PDEDataset
     from kd.search.result import ExperimentResult
+
+
+TermRow = tuple[str, float, float]
+
+_NORMALIZATION_NOTE = "Homogeneous comparison uses the published normalization."
+_EXPANSION_NOTE = "Rows list both laws expanded into monomials."
+
+
+_IDENTIFIER = re.compile(r"\b([A-Za-z_]\w*)\b(\s*\()?")
+
+
+def _published_terms(result: ExperimentResult) -> tuple[list[str], list[float]]:
+    terms, values, selected = _equation_data(result)
+    if terms is None or values is None:
+        raise ValueError("no coefficient data")
+    if len(terms) != len(values):
+        raise ValueError("term/coefficient length mismatch")
+    indices = range(len(terms)) if selected is None else selected
+    return [terms[index] for index in indices], [values[index] for index in indices]
+
+
+def _law_vocabulary(texts: list[str]) -> TermVocabulary:
+    coordinates: set[str] = set()
+    fields: set[str] = set()
+    bare: set[str] = set()
+    for text in texts:
+        for name, call in _IDENTIFIER.findall(text):
+            if call:
+                head = DIFF_OPERATOR_PATTERN.fullmatch(name)
+                if head is not None:
+                    coordinates.add(head.group(2))
+                continue
+            derivative = parse_compound_derivative(name)
+            if derivative is None:
+                bare.add(name)
+                continue
+            fields.add(derivative[0])
+            coordinates.update(axis for axis, _ in derivative[1])
+    fields |= bare - coordinates - {UNITY_TOKEN}
+    return TermVocabulary(fields=frozenset(fields), coordinates=frozenset(coordinates))
+
+
+def _truth_terms(
+    truth: str, result: ExperimentResult, vocabulary: TermVocabulary
+) -> tuple[list[str], list[float]]:
+    parsed = law_from_equation(
+        truth, axes=sorted(vocabulary.coordinates), fields=sorted(vocabulary.fields)
+    )
+    terms, coefficients = list(parsed.terms), list(parsed.coefficients)
+    if isinstance(result.equation, Homogeneous):
+        if parsed.lhs is None:
+            return terms, coefficients
+        return [parsed.lhs, *terms], [1.0, *(-value for value in coefficients)]
+    target = _equation_lhs(result)
+    if parsed.lhs is None and target in terms:
+        factor = coefficients.pop(terms.index(target))
+        terms.remove(target)
+        return terms, [-value / factor for value in coefficients]
+    if parsed.lhs != target:
+        raise ValueError("ground truth does not have the published target as its LHS")
+    return terms, coefficients
+
+
+def _normalized(
+    published: dict[str, float],
+    truth: dict[str, float],
+    terms: list[str],
+    vocabulary: TermVocabulary,
+) -> dict[str, float]:
+    if not terms:
+        raise ValueError("no published normalization term")
+    pivot = min(map(monomial_label, jet_polynomial(terms[0], vocabulary)))
+    if pivot not in published:
+        raise ValueError("the published normalization term sums to zero")
+    if pivot not in truth:
+        raise ValueError("ground truth lacks the published normalization term")
+    scale = published[pivot] / truth[pivot]
+    return {label: value * scale for label, value in truth.items()}
+
+
+def _expanded(
+    terms: list[str], coefficients: list[float], vocabulary: TermVocabulary
+) -> bool:
+    for term, coefficient in zip(terms, coefficients, strict=True):
+        if coefficient == 0.0:
+            continue
+        values = list(jet_polynomial(term, vocabulary).values())
+        if len(values) != 1 or abs(values[0]) != 1.0:
+            return True
+    return False
+
+
+def _jet_comparison(
+    result: ExperimentResult, truth: str
+) -> tuple[list[TermRow], str | None]:
+    terms, coefficients = _published_terms(result)
+    vocabulary = _law_vocabulary([*terms, truth, _equation_lhs(result)])
+    truth_terms, truth_coefficients = _truth_terms(truth, result, vocabulary)
+
+
+    verdict = judge_law(
+        terms,
+        coefficients,
+        truth_terms,
+        truth_coefficients,
+        axes=sorted(vocabulary.coordinates),
+        fields=sorted(vocabulary.fields),
+        small_term_rtol=0.0,
+        coeff_rtol=0.0,
+    )
+    published, expected = verdict.law, verdict.truth
+    notes: list[str] = []
+    if isinstance(result.equation, Homogeneous):
+        expected = _normalized(published, expected, terms, vocabulary)
+        notes.append(_NORMALIZATION_NOTE)
+    if _expanded(terms, coefficients, vocabulary):
+        notes.append(_EXPANSION_NOTE)
+    labels = list(dict.fromkeys([*published, *expected]))
+    rows = [(key, published.get(key, 0.0), expected.get(key, 0.0)) for key in labels]
+    return rows, " ".join(notes) or None
 
 
 def _coefficients(expression: Expr) -> dict[str, float]:
@@ -37,40 +167,16 @@ def _coefficients(expression: Expr) -> dict[str, float]:
     return coefficients
 
 
-def _published_coefficients(result: ExperimentResult) -> dict[str, float]:
-    terms, values, selected = _equation_data(result)
-    if terms is None or values is None:
-        raise ValueError("no coefficient data")
-    if len(terms) != len(values):
-        raise ValueError("term/coefficient length mismatch")
-    indices = range(len(terms)) if selected is None else selected
-    coefficients: dict[str, float] = {}
-    for index in indices:
-        for key, value in _coefficients(values[index] * to_sympy(terms[index])).items():
-            coefficients[key] = coefficients.get(key, 0.0) + value
-    return coefficients
-
-
-def _truth_coefficients(
-    truth: str, result: ExperimentResult, published: dict[str, float]
-) -> tuple[dict[str, float], str | None]:
+def _column_comparison(result: ExperimentResult, truth: str) -> list[TermRow]:
+    published: dict[str, float] = {}
+    for term, value in zip(*_published_terms(result), strict=True):
+        for key, part in _coefficients(value * to_sympy(term)).items():
+            published[key] = published.get(key, 0.0) + part
     parts = truth.split("=")
     if len(parts) != 2:
         raise ValueError("expected one equation with '='")
-    left, right = (to_sympy(part.strip().replace("^", "**")) for part in parts)
+    left, right = (to_sympy(part.strip()) for part in parts)
     residual = sympy.expand(left - right)
-    if isinstance(result.equation, Homogeneous):
-        coefficients = _coefficients(residual)
-        if not published:
-            raise ValueError("no published normalization term")
-        pivot = next(iter(published))
-        if pivot not in coefficients or coefficients[pivot] == 0.0:
-            raise ValueError("ground truth lacks the published normalization term")
-        scale = published[pivot] / coefficients[pivot]
-        return (
-            {key: value * scale for key, value in coefficients.items()},
-            "Homogeneous comparison uses the published normalization.",
-        )
     target = to_sympy(_equation_lhs(result))
     factor = residual.coeff(target)
     remainder = residual - factor * target
@@ -78,24 +184,36 @@ def _truth_coefficients(
         raise ValueError(
             "ground truth does not have the published target as a linear LHS"
         )
-    return _coefficients(-remainder / factor), None
-
-
-def _comparison_rows(
-    result: ExperimentResult, truth: str
-) -> tuple[list[list[str]], str | None]:
-    published = _published_coefficients(result)
-    expected, note = _truth_coefficients(truth, result, published)
+    expected = _coefficients(-remainder / factor)
     keys = list(dict.fromkeys([*published, *expected]))
-    rows = [
-        [
-            f"${to_latex(key)}$",
-            f"{published.get(key, 0.0):.6g}",
-            f"{expected.get(key, 0.0):.6g}",
-        ]
-        for key in keys
+    return [(key, published.get(key, 0.0), expected.get(key, 0.0)) for key in keys]
+
+
+def _term_comparison(
+    result: ExperimentResult, truth: str
+) -> tuple[list[TermRow], str | None]:
+    if isinstance(result.equation, Regression):
+        return _column_comparison(result, truth), None
+    return _jet_comparison(result, truth)
+
+
+def _truth_comparison(
+    result: ExperimentResult, truth: str | None
+) -> tuple[list[TermRow], str | None, list[str]]:
+    if truth is None or latex_display(result, label="card").degraded:
+        return [], None, []
+    try:
+        rows, table_note = _term_comparison(result, truth)
+    except (*RENDER_ERRORS, SyntaxError) as exc:
+        return [], None, [f"Ground-truth comparison unavailable: {exc}"]
+    return rows, table_note, []
+
+
+def _comparison_rows(rows: list[TermRow]) -> list[list[str]]:
+    return [
+        [f"${to_latex(key)}$", f"{published:.6g}", f"{expected:.6g}"]
+        for key, published, expected in rows
     ]
-    return rows, note
 
 
 def _draw_comparison(ax: Axes, rows: list[list[str]], note: str | None) -> None:
@@ -110,13 +228,20 @@ def _draw_comparison(ax: Axes, rows: list[list[str]], note: str | None) -> None:
     table.auto_set_font_size(False)
     table.set_fontsize(11)
     table.scale(1, 1.6)
+    style_table(table)
     for (row, _col), cell in table.get_celld().items():
-        cell.set_edgecolor("#d8dee9")
         if row == 0:
-            cell.set_facecolor("#e8eef6")
             cell.set_text_props(weight="bold")
     if note is not None:
-        ax.text(0.5, 0.02, note, transform=ax.transAxes, ha="center", fontsize=9)
+        ax.text(
+            0.5,
+            0.02,
+            note,
+            transform=ax.transAxes,
+            ha="center",
+            fontsize=9,
+            color=INK_2,
+        )
 
 
 def plot_equation_card(
@@ -125,32 +250,22 @@ def plot_equation_card(
     *,
     style: dict[str, Any] | None = None,
 ) -> tuple[Figure, list[str]]:
-    notes: list[str] = []
-    rows: list[list[str]] = []
-    normalization = None
-    if (
-        dataset.ground_truth is not None
-        and not latex_display(result, label="card").degraded
-    ):
-        try:
-            rows, normalization = _comparison_rows(result, dataset.ground_truth)
-        except RENDER_ERRORS as exc:
-            notes.append(f"Ground-truth comparison unavailable: {exc}")
+    terms, table_note, notes = _truth_comparison(result, dataset.ground_truth)
     with style_context(style):
-        return _draw_card(result, rows, normalization, notes, style)
+        return _draw_card(result, _comparison_rows(terms), table_note, notes, style)
 
 
 def _draw_card(
     result: ExperimentResult,
     rows: list[list[str]],
-    normalization: str | None,
+    table_note: str | None,
     notes: list[str],
     style: dict[str, Any] | None,
 ) -> tuple[Figure, list[str]]:
     fig, axes = plt.subplots(
         2 if rows else 1,
         1,
-        figsize=(10, 3.2 + 0.4 * len(rows)),
+        figsize=(FIGSIZE_SINGLE[0], 3.2 + 0.4 * len(rows)),
         squeeze=False,
         gridspec_kw={"height_ratios": [1, 1.5]} if rows else None,
         layout="constrained",
@@ -159,7 +274,16 @@ def _draw_card(
     notes.extend(plot_equation(result, ax, style=style))
     metric = result.final_eval.nmse
     badge = f"Fit NMSE: {metric:.4g}" if math.isfinite(metric) else "Fit NMSE: N/A"
-    ax.text(0.99, 1.0, badge, transform=ax.transAxes, ha="right", va="top", fontsize=10)
+    ax.text(
+        0.99,
+        1.0,
+        badge,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=10,
+        color=INK_2,
+    )
     fit_note = _sketch_fit_note(result)
     if fit_note is not None:
         notes.append(fit_note)
@@ -172,8 +296,9 @@ def _draw_card(
             ha="center",
             va="top",
             fontsize=9,
+            color=INK_2,
             wrap=True,
         )
     if rows:
-        _draw_comparison(axes[1, 0], rows, normalization)
+        _draw_comparison(axes[1, 0], rows, table_note)
     return fig, notes

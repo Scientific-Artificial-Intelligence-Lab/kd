@@ -16,5 +16,10 @@ target; `lhs_axis` is null and `lhs_order` is zero. The three diagnostic maps
 `noise_estimate`, `first_derivative_gap`, `second_derivative_gap` are empty:
 no coordinate-axis diagnostic was computed.
 
-The ODE target is a time-derivative column estimated from trajectories by
-the provider, and the feature columns are state values.
+The ODE target is a time-derivative column estimated from trajectories, and
+the feature columns are the state values and any per-trajectory parameters.
+When the controller estimated it from a trajectory file, `projection` records
+how (`target_state`; `method` and `state_source`: kd's finite differences on
+the observed states; `trim`: the points dropped at each end of every
+trajectory) and `trajectories` the trajectory count and each one's point
+count; the report describes the projected table.

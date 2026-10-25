@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from kd.api import Model
-from kd.core.equation.sketch import sketch_to_dict
+from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.data.regression import TabularDataset
 from kd.data.tabular_bridge import dataset_from_tabular
 from kd.harness.plan import PlanEntry
@@ -29,6 +29,7 @@ from kd.search.sketch_outcome import write_sketch_artifact
 
 if TYPE_CHECKING:
     from kd.core.equation.sketch import Sketch
+    from kd.core.equation.sketch_input import SketchSpec
     from kd.core.verify import VerifyPolicy
     from kd.data.schema import PDEDataset
     from kd.search.callbacks import RunnerCallback
@@ -149,8 +150,9 @@ def run_episode(
     run_dir: Path | None = None,
     resume_from: Path | str | None = None,
     reseed: bool = False,
-    sketch: Sketch | None = None,
+    sketch: Sketch | SketchSpec | None = None,
     verify: VerifyPolicy | None = None,
+    max_seconds: float | None = None,
     recording: RecordingOptions | None = None,
     record_ref: str | None = None,
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
@@ -192,6 +194,7 @@ def run_episode(
             sketch=sketch,
             reseed=reseed,
             verify=verify,
+            max_seconds=max_seconds,
         )
         result: ExperimentResult | None = model.result_
         record: RunRecord | None = model.result_.run_record
@@ -311,7 +314,7 @@ def run_episode(
         if sketch_outcome is not None:
             write_sketch_artifact(
                 sketch_outcome,
-                sketch_payload=sketch_to_dict(sketch),
+                sketch_payload=record.run_spec.config[SKETCH_CONFIG_KEY],
                 evidence_hash=record.evidence_hash,
                 path=paths.root / SKETCH_SIDECAR_FILENAME,
             )

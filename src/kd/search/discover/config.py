@@ -9,6 +9,7 @@ the generation the first PINN phase follows.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -125,6 +126,13 @@ DEFAULT_TOKEN_BIAS_WEIGHT: float = 0.0
 DEFAULT_OPERATORS = ["add", "mul", "sub", "div", "sin", "cos", "diff_x", "diff2_x"]
 DEFAULT_STATE_VARS = ["u"]
 DEFAULT_COORD_VARS = ["x", "t"]
+
+
+
+
+
+DEFAULT_SPATIAL_AXES: tuple[str, ...] = ("x", "y")
+_DEFAULT_BASE_OPERATORS = ["add", "mul", "sub", "div", "sin", "cos"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,13 +305,44 @@ class PINNConfig:
             )
 
 
+def default_library_config(
+    spatial_axes: Sequence[str], fields: Iterable[str]
+) -> LibraryConfig:
+    """The default grid vocabulary over ``spatial_axes`` and ``fields``.
+
+    Every field is a leaf, sorted by name, whatever the left-hand side is
+    (the target is the dataset's lhs, not a token); the coordinate leaves are
+    ``spatial_axes`` in the order given, then ``t``; the operators are the six
+    base operators and, per axis ``a``, ``diff_a`` and ``diff2_a`` after them.
+    For ``["x"]`` and ``["u"]`` this is the dataclass default
+    (``DEFAULT_OPERATORS``, ``DEFAULT_STATE_VARS``, ``DEFAULT_COORD_VARS``),
+    list for list and in the same order, which is what fixes the controller's
+    token indices. The two orders follow the dataset fingerprint, the resume
+    identity of the data: it records the axis order and identifies the fields
+    as a sorted set, so a checkpoint resumed on the same fields given in
+    another dict order meets the same token indices. An axis outside
+    ``DEFAULT_SPATIAL_AXES`` has no derivative operators in the token library
+    and is refused.
+    """
+    unknown = [axis for axis in spatial_axes if axis not in DEFAULT_SPATIAL_AXES]
+    if unknown:
+        raise ValueError(
+            f"the default vocabulary has no derivative operators for axes "
+            f"{unknown}; it names {list(DEFAULT_SPATIAL_AXES)}"
+        )
+    return LibraryConfig(
+        operators=[
+            *_DEFAULT_BASE_OPERATORS,
+            *(f"{head}_{axis}" for axis in spatial_axes for head in ("diff", "diff2")),
+        ],
+        state_vars=sorted(fields),
+        coord_vars=[*spatial_axes, "t"],
+    )
+
+
 def _default_library_config() -> LibraryConfig:
     """Return the default Burgers vocabulary."""
-    return LibraryConfig(
-        operators=list(DEFAULT_OPERATORS),
-        state_vars=list(DEFAULT_STATE_VARS),
-        coord_vars=list(DEFAULT_COORD_VARS),
-    )
+    return default_library_config(["x"], DEFAULT_STATE_VARS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -735,6 +774,7 @@ __all__ = [
     "DIAGNOSTIC_GATE_RATIONALE",
     "DiscoverConfig",
     "PINNConfig",
+    "default_library_config",
 ]
 
 

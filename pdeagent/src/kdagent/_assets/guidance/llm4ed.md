@@ -1,8 +1,12 @@
-LLM4ED calls its own OpenAI-compatible endpoint: set `base_url`, `model`,
-`max_tokens` and `extra_body` for it in `params`, and the provider key must
-be in the environment of the run. The controller's endpoint and key are not
-reused. Without `base_url` or without the key the call fails at once, naming
-what is missing.
+LLM4ED calls an OpenAI-compatible endpoint of its own, never the controller's.
+A run has one only when the operator configured it (`kd-agent setup
+--llm4ed`) and did not switch it off; the Availability table and the
+`run_discovery` description say whether this run has one, and without it a
+search with LLM4ED is refused before it starts. With it, the run supplies
+`base_url`, `model` and `extra_body` and hands the key to the search alone; a
+call that passes those three is refused, and `max_llm_calls_per_propose`,
+`max_llm_calls_per_run` and `max_tokens` may be lowered, not raised above
+the run's limits.
 
 Search makes billed requests up to `max_llm_calls_per_run` (default 200),
 roughly four per generation. `max_evaluations` does not limit these calls;

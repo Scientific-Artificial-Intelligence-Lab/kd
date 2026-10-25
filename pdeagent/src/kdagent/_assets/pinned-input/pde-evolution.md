@@ -31,4 +31,18 @@ that axis: computation needs uniform spacing, at least five points and a
 field without NaN or Inf. A null value inside a diagnostic dictionary means
 infinity, not a missing measurement.
 
+Derivative source against noise, measured on seven benchmark problems at
+relative noise 0, 1e-4, 1e-3, 1e-2 and 5e-2 with three noise draws each. The
+true equation refitted on finite differences of the raw field passed (NMSE
+below 0.05 and every coefficient within 5%) on all seven without noise, on
+two at 1e-4 plus one more on 1 of 3 draws, and on none at 1e-3 and above.
+After Savitzky-Golay smoothing with window 11 it passed up to 1e-3 on three
+problems and up to 1e-4 on three, and at no level, including no noise, on the
+problem with a shock. With DLGA's surrogate derivatives, searches found the
+equation on 3 of 3 seeds on two problems at 1e-2. On these fields the median
+`noise_estimate` along x was within 5% of the relative noise at 1e-2 and
+5e-2, 0.0010 to 0.0018 at 1e-3 on six problems, and 0.0000 to 0.0008 at 1e-4
+and without noise on the same six; on the seventh it was 0.0044 to 0.0046 at
+every level up to 1e-3.
+
 The evolution target is the named time derivative, including its order.

@@ -46,6 +46,7 @@ from kd.data.diagnostics import (
     noise_estimate,
     second_derivative_gap,
 )
+from kd.data.layouts import recognize
 from kd.data.regression import TabularDataset
 from kd.data.schema import DataTopology, PDEDataset
 from kd.data.tabular_bridge import dataset_from_tabular
@@ -65,13 +66,19 @@ __all__ = [
 def inspect_file(path: str | Path) -> SourceReport:
     """Describe arrays in a file before choosing a dataset layout or mapping.
 
-    Supports numpy, MATLAB, HDF5 and CSV (numeric matrices or named point-table
-    columns, whose 1-D shapes give the row count). Each array
+    Supports numpy, MATLAB, HDF5, CSV (numeric matrices or named point-table
+    columns, whose 1-D shapes give the row count) and XLSX (the columns of the
+    active worksheet under its first-row header, the sheet ``kd.load`` reads;
+    empty and ``"Indeterminate"`` cells count as NaN, and a column with any
+    other text cell is reported as text). Each array
     reports its key, shape, dtype, finite extrema and NaN/Inf counts; nonnumeric
     arrays and arrays without finite values have no extrema. Complex arrays
     raise ValueError because the report's extrema are real scalars. HDF5 arrays
     stream over the leading dimension, retaining only one slice at a time. Missing
-    files and unsupported containers (including XLSX) raise at inventory read.
+    files and unsupported containers raise at inventory read.
+    ``layouts`` names the registered layouts that recognize the file; an empty
+    list means ``kd.load`` needs ``coords=`` / ``fields=``, and a recognized
+    file can still need a load option (see :class:`SourceReport`).
     ``SourceReport.to_dict()`` provides the JSON view.
     """
     inventory = read_inventory(path)
@@ -81,6 +88,7 @@ def inspect_file(path: str | Path) -> SourceReport:
         arrays=[
             _array_report(entry, inventory) for entry in inventory.entries.values()
         ],
+        layouts=[layout.name for layout in recognize(inventory)],
     )
 
 

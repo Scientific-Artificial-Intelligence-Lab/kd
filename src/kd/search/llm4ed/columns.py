@@ -4,14 +4,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import numpy as np
 import numpy.typing as npt
 import torch
 
 from kd.core.expr.executor import PythonExecutor
-from kd.core.expr.registry import FunctionRegistry
+from kd.core.expr.registry import PLAIN_FUNCTION_NAMES, FunctionRegistry
 
 if TYPE_CHECKING:
     from kd.core.executor.context import ExecutionContext
@@ -22,33 +22,13 @@ logger = logging.getLogger(__name__)
 FloatArray = npt.NDArray[np.float64]
 
 
-def _raw_recip(value: torch.Tensor) -> torch.Tensor:
-    return 1.0 / value
 
 
-def _raw_square(value: torch.Tensor) -> torch.Tensor:
-    return value**2
-
-
-def _raw_cube(value: torch.Tensor) -> torch.Tensor:
-    return value**3
-
-
-def _neg(value: torch.Tensor) -> torch.Tensor:
-    return -value
+FUNCTION_NAMES: Final[frozenset[str]] = PLAIN_FUNCTION_NAMES
 
 
 def build_llm4ed_registry() -> FunctionRegistry:
-    reg = FunctionRegistry()
-    reg.register("add", torch.add, arity=2, commutative=True)
-    reg.register("mul", torch.mul, arity=2, commutative=True)
-    reg.register("sub", torch.sub, arity=2, commutative=False)
-    reg.register("div", torch.div, arity=2, commutative=False)
-    reg.register("neg", _neg, arity=1)
-    reg.register("n2", _raw_square, arity=1)
-    reg.register("n3", _raw_cube, arity=1)
-    reg.register("recip", _raw_recip, arity=1)
-    return reg
+    return FunctionRegistry.create_plain()
 
 
 
@@ -74,6 +54,9 @@ class _ColumnContext:
         self.dataset = _ColumnDataset(tuple(columns.keys()))
         self.device = torch.device("cpu")
 
+    def unity_column(self) -> torch.Tensor:
+        return torch.ones_like(next(iter(self._columns.values())))
+
     def get_variable(self, name: str) -> torch.Tensor:
         try:
             return self._columns[name]
@@ -98,9 +81,7 @@ class ColumnResult:
     error: str | None
 
 
-def evaluate_ir_column(
-    ir: str, features: Mapping[str, FloatArray]
-) -> FloatArray:
+def evaluate_ir_column(ir: str, features: Mapping[str, FloatArray]) -> FloatArray:
     tensors = {
         name: torch.from_numpy(np.ascontiguousarray(col, dtype=np.float64))
         for name, col in features.items()

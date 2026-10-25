@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from kd.viz.axes import _get_axes
 from kd.viz.equation_display import expression_display
-from kd.viz.style import style_context
+from kd.viz.style import FIGSIZE_SINGLE, INK_MUTED, style_context, style_table
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -19,13 +19,13 @@ def plot_pareto_table(
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
-    ax = _get_axes(ax, style, figsize=(12, 5))
+    ax = _get_axes(ax, style, figsize=FIGSIZE_SINGLE)
     entries = result.pareto_front()
     displays = [expression_display(entry.expression) for entry in entries]
     with style_context(style):
         ax.axis("off")
         if not entries:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center")
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", color=INK_MUTED)
             return ["Pareto front table has no data"]
         rows = [
             [
@@ -45,6 +45,7 @@ def plot_pareto_table(
         table.auto_set_font_size(False)
         table.set_fontsize(8)
         table.auto_set_column_width(range(4))
+        style_table(table)
         ax.set_title("Pareto Front")
     return [display.note for display in displays if display.note is not None]
 

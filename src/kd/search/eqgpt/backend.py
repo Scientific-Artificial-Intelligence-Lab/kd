@@ -92,7 +92,11 @@ class RealGPTBackend:
             return self.forward_logits(tokens)[0, -1]
 
     def state_dict(self) -> dict[str, Tensor]:
-        return {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+
+
+
+
+        return {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
 
     def load_state_dict(self, state: Mapping[str, Tensor]) -> None:
         self.model.load_state_dict(state)

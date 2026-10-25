@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 
 import torch
@@ -27,7 +27,12 @@ from kd.search.descriptor import (
 )
 from kd.search.discover import viz as _viz_helpers
 from kd.search.discover.builder import _make_magnitude_filter, build_engine
-from kd.search.discover.config import DiscoverConfig, PINNConfig
+from kd.search.discover.config import (
+    DEFAULT_SPATIAL_AXES,
+    DiscoverConfig,
+    PINNConfig,
+    default_library_config,
+)
 from kd.search.discover.engine import DiscoverEngine, EngineState
 from kd.search.discover.evaluation.magnitude import magnitude_rejection
 from kd.search.discover.sketch_backend import (
@@ -232,6 +237,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     config_cls: ClassVar[type[DiscoverConfig]] = DiscoverConfig
     one_shot: ClassVar[bool] = False
     sketch_lower_owner: ClassVar[Literal["platform", "native"]] = "platform"
+    constructor_kwargs: ClassVar[frozenset[str]] = frozenset({"mode"})
 
     descriptor: ClassVar[InstrumentDescriptor] = InstrumentDescriptor(
         algorithm="discover",
@@ -243,13 +249,15 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         modes=(
             InstrumentMode(
                 name="mode1",
-                field_names=("u",),
-                spatial_axes=("x",),
+                spatial_axes=DEFAULT_SPATIAL_AXES,
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
                 description=(
-                    "Grid search with default vocabulary u, x, t, diff_x, diff2_x."
+                    "Grid search whose default vocabulary is every field of "
+                    "the dataset (the target is its left-hand side), the "
+                    "grid's spatial axes (x, and y on a 2-D grid), t, and "
+                    "diff and diff2 along each spatial axis."
                 ),
                 lhs_orders=frozenset({1}),
 
@@ -267,16 +275,15 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
 
                 required_params=frozenset({"pinn"}),
-                field_names=("u",),
-                spatial_axes=("x",),
+                spatial_axes=DEFAULT_SPATIAL_AXES,
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
                 description=(
-                    "PINN surrogate mode that pretrains a network on the "
-                    "observations, searches on its autograd derivatives, and "
-                    "retrains the network on the best equation at every cycle "
-                    "boundary."
+                    "PINN surrogate mode that pretrains one network on every "
+                    "field of the observations, searches mode1's vocabulary on "
+                    "its autograd derivatives, and retrains the network on the "
+                    "best equation at every cycle boundary."
                 ),
                 lhs_orders=frozenset({1}),
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
@@ -431,7 +438,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     def refuse_unsupported_names(self, dataset: PDEDataset) -> None:
         if self._mode == "tabular":
             return
-        library = self._config.library
+        library = self._dataset_config(dataset).library
         fields = set(dataset.fields or {})
         axes = set(dataset.spatial_axes)
         operators = set(library.operators)
@@ -467,7 +474,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         ):
             restore_state = self._engine.state
         task = components.task
-        self._compile_task(task)
+        self._compile_task(task, self._dataset_config(components.dataset))
         torch.manual_seed(self._config.seed)
         platform_evaluator = self._coerce_evaluator(components.evaluator)
         self._engine = build_engine(self._engine_config, mode=self._mode)
@@ -563,12 +570,25 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         self._pending_state = None
         self._pending_mode2 = None
 
-    def _compile_task(self, task: DiscoveryTask | None) -> None:
+    def _dataset_config(self, dataset: PDEDataset) -> DiscoverConfig:
+        axes = list(dataset.spatial_axes)
+        if (
+            self._mode == "tabular"
+            or self._config.library != DiscoverConfig().library
+            or not set(axes) <= set(DEFAULT_SPATIAL_AXES)
+        ):
+            return self._config
+        library = default_library_config(axes, list(dataset.fields or {}))
+        if library == self._config.library:
+            return self._config
+        return replace(self._config, library=library)
+
+    def _compile_task(self, task: DiscoveryTask | None, config: DiscoverConfig) -> None:
         self._sketch_compiled = None
-        self._engine_config = self._config
+        self._engine_config = config
         if task is not None:
-            self._sketch_compiled = compile_for_discover(task.sketch, self._config)
-            self._engine_config = narrowed_config(self._config, self._sketch_compiled)
+            self._sketch_compiled = compile_for_discover(task.sketch, config)
+            self._engine_config = narrowed_config(config, self._sketch_compiled)
 
     def propose(self, n: int) -> list[str]:
         if n < MIN_PROPOSAL_COUNT:
@@ -702,6 +722,18 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if self._mode == "tabular":
             return "none"
         return "autograd" if self._config.pinn is not None else "finite_diff"
+
+    @property
+    def searched_vocabulary(self) -> dict[str, object]:
+        tokens = self._require_engine().library
+        library = self._engine_config.library
+        return {
+            "operators": list(library.operators),
+            "state_vars": list(library.state_vars),
+            "coord_vars": list(library.coord_vars),
+            "token_names": list(tokens.names),
+            "token_arities": [int(arity) for arity in tokens.arities],
+        }
 
     def build_final_result(self) -> EvaluationResult:
         if self._pinn_run is not None:

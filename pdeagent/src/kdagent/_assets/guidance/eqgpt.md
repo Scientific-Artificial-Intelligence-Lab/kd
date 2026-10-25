@@ -3,7 +3,7 @@ steady uses 1.0. The penalty multiplies reward by `1 - alpha*log10(k)`.
 For steady data use `steady=true`, `steady_activation="sin"`,
 `start_words=["S"]`, `sparsity_alpha=1.0`, without boundary deletion or polar
 evaluation. Steady preparation retrains a 50000-epoch surrogate on every call,
-including resume, on CPU regardless of `device`; there is no reuse channel.
+including resume, on the run's device; there is no reuse channel.
 
 Generation cost follows samples per epoch and per-sample evaluation cost.
 A checkpoint includes transformer and optimizer state; its disk use grows

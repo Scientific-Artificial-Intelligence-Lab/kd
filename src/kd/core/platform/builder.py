@@ -4,6 +4,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
@@ -43,6 +44,7 @@ _DEFAULT_SURROGATE_ACTIVATION = "tanh"
 
 __all__ = [
     "PlatformBuilder",
+    "lower_target",
     "resolve_lhs_defaults",
 ]
 
@@ -87,6 +89,39 @@ def resolve_lhs_defaults(dataset: PDEDataset) -> PDEDataset:
     return dataset
 
 
+def lower_target(
+    lhs: torch.Tensor,
+    pins: Sequence[tuple[str, float]],
+    executor: PythonExecutor,
+    context: ExecutionContext,
+) -> torch.Tensor:
+    lowered = lhs
+    for term, value in pins:
+        try:
+            column = (
+                executor.execute(term, context)
+                .value.detach()
+                .flatten()
+                .to(context.device)
+            )
+        except SearchInterrupted:
+
+
+            raise
+        except torch.cuda.OutOfMemoryError:
+
+
+            raise
+        except RuntimeError as exc:
+            if is_cpu_alloc_failure(exc):
+                raise
+            raise ValueError(f"failed to execute pinned sketch term {term!r}") from exc
+        except Exception as exc:
+            raise ValueError(f"failed to execute pinned sketch term {term!r}") from exc
+        lowered = lowered - value * column
+    return lowered
+
+
 class PlatformBuilder:
 
     def __init__(
@@ -98,6 +133,7 @@ class PlatformBuilder:
         compute_condition_number: bool = False,
         task: DiscoveryTask | None = None,
         sketch_lower_owner: Literal["platform", "native"] = "platform",
+        deadline: float | None = None,
     ) -> None:
         self._dataset = dataset
         self._reqs = reqs
@@ -105,6 +141,7 @@ class PlatformBuilder:
         self._compute_condition_number = compute_condition_number
         self._task = task
         self._sketch_lower_owner = sketch_lower_owner
+        self._deadline = deadline
 
 
 
@@ -141,6 +178,8 @@ class PlatformBuilder:
                 context=None,
                 registry=registry,
                 task=self._task,
+                device=self._device,
+                deadline=self._deadline,
             )
         dataset = self._resolve_lhs(self._dataset)
         provider = self._build_provider(dataset)
@@ -155,6 +194,8 @@ class PlatformBuilder:
             context=context,
             registry=registry,
             task=self._task,
+            device=self._device,
+            deadline=self._deadline,
         )
 
     def train_surrogate(self) -> tuple[torch.nn.Module, TrainingResult]:
@@ -212,6 +253,8 @@ class PlatformBuilder:
             context=context,
             registry=registry,
             task=self._task,
+            device=self._device,
+            deadline=self._deadline,
         )
 
 
@@ -335,35 +378,8 @@ class PlatformBuilder:
         context: ExecutionContext,
     ) -> torch.Tensor:
         assert self._task is not None
-        lowered = lhs
-        for pin in self._task.sketch.pinned:
-            try:
-                column = (
-                    executor.execute(pin.term_ir, context)
-                    .value.detach()
-                    .flatten()
-                    .to(context.device)
-                )
-            except SearchInterrupted:
-
-
-
-                raise
-            except torch.cuda.OutOfMemoryError:
-
-
-                raise
-            except RuntimeError as exc:
-                if is_cpu_alloc_failure(exc):
-                    raise
-                raise ValueError(
-                    f"failed to execute pinned sketch term {pin.term_ir!r}"
-                ) from exc
-            except Exception as exc:
-                raise ValueError(
-                    f"failed to execute pinned sketch term {pin.term_ir!r}"
-                ) from exc
-            lowered = lowered - pin.value * column
+        pins = [(pin.term_ir, pin.value) for pin in self._task.sketch.pinned]
+        lowered = lower_target(lhs, pins, executor, context)
         variance = float(lowered.var(correction=0).detach().item())
         if not math.isfinite(variance) or variance <= 0.0:
             raise ValueError(
@@ -435,6 +451,7 @@ class PlatformBuilder:
         self._surrogate_training = trainer.fit(
             coords,
             {dataset.lhs_field: target},
+            deadline=self._deadline,
             **all_kwargs,
         )
         return model

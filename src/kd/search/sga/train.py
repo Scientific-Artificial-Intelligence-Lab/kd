@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -17,6 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 _ZERO_COL_EPS = 1e-14
+
+_TABULAR_ROUNDOFF_FACTOR = 64
 
 
 @dataclass
@@ -35,6 +39,7 @@ class CandidateResult:
     train_result: TrainResult
     pruned_pde: PDE
     valid_term_indices: list[int]
+    fitted_terms: tuple[str, ...] | None = None
 
 
 
@@ -102,6 +107,31 @@ def _selected_indices(w: Tensor) -> list[int]:
 def _compute_mse(theta: Tensor, y_1d: Tensor, w: Tensor, n_samples: int) -> float:
     residual = ((y_1d - theta @ w) ** 2).sum().item()
     return residual / n_samples
+
+
+def _tabular_mse_floor(y_1d: Tensor) -> float:
+    info = torch.finfo(torch.float64)
+    tau = _TABULAR_ROUNDOFF_FACTOR * y_1d.shape[0] * info.eps
+    mean_square = float(torch.mean(y_1d.to(torch.float64) ** 2).item())
+    return max(info.tiny, tau**2 * mean_square)
+
+
+def _tabular_aic(
+    mse: float, k: int, n_samples: int, ratio: float, floor: float
+) -> float:
+    if not math.isfinite(mse) or k >= n_samples:
+        return float("inf")
+    return aic_no_n(max(mse, floor), k, ratio)
+
+
+def _scorer(
+    y_1d: Tensor, ratio: float, *, tabular_scoring: bool
+) -> Callable[[float, int], float]:
+    if not tabular_scoring:
+        return lambda mse, k: aic_no_n(mse, k, ratio)
+    floor = _tabular_mse_floor(y_1d)
+    n_samples = y_1d.shape[0]
+    return lambda mse, k: _tabular_aic(mse, k, n_samples, ratio, floor)
 
 
 def _validate_inputs(theta: Tensor, y: Tensor) -> None:
@@ -218,6 +248,9 @@ def train_sweep(
     theta: Tensor,
     y: Tensor,
     config: SGAConfig,
+    *,
+    active_support_only: bool = False,
+    tabular_scoring: bool = False,
 ) -> TrainResult:
     _validate_inputs(theta, y)
 
@@ -231,7 +264,16 @@ def train_sweep(
     y_1d = y.squeeze(-1) if y.dim() == 2 else y
 
     with torch.no_grad():
-        return _train_sweep_impl(theta, y_1d, n_samples, n_terms, device, config)
+        return _train_sweep_impl(
+            theta,
+            y_1d,
+            n_samples,
+            n_terms,
+            device,
+            config,
+            active_support_only=active_support_only,
+            tabular_scoring=tabular_scoring,
+        )
 
 
 def _train_sweep_impl(
@@ -241,7 +283,11 @@ def _train_sweep_impl(
     n_terms: int,
     device: torch.device,
     config: SGAConfig,
+    *,
+    active_support_only: bool,
+    tabular_scoring: bool,
 ) -> TrainResult:
+    score = _scorer(y_1d, config.aic_ratio, tabular_scoring=tabular_scoring)
 
     w_baseline = _stridge_no_debias(
         theta,
@@ -251,9 +297,11 @@ def _train_sweep_impl(
         tol=0.0,
         normalize=config.normalize,
     )
+    if active_support_only:
+        w_baseline = w_baseline.masked_fill(~_active_mask(w_baseline), 0.0)
     mse = _compute_mse(theta, y_1d, w_baseline, n_samples)
     k = _count_active(w_baseline)
-    best_aic = aic_no_n(mse, k, config.aic_ratio)
+    best_aic = score(mse, k)
     best = _result_or_invalid(w_baseline, best_aic, mse, 0.0, device)
     best_aic = best.aic_score
 
@@ -270,9 +318,11 @@ def _train_sweep_impl(
             tol=tol,
             normalize=config.normalize,
         )
+        if active_support_only:
+            w = w.masked_fill(~_active_mask(w), 0.0)
         mse = _compute_mse(theta, y_1d, w, n_samples)
         k = _count_active(w)
-        aic = aic_no_n(mse, k, config.aic_ratio)
+        aic = score(mse, k)
 
 
 
@@ -303,6 +353,8 @@ def evaluate_candidate(
     y: Tensor,
     config: SGAConfig,
     diff_ctx: DiffContext | None = None,
+    *,
+    active_support_only: bool = False,
 ) -> CandidateResult:
 
     pruned_pde, valid_terms, valid_term_indices = prune_invalid_terms(
@@ -323,7 +375,9 @@ def evaluate_candidate(
         )
 
 
-    train_result = train_sweep(theta, y, config)
+    train_result = train_sweep(
+        theta, y, config, active_support_only=active_support_only
+    )
     return CandidateResult(
         train_result=train_result,
         pruned_pde=pruned_pde,

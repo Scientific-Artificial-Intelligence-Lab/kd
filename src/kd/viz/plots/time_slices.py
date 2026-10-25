@@ -18,13 +18,26 @@ from kd.viz.plots._dim_utils import (
 from kd.viz.plots._field_panels import (
     _WARNING_FONTSIZE,
     _WARNING_WRAP_WIDTH,
+    _bare_panel,
     _diverged_tag,
     _heatmap_panel,
     _range_note,
     _reference_limits,
+    _scale_colorbar,
     _warning_panel,
 )
-from kd.viz.style import style_context
+from kd.viz.style import (
+    DISCOVERED,
+    DISCOVERED_DASH,
+    DPI,
+    FIGSIZE_SINGLE,
+    LINE_WIDTH,
+    OBSERVED,
+    PANEL_H,
+    PANEL_W,
+    WARNING_INK,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -34,8 +47,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DPI = 150
 _YLIM_PAD_FRACTION = 0.05
+_OBSERVED_LABEL = "Observed"
+_DISCOVERED_LABEL = "Discovered law, integrated"
 
 
 def plot_time_slices(
@@ -63,7 +77,7 @@ def plot_time_slices(
     if dataset.axis_order is None:
         warnings.append("axis_order is None; skipping time slices")
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             ax.text(
                 0.5,
                 0.5,
@@ -72,11 +86,12 @@ def plot_time_slices(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Time Slices")
             ax.set_xticks([])
             ax.set_yticks([])
+            _bare_panel(ax)
         return fig, warnings
 
     time_axis = dataset.lhs_axis
@@ -87,7 +102,7 @@ def plot_time_slices(
     if n_spatial == 0:
         warnings.append("No spatial dimensions; skipping time slices")
         with style_context(style):
-            fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=_DEFAULT_DPI)
+            fig, ax = plt.subplots(1, 1, figsize=FIGSIZE_SINGLE, dpi=DPI)
             ax.text(
                 0.5,
                 0.5,
@@ -96,11 +111,12 @@ def plot_time_slices(
                 ha="center",
                 va="center",
                 fontsize=_WARNING_FONTSIZE,
-                color="red",
+                color=WARNING_INK,
             )
             ax.set_title("Time Slices")
             ax.set_xticks([])
             ax.set_yticks([])
+            _bare_panel(ax)
         return fig, warnings
 
     time_dim = dataset.axis_order.index(time_axis)
@@ -201,9 +217,11 @@ def _render_1d_slices(
     fig, axes_arr = plt.subplots(
         1,
         n_cols,
-        figsize=(5 * n_cols, 4),
-        dpi=_DEFAULT_DPI,
+        figsize=(PANEL_W * n_cols, PANEL_H),
+        dpi=DPI,
         squeeze=False,
+        sharey=True,
+        layout="constrained",
     )
 
 
@@ -225,14 +243,26 @@ def _render_1d_slices(
 
         true_slice = np.take(true_field, t_idx, axis=time_dim)
         true_display = np.where(np.isfinite(true_slice), true_slice, np.nan)
-        ax.plot(s_coords, true_display, "b-", label="True", linewidth=1.5)
+        ax.plot(
+            s_coords,
+            true_display,
+            color=OBSERVED,
+            linewidth=LINE_WIDTH,
+            label=_OBSERVED_LABEL,
+        )
 
         note = ""
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
             pred_display = np.where(np.isfinite(pred_slice), pred_slice, np.nan)
-            pred_label = f"Predicted{div_tag}"
-            ax.plot(s_coords, pred_display, "r--", label=pred_label, linewidth=1.5)
+            ax.plot(
+                s_coords,
+                pred_display,
+                color=DISCOVERED,
+                linestyle=DISCOVERED_DASH,
+                linewidth=LINE_WIDTH,
+                label=f"{_DISCOVERED_LABEL}{div_tag}",
+            )
 
 
 
@@ -255,9 +285,8 @@ def _render_1d_slices(
         ax.set_xlabel(s_name)
         if col == 0:
             ax.set_ylabel(dataset.lhs_field)
-            ax.legend()
+            ax.legend(loc="upper left")
 
-    fig.tight_layout()
     return fig
 
 
@@ -292,9 +321,10 @@ def _render_2d_slices(
     fig, axes_arr = plt.subplots(
         n_rows,
         n_cols,
-        figsize=(5 * n_cols, 4 * n_rows),
-        dpi=_DEFAULT_DPI,
+        figsize=(PANEL_W * n_cols, PANEL_H * n_rows),
+        dpi=DPI,
         squeeze=False,
+        layout="constrained",
     )
 
     div_tag = _diverged_tag(diverged, integration_result, time_axis)
@@ -307,35 +337,40 @@ def _render_2d_slices(
 
     limits = _reference_limits(true_field, pred_field)
 
+    images = []
     for col, t_idx in enumerate(time_indices):
         t_val = float(t_coords[t_idx])
 
         true_slice = np.take(true_field, t_idx, axis=time_dim)
         if true_slice.ndim > 2:
             true_slice = _slice_nd_to_2d(true_slice, (0, 1))
-        _heatmap_panel(
-            axes_arr[0, col],
-            true_slice,
-            f"True ({time_axis}={t_val:.3g})" + _range_note(true_slice, limits),
-            extent=extent,
-            xlabel=xlabel,
-            ylabel=ylabel,
-            limits=limits,
+        images.append(
+            _heatmap_panel(
+                axes_arr[0, col],
+                true_slice,
+                f"True ({time_axis}={t_val:.3g})" + _range_note(true_slice, limits),
+                extent=extent,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                limits=limits,
+            )
         )
 
         if pred_field is not None:
             pred_slice = np.take(pred_field, t_idx, axis=time_dim)
             if pred_slice.ndim > 2:
                 pred_slice = _slice_nd_to_2d(pred_slice, (0, 1))
-            _heatmap_panel(
-                axes_arr[1, col],
-                pred_slice,
-                f"Predicted{div_tag} ({time_axis}={t_val:.3g})"
-                + _range_note(pred_slice, limits),
-                extent=extent,
-                xlabel=xlabel,
-                ylabel=ylabel,
-                limits=limits,
+            images.append(
+                _heatmap_panel(
+                    axes_arr[1, col],
+                    pred_slice,
+                    f"Predicted{div_tag} ({time_axis}={t_val:.3g})"
+                    + _range_note(pred_slice, limits),
+                    extent=extent,
+                    xlabel=xlabel,
+                    ylabel=ylabel,
+                    limits=limits,
+                )
             )
         else:
             assert (
@@ -343,7 +378,8 @@ def _render_2d_slices(
             )
             _warning_panel(axes_arr[1, col], no_pred_reason)
 
-    fig.tight_layout()
+    field_rows = 1 if pred_field is None else 2
+    _scale_colorbar(images, list(axes_arr[:field_rows].flat))
     return fig
 
 
@@ -356,5 +392,5 @@ def _add_warning_text(ax: Axes, msg: str) -> None:
         ha="center",
         va="top",
         fontsize=_WARNING_FONTSIZE,
-        color="red",
+        color=WARNING_INK,
     )

@@ -10,6 +10,7 @@ from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
+    anchor_basis,
     constraint_admits,
     pinned_monomials,
     term_admission,
@@ -146,7 +147,11 @@ def _chain_matches(
         frozenset().union(*(f.coordinate_dependencies for f in chain)),
         frozenset().union(*(f.derivative_multiindices for f in chain)),
     )
-    if union != column_fingerprint(target)[:3]:
+    if union != (
+        target.base_fields,
+        target.coordinate_dependencies,
+        target.derivative_multiindices,
+    ):
         return False
     operators = frozenset().union(*(f.operators for f in chain))
     return any(
@@ -154,21 +159,46 @@ def _chain_matches(
     )
 
 
-def _spelling_length(target: TermFeatures, grammar: _Grammar) -> int | None:
+def _chain_term(chain: Sequence[int], operator: int, vocab: Vocab) -> str:
+    sentence = [chain[0]]
+    for token in chain[1:]:
+        sentence.extend((operator, token))
+    (term,) = sentence_to_rhs_terms(vocab, sentence, start_len=0)
+    return term
+
+
+def _spelling_length(
+    target: TermFeatures, grammar: _Grammar, sketch: Sketch, vocab: Vocab
+) -> int | None:
     fingerprint = column_fingerprint(target)
-    atoms = grammar.atoms.values()
-    if any(column_fingerprint(features) == fingerprint for features in atoms):
+    if any(
+        column_fingerprint(features) == fingerprint
+        for features in grammar.atoms.values()
+    ):
         return 1
-    inside = [features for features in atoms if _inside(target, features)]
-    if not inside or not _chain_matches(target, inside, grammar):
+    inside = [
+        token for token, features in grammar.atoms.items() if _inside(target, features)
+    ]
+    if not inside or not _chain_matches(
+        target, [grammar.atoms[token] for token in inside], grammar
+    ):
         return None
+    longest = max(2, len(inside), target.power_degree)
     return next(
-        max(size, 2)
-        for size in range(1, len(inside) + 1)
-        if any(
-            _chain_matches(target, chain, grammar)
-            for chain in itertools.combinations(inside, size)
-        )
+        (
+            size
+            for size in range(2, longest + 1)
+            for chain in itertools.combinations_with_replacement(inside, size)
+            for operator in grammar.operators
+            if column_fingerprint(
+                analyze_term(
+                    law_term_key(_chain_term(chain, operator, vocab)),
+                    sketch.vocabulary,
+                )
+            )
+            == fingerprint
+        ),
+        None,
     )
 
 
@@ -180,7 +210,7 @@ def _anchor_spellings(
 ) -> dict[ColumnFingerprint, int]:
     spellings: dict[ColumnFingerprint, int] = {}
     for anchor, features in zip(sketch.anchored, anchors, strict=True):
-        length = _spelling_length(features, grammar)
+        length = _spelling_length(features, grammar, sketch, vocab)
         if length is not None:
             spellings[column_fingerprint(features)] = length
             continue
@@ -316,7 +346,7 @@ def _witness_terms(
     for token, features in kept.items():
         yield _atom_ir(vocab, token), features, 1
     for left, operator, right in itertools.product(kept, sorted(kept_operators), kept):
-        (term,) = sentence_to_rhs_terms(vocab, [left, operator, right], start_len=0)
+        term = _chain_term((left, right), operator, vocab)
         yield term, analyze_term(law_term_key(term), sketch.vocabulary), 2
 
 
@@ -540,8 +570,10 @@ def _report(
         "anchors and hole counts are exit-checked",
         "the sketch token mask bounds generation; the pre-score gate refuses any "
         "term outside the sketch vocabulary, any term on a pinned law key or "
-        "sharing a jet monomial with a pin, and any term no hole admits unless it "
-        "matches an anchor fingerprint",
+        "sharing a jet monomial with a pin, any term carrying an anchor's jet "
+        "monomial without spelling the anchor, and any term no hole admits "
+        "unless it spells an anchor (column fingerprint and jet expansion); a "
+        "candidate's later spellings of one anchor are left out of its fit",
         f"pinned terms are owned by lower/lift: {pins}",
     ]
     notes.extend(_boundary_notes(sketch, pinned_axes, gate_variables, field_free))
@@ -663,4 +695,12 @@ def refuse_candidate(
     return None
 
 
-__all__ = ["EqGPTCompiled", "compile_for_eqgpt", "refuse_candidate"]
+def fit_candidate(candidate: str, sketch: Sketch) -> str:
+    terms = candidate.split(" + ") if candidate else []
+    kept = anchor_basis(terms, sketch)
+    if len(kept) == len(terms):
+        return candidate
+    return " + ".join(terms[index] for index in kept)
+
+
+__all__ = ["EqGPTCompiled", "compile_for_eqgpt", "fit_candidate", "refuse_candidate"]

@@ -22,19 +22,30 @@ from kd.viz.plots._field_panels import (
     _range_note,
     _reference_limits,
     _resolve_shape,
+    _scale_colorbar,
 )
-from kd.viz.style import style_context
+from kd.viz.style import (
+    CONTEXT,
+    DISCOVERED,
+    DPI,
+    OBSERVED,
+    PANEL_H,
+    PANEL_W,
+    style_context,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from matplotlib.axes import Axes
+    from matplotlib.cm import ScalarMappable
 
     from kd.data.schema import PDEDataset
     from kd.search.result import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
-_RESIDUAL_FIGSIZE = (15, 4)
-_DEFAULT_DPI = 150
+_RESIDUAL_FIGSIZE = (3 * PANEL_W, PANEL_H)
 _WARNING_FONTSIZE = 12
 
 
@@ -78,7 +89,6 @@ def plot_pde_residual_field(
             )
             if note is not None:
                 fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
-                fig.tight_layout(rect=(0, 0, 1, 0.92))
             _annotate_spatial_slice(fig, dataset, warnings)
         return fig, warnings
 
@@ -94,7 +104,8 @@ def plot_pde_residual_field(
             1,
             3,
             figsize=_RESIDUAL_FIGSIZE,
-            dpi=_DEFAULT_DPI,
+            dpi=DPI,
+            layout="constrained",
         )
         axes: list[Axes] = list(axes_arr.flat)
 
@@ -110,34 +121,26 @@ def plot_pde_residual_field(
 
 
             limits = _reference_limits(actual_2d, pred_2d)
-            _render_panel(
-                axes[0], actual_2d, f"True ({lhs_label} actual)", limits=limits
-            )
-            _render_panel(
-                axes[1],
-                pred_2d,
-                f"Predicted ({lhs_label} predicted)",
-                limits=limits,
-            )
 
 
 
-            residual = pred_2d - actual_2d
-            _render_panel(
-                axes[2], residual, f"Residual ({_RESIDUAL_SIGN})", residual=True
+            _triptych(
+                axes,
+                (actual_2d, pred_2d, pred_2d - actual_2d),
+                lhs_label,
+                limits,
             )
         else:
 
-            _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
-            _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
+            _line_fallback(axes[0], actual, f"True ({lhs_label} actual)", OBSERVED)
+            _line_fallback(
+                axes[1], predicted, f"Predicted ({lhs_label} predicted)", DISCOVERED
+            )
             residual_1d = predicted - actual
             _line_fallback(axes[2], residual_1d, f"Residual ({_RESIDUAL_SIGN})")
 
-        fig.tight_layout()
-
     if note is not None:
         fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
-        fig.tight_layout(rect=(0, 0, 1, 0.92))
     return fig, warnings
 
 
@@ -200,13 +203,15 @@ def _render_axis_aware(
             1,
             3,
             figsize=_RESIDUAL_FIGSIZE,
-            dpi=_DEFAULT_DPI,
+            dpi=DPI,
+            layout="constrained",
         )
         axes: list[Axes] = list(axes_arr.flat)
-        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
-        _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
+        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)", OBSERVED)
+        _line_fallback(
+            axes[1], predicted, f"Predicted ({lhs_label} predicted)", DISCOVERED
+        )
         _line_fallback(axes[2], predicted - actual, f"Residual ({_RESIDUAL_SIGN})")
-        fig.tight_layout()
         return fig
 
     actual_nd = _safe_reshape(actual, shape, warnings, "actual")
@@ -217,13 +222,15 @@ def _render_axis_aware(
             1,
             3,
             figsize=_RESIDUAL_FIGSIZE,
-            dpi=_DEFAULT_DPI,
+            dpi=DPI,
+            layout="constrained",
         )
         axes = list(axes_arr.flat)
-        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)")
-        _line_fallback(axes[1], predicted, f"Predicted ({lhs_label} predicted)")
+        _line_fallback(axes[0], actual, f"True ({lhs_label} actual)", OBSERVED)
+        _line_fallback(
+            axes[1], predicted, f"Predicted ({lhs_label} predicted)", DISCOVERED
+        )
         _line_fallback(axes[2], predicted - actual, f"Residual ({_RESIDUAL_SIGN})")
-        fig.tight_layout()
         return fig
 
     residual_nd = pred_nd - actual_nd
@@ -236,18 +243,12 @@ def _render_axis_aware(
             1,
             3,
             figsize=_RESIDUAL_FIGSIZE,
-            dpi=_DEFAULT_DPI,
+            dpi=DPI,
+            layout="constrained",
         )
         axes = list(axes_arr.flat)
         limits = _reference_limits(actual_nd, pred_nd)
-        _render_panel(axes[0], actual_nd, f"True ({lhs_label} actual)", limits=limits)
-        _render_panel(
-            axes[1], pred_nd, f"Predicted ({lhs_label} predicted)", limits=limits
-        )
-        _render_panel(
-            axes[2], residual_nd, f"Residual ({_RESIDUAL_SIGN})", residual=True
-        )
-        fig.tight_layout()
+        _triptych(axes, (actual_nd, pred_nd, residual_nd), lhs_label, limits)
         return fig
 
     if n_spatial <= 1 and len(shape) == 2:
@@ -305,7 +306,8 @@ def _render_1d_axis_aware(
         1,
         3,
         figsize=_RESIDUAL_FIGSIZE,
-        dpi=_DEFAULT_DPI,
+        dpi=DPI,
+        layout="constrained",
     )
     axes: list[Axes] = list(axes_arr.flat)
 
@@ -314,7 +316,7 @@ def _render_1d_axis_aware(
 
     limits = _reference_limits(actual_display, pred_display)
 
-    _pcolormesh_panel(
+    true_mesh = _pcolormesh_panel(
         axes[0],
         t_coords,
         s_coords,
@@ -324,7 +326,7 @@ def _render_1d_axis_aware(
         spatial_axis=s_name,
         limits=limits,
     )
-    _pcolormesh_panel(
+    pred_mesh = _pcolormesh_panel(
         axes[1],
         t_coords,
         s_coords,
@@ -334,7 +336,7 @@ def _render_1d_axis_aware(
         spatial_axis=s_name,
         limits=limits,
     )
-    _pcolormesh_panel(
+    residual_mesh = _pcolormesh_panel(
         axes[2],
         t_coords,
         s_coords,
@@ -344,8 +346,7 @@ def _render_1d_axis_aware(
         spatial_axis=s_name,
         residual=True,
     )
-
-    fig.tight_layout()
+    _triptych_colorbars(axes, (true_mesh, pred_mesh, residual_mesh))
     return fig
 
 
@@ -391,13 +392,14 @@ def _render_2d_axis_aware(
         1,
         3,
         figsize=_RESIDUAL_FIGSIZE,
-        dpi=_DEFAULT_DPI,
+        dpi=DPI,
+        layout="constrained",
     )
     axes: list[Axes] = list(axes_arr.flat)
 
 
     limits = _reference_limits(actual_slice, pred_slice)
-    _heatmap_panel(
+    true_image = _heatmap_panel(
         axes[0],
         actual_slice,
         f"True ({time_axis}={t_val:.3g})" + _range_note(actual_slice, limits),
@@ -406,7 +408,7 @@ def _render_2d_axis_aware(
         ylabel=ylabel,
         limits=limits,
     )
-    _heatmap_panel(
+    pred_image = _heatmap_panel(
         axes[1],
         pred_slice,
         f"Predicted ({time_axis}={t_val:.3g})" + _range_note(pred_slice, limits),
@@ -415,7 +417,7 @@ def _render_2d_axis_aware(
         ylabel=ylabel,
         limits=limits,
     )
-    _heatmap_panel(
+    residual_image = _heatmap_panel(
         axes[2],
         residual_slice,
         f"Residual ({_RESIDUAL_SIGN}, {time_axis}={t_val:.3g})",
@@ -424,8 +426,7 @@ def _render_2d_axis_aware(
         xlabel=xlabel,
         ylabel=ylabel,
     )
-
-    fig.tight_layout()
+    _triptych_colorbars(axes, (true_image, pred_image, residual_image))
     return fig
 
 
@@ -442,6 +443,30 @@ def _safe_reshape(
         return None
 
 
+def _triptych(
+    axes: list[Axes],
+    fields: tuple[np.ndarray, np.ndarray, np.ndarray],
+    lhs_label: str,
+    limits: tuple[float, float],
+) -> None:
+    actual, predicted, residual = fields
+    mappables = (
+        _render_panel(axes[0], actual, f"True ({lhs_label} actual)", limits=limits),
+        _render_panel(
+            axes[1], predicted, f"Predicted ({lhs_label} predicted)", limits=limits
+        ),
+        _render_panel(axes[2], residual, f"Residual ({_RESIDUAL_SIGN})", residual=True),
+    )
+    _triptych_colorbars(axes, mappables)
+
+
+def _triptych_colorbars(
+    axes: Sequence[Axes], mappables: Sequence[ScalarMappable]
+) -> None:
+    _scale_colorbar(mappables[:2], axes[:2])
+    _scale_colorbar(mappables[2:], axes[2:])
+
+
 def _render_panel(
     ax: Axes,
     data: np.ndarray,
@@ -449,22 +474,25 @@ def _render_panel(
     *,
     residual: bool = False,
     limits: tuple[float, float] | None = None,
-) -> None:
+) -> ScalarMappable:
     from kd.viz.plots._dim_utils import _slice_nd_to_2d
 
     render_data = data
     if render_data.ndim > 2:
         render_data = _slice_nd_to_2d(render_data, (0, 1))
     note = "" if residual or limits is None else _range_note(render_data, limits)
-    _heatmap_panel(ax, render_data, title + note, residual=residual, limits=limits)
+    return _heatmap_panel(
+        ax, render_data, title + note, residual=residual, limits=limits
+    )
 
 
 def _line_fallback(
     ax: Axes,
     data: np.ndarray,
     title: str,
+    color: str = CONTEXT,
 ) -> None:
-    ax.plot(data.ravel())
+    ax.plot(data.ravel(), color=color)
     ax.set_title(title)
     ax.set_xlabel("Index")
     integer_ticks(ax)

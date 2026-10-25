@@ -7,14 +7,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
+import torch
 from matplotlib.animation import PillowWriter
 
 from kd.core.equation import DEFAULT_LHS_LABEL, Form
+from kd.core.oom import is_cpu_alloc_failure
 from kd.data.schema import DataTopology
 from kd.viz.extension import HomogeneousVizExtension, VizExtension
 from kd.viz.integration_assembly import build_integration_result
 from kd.viz.plots.animation import plot_field_animation
-from kd.viz.plots.coefficient import plot_coefficient_bar
+from kd.viz.plots.coefficient import coefficient_bar_figsize, plot_coefficient_bar
 from kd.viz.plots.comparison import (
     plot_score_bar,
     plot_summary_table,
@@ -22,7 +24,6 @@ from kd.viz.plots.comparison import (
 )
 from kd.viz.plots.convergence import plot_convergence
 from kd.viz.plots.equation import plot_equation
-from kd.viz.plots.equation_card import plot_equation_card
 from kd.viz.plots.equation_tree import plot_equation_tree
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 from kd.viz.plots.field import plot_field_comparison
@@ -38,13 +39,16 @@ from kd.viz.plots.time_slices import plot_time_slices
 from kd.viz.report import (
     FigureSpec,
     ReportResult,
+    _figure_title_from_path,
     _universal_figure_spec,
     generate_report,
 )
-from kd.viz.style import style_context
+from kd.viz.style import DPI, FIGSIZE_SINGLE, PANEL_H, PANEL_W, style_context
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from matplotlib.figure import Figure
 
     from kd.core.integrator import IntegrationResult
     from kd.data.schema import PDEDataset
@@ -52,13 +56,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DPI = 150
+_DEFAULT_DPI = DPI
 _SVG_FORMAT = "svg"
-_UNIVERSAL_FIGSIZE = (8, 5)
-_FIELD_FIGSIZE = (15, 4)
-_COMPARISON_FIGSIZE = (10, 5)
-_SUMMARY_FIGSIZE = (10, 3)
-_PLUGIN_FIGSIZE = (8, 5)
+_UNIVERSAL_FIGSIZE = FIGSIZE_SINGLE
+_COMPARISON_FIGSIZE = FIGSIZE_SINGLE
+_SUMMARY_FIGSIZE = (3 * PANEL_W, PANEL_H)
+_PLUGIN_FIGSIZE = FIGSIZE_SINGLE
+
+_EQUATION_FIGSIZE = (FIGSIZE_SINGLE[0], 1.8)
 
 
 
@@ -135,6 +140,33 @@ def _scatter_aware_field_shape(
     return field_shape, no_grid
 
 
+def _drop_card_heading(fig: Figure, heading: str) -> None:
+    """Keep a single-panel figure from repeating its report card heading.
+
+    The report prints ``heading`` above the figure, so a title line that
+    starts with it loses those words: a line that says nothing else is
+    removed, and a disclosure after it stays (``Error Heatmap (DIVERGED at
+    t=0.3)`` becomes ``DIVERGED at t=0.3``). Multi-panel figures keep their
+    panel titles, which name the panels rather than the figure.
+    """
+    panels = [ax for ax in fig.axes if ax.get_label() != "<colorbar>"]
+    if len(panels) != 1:
+        return
+    title = panels[0].title
+    lines = [_without_heading(line, heading) for line in title.get_text().split("\n")]
+    title.set_text("\n".join(line for line in lines if line))
+
+
+def _without_heading(line: str, heading: str) -> str:
+    """``line`` minus a leading ``heading`` (case-insensitive) and its brackets."""
+    if not line.casefold().startswith(heading.casefold()):
+        return line
+    rest = line[len(heading):].strip()
+    if rest.startswith("(") and rest.endswith(")"):
+        rest = rest[1:-1].strip()
+    return rest[:1].upper() + rest[1:]
+
+
 class VizEngine:
     """Orchestrates rendering of universal, plugin, and comparison plots.
 
@@ -205,14 +237,6 @@ class VizEngine:
             result, field_shape=field_shape, infer_grid=not no_grid
         )
 
-        if dataset is not None:
-            path, warnings = self._render_tier2(
-                "equation_card", plot_equation_card, result=result, dataset=dataset
-            )
-            if path is not None:
-                report.figures.insert(0, path)
-            self._merge_warnings(report, warnings)
-
 
 
 
@@ -224,7 +248,7 @@ class VizEngine:
                     "coefficient_bar",
                     plot_coefficient_bar,
                     result,
-                    figsize=_UNIVERSAL_FIGSIZE,
+                    figsize=coefficient_bar_figsize(result),
                 )
                 if path is not None:
                     report.figures.append(path)
@@ -254,6 +278,7 @@ class VizEngine:
         plugin_specs = homogeneous_specs + self._render_plugin_plots(algorithm, report)
 
 
+
         html_path = self._output_dir / "report.html"
         generate_report(
             result,
@@ -261,6 +286,7 @@ class VizEngine:
             html_path,
             plugin_figures=plugin_specs,
             warnings=report.warnings,
+            ground_truth=getattr(dataset, "ground_truth", None),
         )
         report.report = html_path
 
@@ -302,7 +328,7 @@ class VizEngine:
         tier1_specs = [
             ("convergence", plot_convergence, _UNIVERSAL_FIGSIZE),
             ("parity", plot_parity, _UNIVERSAL_FIGSIZE),
-            ("equation", plot_equation, _UNIVERSAL_FIGSIZE),
+            ("equation", plot_equation, _EQUATION_FIGSIZE),
             ("equation_tree", plot_equation_tree, _UNIVERSAL_FIGSIZE),
         ]
         if result.has_pareto_front():
@@ -479,6 +505,7 @@ class VizEngine:
                 path = self._output_dir / (
                     f"homogeneous_{plot_info.name}.{_SVG_FORMAT}"
                 )
+                _drop_card_heading(fig, plot_info.title)
                 fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
                 specs.append(
                     FigureSpec(
@@ -488,7 +515,11 @@ class VizEngine:
                     )
                 )
                 report.figures.append(path)
+            except torch.cuda.OutOfMemoryError:
+                raise
             except Exception as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
                 msg = f"Homogeneous plot '{plot_info.name}' failed: {exc}"
                 logger.warning(msg)
                 report.warnings.append(msg)
@@ -558,6 +589,7 @@ class VizEngine:
                 if plugin_warnings:
                     self._merge_warnings(report, plugin_warnings)
                 path = self._output_dir / f"plugin_{plot_info.name}.{_SVG_FORMAT}"
+                _drop_card_heading(fig, plot_info.title)
                 fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
                 plugin_specs.append(
                     FigureSpec(
@@ -567,7 +599,11 @@ class VizEngine:
                     )
                 )
                 report.figures.append(path)
+            except torch.cuda.OutOfMemoryError:
+                raise
             except Exception as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
                 msg = f"Plugin plot '{plot_info.name}' failed: {exc}"
                 logger.warning(msg)
                 report.warnings.append(msg)
@@ -597,7 +633,7 @@ class VizEngine:
             "coefficient_bar",
             plot_coefficient_bar,
             result,
-            figsize=_UNIVERSAL_FIGSIZE,
+            figsize=coefficient_bar_figsize(result),
         )
         if path is not None:
             report.figures.append(path)
@@ -809,6 +845,7 @@ class VizEngine:
         try:
             fig, warnings = plot_fn(**kwargs, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"
+            _drop_card_heading(fig, _figure_title_from_path(path))
             fig.savefig(
                 path,
                 format=_SVG_FORMAT,
@@ -906,6 +943,7 @@ class VizEngine:
         try:
             warnings = plot_fn(result, ax, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"
+            _drop_card_heading(fig, _figure_title_from_path(path))
             fig.savefig(path, format=_SVG_FORMAT, bbox_inches="tight")
         except Exception as exc:
             msg = f"Universal plot '{name}' failed: {exc}"

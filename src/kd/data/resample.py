@@ -19,6 +19,7 @@ from kd.data.schema import (
 )
 from kd.data.source import DatasetSource
 from kd.models import FieldModel, FieldModelTrainer
+from kd.models._training_precision import TrainingDtype, omit_default_training_dtype
 
 __all__ = ["resample_to_grid"]
 
@@ -37,6 +38,7 @@ def resample_to_grid(
     seed: int = 0,
     restore_best: bool = False,
     device: str | torch.device | None = None,
+    training_dtype: TrainingDtype | None = None,
 ) -> PDEDataset:
     coords, targets, dtype = _scatter_payload(dataset)
     output_axes = _target_axes(dataset, axes, dtype)
@@ -46,16 +48,19 @@ def resample_to_grid(
         "hidden_sizes": list(hidden_sizes),
         "activation": activation,
     }
-    training: dict[str, Any] = {
-        "max_epochs": max_epochs,
-        "lr": lr,
-        "weight_decay": weight_decay,
-        "patience": patience,
-        "val_ratio": val_ratio,
-        "seed": seed,
-        "restore_best": restore_best,
-        "device": str(device) if device is not None else "cpu",
-    }
+    training = omit_default_training_dtype(
+        {
+            "max_epochs": max_epochs,
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "patience": patience,
+            "val_ratio": val_ratio,
+            "seed": seed,
+            "restore_best": restore_best,
+            "device": str(device) if device is not None else "cpu",
+            "training_dtype": training_dtype,
+        }
+    )
     model, epochs_run = _fit_surrogate(coords, targets, model_options, training)
     return replace(
         dataset,
@@ -115,9 +120,7 @@ def _target_axes(
     result: dict[str, AxisInfo] = {}
     for name, raw in axes.items():
         axis = AxisInfo(
-            name=name,
-            values=torch.as_tensor(raw, dtype=dtype),
-            is_periodic=dataset.axes[name].is_periodic,
+            name=name, values=torch.as_tensor(raw, dtype=dtype), is_periodic=False
         )
         values = regularize_axis(name, axis.values.detach().cpu().numpy())
         axis.values = torch.as_tensor(values, dtype=dtype, device="cpu").clone()
@@ -172,6 +175,7 @@ def _resampled_source(
     training: dict[str, Any],
     epochs_run: int,
 ) -> DatasetSource:
+    assert dataset.axes is not None
     return DatasetSource(
         path="",
         sha256="",
@@ -187,6 +191,9 @@ def _resampled_source(
                 else None,
             },
             "axes": {name: axis.values.tolist() for name, axis in axes.items()},
+            "source_periodic": {
+                name: info.is_periodic for name, info in dataset.axes.items()
+            },
             "model": model_options,
             "training": training,
             "epochs_run": epochs_run,

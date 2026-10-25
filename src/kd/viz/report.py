@@ -11,9 +11,17 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from kd.core.expr.sympy_bridge import to_latex
 from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.viz._result_data import _sketch_fit_note
-from kd.viz.equation_display import EquationDisplay, expression_display, latex_display
+from kd.viz.equation_display import (
+    STRUCTURE_ONLY_NOTE,
+    EquationDisplay,
+    expression_display,
+    latex_display,
+)
+from kd.viz.plots._comparison_cells import _fitted_formatted
+from kd.viz.plots.equation_card import _truth_comparison
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,10 +34,6 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 _FIGURE_DESCRIPTIONS = {
-    "equation_card": (
-        "Read the published equation, compare its term coefficients with ground "
-        "truth when available, and check the native search-fit NMSE."
-    ),
     "convergence": ("Read the best native score reached at each search iteration."),
     "term_presence": (
         "Track active fitted terms among the recorded top-k distinct structures. "
@@ -190,6 +194,76 @@ def _best_expression_display(result: ExperimentResult) -> EquationDisplay:
     return latex_display(result, label=_display_algorithm(result))
 
 
+
+_PROVIDER_WORDS = {
+    "finite_diff": "finite differences",
+    "autograd": "autograd derivatives",
+}
+
+
+@dataclass(frozen=True)
+class _MathText:
+
+    text: str
+    tex: str | None
+
+
+@dataclass(frozen=True)
+class _TermRow:
+
+    term: _MathText
+    published: str
+    truth: str
+
+
+def _run_sentence(result: ExperimentResult) -> str:
+    parts = [f"{_display_algorithm(result)} on {result.dataset_name}"]
+    seed = result.config.get("seed")
+    if seed is not None:
+        parts.append(f"seed {seed}")
+    plural = "" if result.iterations == 1 else "s"
+    length = f"{result.iterations} iteration{plural}"
+    parts.append(f"{length}, stopped early" if result.early_stopped else length)
+    provider = _PROVIDER_WORDS.get(str(result.config.get("provider_kind")))
+    if provider is not None:
+        parts.append(provider)
+    return ", ".join(parts) + "."
+
+
+def _law_text(result: ExperimentResult, display: EquationDisplay) -> _MathText:
+    if not display.is_math:
+        return _MathText(display.text, None)
+    if display.note == STRUCTURE_ONLY_NOTE:
+        return _MathText(expression_display(result.best_expression).text, display.text)
+    formatted = _fitted_formatted(result)
+    assert formatted is not None
+    return _MathText(f"{formatted.lhs} = {formatted.rhs}", display.text)
+
+
+def _truth_text(truth: str) -> _MathText:
+    display = expression_display(truth)
+    if display.degraded:
+        return _MathText(truth, None)
+    tex = " = ".join(to_latex(part.strip()) for part in truth.split("=", 1))
+    return _MathText(display.text, tex)
+
+
+def _term_rows(
+    result: ExperimentResult, truth: str | None
+) -> tuple[list[_TermRow], list[str]]:
+    rows, normalization, notes = _truth_comparison(result, truth)
+    if normalization is not None:
+        notes = [*notes, normalization]
+    return [
+        _TermRow(
+            term=_MathText(expression_display(key).text, to_latex(key)),
+            published=f"{published:.6g}",
+            truth=f"{expected:.6g}",
+        )
+        for key, published, expected in rows
+    ], notes
+
+
 def _display_config(value: Any, *, key: str = "") -> Any:
     if isinstance(value, dict):
         return {name: _display_config(item, key=name) for name, item in value.items()}
@@ -210,12 +284,10 @@ def generate_report(
     *,
     plugin_figures: Sequence[Path | FigureSpec] | None = None,
     warnings: list[str] | None = None,
+    ground_truth: str | None = None,
 ) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fig_entries = _build_figure_entries(figures)
-    plugin_entries = _build_figure_entries(plugin_figures or [])
 
 
 
@@ -224,35 +296,40 @@ def generate_report(
 
     json_summary = _build_json_summary(result)
     expression = _best_expression_display(result)
-
+    term_rows, term_notes = _term_rows(result, ground_truth)
 
     env = Environment(
         loader=FileSystemLoader(str(_TEMPLATES_DIR)),
         autoescape=True,
     )
     template = env.get_template("report.html")
+    config = _display_config(result.config)
 
     html = template.render(
         dataset_name=result.dataset_name,
         algorithm_name=_display_algorithm(result),
+        run_sentence=_run_sentence(result),
 
 
 
-        best_expression_latex=expression.text,
-        best_expression_is_math=expression.is_math,
-        best_expression_note=expression.note,
+        law=_law_text(result, expression),
+        law_note=expression.note,
+        truth=None if ground_truth is None else _truth_text(ground_truth),
+        term_rows=term_rows,
+        term_notes=term_notes,
         best_score=f"{result.best_score:.6g}",
 
 
         score_label=result.score_kind,
+        lhs_label=result.lhs_label,
         r2=f"{result.final_eval.r2:.6f}",
         nmse=f"{result.final_eval.nmse:.4g}",
         fit_note=_sketch_fit_note(result),
         iterations=result.iterations,
         early_stopped=result.early_stopped,
-        config=_display_config(result.config),
-        figures=fig_entries,
-        plugin_figures=plugin_entries,
+        config=config,
+        figures=_build_figure_entries(figures),
+        plugin_figures=_build_figure_entries(plugin_figures or []),
         warnings=warnings or [],
         json_summary=json_summary,
     )

@@ -4,14 +4,17 @@
 a frozen, fully typed dataclass whose sequence fields are tuples (so an
 instance stays hashable / immutable) and whose scalar knobs are JSON-safe
 (``asdict`` round-trips through ``json.dumps`` when ``extra_pysr_kwargs`` is
-``None``). ``__post_init__`` rejects illegal values with ``ValueError`` and
-never mutates fields.
+``None``). ``__post_init__`` rejects illegal values with ``ValueError``; the
+only field it rewrites is ``terms``, whose product-notation entries it lowers
+to funcall IR.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+from kd.core.equation._sketch_terms import lower_term
 
 
 
@@ -84,7 +87,10 @@ class PySRConfig:
     """
 
     terms: tuple[str, ...] = _DEFAULT_TERMS
-    """Ordered catalog of candidate columns for PDE regression."""
+    """Ordered catalog of candidate columns for PDE regression. On a grid whose
+    spatial axes are ``x`` and ``y``, ``kd.Model`` builds the default over both
+    axes, ``u, u_x, u_xx, mul(u, u_x), u_y, u_yy, mul(u, u_y)``.
+    """
     seed: int = 0
     niterations: int = 40
     population_size: int = 33
@@ -101,12 +107,15 @@ class PySRConfig:
         """Validate the configuration, raising ``ValueError`` on illegal input.
 
         Guards reject only genuinely illegal values; legitimate small ones
-        (e.g. a single term, size knobs == 1) are accepted. No field is
-        mutated here -- the dataclass is frozen and these checks are
-        raise-only.
+        (e.g. a single term, size knobs == 1) are accepted. The only field
+        rewritten is ``terms``: an entry in product notation is stored as its
+        funcall IR.
         """
         if not self.terms:
             raise ValueError("terms must be a non-empty tuple of candidate terms")
+
+
+        object.__setattr__(self, "terms", tuple(map(lower_term, self.terms)))
         if self.niterations <= 0:
             raise ValueError(f"niterations must be > 0, got {self.niterations}")
         if self.maxsize <= 0:

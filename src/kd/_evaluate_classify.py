@@ -5,11 +5,18 @@ this module owns the layered term-rejection classifier and the JSON-dumpable
 report dataclasses. ``kd.evaluate`` re-exports the report types and calls
 ``classify_terms``; nothing here imports ``kd.evaluate`` (no import cycle).
 
+Each term is classified in the caller's spelling: a term in product notation
+(``u*u_x``, ``u**2``) is lowered to its funcall IR
+(:func:`kd.core.equation._sketch_terms.lower_term`) and the IR is what the
+layers check and execute, while reports name the term as written.
+
 Rejection layers, applied in order:
-(0) syntax/composite via ``split_terms`` → (1) execution error (incl. CUDA-OOM
-special case + terminal-derivative max_order hint) → (2) shape → (3) non-finite
-→ (4) all-zero → (5) LHS tautology. The reason prefixes are mutually
-distinguishable so callers can branch on the failure class.
+(0) syntax (outside the product notation, or not funcall IR) / composite via
+``split_terms`` → (1) execution error (incl. the terminal-derivative max_order
+hint) → (2) shape → (3) non-finite → (4) all-zero → (5) LHS tautology. The
+reason prefixes are mutually distinguishable so callers can branch on the
+failure class. An allocation failure (CUDA OOM or a CPU allocation failure) and
+an external stop are not term verdicts: they propagate.
 """
 
 from __future__ import annotations
@@ -19,10 +26,11 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from kd.core.evaluator import release_cuda_memory
+from kd.core.equation._sketch_terms import lower_term
 from kd.core.expr.naming import parse_derivative_name
 from kd.core.expr.terms import split_terms
 from kd.core.interrupt import SearchInterrupted
+from kd.core.oom import is_cpu_alloc_failure
 from kd.data.derivatives.finite_diff import MAX_SUPPORTED_ORDER
 
 if TYPE_CHECKING:
@@ -162,8 +170,7 @@ def classify_terms(
 
 
         raise TypeError(
-            "classify_terms requires components.context (term execution); "
-            "got None."
+            "classify_terms requires components.context (term execution); got None."
         )
     known_fields, known_axes = _known_names(components.dataset)
     results: list[TermValidation] = []
@@ -207,34 +214,41 @@ def _classify_one(
     """Return ``None`` if ``term`` is usable, else a rejection reason string.
 
     Layers, in order (see module docstring): (0) syntax/composite via
-    ``split_terms``; (1) execution error — enriched with the CUDA-OOM special
-    case and the terminal-derivative max_order hint; (2) shape (numel != LHS
-    length); (3) non-finite; (4) all-zero; (5) tautology (bitwise-equal to the
-    LHS target, relative to the caller's ``lhs_order``).
+    ``split_terms``; (1) execution error, enriched with the terminal-derivative
+    max_order hint, while an allocation failure propagates; (2) shape (numel !=
+    LHS length); (3) non-finite; (4) all-zero; (5) tautology (bitwise-equal to
+    the LHS target, relative to the caller's ``lhs_order``).
 
     Layers 1-4 mirror ``Evaluator._build_theta`` (additive, read-only). The
     non-finite branch is practically unreachable with safe ops on clean data but
-    is kept so the contract is explicit and testable.
+    is kept so the contract is explicit and testable. A term in product
+    notation is checked and executed as its lowered IR; a term outside the
+    notation is a ``syntax`` rejection.
     """
-    syntax_reason = _canonical_reason(term, registry)
+    try:
+        ir = lower_term(term)
+    except ValueError as exc:
+        return f"{_REASON_SYNTAX}: not one term in product notation; {exc}"
+    syntax_reason = _canonical_reason(ir, registry)
     if syntax_reason is not None:
         return syntax_reason
 
     try:
         with torch.no_grad():
-            exec_result = executor.execute(term, context)
+            exec_result = executor.execute(ir, context)
             column = exec_result.value.detach().flatten()
-    except SearchInterrupted:
+    except (SearchInterrupted, torch.cuda.OutOfMemoryError):
+
 
 
         raise
-    except torch.cuda.OutOfMemoryError:
-
-
-        release_cuda_memory()
-        return f"{_REASON_EXECUTION}: CUDA out of memory during term execution"
     except Exception as exc:
-        hint = _max_order_hint(term, max_order, known_fields, known_axes)
+        if is_cpu_alloc_failure(exc):
+
+
+
+            raise
+        hint = _max_order_hint(ir, max_order, known_fields, known_axes)
         return f"{_REASON_EXECUTION} error for '{term}': {exc}{hint}"
 
     return _column_reason(column, lhs_target)
@@ -271,7 +285,10 @@ def _canonical_reason(term: str, registry: FunctionRegistry) -> str | None:
 
         raise
     except Exception as exc:
-        return f"{_REASON_SYNTAX}: non-canonical term (funcall IR required); {exc}"
+        return (
+            f"{_REASON_SYNTAX}: non-canonical term (funcall IR or product "
+            f"notation required); {exc}"
+        )
     if len(parts) > 1:
         return (
             f"{_REASON_COMPOSITE}: top-level additive structure; submit as "

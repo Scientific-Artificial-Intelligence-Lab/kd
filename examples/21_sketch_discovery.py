@@ -3,17 +3,26 @@
 Examples 01-20 search blind: every fit starts from "any equation could be
 here". Real problems rarely look like that - part of the law is often
 settled physics. ``Model.fit(dataset, sketch=...)`` turns that partial
-knowledge into a first-class task object:
+knowledge into a first-class task object, written with ``kd.Sketch``:
 
-    PinnedTerm a term you know WITH its coefficient. It is subtracted
-                    from the regression target before the search and restored
-                    exactly in the solution - never re-fitted, and the search
-                    cannot spend budget rediscovering it.
-    AnchoredTerm a term you know structurally; its coefficient stays free,
-                    and the exit checks the final equation carries it.
-    TermHole the unknown remainder: how many terms may fill it, and
-                    what shapes they may take (derivative-order cap, allowed
-                    operators, fields, axes).
+    pinned terms you know WITH their coefficients, as a dict such as
+                {"u*u_x": -1.0}. Each is subtracted from the regression
+                target before the search and restored exactly in the
+                solution - never re-fitted, and the search cannot spend
+                budget rediscovering it.
+    anchored terms you know structurally, such as ["u_xx"]; their
+                coefficients stay free, and the exit checks the final
+                equation carries them.
+    holes the unknown remainder, as kd.Hole objects: how many terms
+                may fill it, and what shapes they may take (derivative-order
+                cap, allowed operators, fields).
+
+A term is a name (u, u_xx), a product (u*u_x), a positive integer power
+(u**2) or kd's funcall IR (mul(u,u_x)). The fit takes the left-hand side, the
+vocabulary and an exact match policy from the dataset;
+``sketch.resolve(dataset)`` returns the complete Sketch the fit runs under,
+and ``kd.core.equation`` holds the typed clauses (PinnedTerm, AnchoredTerm,
+TermHole) for constraints the shorthand does not cover, such as axes.
 
 The exit is certified: ``result_.sketch_outcome.solution`` is only published
 when the discovered law satisfies every clause (see ``.verdict``) AND fits the
@@ -22,54 +31,28 @@ defaults to ``kd.SKETCH_EXIT_VERIFY`` (NMSE <= 0.05); otherwise the run reports
 the best candidate and the reason instead of overclaiming.
 
 Here we pin the advection term of Burgers u_t = -1.0*u*u_x + 0.1*u_xx and
-leave one order-2 hole, on SGA - one of the two backends with their own sketch
-compiler (PySINDy is the other): SGA narrows the search's variable and operator
-pools at the source, and a structural predicate rejects the composite shapes
-that still slip past the narrowed pools, so the search budget concentrates on
-the admissible space. The same Sketch object runs on PySINDy unchanged - it
-enforces the same three generation-level clauses (derivative order, operator
-set, field/axis set) by filtering its explicit term library, provided that
-library already lists the pinned term and the candidates that may fill the hole.
-narrows the search's variable and operator pools at the source, and a
-structural predicate rejects the composite shapes that still slip past the
-narrowed pools, so the search budget concentrates on the admissible space.
+leave one hole of one or two terms of derivative order at most 2, on SGA,
+which compiles the sketch into its own generation grammar: SGA narrows the
+search's variable and operator pools at the source, and a structural
+predicate rejects the composite shapes that still slip past the narrowed
+pools, so the search budget concentrates on the admissible space. The same
+sketch runs on PySINDy unchanged - it enforces the same three
+generation-level clauses (derivative order, operator set, field/axis set) by
+filtering its explicit term library, provided that library already lists the
+pinned term and the candidates that may fill the hole.
 
 Run: python examples/21_sketch_discovery.py
 """
 
 import kd
 from kd.core.expr import to_sympy
-from kd.core.equation import (
-    LhsSpec,
-    PinnedTerm,
-    Sketch,
-    SketchMatchPolicy,
-    TermConstraint,
-    TermHole,
-)
-from kd.core.expr import TermVocabulary
 from kd.data.synthetic import generate_burgers_data
 
 dataset = generate_burgers_data(nx=64, nt=51, nu=0.1, seed=0)
 
-sketch = Sketch(
-    lhs_spec=LhsSpec("u", "t", 1),
-    vocabulary=TermVocabulary(
-        fields=frozenset({"u"}), coordinates=frozenset({"x", "t"})
-    ),
-    pinned=(PinnedTerm("mul(u,u_x)", -1.0),),
-    anchored=(),
-    holes=(
-        TermHole(
-            id="diffusion",
-            min_count=1,
-            max_count=2,
-            constraint=TermConstraint(max_deriv_order=2),
-        ),
-    ),
-    match_policy=SketchMatchPolicy(
-        coeff_atol=1e-9, coeff_rtol=1e-9, support_threshold=0.0
-    ),
+sketch = kd.Sketch(
+    pinned={"u*u_x": -1.0},
+    holes=[kd.Hole(max_terms=2, max_deriv_order=2)],
 )
 
 model = kd.Model(
