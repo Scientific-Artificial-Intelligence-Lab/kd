@@ -732,13 +732,14 @@ html.kd-home .kd-readout--hero { --kd-fig-h: min(27vh, 13rem); }
   font-size: .78rem;
   color: var(--kd-slate);
 }
-/* Break out of the reading column: the field and comparison panels carry
-   detail that the text measure is too narrow to show. */
-.kd-figure--wide { margin-inline: calc(-1 * clamp(0px, 6vw, 4rem)); }
-/* An algorithm page carries both sidebars, so its reading column is far
-   narrower than a hidden-toc page's; give the wide figures more room there. */
+/* Break out of the reading column into the content gutter on both sides:
+   the field and comparison panels carry detail that the text measure is too
+   narrow to show. The width is the column plus Material's .md-content__inner
+   margin (.8rem; 1.2rem beside the sidebars from 76.25em), so the figure
+   never reaches a sidebar or past the screen edge. */
+.md-typeset .kd-figure--wide { width: auto; max-width: none; margin-inline: -.8rem; }
 @media screen and (min-width: 76.25em) {
-  .kd-figure--wide { margin-inline: calc(-1 * clamp(0px, 12vw, 11rem)); }
+  .md-typeset .kd-figure--wide { margin-inline: -1.2rem; }
 }
 
 .kd-figure__placeholder {

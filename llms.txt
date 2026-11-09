@@ -14,7 +14,9 @@ The PyPI distribution is `sail-kd`; Python code imports `kd`. After installation
 - [Experimental controller](https://scientific-artificial-intelligence-lab.github.io/kd/guide/controller/): Endpoint setup, data files, interactive searches and reports.
 - [Agent search example](https://scientific-artificial-intelligence-lab.github.io/kd/guide/agent-example/): A checkpoint/resume demonstration, results from both search segments and interactive requests.
 - [Architecture](https://scientific-artificial-intelligence-lab.github.io/kd/design/architecture/): The complete component diagram, package layers and execution order.
-- [Data loading](https://scientific-artificial-intelligence-lab.github.io/kd/data/shape/): Array construction, kd.load, kd.inspect_file, mappings, axes and left-hand sides.
+- [Data loading](https://scientific-artificial-intelligence-lab.github.io/kd/data/shape/): Array construction, kd.load and its registered layouts, kd.inspect_file, mappings, axes and left-hand sides.
+- [ODE trajectories](https://scientific-artificial-intelligence-lab.github.io/kd/data/trajectories/): Trajectory sets, per-trajectory derivatives, one regression table per target state and saved preparations.
+- [Partial equations](https://scientific-artificial-intelligence-lab.github.io/kd/guide/sketch/): Pinned, anchored and hole clauses of kd.Sketch, term notation, algorithm support and the sketch outcome.
 - [Algorithm overview](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/): Algorithm capabilities and links to their reference pages.
 - [API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/): Import locations, signatures and parameters.
 
