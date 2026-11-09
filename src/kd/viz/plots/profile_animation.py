@@ -29,9 +29,9 @@ from kd.viz.style import (
     DPI,
     FIGSIZE_SINGLE,
     INK_2,
-    INK_MUTED,
     LINE_WIDTH,
     OBSERVED,
+    SMALL_FONTSIZE,
     SURFACE,
     TRAJECTORY_WIDTH,
     style_context,
@@ -182,8 +182,8 @@ def _profile_movie(
             ax.set_title(
                 f"Showing {len(frames)} of {n_t} time steps",
                 loc="right",
-                color=INK_MUTED,
-                fontsize="small",
+                color=INK_2,
+                fontsize=SMALL_FONTSIZE,
             )
         clip_notes = _clip_notes(profiles, frames, ax.get_ylim(), notes)
         clip_text = _note_text(ax, clip_notes.get(frames[0], ""))
@@ -232,8 +232,8 @@ def _note_text(ax: Axes, text: str) -> Text:
         transform=ax.transAxes,
         ha="left",
         va="top",
-        color=INK_MUTED,
-        fontsize="small",
+        color=INK_2,
+        fontsize=SMALL_FONTSIZE,
         bbox={"facecolor": SURFACE, "edgecolor": "none", "alpha": 0.85, "pad": 2},
     )
 
@@ -323,7 +323,7 @@ def _draw_waterfall_row(
         ha="right",
         va="center",
         color=INK_2,
-        fontsize="small",
+        fontsize=SMALL_FONTSIZE,
     )
 
 

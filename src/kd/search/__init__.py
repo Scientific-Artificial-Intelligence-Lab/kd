@@ -13,7 +13,8 @@ Sanctioned direct-import module paths beyond this facade:
 ``kd.search.records`` / ``kd.search.mini_table`` / ``kd.search.descriptor``
 -- their key types (``RunRecord`` / ``build_mini_table`` /
 ``InstrumentDescriptor`` / ``InstrumentMode`` / ``ModeSelector`` / ``Knob`` /
-``Segmentation`` / ``tool_schema``)
+``Segmentation`` / ``RuntimeRequirements`` / ``EnvironmentRequirement`` /
+``ResourceHints`` / ``tool_schema``)
 are re-exported here, but each module carries more than
 what is promoted (e.g. ``mini_table``'s ``escape_cell``) and stays
 direct-import-sanctioned at its own module path. ``kd.search.protocol`` is
@@ -54,11 +55,14 @@ from kd.search.checkpoint_select import (
     resolve_checkpoint,
 )
 from kd.search.descriptor import (
+    EnvironmentRequirement,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
     ModeSelector,
     ModeVerdict,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
     mode_accepts,
     mode_inputs,
@@ -96,6 +100,7 @@ from kd.search.protocol import (
     PlatformComponents,
     SearchAlgorithm,
     SearchedVocabularyAlgorithm,
+    StoredSurrogateTrainer,
     SurrogateTrainer,
     TerminatingSearchAlgorithm,
 )
@@ -103,7 +108,11 @@ from kd.search.pysindy import PySINDyConfig, PySINDyPlugin
 from kd.search.pysr import PySRConfig, PySRPlugin
 from kd.search.recorder import BEST_SCORE_KEY, VizRecorder
 from kd.search.records import RunRecord
-from kd.search.registry import register_algorithm
+from kd.search.registry import (
+    DerivativeSelection,
+    DerivativeSelectionAlgorithm,
+    register_algorithm,
+)
 from kd.search.result import (
     ExperimentResult,
     ParetoEntry,
@@ -121,10 +130,12 @@ from kd.search.run_catalog import (
 from kd.search.run_dir import (
     RUNDIR_SCHEME,
     RunDirPaths,
+    RunState,
     create_run_dir,
     finalize_run_dir,
     last_completed_iteration,
     new_run_id,
+    read_run_state,
     run_id_of_run_dir,
 )
 from kd.search.runner import ExperimentRunner
@@ -156,10 +167,13 @@ __all__ = [
     "DLGAConfig",
     "DLGAPlugin",
     "DeadlineAwareSearchAlgorithm",
+    "DerivativeSelection",
+    "DerivativeSelectionAlgorithm",
     "DerivativeSourceAlgorithm",
     "DiscoverConfig",
     "DiscoveryTask",
     "EarlyStoppingCallback",
+    "EnvironmentRequirement",
     "EqGPTConfig",
     "EqGPTPlugin",
     "EvaluationBudgetCallback",
@@ -195,10 +209,13 @@ __all__ = [
     "RUNCAT_SCHEME",
     "RUNDIR_SCHEME",
     "ResolvedCheckpoint",
+    "ResourceHints",
     "RunDirPaths",
     "RunRecord",
+    "RunState",
     "RunResult",
     "RunnerCallback",
+    "RuntimeRequirements",
     "SearchTrajectoryCandidate",
     "SGAConfig",
     "SGAPlugin",
@@ -208,6 +225,7 @@ __all__ = [
     "Segmentation",
     "SketchClauseLevels",
     "SketchOutcome",
+    "StoredSurrogateTrainer",
     "SurrogateTrainer",
     "TerminatingSearchAlgorithm",
     "VizDataCollector",
@@ -229,6 +247,7 @@ __all__ = [
     "mode_inputs",
     "new_run_id",
     "resolve_checkpoint",
+    "read_run_state",
     "run_id_of_run_dir",
     "save_dlga_surrogate",
     "tool_schema",

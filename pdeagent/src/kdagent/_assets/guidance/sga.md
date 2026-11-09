@@ -21,4 +21,8 @@ where one continuous run of the same evaluation count did not and the
 reverse on 4 (two problems), and 38 against 19 on five more problems.
 Resuming runs from their checkpoints with continue, retune or fork
 decisions found it on 3 seeds where one continuous run did not and the
-reverse on 2.
+reverse on 2. The restart comparisons date from 2026-09-18/19 and used
+scripts before built-in `restart_interval` (2026-10-05); the checkpoint
+resume/fork comparison dates from 2026-09-18. All predate the 2026-10-07
+STRidge first-round empty-support correction and have not been remeasured
+on the current code.

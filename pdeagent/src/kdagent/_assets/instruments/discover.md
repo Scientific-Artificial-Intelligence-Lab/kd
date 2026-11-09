@@ -14,8 +14,11 @@ axes, in the dataset's order, and `t` are coordinate leaves; and each spatial
 axis adds `diff_<axis>` and `diff2_<axis>`. Spatial axes other than `x` and `y`
 are refused. A `library` set in the Python configuration is used as given and
 refuses a field or axis it does not name. The vocabulary contains no mixed
-derivative or third-order derivative token. `max_diff_order` can further restrict the
-vocabulary but cannot add an absent token or override another structural prior.
+derivative or third-order derivative token. Outside sketch compilation,
+`max_diff_order` leaves sampling unchanged: expressions above its cumulative
+derivative-order cap are rejected after sampling and still use a batch slot.
+Sketch compilation can also narrow derivative tokens using the sketch
+bounds. Neither path adds absent tokens or overrides other structural priors.
 The vocabulary a run searched is sealed in its result config as
 `searched_vocabulary` (operators, state and coordinate variables, and the
 engine's token names and arities; on a sketch run, the library narrowed to
@@ -27,6 +30,13 @@ from the observed grid by finite differences and requires no pretrained weights
 or optional backend. With `pinn` set, the same vocabulary is searched in PINN
 mode, where a neural network is trained on the data and derivatives are taken
 from the network by automatic differentiation.
+
+MODE1 and MODE2 accept `target_lhs_order=1` (the default) or `2`, matching the
+dataset's declared target. Order 2 fits the second time derivative directly;
+it does not add time-derivative tokens to the default RHS vocabulary.
+PINN search targets and physics residuals use the same order.
+Tabular mode refuses a nondefault PDE
+target order. Changing the target order starts a new lineage.
 
 ### Tabular regression
 
@@ -43,10 +53,11 @@ An LSTM samples token sequences in pre-order, conditioned on the parent and
 left sibling of each slot. Structural priors mask illegal choices: expression
 length and token-repetition bounds, addition or subtraction below a derivative,
 derivative arguments other than fields or permitted derivative expressions,
-unary operators directly below their inverse, and excessive cumulative
-derivative order. The standard priors also prevent nested derivatives and
-trigonometric nesting. Sequences that fail length or legality checks are
-dropped and surviving expressions are deduplicated before scoring.
+and unary operators directly below their inverse. The standard priors also
+prevent nested derivatives and trigonometric nesting. Sequences that fail
+length or legality checks, including cumulative derivative order above
+`max_diff_order`, are dropped after sampling, and surviving expressions are
+deduplicated before scoring.
 
 In PDE mode the platform splits top-level additions into terms, fits their
 coefficients by dense least squares against the time derivative, and computes
@@ -61,6 +72,10 @@ plus an entropy bonus. Invalid fits receive zero reward and are excluded from
 training. The champion changes only on strict improvement, so ties retain the
 incumbent. The seed controls both initial network weights and token sampling.
 One controller iteration is one KD iteration, controlled by `generations`.
+
+Pin reservation under a sketch excludes shared jet monomials, but does not
+cover every rational respelling or several separately admitted terms whose
+sum reconstructs a pinned column. The compile notes describe these limits.
 
 ### PINN mode
 
@@ -101,7 +116,10 @@ being sought.
 
 For PDEs, `model.best_expr_` is the sampled structure and
 `model.result_.equation` carries the coefficients from the same least-squares
-fit used in scoring. The recorder's `best_reward` is non-decreasing;
+fit used in scoring. In ordinary MODE1, the recorder's `best_reward` does not
+decrease within a call. In PINN mode each phase re-prices the champion on
+the new network, so the value can fall, to zero if the champion is invalid.
+
 `n_eval_valid` distinguishes invalid sampling from valid candidates with poor
 fits. An improving champion at the final iteration suggests additional search
 may still change the result; a flat curve alone does not identify the cause.
@@ -111,7 +129,7 @@ target and the residuals of the result have one entry per collocation point,
 and the result config records `provider_kind` as `autograd`. On a fresh call,
 the recorder carries the pretraining outcome in the `pinn_pretrain_*` series;
 a resumed segment's recorder has no such series. Each segment records one entry
-per retraining phase it executes in `pinn_cycle_idx`, `pinn_phase_ran`, `pinn_data_loss`,
+per retraining phase it executes in `pinn_cycle_idx`, `pinn_phase_ran`, `pinn_best_reward`, `pinn_data_loss`,
 `pinn_physics_loss`, `pinn_total_loss`, `pinn_epochs_run` and
 `pinn_train_seconds`. A phase with no valid best equation is recorded with
 `pinn_phase_ran` equal to 0 and leaves the network unchanged.
@@ -130,9 +148,10 @@ A typed `DiscoverConfig` can supply a different `library`, which is Python-only
 and unavailable through JSON `params`. `pinn` takes a `PINNConfig`, exported
 from `kd.search`, or a JSON object of its fields, in which every omitted key
 keeps its default. `DiscoverConfig.burgers_preset(pinn=PINNConfig(...))`
-combines a reference preset with PINN mode through `config=`. A sketch, an
+combines a reference preset with PINN mode through `config=`. An
 `EarlyStoppingCallback` and a `kd.TabularDataset` are refused together with
-`pinn`.
+`pinn`. A sketch is accepted with `pinn`: its pins are deducted from every
+rebuilt collocation target and enter the PINN residual.
 
 ## References
 
@@ -146,8 +165,9 @@ Implementation notes. KD implements the reinforcement-learning search, structura
 and its optional stability selection. The paper's genetic operators and
 dynamic subtree bank are not implemented. Risk-seeking policy gradient is the
 training strategy; PQT has zero weight in the reference's shipped configuration,
-and PPO is not implemented. The configured quantile follows DSO-PyTorch, while
-the paper used 0.02. Unary `diff_x(u)` replaces the paper's binary `diff(u, x)`
+and PPO is not implemented. Grid fits default to quantile 0.10 with batch
+size 16; tabular fits default to 0.05 with batch size 500. DSO-PyTorch used
+0.05 and the paper used 0.02. Unary `diff_x(u)` replaces the paper's binary `diff(u, x)`
 for one-dimensional spatial differentiation.
 
 Dense least squares and the stability-selection statistic `std / mean` follow

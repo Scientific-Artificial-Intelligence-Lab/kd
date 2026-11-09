@@ -9,7 +9,7 @@ is supplied by the caller.
 
 Sampling masks tokens containing `t`, tokens referring to absent axes,
 derivatives beyond the active provider's order, tokens without an IR mapping,
-and `masked_tokens`. On a time axis and one spatial axis `x`, the evolution
+`masked_tokens` and, under a sketch, tokens the sketch excludes. On a time axis and one spatial axis `x`, the evolution
 finite-difference path admits these 21 atoms: `u`, `ux`, `uxx`, `uxxx`, `ux^2`,
 `u^2`, `u^3`, `x`, `x^2`, `x^4`, `sin(u)`, `sinx`, `exp(x)`, `(uux)x`,
 `(uux)xx`, `(u^3)xx`, `(u^4)xx`, `(1/u)xx`, `(u^-2*ux)x`,
@@ -20,7 +20,9 @@ provider's cap; mixed space-time terms, explicit time dependence, `sqrt` and
 Sentence gates give zero reward to the term combinations `{u, sin(u)}`,
 `{u, sinh(u)}`, `{sin(u), sinh(u)}`, `{u, u^2, u^3}` and `{x, sinx}`.
 Another gate requires every declared axis to occur unless the sentence contains
-`Laplace`. The pinned `ut` covers time, so an evolution candidate must also
+`Laplace`. It tests substrings of the joined sentence, so `exp(-y)` also
+counts as containing `x`; under a sketch, axes carried by pinned terms count
+as present. The pinned `ut` covers time, so an evolution candidate must also
 represent its spatial axes. These gates act before fitting.
 
 For a steady problem on scattered `(x, y)` coordinates, configure `steady`,
@@ -45,7 +47,8 @@ otherwise the transformer evaluates the current prefix.
 Each accepted sentence converts to KD IR terms, and the platform executes
 one column per term. Least squares fits the relation and the reward combines
 centered R² with a penalty on the column count. Each epoch merges candidates
-into a reward-deduplicated elite pool of size `top_k`, then fine-tunes on that
+into a reward-deduplicated elite pool of at most `top_k` entries. The size
+of its first fill is retained for the rest of the run. It then fine-tunes on that
 pool with Adam at `finetune_lr` for `finetune_steps` steps. One epoch is one KD
 iteration, controlled by `generations`.
 
@@ -82,8 +85,12 @@ An uncached run needs network access. `KD_EQGPT_ASSET_DIR` can point to a local
 directory containing `gpt_model/PDEGPT_wave_breaking.pt`; the Python API also
 accepts `EqGPTConfig(weights_path=...)` or `asset_dir`. The mirror is
 `timeoutHao/KD-data`, with a pinned revision and SHA-256 verification.
-Multi-case wave mode also needs `WaveBreaking.pkl` and per-case surrogates;
-`KD_V1_WAVE_ASSETS` selects local assets instead of the Hub copy.
+Multi-case wave mode also needs `WaveBreaking.pkl` and per-case surrogates.
+Surrogates resolve through `v1_asset_dir`, then `KD_V1_WAVE_ASSETS`, then the
+Hub mirror. The pickle is not downloaded: in a source checkout its default
+is `data/hf-knowledgediscover/WaveBreaking.pkl` relative to the repository.
+Wheel users should supply `wave_pkl_path`. Both `wave_pkl_path` and
+`v1_asset_dir` are Python-only configuration fields.
 The dataset passed to `fit` in this mode must equal the data of the primary
 case (`primary_case`): axis order, field names and every coordinate and field
 value are compared, and only the name may differ.

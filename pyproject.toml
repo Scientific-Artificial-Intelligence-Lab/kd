@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sail-kd"
-version = "0.9.0"
+version = "0.10.0"
 description = "KD — An open-source platform for knowledge discovery, powered by the Scientific Artificial Intelligence Lab (SAIL)."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -59,10 +59,17 @@ dependencies = [
     # user wants always available and CI-covered; h5py ships binary wheels on
     # every target platform.
     "h5py>=3.10",
+    # Process identity, memory accounting and the machine-level memory budget for
+    # supervised runs: ``kd.harness`` process supervision on Windows and the kdui
+    # scheduler both read them (KD-WEB-UI, 2026-11-06 ruling). Core, not part of
+    # the ``ui`` extra, because the supervisor lives in ``kd.harness``; psutil
+    # ships binary wheels on every target platform.
+    "psutil>=6.0",
 ]
 
 [project.scripts]
 kd-agent = "kdagent.cli:main"
+kd-ui = "kdui.cli:main"
 
 # ``import kd`` runs every installed hook of the entry-point group
 # ``kd.extensions`` (value ``module:function``, a function without arguments
@@ -106,9 +113,17 @@ agent = [
     "langchain-openai>=1.0",
     "langchain-anthropic>=1.5",
 ]
+# process needs only these two; it never imports kd or torch, and reaches kd
+# through subprocesses. Bare ``uvicorn``, without its ``standard`` extra: no
+# reload mode, no optional event loop or protocol packages. The package and its
+# static files ride every wheel; the extra selects only the dependencies.
+ui = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 # Everything optional at once.
 all = [
-    "sail-kd[pysr,agent]",
+    "sail-kd[pysr,agent,ui]",
 ]
 
 [dependency-groups]
@@ -131,6 +146,9 @@ dev = [
     # Layering gate (.importlinter). Pinned to one minor so a cold runner
     # cannot drift gate semantics; lived behind `uv run --with` until 2026-09-13.
     "import-linter>=2.13,<2.14",
+    # psutil ships no inline types; kdui's scheduler and kd.harness import it
+    # under ``mypy --strict``.
+    "types-psutil>=6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -156,7 +174,11 @@ where = ["src", "pdeagent/src"]
 # Kept in step with pdeagent/pyproject.toml (package-data): the controller's
 # instrument cards must ride the root wheel too, or a non-editable root install
 # assembles its first SKILL.md from an empty glob (arch-audit WIRE-02).
-"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md", "_assets/skills/*/*.md", "_assets/task/*.md", "_assets/pinned-input/*.md", "_assets/experience/*.md", "_assets/fingerprint/*.json"]
+"kdagent" = ["_assets/*.md", "_assets/instruments/*.md", "_assets/guidance/*.md", "_assets/skills/*/*.md", "_assets/task/*.md", "_assets/pinned-input/*.md", "_assets/experience/*.md", "_assets/experience/*.json", "_assets/fingerprint/*.json"]
+# The web UI's page shell, scripts, styles and vendored libraries (fonts and
+# licenses included). ``**`` keeps a new subdirectory under static/ in the wheel
+# without another row here.
+"kdui" = ["py.typed", "static/**"]
 
 [tool.pytest.ini_options]
 # Two roots since 2026-08-18: the controller's tests moved with it into

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
+from matplotlib.transforms import ScaledTranslation
 
 from kd.core.expr import structure_term_key
 from kd.core.expr.sympy_bridge import to_latex
@@ -23,6 +24,7 @@ from kd.viz.style import (
     NO_DATA,
     PANEL_W,
     SERIES,
+    SMALL_FONTSIZE,
     SURFACE,
     isolated_point_marks,
     style_context,
@@ -43,12 +45,15 @@ _EMPTY = NO_DATA
 _WIDTH = 3 * PANEL_W
 _NOTE_WRAP = 95
 
+_LEGEND_DROP = 0.62
+_ROW_GAP = 1.5
+
 
 def _figure(height: float, notes: list[str]) -> tuple[Figure, Axes]:
     if not notes:
         return plt.subplots(figsize=(_WIDTH, height), layout="constrained")
     wrapped = "\n".join(textwrap.fill(note, width=_NOTE_WRAP) for note in notes)
-    note_height = max(0.7, 0.2 * (wrapped.count("\n") + 1))
+    note_height = 0.2 * (wrapped.count("\n") + 1)
     figure = plt.figure(figsize=(_WIDTH, height + note_height), layout="constrained")
     grid = figure.add_gridspec(2, 1, height_ratios=[height, note_height])
     ax = figure.add_subplot(grid[0])
@@ -56,10 +61,10 @@ def _figure(height: float, notes: list[str]) -> tuple[Figure, Axes]:
     text_ax.axis("off")
     text_ax.text(
         0,
-        0.5,
+        1.0,
         wrapped,
-        va="center",
-        fontsize=10,
+        va="top",
+        fontsize=SMALL_FONTSIZE,
         color=INK_2,
         transform=text_ax.transAxes,
     )
@@ -116,6 +121,18 @@ def _draw_presence(
     ax.set_yticks(range(len(labels)), labels)
     ax.set_ylabel("Fitted term by target")
     ax.grid(False)
+    ax.tick_params(axis="y", length=0)
+
+    ax.hlines(
+        np.arange(len(labels) - 1) + 0.5,
+        -0.5,
+        len(present) - 0.5,
+        color=SURFACE,
+        linewidth=_ROW_GAP,
+    )
+
+
+    below = ScaledTranslation(0.0, -_LEGEND_DROP, ax.figure.dpi_scale_trans)
     ax.legend(
         handles=[
             Patch(facecolor=SURFACE, edgecolor=AXIS, label="Absent"),
@@ -123,9 +140,9 @@ def _draw_presence(
             Patch(facecolor=_EMPTY, label="No eligible candidates"),
         ],
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.13),
+        bbox_to_anchor=(0.5, 0.0),
+        bbox_transform=ax.transAxes + below,
         ncols=3,
-        fontsize=10,
     )
 
 
@@ -214,7 +231,8 @@ def _draw_score_quantiles(
         label="Median",
         **isolated_point_marks(quantiles[2]),
     )
-    ax.legend()
+
+    ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
 
 
 def plot_search_score_distribution(

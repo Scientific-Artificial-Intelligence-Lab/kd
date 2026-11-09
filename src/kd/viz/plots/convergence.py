@@ -9,7 +9,10 @@ from kd.search.recorder import BEST_SCORE_KEY
 from kd.viz.axes import _get_axes, integer_ticks
 from kd.viz.style import (
     FIGSIZE_SINGLE,
+    FONTSIZE,
     INK_2,
+    MARKER_SIZE,
+    RING_WIDTH,
     SERIES,
     SURFACE,
     isolated_point_marks,
@@ -141,7 +144,7 @@ def plot_convergence(
             ax.set_title(
                 f"Convergence\nbest {result.score_kind} constant at {constant:.4g} "
                 f"(reached at {reached})",
-                fontsize="medium",
+                fontsize=FONTSIZE,
             )
 
     return warnings
@@ -152,10 +155,10 @@ def _label_final_value(ax: Axes, scores: list[float], last: int) -> None:
     ax.scatter(
         [last],
         [value],
-        s=36,
+        s=MARKER_SIZE**2,
         color=SERIES[0],
         edgecolors=SURFACE,
-        linewidths=1.5,
+        linewidths=RING_WIDTH,
         zorder=3,
     )
     ax.annotate(

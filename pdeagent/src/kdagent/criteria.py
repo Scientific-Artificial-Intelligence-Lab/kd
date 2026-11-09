@@ -6,6 +6,8 @@ import math
 from collections.abc import Callable, Collection, Sequence
 from typing import Any, cast
 
+import kd
+
 from kdagent.lineage import (
     FORWARD_FRAME,
     SegmentEntry,
@@ -160,13 +162,53 @@ def selection_decision(
 SYSTEM_POLICY = "kd-agent-ode-system-selection-v1"
 
 
+def undefined_terms(support: Sequence[str]) -> list[str]:
+    undefined: list[str] = []
+    for term in support:
+        try:
+            undefined += kd.undefined_terms([term])
+        except ValueError:
+            continue
+    return undefined
+
+
+def undefined_law_runs(ledger: SegmentLedger, *, dataset_id: str | None) -> set[str]:
+    return {
+        entry.run_id
+        for entry in ledger.segments()
+        if entry.dataset == dataset_id
+        and entry.law is not None
+        and undefined_terms(entry.law["support"])
+    }
+
+
+def undefined_members(system: dict[str, Any]) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    for target, run_id in system["members"].items():
+        undefined = undefined_terms(system["laws"][target]["support"])
+        if undefined:
+            found[run_id] = undefined
+    return found
+
+
+def undefined_systems(ledger: SegmentLedger) -> set[str]:
+    return {
+        system["system_id"] for system in ledger.systems() if undefined_members(system)
+    }
+
+
 def system_decision(
-    ledger: SegmentLedger, *, raw_fingerprint: str, target: str
+    ledger: SegmentLedger,
+    *,
+    raw_fingerprint: str,
+    target: str,
+    exclude: Collection[str] = (),
 ) -> dict[str, Any] | None:
     candidates = [
         (system, standing)
         for system in ledger.systems()
         if system["raw_fingerprint"] == raw_fingerprint
+        and system["system_id"] not in exclude
         and not ledger.system_pruned(system["system_id"])
         and (standing := standing_verification(system)) is not None
     ]

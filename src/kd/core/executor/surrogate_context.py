@@ -66,7 +66,11 @@ class SurrogateContext(ExecutionContext):
                     raise TypeError("SurrogateContext requires provider.get_field")
                 self._cache[name] = get_field(name).detach().flatten().to(self.device)
             return self._cache[name]
-        return super().get_variable(name)
+        if name in self.derivative_provider.coords:
+            return (
+                self.derivative_provider.coords[name].detach().flatten().to(self.device)
+            )
+        return super().get_variable(name).flatten()
 
     def clear_cache(self) -> None:
         self._cache.clear()

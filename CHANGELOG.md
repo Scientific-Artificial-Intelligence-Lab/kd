@@ -11,6 +11,475 @@ also published on PyPI and as a GitHub Release carrying longer notes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
+### Added
+
+- Local web interface: install `sail-kd[ui]` and run `kd-ui` to manage data,
+  preprocessing, searches, validation, result comparisons and run history in a
+  local workspace. The first version supports Linux (including WSL) and Windows.
+- LLM4ED accepts an optional `fit_stop_threshold` in `(0, 1]` to stop after a
+  completed round when the best sparse-reward candidate reaches the requested
+  `1 / (1 + NRMSE)` fit quality on its native scoring rows. It is disabled by
+  default and may change on resume. Candidate ranking and sparse reward are
+  unchanged; this is an in-sample stopping criterion, not a recovery verdict.
+- Agent experience supports multidimensional input features, a default minimum
+  of one independent donor problem, and bounded replay of larger subset
+  families. Explicit higher donor thresholds and held-out problem exclusions
+  remain enforced. Optional curated lessons render separately from measured
+  pipeline statistics.
+
+- Agent controller: weak-form measurements (`refine_candidate`, `ablate_candidate`,
+  `score_term_sets`, `select_support`) take `max_order` and the weak option
+  `bump_degree`, so fourth-order spatial terms (`u_xxxx` or nested spellings) and
+  second-order time targets reach kd's weak path. `submit_answer` also accepts a law
+  whose exact term set a receipt from the same run measured on the run's registered
+  input; its `answer_origin` is `receipt_measured`, and the existing origins and the
+  sealed-LHS check are unchanged. Close-out and `--result` fields are additive.
+
+- SGA finite differences/autograd and DISCOVER MODE1/MODE2 accept specified second-order
+  time targets through `target_lhs_order=2`, which must match the dataset's
+  LHS order. The target order is part of resume identity. DISCOVER's PINN
+  search and physics losses use the selected order; the default RHS vocabulary is unchanged.
+  **Breaking:** existing SGA/DISCOVER checkpoint config snapshots without
+  `target_lhs_order` follow the schema-evolution refusal; start a fresh run
+  rather than resuming those snapshots.
+
+- Agent controller: `kd-agent experience learn` runs after a sealed, graded round
+  without model calls. It diagnoses failed runs, replays recorded answer-blind
+  pipelines (for example network-field input) on them and folds the outcome into
+  the next experience library.
+
+- Weak-form refitting accepts second-order time targets and pure spatial
+  derivatives through order four (`max_order=4`). The optional
+  `WeakFormOptions(bump_degree=6)` reduces fourth-derivative quadrature error;
+  degree four remains the default and preserves existing first-order numerical
+  behavior. Refit, fixed coefficients, batch scoring and ablation share the
+  selected frame, recorded as `kd-weak-v2`.
+
+- PySR and PySINDy grid searches accept a specified second-order time target
+  with `target_lhs_order=2`, matching the dataset's left-hand order. The
+  target order is recorded in the configuration and changes the run identity;
+  tabular modes refuse a nondefault PDE target order. Direct spellings of the
+  selected derivative are excluded from their feature catalogs, while a
+  first time derivative remains usable on the right of a second-order law.
+  **Breaking:** PySR now rejects direct spellings of its PDE target in
+  `terms`; remove those aliases from the feature catalog.
+
+- Agent controller: `kd-agent experience build` builds `kd-experience-v4`
+  (version 4) offline from kd-bench observation exports or explicitly graded
+  agent search segments and refinement receipts
+  (`kd-agent-graded-searches-v1`) with verifiable sealed-record and input
+  provenance. It can write a private build log (`--log`) and needs no model
+  endpoint or agent runtime; it does not grade, search, train, or update a
+  library online. A pipeline records its full supplied conditioning: Sketch
+  payloads, model-given `terms`, `library` and operator sets, refinement
+  recipes (a refinement's grade is its own pipeline and never overwrites the
+  search grade), continuation schedules (one logical search per chain, segment
+  costs summed, each segment's `resume_iteration` and `reseed` in the pipeline
+  identity) and ordered input transformations, composed inputs included.
+  Declared default DLGA libraries are supported. A row the reader refuses no
+  longer rejects the build: a refusal whose recipe can be reconstructed stays
+  in that pipeline's denominator and in `support.n_refused`; one without a
+  trustworthy recipe is counted as unassigned in the build's admission totals.
+  Present-but-wrong sealed-record or artifact digests still fail the build. A
+  surrogate ID with differing historical file hashes is refused, including
+  newer searches under that ID, because exact launch provenance is unavailable;
+  identical-byte re-registration remains supported. Evaluation documents
+  withhold one independent problem per group at source (singleton
+  `group_problems`, across its instances and seeds); a usage document makes no
+  same-problem exclusion claim. (The command's first version, not released,
+  built `kd-experience-v2` and refused continuations, Sketch, nondefault
+  terms/library knowledge, composed inputs and refined answers.)
+  **Breaking:** `kd-agent run --memory` and kd-bench's memory preflight accept
+  only `kd-experience-v4`; rebuild a v2 or v3 document with this command.
+- kd: registration of derivative providers, sparse solvers and refit methods
+  (registration phase 2), using the existing `kd.extensions` hook and origin
+  model; the built-ins use the same production registries.
+  `Model(derivatives=...)` accepts a registered provider on modes that declare
+  platform derivative service; private derivative paths and DLGA's two-solver
+  policy are kept. `kd.refit_terms`, `kd.ablate_terms` and
+  `kd.score_term_sets` run through complete registered measurement methods,
+  with fixed-coefficient and Sketch semantics and the built-in numerical and
+  frame outputs unchanged (22 refit cases byte-identical, DLGA and PySINDy
+  bit-identical).
+- `kd.Sketch` works on tabular data, including ODE systems turned into tables by
+  `kd.trajectories_to_tabular`. A table sketch's left-hand side is the target
+  column at order 0 with no axis; its vocabulary is the feature columns. A
+  tabular result is matched as a sum: its terms are split at additions, a
+  number inside a product joins the coefficient, and the constant is the term
+  `one`. `Model.fit(table, sketch=...)` runs on PySINDy (`mode="tabular"`) and
+  LLM4ED (`mode="tabular"`); on the other algorithms a table sketch is refused
+  before any search, with the clauses each tabular mode cannot honour named.
+- `kd.lower_term(text)` is public: it returns the funcall IR of one term
+  written in product notation (such as `u*u_x`), the lowering kd's term
+  parsing uses. The agent experience reader applies it to the launch recipes
+  of searches that raised, so they match the recipes of completed searches.
+- `Model.resolved_config_`: the configuration the last fit's search ran
+  under, with the semantics of the sealed config (`run_spec.config` without
+  `searched_vocabulary`), including values kd resolved from the dataset such
+  as a default term catalog built over its axes. It is taken when
+  `search_started` is written, so a fit that raised after that moment keeps
+  it; it is `None` before the first fit and after a fit that stopped earlier.
+- Instrument schemas publish stable per-parameter `legacy` evidence for
+  parameters added after historical searches (`"legacy": {"value": X}`, or
+  `null` when none is declared): SGA and DLGA `training_dtype` (null) and the
+  facade control `derivatives` (`finite_diff` for DISCOVER, EqGPT, PySINDy and
+  PySR, `autograd` for DLGA). The evidence does not enter
+  `instrument_schema_digest()`.
+- Agent controller: every `run_discovery` outcome records the search's own
+  cap as `provenance.time_cap_seconds`; a raised outcome also records
+  `provenance.search_started`, decoded from kd's phase events (a missing run
+  directory or phase event reads as false). The segment ledger is unchanged.
+- kd-bench (private): `kd-bench export-agent-searches <matrix> --rules <v>
+  --groups <toml>` writes the searches of a matrix's agent rows for
+  `kd-agent experience build` as `kd-agent-graded-searches-v1`: every known
+  search segment once, raised and incomplete ones included, a search the trace
+  names but the ledger lacks (emitted from its launch facts), and each
+  successful refinement receipt as its own row graded from its own law. ODE
+  roots bind by target state. Each row carries the requested call facts, the
+  launch defaults, the failure and its `search_started` phase, and
+  `producing_workspace` (the agent workspace path recorded when the row ran),
+  by which the reader binds a continuation's checkpoint in fetched records.
+  Groups name one independent problem each; one fold file per group plus a
+  usage file. Rules versions: `j0`, `j0b`, `j1refit`, `j1refit_trim_v1`,
+  `j1refit_train_by_order_v1`, `j1refit_fd2_interior_v1` and `j2sr_v1`.
+  Agent rows record kd's declaration digest as
+  `raw.provenance.instrument_schema_sha256`.
+- Agent controller (`sail-kd[agent]`, experimental): an experience row's
+  pipeline may name what its search ran on, `pipeline.input` = `raw`,
+  `lowpass` or `pinn`, each optionally `+surrogate`; the experience check
+  refuses any other value and retrieval keeps rows that differ only in input
+  apart. The kd-bench exporter now writes explicit `raw`; the offline agent
+  source adapter derives the six labels from recorded search input and
+  surrogate-injection facts.
+- kd-bench (private): judge rules version `j1refit_train_by_order_v1`. It is
+  `j1refit_trim_v1` with the training evolution refit made by
+  `kd.refit_terms(trim="by_order")` (derivatives first, then the rows the
+  answer's derivative orders leave); `refit.frame` keeps kd's whole returned
+  frame and adds the SHA-256 of the selected rows. Earlier rules versions are
+  unchanged.
+- kd: an opt-in three-point finite-difference profile, `fd2` (implementation
+  `kd-fd2-v1`): second-order central stencils in the interior and
+  second-order one-sided stencils at nonperiodic edges, with order 3 taken as
+  the first derivative of the second. It is registered as a derivative
+  provider (`Model(derivatives="fd2")` on modes with platform finite-difference
+  service) and as a refit method (`kd.refit_terms(method="fd2")`), and
+  `FiniteDiffProvider` takes `accuracy=2` (default 4). `trim="by_order"` now
+  reads each derivative pass's stencil reach from the provider: 2 points per
+  side for every order under the default profile (as before), 1, 1 and 2 for
+  orders 1 to 3 under `fd2`. The default profile's derivatives, frame, trim
+  and NMSE are unchanged.
+- kd-bench (private): judge rules version `j1refit_fd2_interior_v1`. It is
+  `j1refit_train_by_order_v1` unchanged plus a `refit_fd2` block: the same
+  refit made by `kd.refit_terms(method="fd2", trim="by_order")`, with its own
+  frame (and `selected_rows_sha256`) and held-out residual. The block is a
+  diagnostic reported beside `refit` (a `refit_fd2` report table and
+  `refit_fd2_*` columns in rows.csv); it never replaces `refit`, and neither
+  block is chosen by its smaller NMSE. Earlier rules versions are unchanged.
+- LLM4ED: four opt-in configuration fields whose defaults keep EDL's scoring
+  unchanged. `edge_trim` (default 0) drops that many grid cells at each end of
+  every axis from the regression rows after the finite differences, so no
+  scored row uses a one-sided boundary stencil. `l0_penalty` (default `1e-5`,
+  EDL's) sets STRidge's selection penalty per nonzero term, and
+  `l0_relative=True` multiplies it by the variance of the target.
+  `max_derivative_order=4` (default 3) adds `u_xxxx` (and `u_yyyy` on two
+  axes), computed as the second difference of the second difference, to the
+  columns, the prompts and the parser; it refuses a sketch, because kd's
+  platform finite differences stop at third order and the sketch's exit check,
+  and finite-difference refits and consensus verification, cannot evaluate a
+  `u_xxxx` answer. With
+  `edge_trim` the residuals cover the interior rows only, and the report's
+  residual panels fall back to line plots. `edge_trim` and
+  `max_derivative_order` apply to the PDE mode only; a resume refuses a change
+  to any of the four, and an LLM4ED checkpoint written by an earlier kd, whose
+  configuration lacks them, does not resume. A run
+  record's `run_spec.artifacts` now lists `llm_served_models`: the model ids
+  the endpoint's responses named, which can differ from the configured
+  `model` when the provider reroutes a retired name. These fields change the
+  published instrument schema digest.
+- Packaging: the wheel ships the local web UI, package `kdui` with the command `kd-ui`; its web
+  dependencies install with the new `ui` extra (also part of `all`). The bundled ECharts 6.1.0 and
+  KaTeX 0.16.11 ship with their licence files and are named in NOTICE.
+
+### Fixed
+
+- Evolution experience retrieval distinguishes observed-static companion fields
+  from evolving fields, including axis variation consistent with white noise.
+  Every input field remains available to search, and the target always counts
+  as an evolving field. Executable recipes are checked against the complete
+  input report before ranking and selection.
+- Batched agent scoring shares measurement frames; experience text distinguishes
+  independent donor problems from repeated trials.
+
+- Autograd frame: an open-form derivative of a compound expression
+  (`diff_x(mul(u,u_x))`) and a term that mixes a coordinate with the field
+  (`mul(recip(x),u_x)`) now score in an autograd refit instead of failing with
+  "not connected to coordinate" or a tensor-size error. A term that reads a
+  field other than the modelled LHS field gets the existing unmodelled-field
+  reason. The same paths change two searches: EqGPT wave mode now scores words
+  that combine a coordinate with the field (`mul(u, x)`, `div(u_xx, x)`) and
+  the open-form word `(uux)x`, which used to drop out, so its reward landscape
+  moves toward the reference EqGPT; DISCOVER's PINN mode now scores diff
+  tokens over compound arguments.
+- Agent controller: a mode whose declared Python package is not installed
+  (for example `pysr`) is listed as unavailable and `run_discovery` refuses it
+  before a worker starts; the prompt then omits that mode's cost anchors.
+- Experience building and retrieval treat omitted `pipeline.input` and explicit
+  `raw` as the same pipeline identity, preserving support counts and retrieval
+  slots without rewriting legacy documents or merging distinct input kinds.
+- Prepared trajectory regression tables retain the original file provenance
+  in memory. Content and projection identities and saved numeric bundles are
+  unchanged; reloaded bundles still have no file provenance.
+- Agent controller: persist verification policies in the segment ledger so
+  continued searches retain their threshold after reopening a workspace.
+  **Breaking:** legacy segments with no recorded policy and manually
+  imported segments without authoritative policy evidence remain readable,
+  but cannot resume; start a fresh search instead. Imports record an unknown
+  policy explicitly, without inferring it from a parent segment.
+- Agent controller: allow ablation and verification of sealed uncertified
+  Sketch candidates in the current invocation. Measurement does not certify
+  them; submission, voting, refinement and batched scoring still require a
+  successful search, and reopening does not restore this measurement access.
+- Pure numeric expressions evaluated by PythonExecutor retain float64
+  precision and range, including constant forcing terms and finite `1e40`.
+- EqGPT's `wave_multicase` mode declares a `case_filter` selector, so a wave
+  search resolves to one mode. The agent experience reader refused every
+  EqGPT wave search ("no unique accepted mode").
+- DISCOVER's default `library` is declared as the canonical JSON the sealed
+  run config carries (the default `LibraryConfig`) instead of `None`, so the
+  experience reader no longer reads every DISCOVER search as a nondefault
+  library. The declaration digest changes with it.
+- Both agent experience normalizers select DISCOVER mode2 from a present,
+  non-null required `pinn` object; concrete mode selector values still compare
+  exactly. Action-experience reads refused a mode2 search ("no unique accepted
+  mode").
+- `kd.load_tabular` accepts a `str` path as well as a `Path`, like `kd.load`
+  and `kd.inspect_file`; a string raised `AttributeError`, and the agent's kd
+  skill template passes one.
+- Agent controller: the LLM4ED guidance says that changing
+  `max_llm_calls_per_run` on resume is refused (it said raising it; the
+  parameter is `init_only`, so lowering it is refused too). Prompt
+  fingerprints change.
+
+### Changed
+
+- Expression evaluation reuses derivative results within its evaluation scope;
+  plotting imports are deferred until needed.
+- SGA reuses the normalized system and identical-support STRidge and
+  least-squares solves within one candidate fit. Search trajectories are
+  unchanged; RD-2D fits run 3.5 to 5.4 times faster, Burgers 1.8 and KdV 4.1.
+- Agent timeout and worker-death summaries use the public completed-iteration
+  reader. Missing files and a truncated final event retain their existing
+  behavior; malformed complete events use the shared reader's validation errors.
+- Update agent cards and tool guidance to describe current continuation,
+  Sketch constraints, availability and budgets, and qualify historical
+  results by their measurement scope; algorithm behavior is unchanged.
+- PINN refinement and network smoothing share prediction-dataset assembly.
+  **Breaking:** PINN output datasets now clear `ground_truth`, since the
+  source reference equation is not established for learned predictions;
+  callers needing that reference should retain the original input dataset.
+  Field metadata and input provenance are preserved, and prediction axes
+  remain nonperiodic.
+- Remove redundant DLGA Sketch anchor-overlap validation and update stale
+  capacity and anchor-matching descriptions across Sketch backends.
+- Remove kd-bench's unused `supervise_attempt` wrapper and move its existing
+  log and termination tests to the production launch/result-mapping path.
+- **Breaking:** the built-in instrument schema digest changes from 0.9.0's
+  `41a848e6…` to `8dc4c26f…` (registration declarations, the tabular sketch
+  levels of PySINDy and LLM4ED, DISCOVER's declared library default, nested
+  `object_fields` now inside the digest, the `fd2` derivative provider, and
+  the sketch levels of SGA, DISCOVER and EqGPT below). Agent experience and
+  action-experience documents and kdb observation exports built under the old
+  digest are refused; rebuild them. Agent searches graded under an older
+  digest are still admitted parameter by parameter (below).
+- A platform derivative provider is advertised only when its surrogate
+  capability matches the mode's declared field frame: ordinary platform modes
+  accept non-surrogate providers, DLGA accepts surrogate providers, and SGA's
+  private autograd mode keeps its existing artifact channel. Schema, facade
+  choices and fit validation use the same rule. A surrogate module enters only
+  a declared constructor or artifact channel; undeclared injection is refused
+  before fitting. SGA config conflicts name the public controls
+  (`derivatives`, `SGAConfig.use_autograd`).
+- **Breaking** (extension authors): registration rejects two modes whose
+  topology, forms and LHS orders overlap and whose `config_values` and
+  `selector` are identical, naming both modes. Disjoint declared forms or
+  orders remain valid discriminators; empty forms and undeclared orders do not
+  distinguish inputs; `selected_by` alone is caller guidance. Give such modes
+  a distinguishing selector or configuration value.
+- A recorded run without the new `derivatives` control reads it as its
+  declared default, and a recorded default `finite_diff` is accepted on
+  tabular and private-derivative modes without replacing their derivative
+  service. Implicit and explicit default provider selection share one
+  surrogate training recipe.
+- Extension dependencies are sealed while worker requests are built, with
+  failure records and child-side identity checks kept; process-only
+  dependencies are refused before any request or store is written. Selected
+  implementation identities are bound into results, every checkpoint writer,
+  isolated workers and kd-bench versions; historical reads use the sealed
+  provider identities and do not need the extension installed. Provider-only
+  changes do not change DLGA's training-cache identity.
+- Agent controller: the ordinary and bare tool texts list the registered
+  options (prompt fingerprints change), and surrogate training and injection
+  follow the declared surrogate capabilities: `train_surrogate` lists and
+  accepts only surrogate-consuming selections and refuses another before a
+  worker starts. Catalog topology metadata resolves a mode without loading
+  tensors in the parent.
+- kd-bench (private): kd examinee rows bind the exact effective mode and
+  target-order configuration and agent rows the installed callable component
+  set; adapters `kd-adapter-13` and `agent-adapter-7`, so rows planned before
+  must be planned again. A matrix's `memory` document must be
+  `kd-experience-v4` (an older document is refused with the rebuild
+  instruction).
+- `Model.fit` no longer refuses every sketch on a table; it refuses a sketch whose order class
+  does not match the data (an evolution sketch on a table, an order-0 sketch on
+  evolution data). A feature name containing `_` cannot be used in a table
+  sketch, and `const` is reserved in a table sketch's vocabulary.
+- `kd.load_sketch(..., dataset=)` and `SketchSpec.resolve` accept a
+  `kd.TabularDataset` and read it as `Model.fit` does. The controller binds a
+  table sketch given as a `--sketch` file, a `run_discovery` payload or through
+  `set_sketch`; it refuses only an evolution sketch on a table before a worker
+  starts. The controller's `make_sketch` tool cannot yet build a table sketch
+  from anchors.
+- A table law is read with `n2`/`n3` of a sum multiplied out, so
+  `n2(add(x1,x2))` counts as the same three terms as
+  `mul(add(x1,x2),add(x1,x2))` in matching and admission. The certified law
+  keeps such a power whole: `n2` and `n3` clip their input at 1e6 in
+  magnitude and the multiplied-out products do not. A sign or numeric factor
+  in front of the power joins its coefficient, so a fit holding the power and
+  its negation certifies the power once. Whole terms of a certified table law
+  are written in kd's canonical spelling (sorted `add` arguments, regrouped
+  products, `div(a,b)` as `mul(a,recip(b))`), so `solution.terms` strings can
+  differ from the fitted library's spelling.
+- A product in a table law is one term however its factors are grouped:
+  `mul(x1,mul(x2,x3))` and `mul(mul(x1,x2),x3)` add up, cancel and match a pin
+  or an anchor as one term, so a cube of a sum is its four monomials. The law
+  signature (`kd-lawsig-v2`) and evolution sketches are unchanged.
+- LLM4ED accepts the intercept `one` as a pinned or anchored clause on a table.
+  PySINDy's tabular mode identifies a pinned or anchored product with its
+  library column whatever the grouping (`x1*x2*x3` is the library's
+  `mul(x1, mul(x2, x3))`), counts two groupings once toward a hole, and its
+  compile report declares the tabular mode's levels.
+- Agent experience reader: explicitly graded agent searches recorded under an
+  older declaration digest are admitted when their recorded parameter values
+  replay under the running kd (parameter-level identity). A parameter the record lacks is filled from the declared default
+  under the same digest and from its declared `legacy` value under another; a
+  missing legacy value, a missing required value, an unsupported setting or a
+  sealed parameter the running kd lacks refuses the search as unassigned. The
+  build log records the producing digest (`produced_under`) and every fill.
+  Kdb exports and runtime experience documents keep whole-digest checks
+  (re-exporting a historical kdb file updates its header, not its rows'
+  digests), and pooling across examinee versions still needs the builder's
+  explicit opt-in; replayability does not establish numerical equivalence.
+- Agent experience conditions have five keys: `device`, `soft_seconds`,
+  `budget_tier`, `blas_threads` and `python_hash_seed`. With a problem budget
+  B, `soft_seconds` is B and a search with cap c is in tier `full` when
+  c >= B/2, otherwise `short`, each tier with its own rate; without B the tier is null and `soft_seconds` keeps the cap.
+  Search costs remain segment costs.
+- Agent experience: a raised search with a caller-error type (`ValueError`,
+  `TypeError`, `NotImplementedError`) is an unassigned refusal; another raised
+  search enters its pipeline's denominator and `n_refused` only when
+  `search_started` is true and its input, cap and launch recipe can be
+  attributed: failures after the search started count, refusals before it
+  do not. The launch recipe reuses the declared
+  defaults, controller fills, `kd.lower_term` lowering and the ledger's seed
+  that completed recipes use. A worker death that binds launch, recipe and
+  input is a failure, otherwise an "unverified failure"; a failed continuation
+  terminal keeps its continuation recipe and its prefix is suppressed.
+  Refusal facts and the `(code, search_started)` census stay in the source
+  manifests and build logs; they do not yet reach action-experience documents.
+- Agent experience reader: a continuation binds its source by run, reseed and
+  checkpoint. A resumed search that raised carries kd's attempted lineage (no
+  source config hash, final status or iteration) and binds on run, reseed and
+  checkpoint; a completed child's recorded source config hash and iteration
+  must equal the parent's sealed values. The checkpoint binds exactly: read
+  where the search ran, kd's path and the ledger's workspace-relative path
+  resolve to one file; read from fetched records, kd's absolute path equals the
+  graded row's `producing_workspace` joined with the ledger's path. Any other
+  path refuses the source. A refusal for a parameter without legacy evidence
+  names the record it came from (sealed configuration or launch record).
+- Figures and the HTML report share one visual system in `kd.viz.style`:
+  thinner lines (1.5 pt data, 1.1 pt context), DejaVu Sans with DejaVu
+  mathtext only (the figures look the same on any machine with matplotlib's
+  bundled fonts), grey tick marks with darker tick labels, one note size
+  (9.5 pt) and one table style (header band, horizontal rules, rows sized to
+  their content). Table text stays at 10 pt: long run names and equations
+  wrap at spaces, underscores and between terms instead of shrinking the
+  table, and a text column is never narrower than its widest piece that
+  wrapping keeps whole (when those widths alone exceed the axes, as with six
+  columns in a 4.5 x 3 in axes, text can run up to 27 px past its cell);
+  text columns are left-aligned and number columns centred. Run labels under
+  bars wrap at spaces and underscores only. Comparison figures keep one
+  colour per run in every panel, and multi-run curve overlays also give each
+  run its own line style (legend included). The structure comparison's NMSE
+  bars use a log axis when every value is positive (linear when one is zero).
+  Clipping notes are drawn in the secondary ink instead of the muted grey.
+  The tree figure is titled "Equation Tree", matching the report heading.
+  The report page uses the figures' warm neutrals in light and dark mode and
+  shows the headline numbers larger. Data, numbers, panels, panel order,
+  disclosures and public signatures are unchanged.
+- `kd.viz.style.style_table` is replaced by `draw_table(ax, rows,
+  col_labels, *, text_columns, col_widths=None)` (no other caller; not in
+  `kd.viz.__all__`). New helpers `kd.viz.style.wrap_text` /
+  `wrap_to_width` and `kd.viz.axes.value_bar_scale` (log-or-linear bar
+  axis, shared by the structure comparison and the PySINDy coefficient
+  bars); none is exported from `kd.viz.__all__`.
+- SGA (default and autograd modes), DISCOVER mode1 and EqGPT `single_wave`
+  declare sketch anchors as `fit_enforced`, as PySINDy, DLGA and LLM4ED do:
+  each anchored column is supplied to every fit, is never thresholded, its
+  coefficient is not shrunk by a penalty, and it is counted neither in
+  `complexity` nor in the score's term penalty (the AIC of SGA and DISCOVER,
+  EqGPT's sparsity factor). A generated term that spells an anchor is refused
+  before scoring. SGA and DISCOVER generate from the same vocabularies as
+  before; EqGPT masks the tokens that only an anchor uses. Anchors no longer
+  need to be generable: SGA counts them against no `width`, and DISCOVER and
+  EqGPT accept an anchor their tokens cannot build. An anchor whose column
+  does not execute on the run's data (such as a derivative above the order
+  the run computes) is refused before the search. The exit rule is
+  unchanged: an anchor matches when `|coefficient| >= support_threshold`, so
+  at the default threshold 0 only an exactly zero coefficient fails.
+- DISCOVER mode2 (`pinn`) accepts a sketch and declares mode1's clause
+  levels. Pins are deducted from every rebuilt collocation target and enter
+  the PINN residual at their fixed values; anchors enter it with their fitted
+  coefficients. The exit verification stays on the platform finite-difference
+  footing. A pin or anchor that does not execute on the collocation context
+  (for example `one`) is refused before pretraining.
+- A DLGA sketch with anchored terms and no hole runs one fit of the anchored
+  columns on the surrogate and reaches the sketch exit with `complexity` 0,
+  for any number of generations and across a resume, for example
+  `kd.Model(algorithm="dlga", generations=1).fit(ds,
+  sketch=kd.Sketch(anchored=["u_xx", "u*u_x"]))`. Pins are still deducted
+  from the target. 0.9.0 refused such a sketch when the plugin was built.
+- **Breaking:** a sketch with anchored terms and no hole is refused on SGA,
+  DISCOVER and EqGPT when it is compiled, since the anchors are supplied
+  rather than searched and nothing is left to search. Refit the anchored terms
+  instead; the message names
+  `kd.refit_terms(dataset, [a.term_ir for a in sketch.anchored], sketch=sketch)`.
+- **Breaking:** checkpoints of anchored-sketch runs of SGA, DISCOVER mode1 and
+  EqGPT `single_wave` written before this release are refused at resume with
+  a `ValueError` naming `sketch_fit_policy`; start such a run again.
+  Checkpoints of runs whose sketch has only pins or holes still resume.
+- Agent controller: the SGA card says anchored terms take no `width` and the
+  DISCOVER card that PINN mode accepts a sketch. With the sketch levels the
+  cards render from the schema, prompt fingerprints change.
+- **Breaking:** agent experience documents are `kd-experience-v4`. Calls kd
+  refused before any search become `refusals` rows when the building kd
+  reproduces the refusal; `kd-agent run --memory` retrieves the rows of the
+  same task kind (for PDE inputs also the same topology and axis count) and
+  shows them in the system prompt after the pipeline rows (`--action-memory`
+  alone is unchanged). A row carries only
+  closed-vocabulary tokens, integers and names the installed kd declares, never
+  kd's message or the text the agent typed; a refusal that cannot be verified
+  or does not reproduce is dropped and counted in the build log. A
+  `kd-experience-v3` document is refused by `kd-agent run --memory` and by
+  kd-bench; rebuild it with `kd-agent experience build`. Prompt fingerprints
+  change.
+- Agent controller: kd-agent records the configuration kd resolved for a search
+  that raised after it started (`provenance.params.resolved`, from
+  `Model.resolved_config_`, when the worker replied); `export-agent-searches`
+  writes it as `resolved` and the experience reader replays such rows under
+  another declaration digest without legacy values.
+
 ## [0.9.0] - 2026-10-26
 
 ### Added
@@ -3125,7 +3594,8 @@ The first release on PyPI. The distribution is named `sail-kd` (`pip install sai
   run. It now emits a single Float literal, exact when the rational is a
   binary float (1/2, 3/4), approximate otherwise (1/3).
 
-[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Scientific-Artificial-Intelligence-Lab/kd/compare/v0.8.0...v0.8.1

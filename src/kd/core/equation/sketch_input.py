@@ -46,6 +46,8 @@ from kd.core.expr.executor import _SPECIAL_OPERATORS
 from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.term_features import TermVocabulary
 from kd.core.platform.builder import resolve_lhs_defaults
+from kd.data.regression import TabularDataset
+from kd.data.tabular_bridge import dataset_from_tabular
 
 if TYPE_CHECKING:
     from kd.data.schema import PDEDataset
@@ -185,7 +187,8 @@ class SketchSpec:
                 "a Sketch must not be fully empty: give pinned, anchored or holes"
             )
 
-    def resolve(self, dataset: PDEDataset) -> CompleteSketch:
+    def resolve(self, dataset: PDEDataset | TabularDataset) -> CompleteSketch:
+        dataset = _fitted_form(dataset)
         vocabulary = dataset_vocabulary(dataset, self.vocabulary)
         registry = FunctionRegistry.create_default()
         pins = [
@@ -337,21 +340,25 @@ def load_sketch(
 def load_sketch(
     source: str | os.PathLike[str] | Mapping[str, object],
     *,
-    dataset: PDEDataset,
+    dataset: PDEDataset | TabularDataset,
 ) -> CompleteSketch: ...
 
 
 def load_sketch(
     source: str | os.PathLike[str] | Mapping[str, object],
     *,
-    dataset: PDEDataset | None = None,
+    dataset: PDEDataset | TabularDataset | None = None,
 ) -> CompleteSketch | SketchSpec:
     payload = as_mapping(_read_payload(source), "sketch file")
     if payload.get("schema") == SKETCH_SPEC_SCHEMA_TAG:
         spec = _spec_from_dict(payload)
-        return spec if dataset is None else spec.resolve(_evolution(dataset))
+        if dataset is None:
+            return spec
+        return spec.resolve(resolve_lhs_defaults(_fitted_form(dataset)))
     sketch = sketch_from_dict(payload)
-    return sketch if dataset is None else _bind_complete(sketch, _evolution(dataset))
+    if dataset is None:
+        return sketch
+    return _bind_complete(sketch, resolve_lhs_defaults(_fitted_form(dataset)))
 
 
 def _read_payload(source: str | os.PathLike[str] | Mapping[str, object]) -> object:
@@ -364,10 +371,10 @@ def _read_payload(source: str | os.PathLike[str] | Mapping[str, object]) -> obje
         raise ValueError(f"sketch file {str(source)!r} is not JSON: {exc}") from exc
 
 
-def _evolution(dataset: PDEDataset) -> PDEDataset:
-    if dataset.lhs_order == 0:
-        raise ValueError("a Sketch binds to an evolution dataset; lhs_order is 0")
-    return resolve_lhs_defaults(dataset)
+def _fitted_form(dataset: PDEDataset | TabularDataset) -> PDEDataset:
+    if isinstance(dataset, TabularDataset):
+        return dataset_from_tabular(dataset)
+    return dataset
 
 
 def _bind_complete(sketch: CompleteSketch, dataset: PDEDataset) -> CompleteSketch:

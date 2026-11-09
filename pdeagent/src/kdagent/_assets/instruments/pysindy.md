@@ -16,6 +16,12 @@ finite-difference stencil. Any number of spatial axes can supply columns. Atomic
 compound and open-form derivatives are computed during execution. For example,
 `u_xxxx` exceeds the atomic-order cap, while `diff_x(u_xxx)` uses composition.
 The fit refuses duplicate terms and target-derivative tautologies.
+For a second time-derivative target, set `target_lhs_order=2` and use a
+dataset whose left-hand side is second order. The selected order must match
+the dataset. A first time derivative can be a feature of a second-order law;
+the second derivative itself, including repeated first-derivative spellings,
+cannot be its own predictor. Changing the target order requires a new
+lineage. Tabular mode refuses this setting when nondefault.
 A non-uniform axis or an unresolvable term fails explicitly. Smoothing noisy
 observations before differentiation can improve the columns used for support
 selection.
@@ -70,16 +76,43 @@ deducted from that target first and anchored columns are projected out of it,
 so the fraction refers to the part of the target that remains for STLSQ to
 fit.
 
-One sparse-regression solve answers the run; `generations` does not create
-additional solves and the seed does not randomize the optimizer. Equivalent
+One STLSQ solve answers the run unless the sketch hole-count step below
+replaces it; `generations` adds no further search, and the seed does not
+randomize the optimizer. Equivalent
 catalog spellings can still produce collinear numeric columns: canonical
 syntax catches duplicate terms but does not equate `u_xx` and `diff2_x(u)`.
 Collinear columns can split a coefficient and change threshold selection.
 
+A sketch with anchors or holes is checked before fitting. Each anchor must
+have a configured column with the same law identity. Holes admit only
+configured columns matching their constraints; anchors without holes leave
+only the anchored columns. Each hole needs at least `min_count` admissible
+distinct non-anchor law keys. A non-empty operator clause must name law
+features present in the library and admit an operator-bearing column as a
+whole; an empty clause means terminal-only. Failed checks refuse the fit.
+
+Compilation removes pinned columns and columns sharing their jet monomials.
+It keeps one column per anchor and removes other spellings or columns
+carrying part of an anchor. Among the remaining columns, those numerically
+inside the anchor span are held at zero during fitting.
+
+When there is at least one hole and summed `max_count` is at most 3, an empty
+STLSQ support or a non-anchor count outside summed `min_count..max_count`
+triggers bounded subset fitting. KD fits OLS subsets of the nonzero columns
+outside the anchor span, with anchors in every fit, and selects by
+`aic_no_n` (`2*k + 2*ln(MSE)`, counting anchors and subset columns). The
+selected support and coefficients then come from that OLS fit, not from
+STLSQ thresholding. If fewer identifiable columns than summed `min_count`
+remain, STLSQ stands and the exit judges the shortfall. Above the bound of
+3, STLSQ also stands and hole count is judged at exit. The compile note
+describes this configured rule; it does not report whether replacement ran.
+
 ## Result interpretation
 
-The returned coefficients are the optimizer's own, with no intervening KD
-refit. `model.best_score_` is NMSE evaluated with those coefficients.
+On the ordinary path the returned coefficients are the optimizer's own.
+With anchors, KD solves their unpenalized coefficients by least squares;
+when hole-count selection replaces STLSQ, all coefficients come from KD's
+OLS subset fit. `model.best_score_` is NMSE evaluated with the returned coefficients.
 `model.best_expr_` lists the structural terms; read the coefficient vector on
 `model.result_.final_eval.coefficients` or the terms and coefficients on
 `model.result_.equation`. The full evaluated catalog retains zero coefficients
@@ -91,8 +124,10 @@ rendered equation prints that constant as a number.
 
 Interpret NMSE with the candidate library and threshold. A small value does
 not establish that the library contains the governing equation. If all
-coefficients are removed, the fit raises an empty-support error naming the
-threshold; reduce the threshold to retain a support. Repeating an otherwise
+coefficients remain absent after the applicable fit path, the ordinary
+empty-support error names the threshold. An empty winning hole-count subset
+instead raises "hole-count selection chose the empty law"; lowering the
+threshold does not directly control that subset fit. Repeating an otherwise
 unchanged deterministic solve does not explore another structure. A near-zero
 residual obtained by putting the target derivative itself in the library is
 a tautology.
@@ -119,9 +154,9 @@ Implementation notes. KD uses the native STLSQ optimizer. It does not use PySIND
 `PDELibrary`, differentiation, weak formulation, ensembling or multi-target
 fit. A nonzero optimizer intercept is rejected: the constant belongs to the
 library column `one`, so the optimizer fits no intercept of its own. The typed
-settings follow STLSQ's defaults; other settings, such as ridge `alpha`, pass
-through `extra_optimizer_kwargs`. That mapping rejects names already
-represented by typed fields rather than overriding them.
+settings, including the ridge weight `alpha`, follow STLSQ's defaults; other
+STLSQ settings pass through `extra_optimizer_kwargs`. That mapping rejects
+names already represented by typed fields rather than overriding them.
 Threshold and iteration bounds are validated before computation. Integration
 checks compare the plugin with a direct STLSQ solve on identical Theta and
 target arrays, including their coefficient vectors.

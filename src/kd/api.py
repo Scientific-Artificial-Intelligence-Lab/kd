@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import torch
 
 from kd._registry import extension_source
+from kd.core.equation.rendering import format_equation
+from kd.core.equation.serialize import from_dict as equation_from_dict
 from kd.core.equation.sketch import Sketch
 from kd.core.equation.sketch_input import SketchSpec
 from kd.core.equation.types import LhsSpec
@@ -35,6 +37,7 @@ from kd.core.platform.requirements import resolve_derivative_requirements
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
 from kd.core.verify import VerifyPolicy
 from kd.data import savgol_smooth
+from kd.data.derivatives import derivative_provider, derivative_providers
 from kd.data.regression import TabularDataset
 from kd.data.schema import (
     AxisInfo,
@@ -61,6 +64,11 @@ from kd.search.config_fields import (
     facade_mapped,
     normalize_config_kwargs,
 )
+from kd.search.descriptor import (
+    InstrumentMode,
+    derivative_provider_eligible,
+    execution_mode,
+)
 from kd.search.discover import DiscoverConfig, DISCOVERPlugin
 from kd.search.discover.config import (
     DEFAULT_N_ITERATIONS,
@@ -78,6 +86,7 @@ from kd.search.iteration_events import (
     PHASE_SEARCH_CRASHED,
     PHASE_SEARCH_ENDED,
     PHASE_SEARCH_STARTED,
+    IterationEventSinkError,
     PhaseWriter,
 )
 from kd.search.llm4ed import Llm4edConfig, Llm4edPlugin
@@ -92,12 +101,17 @@ from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.plugin import PySINDyPlugin
 from kd.search.pysr.config import PySRConfig
 from kd.search.pysr.plugin import PySRPlugin
-from kd.search.registry import algorithm_names, execution_identity, plugin_class
+from kd.search.registry import (
+    DerivativeSelectionAlgorithm,
+    algorithm_execution_identity,
+    algorithm_names,
+    bind_derivative_selection,
+    plugin_class,
+)
 from kd.search.resume_policy import check_resume_config
 from kd.search.run_dir import CHECKPOINTS_DIRNAME, run_id_of_run_dir
 from kd.search.runner import ExperimentRunner
 from kd.search.sga import SGAConfig
-from kd.viz.engine import VizEngine
 from kd.viz.equation_display import expression_display
 from kd.viz.report import ReportResult
 
@@ -105,15 +119,26 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from kd.core.evaluator import EvaluationResult
+    from kd.core.expr.sympy_bridge import FormattedEquation
     from kd.core.platform.requirements import DerivativeReqs
     from kd.data.schema import PDEDataset
     from kd.llm import LLMProvider
     from kd.models.serialize import StoredSurrogate
     from kd.models.trainer import TrainingResult
-    from kd.search.protocol import SearchAlgorithm, SurrogateTrainer
+    from kd.search.protocol import (
+        SearchAlgorithm,
+        StoredSurrogateTrainer,
+        SurrogateTrainer,
+    )
+    from kd.search.records import RunRecord
     from kd.search.result import ExperimentResult
 
-__all__ = ["Model", "instrument_schemas", "instrument_schema_digest"]
+__all__ = [
+    "Model",
+    "format_record_equation",
+    "instrument_schemas",
+    "instrument_schema_digest",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +195,6 @@ _DEFAULT_DERIVATIVES = "finite_diff"
 _DEFAULT_SEED = 0
 _DEFAULT_CHECKPOINT_EVERY = 10
 
-_VALID_DERIVATIVES = frozenset({"finite_diff", "autograd"})
 
 
 
@@ -200,8 +224,13 @@ _FACADE_PARAM_DEFAULTS: dict[str, Any] = {
     "derivatives": _DEFAULT_DERIVATIVES,
     "seed": _DEFAULT_SEED,
 }
-_FACADE_PARAM_LITERALS: dict[str, list[str]] = {
-    "derivatives": sorted(_VALID_DERIVATIVES),
+
+_FACADE_PARAM_LEGACY: dict[tuple[str, str], Any] = {
+    ("discover", "derivatives"): "finite_diff",
+    ("eqgpt", "derivatives"): "finite_diff",
+    ("pysindy", "derivatives"): "finite_diff",
+    ("pysr", "derivatives"): "finite_diff",
+    ("dlga", "derivatives"): "autograd",
 }
 
 
@@ -224,12 +253,27 @@ def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
         facade_name: field_name
         for field_name, facade_name in facade_mapped(algorithm).items()
     }
+    modes = plugin_class(algorithm).descriptor.modes
+    platform_modes = [mode for mode in modes if mode.derivative_service == "platform"]
+    names = set(into_config) | {"generations"} | set(_PIPELINE_PARAM_EFFECTS)
+    if platform_modes:
+        names.add("derivatives")
+    provider_choices = set()
+    for name in derivative_providers():
+        entry = derivative_provider(name)
+        if any(derivative_provider_eligible(mode, entry) for mode in platform_modes):
+            provider_choices.add(name)
+    provider_choices.update(
+        mode.selected_by["derivatives"]
+        for mode in modes
+        if "derivatives" in mode.selected_by
+    )
     rows: list[dict[str, Any]] = []
-    for name in sorted(
-        set(into_config) | {"generations"} | set(_PIPELINE_PARAM_EFFECTS)
-    ):
+    for name in sorted(names):
         field_name = into_config.get(name)
-        if name in _PIPELINE_PARAM_EFFECTS:
+        if name == "derivatives":
+            effect = "derivative_provider"
+        elif name in _PIPELINE_PARAM_EFFECTS:
             effect = _PIPELINE_PARAM_EFFECTS[name]
         elif field_name is not None:
             effect = "config_field"
@@ -237,13 +281,28 @@ def _facade_param_rows(algorithm: str) -> list[dict[str, Any]]:
             effect = "unused"
         else:
             effect = "max_iterations"
-        default = _FACADE_PARAM_DEFAULTS[name]
+        default = (
+            platform_modes[0].provider_kind
+            if name == "derivatives" and platform_modes
+            else _FACADE_PARAM_DEFAULTS[name]
+        )
         rows.append(
             {
                 "name": name,
                 "kind": type(default).__name__,
                 "default": default,
-                "literal_values": _FACADE_PARAM_LITERALS.get(name),
+                "legacy": (
+                    {"value": _FACADE_PARAM_LEGACY[(algorithm, name)]}
+                    if (algorithm, name) in _FACADE_PARAM_LEGACY
+                    else None
+                ),
+                "literal_values": [
+                    provider
+                    for provider in derivative_providers()
+                    if provider in provider_choices
+                ]
+                if name == "derivatives"
+                else None,
                 "config_field": field_name,
                 "effect": effect,
             }
@@ -320,25 +379,81 @@ def _dataset_on_device(dataset: PDEDataset, device: str | None) -> PDEDataset:
     return dataclasses.replace(dataset, axes=axes, fields=fields)
 
 
+_DIGEST_FIELD_KEYS = (
+    "name",
+    "json_kind",
+    "default",
+    "required",
+    "settable_from",
+    "facade_param",
+    "resume_tier",
+)
+
+
+
+
+
+
+
+
+_DIGEST_MODE_KEYS = (
+    "name",
+    "forms",
+    "topologies",
+    "provider_kind",
+    "derivative_service",
+    "derivative_providers",
+    "requires_surrogate",
+    "config_values",
+    "component_fields",
+    "sketch",
+    "lhs_orders",
+    "score_frame",
+    "selected_by",
+    "order_params",
+    "required_params",
+    "default_overrides",
+    "refused_fields",
+    "field_names",
+    "field_counts",
+    "spatial_axes",
+    "spatial_dims",
+    "names_from",
+    "selectable_from_data",
+    "selector",
+)
+
+
+def _digest_field(row: dict[str, Any]) -> dict[str, Any]:
+    """Project a field row and its nested object fields onto the digest keys."""
+    nested = row["object_fields"]
+    return {
+        **{key: row[key] for key in _DIGEST_FIELD_KEYS},
+        "object_fields": None if nested is None else [_digest_field(r) for r in nested],
+    }
+
+
 def instrument_schema_digest() -> str:
-    """Hash mode and call-configuration declarations, excluding descriptive prose."""
-    fields = (
-        "name",
-        "json_kind",
-        "default",
-        "required",
-        "settable_from",
-        "facade_param",
-    )
+    """Hash mode and call-configuration declarations, excluding descriptive prose.
+
+    A field row enters with its nested ``object_fields`` at every depth, under
+    the same keys; ``legacy`` and descriptions stay out at every level. A mode
+    enters under ``_DIGEST_MODE_KEYS`` only, so the operational declarations
+    (``requirements``, each mode's ``resources``) stay out.
+    """
     rows = [
         {
             "algorithm": schema["algorithm"],
             "modes": [
-                {key: value for key, value in mode.items() if key != "description"}
+                {key: mode[key] for key in _DIGEST_MODE_KEYS}
                 for mode in schema["modes"]
             ],
-            "fields": [{key: row[key] for key in fields} for row in schema["fields"]],
-            "facade_params": schema["facade_params"],
+            "fields": [_digest_field(row) for row in schema["fields"]],
+            "facade_params": [
+                {key: value for key, value in row.items() if key != "legacy"}
+                for row in schema["facade_params"]
+            ],
+            "identity_breaking_fields": schema["identity_breaking_fields"],
         }
         for schema in instrument_schemas()
     ]
@@ -372,6 +487,64 @@ def _config_field_owners(name: str) -> tuple[str, ...]:
         algorithm
         for algorithm in algorithm_names()
         if name in _config_fields(algorithm)
+    )
+
+
+def _facade_param_text(algorithm: str) -> str:
+    """Name the ``kd.Model`` parameters ``algorithm`` reads, for a refusal.
+
+    The rows are the published ``facade_params``; one the algorithm never
+    reads (``generations`` of a one-shot plugin that does not map it) is left
+    out. A ``generations`` row also says what it sets.
+    """
+    rows = [row for row in _facade_param_rows(algorithm) if row["effect"] != "unused"]
+    text = (
+        f" kd.Model parameters for this algorithm are {[row['name'] for row in rows]}"
+    )
+    generations = next((row for row in rows if row["name"] == "generations"), None)
+    if generations is None:
+        return f"{text}."
+    if generations["effect"] == "max_iterations":
+        return f"{text}; generations is the number of search iterations."
+    return f"{text}; generations sets {generations['config_field']}."
+
+
+def _mode_condition(mode: InstrumentMode) -> str:
+    """When ``mode`` runs: its data layouts and the parameters that select it.
+
+    A required parameter that the selector already says is given is not
+    repeated (DISCOVER's ``pinn``).
+    """
+    layouts = " or ".join(sorted(topology.value for topology in mode.topologies))
+    conditions = [
+        f"{name}={value!r}" for name, value in sorted(mode.selected_by.items())
+    ]
+    covered: set[str] = set()
+    if mode.selector is not None:
+        verb = "is given" if mode.selector.present else "is not given"
+        conditions.append(f"{mode.selector.field} {verb}")
+        if mode.selector.present:
+            covered.add(mode.selector.field)
+    text = f"{mode.name} on {layouts} data"
+    if conditions:
+        text += " when " + " and ".join(conditions)
+    required = sorted(mode.required_params - covered)
+    if required:
+        text += ", requires " + " and ".join(required)
+    if not mode.selectable_from_data:
+        text += ", not selectable from input data"
+    return text
+
+
+def _mode_selection_text(algorithm: str) -> str:
+    """Say how a multi-mode ``algorithm`` picks its mode, from its descriptor."""
+    modes = plugin_class(algorithm).descriptor.modes
+    if len(modes) < 2:
+        return ""
+    clauses = "; ".join(_mode_condition(mode) for mode in modes)
+    return (
+        f" Model(algorithm={algorithm!r}) runs the mode that matches its input "
+        f"data and parameters: {clauses}."
     )
 
 
@@ -563,18 +736,19 @@ class Model:
     post-fit attributes (``best_expr_``, ``best_score_``, ``result_``).
 
     Limitations:
-        Most packaged engines fit a **first-order LHS** only (e.g.
+        Evolution engines default to a **first-order LHS** (e.g.
         ``u_t = f(u, u_x, ...)``). A dataset carries its LHS order via
         ``dataset.lhs_order`` (the single source of truth; e.g.
         ``u_tt`` for the wave equation ``u_tt = c**2 * u_xx``), and an
         unsupported ``(algorithm, lhs_order)`` combination fails loud at
         ``fit`` time rather than silently fitting the wrong target.
-        Second-order-in-time targets are covered by DLGA only: set
-        ``DLGAConfig(target_lhs_order=2)``, or use the ``wave_preset()`` /
-        ``kg_preset()`` constructors (recovery validated on the bundled
-        ``wave`` and ``klein-gordon`` datasets). For every other engine,
-        reduce to a first-order system manually (introduce ``v = u_t``, then
-        discover ``u_t = v`` and ``v_t = ...`` separately).
+        DLGA, PySR, PySINDy, SGA finite differences/autograd and DISCOVER
+        MODE1/MODE2 accept ``target_lhs_order=2`` in their configs. DLGA also offers
+        ``wave_preset()`` / ``kg_preset()`` constructors, with recovery
+        validated on the bundled ``wave`` and ``klein-gordon`` datasets.
+        Check the selected mode's ``lhs_orders`` declaration for other engines.
+        For first-order-only modes, reduce to a system manually: introduce
+        ``v = u_t``, then discover ``u_t = v`` and ``v_t = ...`` separately.
 
     Args:
         algorithm: Search algorithm name. Supported: ``"sga"`` (default,
@@ -597,7 +771,7 @@ class Model:
             their config field names through ``**kwargs``; inspect
             ``kd.instrument_schemas()`` for the exact surface.
             For non-SGA algorithms the individual facade parameters below
-            (population/depth/width/aic_ratio/derivatives) are SGA-only.
+            (population/depth/width/aic_ratio) are SGA-only.
         generations: Search-loop length (default 50). The five iterative
             algorithms (sga / dlga / discover / eqgpt / llm4ed) spend it as the
             kd runner's ``max_iterations``. ``pysr`` is one-shot: the runner
@@ -613,14 +787,16 @@ class Model:
         depth: Maximum tree depth per term. SGA-only.
         width: Maximum number of terms per PDE. SGA-only.
         aic_ratio: AIC penalty ratio. SGA-only.
-        derivatives: Derivative provider mode: ``"finite_diff"`` or
-            ``"autograd"`` (forwards ``use_autograd=True`` to ``SGAConfig``).
-            When ``"autograd"``, the SGA terminal derivatives (u_x, u_t) are
-            routed through an autograd-trained surrogate, while tree-internal
-            derivative operators keep SGA's own finite-difference stencil
-            (not the dataset's provider). SGA-only — DLGA always uses autograd,
-            discover uses finite-diff, or autograd on its own network when its
-            ``pinn`` field is set.
+        derivatives: Registered provider for a mode declaring platform
+            derivatives; omission preserves that mode's declared default.
+            A provider may be selected alongside ``config=``. SGA's
+            ``"autograd"`` selection still activates its private surrogate:
+            terminal derivatives change, while tree-internal derivatives keep
+            SGA's finite-difference stencil. Plugin-owned and derivative-free
+            modes refuse replacement providers; explicit ``"finite_diff"``
+            preserves their declared service when replaying default controls.
+            With an explicit SGA config, this selection must agree with
+            ``SGAConfig.use_autograd``.
         seed: Random seed for reproducibility. It threads into every
             algorithm's default config when ``config=`` is unset; otherwise
             the config's own seed wins. Passing the facade ``seed=`` together
@@ -637,11 +813,11 @@ class Model:
             single source of plugin settings; passing any algorithm-specific
             config fields or overlapping facade
             parameters (``population``, ``depth``, ``width``, ``aic_ratio``,
-            ``derivatives``, ``seed``) or extra ``kwargs`` raises
+            ``seed``) or extra ``kwargs`` raises
             ``ValueError``.
             Only ``algorithm``, ``generations``, ``verbose``, ``callbacks``,
             ``checkpoint_dir``/``checkpoint_every``, ``savgol_window``,
-            ``small_term_rtol``, (for DLGA)
+            ``small_term_rtol``, compatible ``derivatives``, (for DLGA)
             ``surrogate_model``, and (for llm4ed) ``provider`` remain effective
             on the facade — except for pysr, where ``generations`` maps into
             the config's own ``niterations`` and passing both raises.
@@ -729,7 +905,16 @@ class Model:
             runner loop begins), then ``search_ended`` or ``search_crashed``
             — so the minutes-scale pre-search gap (e.g. a DLGA surrogate
             build) is distinguishable
-            from a hung process. The first line of a fit exclusive-creates the
+            from a hung process. A ``fit`` that raises after ``fit_started``
+            appends one last line before the exception leaves it:
+            ``fit_failed``, or ``fit_interrupted`` for a ``KeyboardInterrupt``
+            or a ``kd.SearchInterrupted``, with the stage (``prepare`` /
+            ``search`` / ``finalize``) and the error's class name and message
+            (no traceback; the value of an environment variable named like a
+            credential is replaced by ``[redacted:NAME]``). A ``fit`` refused
+            before ``fit_started`` writes no
+            file. ``kd.search.read_run_state`` reads the state back from the
+            file's directory. The first line of a fit exclusive-creates the
             file: a reused path fails loud instead of interleaving two fits
             (same discipline as the iteration-event sink). Observability only;
             never part of the run's scientific identity.
@@ -911,6 +1096,7 @@ class Model:
         self.width = width_resolved
         self.aic_ratio = aic_ratio_resolved
         self.derivatives = derivatives_resolved
+        self._derivatives_explicit = derivatives is not _UNSET
         self.seed = seed_resolved
         self.verbose = verbose
 
@@ -964,6 +1150,7 @@ class Model:
 
         self._fitted: bool = False
         self._result: ExperimentResult | None = None
+        self._resolved_config: dict[str, Any] | None = None
         self._algorithm: SearchAlgorithm | None = None
         self._dataset: PDEDataset | None = None
 
@@ -1082,15 +1269,21 @@ class Model:
     @staticmethod
     def _validate_derivatives(derivatives: str) -> None:
         """Reject ``derivatives`` values outside the supported whitelist."""
-        if derivatives not in _VALID_DERIVATIVES:
+        if derivatives not in derivative_providers():
             raise ValueError(
                 f"Invalid derivatives='{derivatives}'. "
-                f"Must be one of {sorted(_VALID_DERIVATIVES)}."
+                f"Must be one of {sorted(derivative_providers())}."
             )
 
     @staticmethod
     def _check_kwarg_names(algorithm: str, kwargs: dict[str, Any]) -> None:
         """Reject kwarg NAMES this algorithm's config does not forward.
+
+        The refusal of an unknown name lists the legal config kwargs and the
+        ``kd.Model`` parameters the algorithm reads (``_facade_param_text``).
+        When a name is a field of another algorithm's config, it also says how
+        this algorithm picks its mode, if it has more than one
+        (``_mode_selection_text``).
 
         Split from the value gate because the two run at different points in
         ``__init__``'s frozen validator order (freeze spec §2): names are
@@ -1120,11 +1313,13 @@ class Model:
                 if declared_elsewhere
                 else ""
             )
+            mode_text = _mode_selection_text(algorithm) if declared_elsewhere else ""
             raise TypeError(
                 f"Model(algorithm={algorithm!r}) fields={sorted(unknown)} are not "
                 f"fields of {plugin_cls.config_cls.__name__}.{owner_text} Check "
                 "kd.instrument_schemas() for legal names. Legal config kwargs "
                 f"for this algorithm are {sorted(forwardable)}."
+                f"{_facade_param_text(algorithm)}{mode_text}"
             )
         collision = set(kwargs) & mapped.keys()
         if collision:
@@ -1198,6 +1393,17 @@ class Model:
         """
         if config is None:
             return
+        if (
+            algorithm == "sga"
+            and isinstance(config, SGAConfig)
+            and derivatives is not _UNSET
+            and config.use_autograd != (derivatives == "autograd")
+        ):
+            raise ValueError(
+                "derivatives conflicts with SGAConfig.use_autograd; set "
+                "use_autograd=True with derivatives='autograd', or "
+                "use_autograd=False with a non-surrogate provider"
+            )
         overrides: list[str] = []
         if generations is not _UNSET and algorithm in _GENERATIONS_INTO_CONFIG:
             overrides.append("generations")
@@ -1209,8 +1415,6 @@ class Model:
             overrides.append("width")
         if aic_ratio is not _UNSET:
             overrides.append("aic_ratio")
-        if derivatives is not _UNSET:
-            overrides.append("derivatives")
         if seed is not _UNSET:
             overrides.append("seed")
         if kwargs:
@@ -1248,9 +1452,8 @@ class Model:
           silently dropped, so raise instead of accepting a no-op argument.
 
         - non-SGA algorithms still reject the dedicated SGA facade parameters
-          (``population``, ``depth``, ``width``, ``aic_ratio``,
-          ``derivatives``). Algorithm config fields travel through the generic
-          kwargs path and are validated separately.
+          (``population``, ``depth``, ``width``, ``aic_ratio``). Algorithm config
+          fields travel through the generic kwargs path and are validated separately.
         """
         plugin_cls = plugin_class(algorithm)
         for argument, value in (
@@ -1276,13 +1479,20 @@ class Model:
                 f"``{argument}`` in its constructor_kwargs, so it would never "
                 f"receive it. Algorithms that take it: {takers}.{hint}"
             )
+        if derivatives is not _UNSET and not any(
+            mode.derivative_service == "platform"
+            for mode in plugin_cls.descriptor.modes
+        ):
+            raise TypeError(
+                f"Model(algorithm={algorithm!r}, derivatives=...) is not supported: "
+                f"{plugin_cls.config_cls.__name__} has no platform derivative mode"
+            )
         Model._reject_sga_only_params_for_non_sga(
             algorithm,
             population=population,
             depth=depth,
             width=width,
             aic_ratio=aic_ratio,
-            derivatives=derivatives,
         )
 
     @staticmethod
@@ -1293,12 +1503,11 @@ class Model:
         depth: Any,
         width: Any,
         aic_ratio: Any,
-        derivatives: Any,
     ) -> None:
         """Raise if SGA-only facade params ride a non-SGA algorithm path.
 
         The individual SGA facade knobs
-        (``population``/``depth``/``width``/``aic_ratio``/``derivatives``) and
+        (``population``/``depth``/``width``/``aic_ratio``)
         would otherwise be silently dropped on other algorithms. The error
         names the offending params and the selected config class. No-op for
         ``sga``, whose knobs they are.
@@ -1317,8 +1526,6 @@ class Model:
             sga_only_set.append("width")
         if aic_ratio is not _UNSET:
             sga_only_set.append("aic_ratio")
-        if derivatives is not _UNSET:
-            sga_only_set.append("derivatives")
         if sga_only_set:
             raise TypeError(
                 f"Model(algorithm={algorithm!r}, ...): the following SGA-only "
@@ -1551,7 +1758,8 @@ class Model:
         ``savgol_window``, which smooths the training data as in ``fit``);
         the rest of the configuration does not enter the network.
 
-        For dlga, ``save_to`` writes the trained network as a stored surrogate
+        For a ``surrogate_model`` artifact channel (including dlga), ``save_to``
+        writes the trained network as a stored surrogate
         (``kd.search.save_dlga_surrogate``): a ``kd-surrogate-v1`` file whose
         identity names the (smoothed) dataset and the surrogate configuration,
         which a later ``Model(algorithm="dlga", surrogate_model=<that path>)``
@@ -1577,7 +1785,8 @@ class Model:
                 (``field_model`` / ``surrogate_model``); training here would
                 retrain and silently discard it. Also sga under the default
                 ``derivatives="finite_diff"``, which never consults a
-                surrogate, and ``save_to`` on an instrument other than dlga.
+                surrogate, and ``save_to`` without the stored-surrogate
+                artifact channel.
         """
         plugin_cls = plugin_class(self.algorithm)
         if not plugin_cls.descriptor.config_artifact_keys:
@@ -1592,10 +1801,11 @@ class Model:
                 "train_surrogate takes a gridded PDEDataset; a TabularDataset "
                 "(scalar regression) has no field surrogate to train."
             )
-        if save_to is not None and self.algorithm != "dlga":
+        stored = "surrogate_model" in plugin_cls.descriptor.config_artifact_keys
+        if save_to is not None and not stored:
             raise ValueError(
                 f"Model(algorithm={self.algorithm!r}).train_surrogate(save_to=) "
-                "is dlga-only: only dlga's surrogate_model takes a stored "
+                "requires the surrogate_model artifact channel to take a stored "
                 "surrogate back; save this instrument's module with "
                 "kd.models.save_field_model."
             )
@@ -1626,13 +1836,10 @@ class Model:
         )
         if self.savgol_window > 0:
             dataset = savgol_smooth(dataset, self.savgol_window)
-        if self.algorithm == "dlga":
+        if stored:
 
 
-
-
-
-            return cast("DLGAPlugin", plugin).train_surrogate(
+            return cast("StoredSurrogateTrainer", plugin).train_surrogate(
                 dataset, device=self.device, save_to=save_to
             )
         return trainer.train_surrogate(_dataset_on_device(dataset, self.device))
@@ -1927,7 +2134,8 @@ class Model:
             TypeError: If ``sketch`` is not a ``Sketch``, a ``SketchSpec`` or
                 ``None``.
             ValueError: If ``sketch`` uses a clause the algorithm's capability
-                declaration does not support, targets a non-evolution dataset,
+                declaration does not support, is an evolution sketch on a
+                table or an order-0 (table) sketch on evolution data,
                 or declares an LHS differing from the dataset's resolved LHS,
                 or if a ``SketchSpec`` does not resolve on the dataset;
                 or if the dataset is missing the required LHS field
@@ -1956,6 +2164,51 @@ class Model:
 
 
 
+        phase_writer = (
+            PhaseWriter(self.phases_path) if self.phases_path is not None else None
+        )
+        try:
+            return self._run_fit(
+                dataset,
+                resume_from,
+                sketch=sketch,
+                reseed=reseed,
+                verify=verify,
+                max_seconds=max_seconds,
+                phase_writer=phase_writer,
+            )
+        except BaseException as exc:
+
+
+
+
+            if phase_writer is not None and phase_writer.last_phase is not None:
+                try:
+                    phase_writer.write_failure(exc)
+                except IterationEventSinkError:
+
+
+
+                    logger.exception(
+                        "could not record the failed fit in %s", self.phases_path
+                    )
+            raise
+
+    def _run_fit(
+        self,
+        dataset: PDEDataset | TabularDataset,
+        resume_from: str | Path | None,
+        *,
+        sketch: Sketch | SketchSpec | None,
+        reseed: bool,
+        verify: VerifyPolicy | None,
+        max_seconds: float | None,
+        phase_writer: PhaseWriter | None,
+    ) -> Model:
+        """Run one fit; ``fit`` owns the contract and records a failure."""
+
+
+
 
 
 
@@ -1965,6 +2218,7 @@ class Model:
 
         self._fitted = False
         self._result = None
+        self._resolved_config = None
         self._algorithm = None
         self._dataset = None
         self._tabular_feature_names = None
@@ -2055,14 +2309,18 @@ class Model:
                     "sketch must be a Sketch, a SketchSpec or None, got "
                     f"{type(sketch).__name__}"
                 )
-            if dataset.lhs_order == 0:
-                raise ValueError("sketch requires an evolution dataset")
             dataset = resolve_lhs_defaults(dataset)
 
 
 
             if isinstance(sketch, SketchSpec):
                 sketch = sketch.resolve(dataset)
+            if (sketch.lhs_spec.order == 0) != (dataset.lhs_order == 0):
+                raise ValueError(
+                    "an evolution sketch needs evolution data and an order-0 "
+                    "sketch needs a table: sketch LHS order "
+                    f"{sketch.lhs_spec.order}, dataset LHS order {dataset.lhs_order}"
+                )
             plugin_cls = plugin_class(self.algorithm)
 
 
@@ -2116,9 +2374,6 @@ class Model:
 
 
 
-        phase_writer = (
-            PhaseWriter(self.phases_path) if self.phases_path is not None else None
-        )
         if phase_writer is not None:
             phase_writer.write(PHASE_FIT_STARTED)
 
@@ -2142,6 +2397,29 @@ class Model:
 
         plugin, batch_size = self._build_plugin(task=task)
         self._algorithm = plugin
+        self._check_dataset_supported(
+            dataset, resolve_derivative_requirements(plugin), plugin
+        )
+        self._selected_derivative_mode = execution_mode(
+            plugin_class(self.algorithm).descriptor,
+            dataset.topology,
+            plugin.config,
+            lhs_order=dataset.lhs_order,
+        )
+        selected_reqs = self._resolve_selected_derivatives(plugin)
+        mode = self._selected_derivative_mode
+        platform_derivatives = mode.derivative_service == "platform"
+        if platform_derivatives or mode.component_fields:
+            bind_derivative_selection(
+                cast(DerivativeSelectionAlgorithm, plugin),
+                derivative_provider=selected_reqs.provider_kind
+                if platform_derivatives
+                else None,
+                default_derivative_provider=mode.provider_kind
+                if platform_derivatives
+                else None,
+                mode=mode.name,
+            )
 
         max_iterations = self._effective_max_iterations()
         callbacks = (
@@ -2193,7 +2471,7 @@ class Model:
         if resume_from is not None:
             live_config = {
                 **dict(plugin.config),
-                **execution_identity(self.algorithm),
+                **algorithm_execution_identity(plugin, self.algorithm),
             }
             if task is not None:
                 live_config[SKETCH_CONFIG_KEY] = task.payload
@@ -2254,10 +2532,16 @@ class Model:
 
 
         self._dataset = components.dataset
-        self._result = runner.run(
-            components,
-            preprocessing_seconds=preprocessing_seconds,
-        )
+
+
+
+        try:
+            self._result = runner.run(
+                components,
+                preprocessing_seconds=preprocessing_seconds,
+            )
+        finally:
+            self._resolved_config = runner.resolved_config
         self._fitted = True
         return self
 
@@ -2737,6 +3021,25 @@ class Model:
         return self._require_result()
 
     @property
+    def resolved_config_(self) -> dict[str, Any] | None:
+        """The configuration the last fit's search ran under, or ``None``.
+
+        A snapshot with the semantics of the sealed config, taken when the
+        search starts (the moment ``search_started`` is written to
+        ``phases_path``): for a completed fit it equals
+        ``result_.run_record.run_spec.config`` without ``searched_vocabulary``,
+        including values kd resolved from the dataset, such as a default term
+        catalog built over its axes. A fit that raised after that moment keeps
+        the configuration its search ran under. It is ``None`` before the
+        first fit and after a fit that stopped earlier: a refused argument, a
+        refused ``resume_from``, or a failure in preprocessing or the
+        algorithm's ``prepare()``. It is the public configuration the seal
+        records, not every internal setting an algorithm derives during the
+        search. Unlike ``result_``, it does not require a completed fit.
+        """
+        return self._resolved_config
+
+    @property
     def algorithm_(self) -> SearchAlgorithm:
         """The fitted ``SearchAlgorithm`` plugin instance (post-fit only).
 
@@ -2774,15 +3077,25 @@ class Model:
 
 
 
-    def report(self, output_dir: str | Path, *, animate: bool = False) -> ReportResult:
+    def report(
+        self,
+        output_dir: str | Path,
+        *,
+        animate: bool = False,
+        include_ground_truth: bool = True,
+    ) -> ReportResult:
         """Render every figure this fit supports and one HTML page into ``output_dir``.
 
         The same pass as ``kd.VizEngine(output_dir).render_all(...)`` with the
         result, the algorithm and the dataset of this fit wired in. The
         returned ``ReportResult`` lists the figure paths, the page path and
         the figure families that were skipped; in a notebook it displays the
-        page inline.
+        page inline. ``include_ground_truth=False`` leaves the dataset's
+        reference equation and the term table derived from it off the page
+        (forwarded to ``render_all``).
         """
+        from kd.viz.engine import VizEngine
+
         self._check_fitted()
         if self._dataset is None:
             raise RuntimeError(_FIT_REQUIRED_MSG)
@@ -2791,6 +3104,7 @@ class Model:
             algorithm=self.algorithm_,
             dataset=self._dataset,
             animate=animate,
+            include_ground_truth=include_ground_truth,
         )
 
     def _check_fitted(self) -> None:
@@ -2844,6 +3158,33 @@ class Model:
             **self._extra_kwargs,
         )
 
+    def _resolve_selected_derivatives(self, plugin: Any) -> DerivativeReqs:
+        """Apply the facade choice only to a mode declaring platform derivatives."""
+        reqs = resolve_derivative_requirements(plugin)
+        if not self._derivatives_explicit:
+            return reqs
+        mode = self._selected_derivative_mode
+        if mode.derivative_service != "platform":
+            if self.derivatives == _DEFAULT_DERIVATIVES:
+                return reqs
+            if (
+                self.algorithm == "sga"
+                and mode.name == "autograd"
+                and self.derivatives == "autograd"
+            ):
+                return reqs
+            raise ValueError(
+                f"derivatives cannot replace the {mode.derivative_service} "
+                f"service of mode {mode.name!r}"
+            )
+        entry = derivative_provider(self.derivatives)
+        if not derivative_provider_eligible(mode, entry):
+            raise ValueError(
+                f"derivatives provider {self.derivatives!r} is incompatible with "
+                f"mode {mode.name!r}: requires_surrogate={mode.requires_surrogate}"
+            )
+        return dataclasses.replace(reqs, provider_kind=self.derivatives)
+
     def _build_components(
         self,
         dataset: PDEDataset,
@@ -2878,7 +3219,7 @@ class Model:
         from kd.core.platform.builder import PlatformBuilder
 
         dataset = _dataset_on_device(dataset, self.device)
-        reqs = resolve_derivative_requirements(self._algorithm)
+        reqs = self._resolve_selected_derivatives(self._algorithm)
         self._check_dataset_supported(dataset, reqs, self._algorithm)
         if self.algorithm == "dlga":
 
@@ -2956,8 +3297,8 @@ class Model:
             cast("EqGPTPlugin", plugin).refuse_unsupported_names(resolved)
         elif self.algorithm == "llm4ed":
             cast("Llm4edPlugin", plugin).refuse_unsupported_names(resolved)
-        elif self.algorithm == "pysindy":
-            cast("PySINDyPlugin", plugin).refuse_lhs_terms(resolved)
+        elif self.algorithm in ("pysindy", "pysr"):
+            cast("PySINDyPlugin | PySRPlugin", plugin).refuse_lhs_terms(resolved)
         if self.algorithm == "dlga":
 
 
@@ -3118,3 +3459,30 @@ if set(Model._CONFIG_BUILDER_BY_ALGORITHM) != _BUILT_IN_ALGORITHMS:
         f"{sorted(_BUILT_IN_ALGORITHMS)}. Every built-in algorithm needs a "
         "config-builder entry (and vice versa)."
     )
+
+
+def format_record_equation(record: RunRecord) -> FormattedEquation | None:
+    """Format the law a sealed run record carries, for display.
+
+    Decodes ``record.evidence.catalog_fit`` and renders it through the same
+    form-aware path as a live result's equation: the active-law projection
+    (the selected support, with any fixed sketch terms the fit sealed in the
+    catalog), the order-aware left side of an evolution law, ``0`` for a
+    homogeneous law and the target column for a regression. The law is never
+    rebuilt from the record's ``expression`` string.
+
+    Args:
+        record: A sealed run record, live or loaded from disk.
+
+    Returns:
+        The formatted law, or ``None`` when the record carries no equation
+        (``catalog_fit`` is ``None``).
+
+    A malformed ``catalog_fit`` raises the equation decoder's own error
+    (``ValueError`` for an invalid form, left side or support); it is not
+    reported as an absent equation.
+    """
+    payload = record.evidence.catalog_fit
+    if payload is None:
+        return None
+    return format_equation(equation_from_dict(payload))

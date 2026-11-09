@@ -7,10 +7,17 @@ the field itself, which is always included as a default column; the fitted law
 can therefore contain `width + 1` terms. A law containing only that field is a
 valid outcome, while an empty law is excluded.
 
+The finite-difference and autograd modes accept `target_lhs_order=1` (the default) or
+`2`, matching the dataset's declared target. Order 2 fits the second time
+derivative directly. Tabular mode
+refuses a nondefault PDE target order. Changing the target order starts a
+new lineage.
+
 The left-hand-side axis is excluded from derivative denominators, precomputed
 terminals and coordinate leaves. The search space contains spatial derivatives
-and explicit spatial dependence. Mixed space-time derivatives, higher time
-derivatives and explicit time dependence require a different grammar. A term
+and explicit spatial dependence. Mixed space-time derivatives, time
+derivatives on the right-hand side and explicit time dependence require a
+different grammar. A term
 that still differentiates along the left-hand-side axis is discarded during
 execution. A derivative terminal that cannot be computed is removed from the
 run's vocabulary with a warning.
@@ -39,7 +46,9 @@ argument holds no input feature after rational reduction, such as `log(one)`,
 `sin(6.283185307179586)` or `cos(div(x, x))`, makes the whole tree
 inadmissible. Its value is a number: `log(one)` is zero, and the `sin` example
 is about 1e-16, which protected division turns into a large column. Offspring
-refused by these rules are scored invalid without a fit. Initial draws refused by
+refused by these rules are dropped before scoring on the staged search path,
+so they enter neither the offspring statistics nor the evaluation count. The
+compatibility evaluation path reports them as invalid. Initial draws refused by
 them are drawn again; when 500 draws for one population slot are refused,
 initialization stops with an error that names the vocabulary. A vocabulary
 with many constants and few features can reach that bound.
@@ -124,6 +133,19 @@ baseline is followed by adaptive `d_tol` steps, bounded by `maxit`, with
 ranks candidates for selection. One generation is one KD iteration, controlled
 by `generations`.
 
+With a sketch, the sum of the holes' `min_count` must fit within `width`
+plus one if the default field column is retained; otherwise compilation
+refuses the search. Anchored terms take no width: each anchored column is in
+every fit and is never thresholded, and a sketch with anchored terms and no
+hole is refused. After fitting, the selected support
+is aggregated by signed law key, zero and below-threshold coefficients are
+excluded, and anchor columns are reserved away from holes. Each remaining
+key occupies the first admitting hole; exceeding any hole's `max_count`
+rejects the candidate, although `hole_count` is declared `exit_checked`.
+Pin reservation excludes shared jet monomials but does not cover every
+rational respelling or a sum of separately admitted terms that reconstructs
+a pinned column; the compile notes describe that boundary.
+
 In tabular mode, every tolerance comparison and candidate score uses only the
 selected terms. The same coefficients define the returned equation, prediction
 and residuals, including selected terms with small coefficients. This mode uses
@@ -156,13 +178,16 @@ stored best and the current population's best-ranked candidate, with ties
 going to the earlier segment. With finite differences, each segment reproduces
 an independent run of k generations at its seed. With autograd, the field
 surrogate trained before the first generation is shared by all segments, so
-the segments are not independent runs at those seeds.
+the segments are not independent runs at those seeds. A checkpoint resume or
+fork trains the surrogate again from `seed` unless a trained surrogate is
+injected; changing the seed can therefore change that surrogate.
 
 ## Result interpretation
 
 `model.best_score_` combines fit error and support size through
 `2 * k * aic_ratio + 2 * ln(MSE)`, with `max(MSE, F)` in tabular mode (see
-Method). NMSE alone therefore does not determine which
+Method). PDE candidates with AIC below -100 are invalid; -100 itself is
+valid. NMSE alone therefore does not determine which
 candidate is preferred. AIC ranks candidates on the same dataset; NMSE is
 measured on SGA's own fitting domain. For a PDE this is its grid and derivative
 basis, which can differ from a refit using another derivative provider. For a

@@ -13,6 +13,7 @@ from matplotlib.animation import PillowWriter
 from kd.core.equation import DEFAULT_LHS_LABEL, Form
 from kd.core.oom import is_cpu_alloc_failure
 from kd.data.schema import DataTopology
+from kd.viz.axes import FULL_FIGURE
 from kd.viz.extension import HomogeneousVizExtension, VizExtension
 from kd.viz.integration_assembly import build_integration_result
 from kd.viz.plots.animation import plot_field_animation
@@ -21,13 +22,14 @@ from kd.viz.plots.comparison import (
     plot_score_bar,
     plot_summary_table,
     render_overlaid_convergence,
+    summary_table_figsize,
 )
 from kd.viz.plots.convergence import plot_convergence
 from kd.viz.plots.equation import plot_equation
 from kd.viz.plots.equation_tree import plot_equation_tree
 from kd.viz.plots.error_heatmap import plot_error_heatmap
 from kd.viz.plots.field import plot_field_comparison
-from kd.viz.plots.pareto_table import plot_pareto_table
+from kd.viz.plots.pareto_table import pareto_table_figsize, plot_pareto_table
 from kd.viz.plots.parity import plot_parity
 from kd.viz.plots.pde_residual import plot_pde_residual_field
 from kd.viz.plots.residual import plot_residual
@@ -43,11 +45,12 @@ from kd.viz.report import (
     _universal_figure_spec,
     generate_report,
 )
-from kd.viz.style import DPI, FIGSIZE_SINGLE, PANEL_H, PANEL_W, style_context
+from kd.viz.style import DPI, FIGSIZE_SINGLE, style_context
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
     from kd.core.integrator import IntegrationResult
@@ -60,10 +63,11 @@ _DEFAULT_DPI = DPI
 _SVG_FORMAT = "svg"
 _UNIVERSAL_FIGSIZE = FIGSIZE_SINGLE
 _COMPARISON_FIGSIZE = FIGSIZE_SINGLE
-_SUMMARY_FIGSIZE = (3 * PANEL_W, PANEL_H)
 _PLUGIN_FIGSIZE = FIGSIZE_SINGLE
 
 _EQUATION_FIGSIZE = (FIGSIZE_SINGLE[0], 1.8)
+
+_TABLE_FIGURES = frozenset({"pareto_front_table", "comparison_summary"})
 
 
 
@@ -101,8 +105,8 @@ _INTEGRATION_DEGRADED_NOTE = (
 
 
 _NO_DATASET_NOTE = (
-    "no dataset provided: dataset-dependent plots skipped (coefficient bar, "
-    "field comparison, PDE residual field, time slices, error heatmap) and "
+    "no dataset provided: dataset-dependent plots skipped (field comparison, "
+    "PDE residual field, time slices, error heatmap) and "
     "the residual panel has no spatial layout (1-D panels only, no grid "
     "inference)"
 )
@@ -140,6 +144,14 @@ def _scatter_aware_field_shape(
     return field_shape, no_grid
 
 
+def _new_axes(name: str, figsize: tuple[float, float]) -> tuple[Figure, Axes]:
+    """The figure and axes the engine hands a Tier-1 plot called ``name``."""
+    fig = plt.figure(figsize=figsize, dpi=_DEFAULT_DPI)
+    if name in _TABLE_FIGURES:
+        return fig, fig.add_axes(FULL_FIGURE)
+    return fig, fig.add_subplot()
+
+
 def _drop_card_heading(fig: Figure, heading: str) -> None:
     """Keep a single-panel figure from repeating its report card heading.
 
@@ -173,8 +185,9 @@ class VizEngine:
     The engine creates figures, applies styling, delegates to individual
     plot functions, saves output, and closes figures to avoid resource
     leaks. After rendering plots it generates an HTML report with
-    inline SVG figures (LaTeX in the equation block is rendered by
-    MathJax loaded from a public CDN).
+    inline SVG figures and equations typeset as inline SVG by Matplotlib
+    mathtext, which MathJax from a public CDN replaces with its own
+    typesetting when the page is online.
 
     Args:
         output_dir: Directory for rendered output. Created if missing.
@@ -209,6 +222,7 @@ class VizEngine:
         algorithm: Any | None = None,
         dataset: Any | None = None,
         animate: bool = False,
+        include_ground_truth: bool = True,
     ) -> ReportResult:
         """Render universal plots, plugin plots, and HTML report.
 
@@ -220,6 +234,10 @@ class VizEngine:
                 (u-field True/Predicted/Residual) and PDE residual field.
             animate: When True, render a 2D field animation GIF for
                 2D-spatial+time datasets. Defaults to False.
+            include_ground_truth: When False, the page omits the dataset's
+                reference equation and the term table derived from it; the
+                fitted law and the data figures are unchanged. Defaults to
+                True.
 
         Returns:
             ReportResult with generated figure paths, HTML report
@@ -241,18 +259,23 @@ class VizEngine:
 
 
 
-        if getattr(dataset, "topology", None) is DataTopology.TABULAR:
+
+        tabular = getattr(dataset, "topology", None) is DataTopology.TABULAR
+        if not tabular or result.equation is not None:
+            path, warnings = self._render_one(
+                "coefficient_bar",
+                plot_coefficient_bar,
+                result,
+                figsize=coefficient_bar_figsize(result),
+            )
+            if path is not None:
+                report.figures.append(path)
+            self._merge_warnings(report, warnings)
+
+
+
+        if tabular:
             notes = ["tabular data: field-grid plots skipped (no grid topology)"]
-            if result.equation is not None:
-                path, warnings = self._render_one(
-                    "coefficient_bar",
-                    plot_coefficient_bar,
-                    result,
-                    figsize=coefficient_bar_figsize(result),
-                )
-                if path is not None:
-                    report.figures.append(path)
-                self._merge_warnings(report, warnings)
             if animate:
                 notes.append(_ANIMATION_TOPOLOGY_NOTE)
             self._merge_warnings(report, notes)
@@ -286,7 +309,9 @@ class VizEngine:
             html_path,
             plugin_figures=plugin_specs,
             warnings=report.warnings,
-            ground_truth=getattr(dataset, "ground_truth", None),
+            ground_truth=(
+                getattr(dataset, "ground_truth", None) if include_ground_truth else None
+            ),
         )
         report.report = html_path
 
@@ -305,8 +330,8 @@ class VizEngine:
         Tier 2 (plot creates its own figure): residual (histogram + heatmap)
         and recorded search trajectory (term presence + native score distribution).
 
-        ``coefficient_bar`` and field-comparison Tier 2 plots require an
-        explicit dataset and are handled by ``render_all``.
+        ``coefficient_bar`` (which needs no dataset) and the field-comparison
+        Tier 2 plots (which do) are handled by ``render_all``.
 
         Args:
             result: Completed experiment result.
@@ -333,7 +358,11 @@ class VizEngine:
         ]
         if result.has_pareto_front():
             tier1_specs.append(
-                ("pareto_front_table", plot_pareto_table, _COMPARISON_FIGSIZE)
+                (
+                    "pareto_front_table",
+                    plot_pareto_table,
+                    pareto_table_figsize(len(result.pareto_front())),
+                )
             )
 
         for name, plot_fn, figsize in tier1_specs:
@@ -430,7 +459,7 @@ class VizEngine:
             plot_summary_table,
             results,
             labels=labels,
-            figsize=_SUMMARY_FIGSIZE,
+            figsize=summary_table_figsize(len(results)),
         )
         if path is not None:
             report.figures.append(path)
@@ -627,17 +656,6 @@ class VizEngine:
         lhs_note = self._maybe_lhs_assumption_note(result, dataset)
         if lhs_note:
             self._merge_warnings(report, [lhs_note])
-
-
-        path, warnings = self._render_one(
-            "coefficient_bar",
-            plot_coefficient_bar,
-            result,
-            figsize=coefficient_bar_figsize(result),
-        )
-        if path is not None:
-            report.figures.append(path)
-        self._merge_warnings(report, warnings)
 
 
 
@@ -939,7 +957,7 @@ class VizEngine:
             Tuple of (saved file path or None on error, warnings).
         """
         with style_context(self._style):
-            fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
+            fig, ax = _new_axes(name, figsize)
         try:
             warnings = plot_fn(result, ax, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"
@@ -976,7 +994,7 @@ class VizEngine:
             Tuple of (saved file path or None on error, warnings).
         """
         with style_context(self._style):
-            fig, ax = plt.subplots(figsize=figsize, dpi=_DEFAULT_DPI)
+            fig, ax = _new_axes(name, figsize)
         try:
             warnings = plot_fn(results, ax, labels=labels, style=self._style)
             path = self._output_dir / f"{name}.{_SVG_FORMAT}"

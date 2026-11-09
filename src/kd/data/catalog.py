@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from kd.data.remote._hf_client import KD_HUB_REPO_ID
@@ -11,7 +11,7 @@ from kd.data.remote._loaders import (
     load_llm4ed_fisher_nonlinear,
     load_llm4ed_heat,
 )
-from kd.data.schema import PDEDataset
+from kd.data.schema import DataTopology, PDEDataset
 from kd.data.synthetic import (
     load_allen_cahn,
     load_burgers,
@@ -62,6 +62,7 @@ _LLM4ED_REMOTE_REVISION = "6c7dbe4f032e14fea2194644b09e74a4f254dd42"
 @dataclass(frozen=True)
 class DatasetSpec:
 
+    topology: DataTopology = field(kw_only=True)
     id: str
     loader: DatasetLoader
     equation: str
@@ -82,6 +83,7 @@ class DatasetSpec:
 DATASET_CATALOG: dict[str, DatasetSpec] = {
     "allen-cahn": DatasetSpec(
         id="allen-cahn",
+        topology=DataTopology.GRID,
         loader=load_allen_cahn,
         equation="u_t = 0.003 * u_xx + u - u^3",
         lhs=_LHS_UT,
@@ -95,6 +97,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "burgers": DatasetSpec(
         id="burgers",
+        topology=DataTopology.GRID,
         loader=load_burgers,
         equation="u_t = -u * u_x + 0.1 * u_xx",
         lhs=_LHS_UT,
@@ -108,6 +111,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "burgers-2d": DatasetSpec(
         id="burgers-2d",
+        topology=DataTopology.GRID,
         loader=load_burgers_2d,
         equation="u_t = -u*u_x - u*u_y + 0.01*u_xx + 0.01*u_yy",
         lhs=_LHS_UT,
@@ -121,6 +125,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "chafee-infante": DatasetSpec(
         id="chafee-infante",
+        topology=DataTopology.GRID,
         loader=load_chafee_infante,
         equation="u_t = u_xx - u + u^3",
         lhs=_LHS_UT,
@@ -138,6 +143,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "convection-diffusion": DatasetSpec(
         id="convection-diffusion",
+        topology=DataTopology.GRID,
         loader=load_convection_diffusion,
         equation="u_t = -u_x + 0.25 * u_xx",
         lhs=_LHS_UT,
@@ -153,6 +159,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "eq-6-2-12": DatasetSpec(
         id="eq-6-2-12",
+        topology=DataTopology.GRID,
         loader=load_eq_6_2_12,
         equation="u_t = -0.1*u_x_t - 0.1*u_x",
         lhs=_LHS_UT,
@@ -166,6 +173,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "eqgpt-laplacian-eitech": DatasetSpec(
         id="eqgpt-laplacian-eitech",
+        topology=DataTopology.SCATTERED,
         loader=load_laplacian_eitech,
         equation="u_xx + u_yy + 1 = 0",
         lhs=None,
@@ -179,6 +187,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "eqgpt-laplacian-smile": DatasetSpec(
         id="eqgpt-laplacian-smile",
+        topology=DataTopology.SCATTERED,
         loader=load_laplacian_smile,
         equation="u_xx + u_yy = 0",
         lhs=None,
@@ -192,6 +201,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "eqgpt-poisson-disk": DatasetSpec(
         id="eqgpt-poisson-disk",
+        topology=DataTopology.SCATTERED,
         loader=load_poisson_disk,
         equation="u_xx + u_yy = 0",
         lhs=None,
@@ -205,6 +215,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "kdv": DatasetSpec(
         id="kdv",
+        topology=DataTopology.GRID,
         loader=load_kdv,
         equation="u_t = -u * u_x - 0.0025 * u_xxx",
         lhs=_LHS_UT,
@@ -218,6 +229,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "klein-gordon": DatasetSpec(
         id="klein-gordon",
+        topology=DataTopology.GRID,
         loader=load_klein_gordon,
         equation="u_tt = 0.5 * u_xx - 5 * u",
         lhs="u_tt",
@@ -231,6 +243,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "llm4ed-fisher": DatasetSpec(
         id="llm4ed-fisher",
+        topology=DataTopology.GRID,
         loader=load_llm4ed_fisher,
         equation="u_t = 0.02*u_xx + 10*u*(1-u)",
         lhs=_LHS_UT,
@@ -247,6 +260,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "llm4ed-fisher-nonlinear": DatasetSpec(
         id="llm4ed-fisher-nonlinear",
+        topology=DataTopology.GRID,
         loader=load_llm4ed_fisher_nonlinear,
         equation="u_t = 0.02*(u*u_xx + u_x^2) + 10*u*(1-u)",
         lhs=_LHS_UT,
@@ -263,6 +277,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "llm4ed-heat": DatasetSpec(
         id="llm4ed-heat",
+        topology=DataTopology.GRID,
         loader=load_llm4ed_heat,
         equation="u_t = 0.05*u_xx",
         lhs=_LHS_UT,
@@ -279,6 +294,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "pde-compound": DatasetSpec(
         id="pde-compound",
+        topology=DataTopology.GRID,
         loader=load_pde_compound,
         equation="u_t = u * u_xx + u_x^2",
         lhs=_LHS_UT,
@@ -295,6 +311,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "pde-divide": DatasetSpec(
         id="pde-divide",
+        topology=DataTopology.GRID,
         loader=load_pde_divide,
         equation="u_t = -u_x / x + 0.25 * u_xx",
         lhs=_LHS_UT,
@@ -308,6 +325,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "variable-diffusion-smooth": DatasetSpec(
         id="variable-diffusion-smooth",
+        topology=DataTopology.GRID,
         loader=load_variable_diffusion_smooth,
         equation="u_t = diff_x(mul(K, u_x))",
         lhs=_LHS_UT,
@@ -321,6 +339,7 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
     ),
     "wave": DatasetSpec(
         id="wave",
+        topology=DataTopology.GRID,
         loader=load_wave,
         equation="u_tt = u_xx",
         lhs="u_tt",
@@ -346,6 +365,7 @@ def list_datasets_answer_blind() -> list[dict[str, Any]]:
 def _answer_blind_row(spec: DatasetSpec) -> dict[str, Any]:
     return {
         "id": spec.id,
+        "topology": spec.topology.value,
         "axes": list(spec.axes),
         "lhs": spec.lhs,
         "fmt": spec.fmt,

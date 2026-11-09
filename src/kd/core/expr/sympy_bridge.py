@@ -95,13 +95,17 @@ def _derivative_symbol_name(expr: Expr, axis: str, order: int) -> str:
     return f"d{order}_{axis}"
 
 
-def _make_diff_callable(name: str) -> Callable[[Expr], Expr] | None:
+def _make_diff_callable(
+    name: str, *, fold_derivatives: bool
+) -> Callable[[Expr], Expr] | None:
     match = DIFF_OPERATOR_PATTERN.match(name)
     if match is None:
         return None
     order_str, axis = match.groups()
     order = int(order_str) if order_str else 1
     diff_func = diff_display_class(name, axis, order)
+    if not fold_derivatives:
+        return lambda expr: cast(Expr, diff_func(expr))
 
     def _diff(expr: Expr) -> Expr:
 
@@ -133,7 +137,7 @@ def _make_diff_callable(name: str) -> Callable[[Expr], Expr] | None:
     return _diff
 
 
-def _build_namespace(names: set[str]) -> dict[str, Any]:
+def _build_namespace(names: set[str], *, fold_derivatives: bool) -> dict[str, Any]:
     namespace: dict[str, Any] = dict(_KD_OPS)
     for name in names:
         if name in namespace:
@@ -145,7 +149,7 @@ def _build_namespace(names: set[str]) -> dict[str, Any]:
 
             namespace[name] = sympy.Integer(1)
             continue
-        diff_callable = _make_diff_callable(name)
+        diff_callable = _make_diff_callable(name, fold_derivatives=fold_derivatives)
         if diff_callable is not None:
             namespace[name] = diff_callable
             continue
@@ -153,11 +157,13 @@ def _build_namespace(names: set[str]) -> dict[str, Any]:
     return namespace
 
 
-def to_sympy(code: str, *, strict: bool = True) -> Expr:
+def to_sympy(code: str, *, strict: bool = True, fold_derivatives: bool = True) -> Expr:
     try:
         tree = _parse_expression(code)
         compiled = compile(tree, "<kd-sympy>", "eval")
-        namespace = _build_namespace(_extract_names(tree))
+        namespace = _build_namespace(
+            _extract_names(tree), fold_derivatives=fold_derivatives
+        )
         result = eval(compiled, {"__builtins__": {}}, namespace)
         return cast(Expr, sympy.sympify(result))
     except Exception as exc:
@@ -327,7 +333,11 @@ def _serialize_pow(base_ir: str, exponent: int) -> str:
 
 def _serialize_power(expr: sympy.Pow) -> str:
     exponent = expr.exp
-    if exponent.is_Rational and exponent.q in (1, 2):
+    if exponent.is_Float:
+        exact = sympy.Rational(exponent)
+        if exact.q in (1, 2):
+            return _sympy_to_ir(sympy.Pow(expr.base, exact))
+    elif exponent.is_Rational and exponent.q in (1, 2):
         base_ir = _sympy_to_ir(expr.base)
         if exponent.q == 2:
             base_ir = f"sqrt({base_ir})"

@@ -18,6 +18,8 @@ from kd.core.expr.naming import parse_compound_derivative
 
 _DIFF_HEAD = DIFF_OPERATOR_PATTERN
 
+GAUGE_CONSTANT_TOKEN = "const"
+
 
 @dataclass(frozen=True)
 class TermVocabulary:
@@ -28,8 +30,6 @@ class TermVocabulary:
     def __post_init__(self) -> None:
         if not self.fields:
             raise ValueError("TermVocabulary fields must be non-empty")
-        if not self.coordinates:
-            raise ValueError("TermVocabulary coordinates must be non-empty")
         names = self.fields | self.coordinates
         if any(not isinstance(name, str) or not name for name in names):
             raise ValueError("TermVocabulary names must not contain an empty name")
@@ -37,13 +37,26 @@ class TermVocabulary:
             raise ValueError(
                 f"TermVocabulary name {UNITY_TOKEN!r} is reserved for unity"
             )
-        if any("_" in name for name in names):
-            raise ValueError("TermVocabulary names must not contain an underscore")
+        underscored = sorted(name for name in names if "_" in name)
+        if underscored:
+            raise ValueError(
+                "TermVocabulary names must not contain an underscore, got "
+                f"{underscored!r}"
+            )
         overlap = self.fields & self.coordinates
         if overlap:
             raise ValueError(
                 f"TermVocabulary fields/coordinates overlap: {sorted(overlap)!r}"
             )
+        if not self.coordinates and GAUGE_CONSTANT_TOKEN in names:
+            raise ValueError(
+                f"TermVocabulary name {GAUGE_CONSTANT_TOKEN!r} is reserved for "
+                "fitted constants in a vocabulary without coordinates"
+            )
+
+    @property
+    def gauge_constant(self) -> str | None:
+        return None if self.coordinates else GAUGE_CONSTANT_TOKEN
 
 
 DerivativeMultiindex = tuple[str, tuple[tuple[str, int], ...]]
@@ -119,6 +132,8 @@ class _FeatureCollector:
         self.visit(node.args[0], nested_path)
 
     def _visit_name(self, name: str, path: dict[str, int]) -> None:
+        if name == self.vocabulary.gauge_constant:
+            return
         if name == UNITY_TOKEN:
             if path:
                 raise ValueError(
@@ -198,6 +213,7 @@ def column_fingerprint(features: TermFeatures) -> ColumnFingerprint:
 
 
 __all__ = [
+    "GAUGE_CONSTANT_TOKEN",
     "TermFeatures",
     "ColumnFingerprint",
     "TermVocabulary",

@@ -17,6 +17,7 @@ from kdagent.lineage import (
 )
 from kdagent.segment_report import law_from_evidence, sealed_equation, sealed_lhs_label
 from kdagent.surrogates import SurrogateRegistry, stopped_at_deadline
+from kdagent.trace_file import read_rows
 
 
 def _cell(value: Any) -> str:
@@ -158,6 +159,12 @@ def _answer_sections(
         _selection_section(result),
         _sealed_section(record, run_dir, workspace),
     ]
+    if "answer_origin" in provenance:
+        lines.insert(
+            3,
+            f"Support origin: `{provenance['answer_origin']}`; "
+            f"reference: `{json.dumps(provenance['origin_ref'], sort_keys=True)}`.\n",
+        )
     lines.append("## Platform refit of cited support\n")
     if entry is None:
         lines.append(
@@ -508,6 +515,7 @@ REPORTED_TOOLS = frozenset(
         "smooth_input",
         "ablate_candidate",
         "score_term_sets",
+        "select_support",
         "verify_candidate",
         "verify_system",
         "vote_terms",
@@ -520,9 +528,7 @@ REPORTED_TOOLS = frozenset(
 
 def _tool_outcomes(trace_path: Path) -> str:
     lines = ["## Tool outcomes from this invocation\n"]
-    rows = [
-        json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()
-    ]
+    rows = read_rows(trace_path)
     for row in sorted(rows, key=lambda row: row["start_time"]):
         if row["run_type"] != "tool" or row["name"] not in REPORTED_TOOLS:
             continue

@@ -230,7 +230,7 @@ def _run(request: dict[str, Any], *, started_at: float) -> dict[str, Any]:
 
 
 
-        extra["sketch"] = kd.load_sketch(sketch, dataset=_grid(dataset))
+        extra["sketch"] = kd.load_sketch(sketch, dataset=dataset)
 
 
         verify = request.get("verify")
@@ -320,6 +320,7 @@ def _run(request: dict[str, Any], *, started_at: float) -> dict[str, Any]:
         "resources": _device_resources(),
         "trained_surrogate": network,
         "trained_surrogate_error": network_error,
+        "resolved_config": built[0].resolved_config_ if built else None,
     }
 
 
@@ -592,6 +593,7 @@ def _frame_arguments(request: dict[str, Any]) -> dict[str, Any]:
     surrogate = request.get("surrogate")
     return {
         "method": request.get("method", "finite_diff"),
+        "max_order": request.get("max_order", 3),
         "trim": request.get("trim", 0),
         "weak": None if weak is None else kd.WeakFormOptions(**weak),
         "surrogate": None if surrogate is None else _stored_surrogate(surrogate),
@@ -618,7 +620,7 @@ def _fit_json(fit: Any) -> dict[str, Any]:
         "r2": fit.r2,
         "condition_number": fit.condition_number,
         "derivative_source": fit.derivative_source,
-        "frame": dataclasses.asdict(fit.frame),
+        "frame": fit.frame.to_dict(),
         "weak": None if fit.weak is None else dataclasses.asdict(fit.weak),
     }
 
@@ -627,6 +629,7 @@ def _smooth(request: dict[str, Any]) -> dict[str, Any]:
     import kd
     import numpy as np
     from kd import lowpass_smooth, lowpass_spectrum
+    from kd.data import savgol_smooth
 
     from kdagent.data_source import load_dataset
 
@@ -634,30 +637,47 @@ def _smooth(request: dict[str, Any]) -> dict[str, Any]:
     parent = load_dataset(parent_id, request["input_source"])
     modes = request["lowpass_modes"]
     window = request["time_window"]
+    savgol_window = request.get("savgol_window")
+    derived: dict[str, Any] = {
+        "from": parent_id,
+        "lowpass_modes": modes,
+        "time_window": window,
+        "parent_sha256": request["input_source"]["source"]["sha256"],
+    }
     try:
         if not isinstance(parent, kd.PDEDataset):
-            raise ValueError("a table has no axes to low-pass")
-        smoothed = lowpass_smooth(parent, modes=modes, time_window=window)
-        assert smoothed.axis_order is not None and smoothed.axes is not None
-        assert smoothed.fields is not None
-        smoothed_axes = (
-            [axis for axis in smoothed.axis_order if axis != smoothed.lhs_axis]
-            if isinstance(modes, int)
-            else [axis for axis in smoothed.axis_order if axis in modes]
-        )
-        spectrum: dict[str, dict[str, Any]] = {}
-        for axis in smoothed_axes:
-            kept = np.asarray(lowpass_spectrum(parent, parent.lhs_field, axis))
-            count = modes if isinstance(modes, int) else modes[axis]
-            spectrum[axis] = {
-                "n": int(kept.size),
-                "energy_kept": float(kept[count - 1]),
-                **{
-                    f"modes_at_{fraction}": int(np.argmax(kept >= fraction)) + 1
-                    for fraction in SPECTRUM_FRACTIONS
-                },
-                "modes_at_knee": _modes_at_knee(kept),
+            raise ValueError("a table has no axes to smooth")
+        if savgol_window is not None:
+            smoothed = savgol_smooth(parent, savgol_window, polyorder=3)
+            derived["lowpass_modes"] = None
+            derived["time_window"] = None
+            derived["savgol"] = {
+                "window_length": savgol_window,
+                "polyorder": 3,
             }
+        else:
+            smoothed = lowpass_smooth(parent, modes=modes, time_window=window)
+            assert smoothed.axis_order is not None and smoothed.axes is not None
+            assert smoothed.fields is not None
+            smoothed_axes = (
+                [axis for axis in smoothed.axis_order if axis != smoothed.lhs_axis]
+                if isinstance(modes, int)
+                else [axis for axis in smoothed.axis_order if axis in modes]
+            )
+            spectrum: dict[str, dict[str, Any]] = {}
+            for axis in smoothed_axes:
+                kept = np.asarray(lowpass_spectrum(parent, parent.lhs_field, axis))
+                count = modes if isinstance(modes, int) else modes[axis]
+                spectrum[axis] = {
+                    "n": int(kept.size),
+                    "energy_kept": float(kept[count - 1]),
+                    **{
+                        f"modes_at_{fraction}": int(np.argmax(kept >= fraction)) + 1
+                        for fraction in SPECTRUM_FRACTIONS
+                    },
+                    "modes_at_knee": _modes_at_knee(kept),
+                }
+            derived["spectrum"] = spectrum
     except kd.SearchInterrupted:
         raise
     except Exception as exc:
@@ -670,13 +690,7 @@ def _smooth(request: dict[str, Any]) -> dict[str, Any]:
     description = _write_derived_input(
         smoothed,
         Path(request["output_path"]),
-        derived={
-            "from": parent_id,
-            "lowpass_modes": modes,
-            "time_window": window,
-            "parent_sha256": request["input_source"]["source"]["sha256"],
-            "spectrum": spectrum,
-        },
+        derived=derived,
     )
     return {"description": description}
 
@@ -936,7 +950,7 @@ def _score(request: dict[str, Any]) -> dict[str, Any]:
         return {"task_error": _kd_failure(exc)}
     return {
         "value": {
-            "frame": dataclasses.asdict(scores.frame),
+            "frame": scores.frame.to_dict(),
             "entries": [
                 {
                     "terms": list(entry.terms),
@@ -1129,18 +1143,18 @@ def _verify_system(request: dict[str, Any], *, started_at: float) -> dict[str, A
     }
 
 
-def _bound_sketch(grid: Any, request: dict[str, Any]) -> Any:
+def _bound_sketch(dataset: Any, request: dict[str, Any]) -> Any:
     import kd
 
     if "payload" in request:
-        return kd.load_sketch(request["payload"], dataset=grid)
+        return kd.load_sketch(request["payload"], dataset=dataset)
     clauses = request["clauses"]
     spec = kd.Sketch(
         pinned=clauses["pinned"],
         anchored=clauses["anchored"],
         holes=[kd.Hole(**hole) for hole in clauses["holes"]],
     )
-    return spec.resolve(grid)
+    return spec.resolve(dataset)
 
 
 def _make_sketch(request: dict[str, Any]) -> dict[str, Any]:
@@ -1151,7 +1165,7 @@ def _make_sketch(request: dict[str, Any]) -> dict[str, Any]:
     dataset = load_dataset(request["dataset_id"], request.get("input_source"))
     try:
         if "anchors" not in request:
-            sketch = _bound_sketch(_grid(dataset), request)
+            sketch = _bound_sketch(dataset, request)
             return {"value": {"sketch": dict(kd.sketch_to_dict(sketch))}}
         anchors = request["anchors"]
         report = kd.validate_terms(_grid(dataset), anchors, max_order=MEASURE_MAX_ORDER)
@@ -1214,6 +1228,13 @@ def main(argv: list[str]) -> None:
         request = json.load(f)
     result: dict[str, Any]
     try:
+        dependencies = request_dependencies(request)
+        if (dependencies or "extension_dependencies" in request) and (
+            dependencies != request["extension_dependencies"]
+        ):
+            raise ValueError(
+                "Extension dependency identity changed between parent and worker"
+            )
         if request.get(TASK_KEY) == "prepare_input":
             result = _prepare(request)
         elif request.get(TASK_KEY) == TRAIN_TASK:
@@ -1271,6 +1292,7 @@ class IsolatedEpisode:
     resources: dict[str, Any] | None = None
     trained_surrogate: TrainedNetwork | None = None
     trained_surrogate_error: str | None = None
+    resolved_config: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -1332,6 +1354,7 @@ def run_isolated_episode(
 
         request["evaluation_cap"] = int(evaluation_cap)
     _add_device(request, device)
+    request = _with_worker_dependencies(request)
     logger.info("launching episode worker for %s", run_dir.name)
     result, sent_sigterm, returncode, elapsed = _supervise(
         request,
@@ -1401,6 +1424,7 @@ def run_isolated_training(
     if input_source is not None:
         request["input_source"] = input_source
     _add_device(request, device)
+    request = _with_worker_dependencies(request)
     logger.info("launching surrogate training for %s", output_path.name)
     result, sent_sigterm, returncode, elapsed = _supervise(
         request, time_cap_seconds=time_cap_seconds, term_slack=0.0
@@ -1435,6 +1459,7 @@ def run_isolated_refine(
     weak: dict[str, Any] | None,
     surrogate: dict[str, Any] | None,
     time_cap_seconds: float | None,
+    max_order: int = 3,
 ) -> IsolatedRefine:
     request: dict[str, Any] = {
         TASK_KEY: REFINE_TASK,
@@ -1446,10 +1471,17 @@ def run_isolated_refine(
         "savgol_window": savgol_window,
         "lowpass_modes": lowpass_modes,
         "time_window": time_window,
-        **frame_request(method=method, trim=trim, weak=weak, surrogate=surrogate),
+        **frame_request(
+            method=method,
+            trim=trim,
+            weak=weak,
+            surrogate=surrogate,
+            max_order=max_order,
+        ),
     }
     if input_source is not None:
         request["input_source"] = input_source
+    request = _with_worker_dependencies(request)
     logger.info("launching refit worker for %s", dataset_id)
     result, sent_sigterm, returncode, elapsed = _supervise(
         request, time_cap_seconds=time_cap_seconds, term_slack=0.0
@@ -1473,10 +1505,11 @@ def run_isolated_smooth(
     *,
     dataset_id: str,
     input_source: dict[str, Any],
-    lowpass_modes: int | dict[str, int],
+    lowpass_modes: int | dict[str, int] | None,
     time_window: int,
     output_path: Path,
     time_cap_seconds: float | None,
+    savgol_window: int | None = None,
 ) -> IsolatedSmooth:
     request: dict[str, Any] = {
         TASK_KEY: SMOOTH_TASK,
@@ -1486,6 +1519,8 @@ def run_isolated_smooth(
         "time_window": time_window,
         "output_path": str(output_path),
     }
+    if savgol_window is not None:
+        request["savgol_window"] = savgol_window
     logger.info("launching smoothing worker for %s", dataset_id)
     result, sent_sigterm, returncode, elapsed = _supervise(
         request, time_cap_seconds=time_cap_seconds, term_slack=0.0
@@ -1578,10 +1613,13 @@ def frame_request(
     trim: int | dict[str, int] | str,
     weak: dict[str, Any] | None,
     surrogate: dict[str, Any] | None,
+    max_order: int = 3,
 ) -> dict[str, Any]:
     keys: dict[str, Any] = {}
     if method != "finite_diff":
         keys["method"] = method
+    if max_order != 3:
+        keys["max_order"] = max_order
     if trim != 0:
         keys["trim"] = trim
     if weak is not None:
@@ -1608,6 +1646,7 @@ def run_isolated_task(
     cooperative: bool,
 ) -> IsolatedTask:
     term_slack = TERM_SLACK_SECONDS if cooperative else 0.0
+    request = _with_worker_dependencies(request)
     logger.info("launching %s worker for %s", request[TASK_KEY], request["dataset_id"])
     result, sent_sigterm, returncode, elapsed = _supervise(
         request, time_cap_seconds=time_cap_seconds, term_slack=term_slack
@@ -1878,6 +1917,56 @@ def _supervise(
     return result, supervised.stop_reason == "timeout", supervised.returncode, elapsed
 
 
+def _with_worker_dependencies(request: dict[str, Any]) -> dict[str, Any]:
+    dependencies = request_dependencies(request)
+    require_worker_dependencies(dependencies)
+    return {**request, "extension_dependencies": dependencies}
+
+
+def request_dependencies(request: dict[str, Any]) -> list[dict[str, str | None]]:
+    import kd
+
+    task = request.get(TASK_KEY)
+    if task in (REFINE_TASK, ABLATE_TASK, SCORE_TASK):
+        from kdagent.data_source import is_table
+
+        if is_table(request.get("input_source")):
+            return []
+        return kd.extension_dependencies(
+            "refit_method", request.get("method", "finite_diff")
+        )
+    if task is None or task == TRAIN_TASK:
+
+
+
+        if request["algorithm"] not in {
+            schema["algorithm"] for schema in kd.instrument_schemas()
+        }:
+            return []
+        source = request.get("input_source")
+        if source is None:
+            catalog = {row["id"]: row for row in kd.list_datasets_answer_blind()}
+            if request["dataset_id"] not in catalog:
+                return []
+            topology_name = catalog[request["dataset_id"]]["topology"]
+        else:
+            topology_name = source["summary"]["report"]["topology"]
+        topology = kd.DataTopology(topology_name)
+        params = request["model_kwargs"]
+        mode = kd.execution_mode_for_request(request["algorithm"], topology, params)
+        return kd.execution_dependencies(request["algorithm"], mode=mode, params=params)
+    return []
+
+
+def require_worker_dependencies(dependencies: list[dict[str, str | None]]) -> None:
+    for dependency in dependencies:
+        if dependency["source"] == "process":
+            raise ValueError(
+                f"{dependency['kind']} {dependency['name']!r} is registered in "
+                "this process only; register it through a kd.extensions entry-point hook"
+            )
+
+
 def _group_alive(pgid: int) -> bool:
     with contextlib.suppress(ChildProcessError):
         os.waitpid(pgid, os.WNOHANG)
@@ -2058,6 +2147,7 @@ def _episode_from(
                 if network_error is None
                 else network_error
             ),
+            resolved_config=result["resolved_config"],
         )
     if sent_sigterm or result is None:
 
@@ -2082,6 +2172,7 @@ def _episode_from(
                 stopped_by_time_cap=sent_sigterm or stopped_by_time_cap,
                 stopped_by_evaluation_cap=stopped_by_evaluation_cap,
                 resources=None if result is None else result["resources"],
+                resolved_config=None,
             )
     if result is not None and not sent_sigterm:
 
@@ -2115,6 +2206,7 @@ def _episode_from(
                 stopped_by_evaluation_cap=stopped_by_evaluation_cap,
                 post_seal_error=_traceback_message(result["error"]),
                 resources=result["resources"],
+                resolved_config=None,
             )
 
 
@@ -2177,6 +2269,7 @@ def _episode_from(
         outcome=outcome,
         stopped_by_time_cap=False,
         resources=None if result is None else result["resources"],
+        resolved_config=None,
     )
 
 
@@ -2264,23 +2357,12 @@ def _best_so_far_clause(run_dir: Path) -> str:
 
 
 def _best_from_events(run_dir: Path) -> tuple[str, float | None] | None:
-    from kd.search import RunDirPaths
+    from kd.search import IterationEvent, last_completed_iteration
 
-    events = RunDirPaths(root=run_dir).events
-    try:
-        lines = events.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
+    last = last_completed_iteration(run_dir)
+    if not isinstance(last, IterationEvent) or last.best_expression is None:
         return None
-    for line in reversed(lines[-2:]):
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        expression = event["best_expression"]
-        if expression is None:
-            return None
-        return expression, event["best_score"]
-    return None
+    return last.best_expression, last.best_score
 
 
 if __name__ == "__main__":

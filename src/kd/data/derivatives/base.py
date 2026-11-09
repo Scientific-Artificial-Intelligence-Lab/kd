@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Protocol, runtime_checkable
 
 import torch
 
@@ -47,3 +48,14 @@ class DerivativeProvider(ABC):
     @abstractmethod
     def available_derivatives(self) -> list[tuple[str, str, int]]:
         raise NotImplementedError
+
+
+@runtime_checkable
+class SurrogateDerivativeProvider(Protocol):
+    model: torch.nn.Module
+
+    def get_field(self, name: str) -> torch.Tensor:
+        ...
+
+    def get_derivative(self, field: str, axis: str, order: int) -> torch.Tensor:
+        ...

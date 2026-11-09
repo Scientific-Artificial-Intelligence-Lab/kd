@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,19 @@ def _budget(schema: dict[str, Any]) -> str:
     return f"{lever}; {then}"
 
 
+def optional_package_unavailable(schema: dict[str, Any] | None) -> str | None:
+    if schema is None:
+        return None
+    requirements = schema["requirements"]
+    for name in requirements["import_names"]:
+        if importlib.util.find_spec(name) is None:
+            extras = ",".join(requirements["extras"])
+            return f"The Python package {name} is not installed" + (
+                f' (pip install "sail-kd[{extras}]").' if extras else "."
+            )
+    return None
+
+
 def mode_calls(
     report: dict[str, Any], schemas: list[dict[str, Any]], *, llm4ed: bool = False
 ) -> list[dict[str, Any]]:
@@ -112,6 +126,7 @@ def mode_calls(
     inputs = mode_inputs(report)
     for schema in schemas:
         algorithm = schema["algorithm"]
+        unavailable = optional_package_unavailable(schema)
         for mode in schema["modes"]:
             if not mode["selectable_from_data"]:
                 continue
@@ -119,6 +134,8 @@ def mode_calls(
             accepts, reason = verdict.accepts, verdict.reason
             if accepts and algorithm == "llm4ed" and not llm4ed:
                 accepts, reason = False, LLM4ED_OFF
+            if accepts and unavailable is not None:
+                accepts, reason = False, unavailable
             builds = (
                 mode["names_from"] if mode["names_from"] in verdict.params else None
             )
@@ -308,8 +325,10 @@ def _usage_advice(
         return ""
     return (
         f"\n### Usage advice (advice {advice['advice_id']})\n\n"
-        "Written from runs on other inputs; check each point against this "
-        "input before acting on it.\n\n" + "\n".join(lines) + "\n"
+        "Written from earlier runs, which may include runs on this input; "
+        "check each point against this input before acting on it.\n\n"
+        + "\n".join(lines)
+        + "\n"
     )
 
 

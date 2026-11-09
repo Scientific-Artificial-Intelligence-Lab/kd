@@ -5,8 +5,9 @@ term validation and fitting, refits in a recorded measurement frame
 (finite differences, autograd through a stored model, or the weak form),
 drop-one ablation and batched scoring on one shared frame, and the two
 verification signals (block dispersion, bounded forward error). The frame
-rules live in ``kd._refit_frame`` and the weak-form numerics in
-``kd._weak_form``; this module owns the public entries and result types.
+rules live in ``kd._refit_frame``, registered methods in
+``kd._refit_methods`` and weak-form numerics in ``kd._weak_form``; this module
+owns the public entries and result types.
 
 This module is the single, stateless, fail-loud front door for "score this list
 of candidate terms against a dataset". It replaces the 8-12 line hand-assembly of
@@ -128,9 +129,6 @@ from kd._evaluate_classify import (
 from kd._fixed_terms import (
     FixedConstraint,
     FixedPlacement,
-    lowered_components,
-    measure_fixed,
-    merge_fixed,
     place_fixed,
     resolve_constraint,
 )
@@ -139,32 +137,22 @@ from kd._refit_frame import (
     Trim,
     build_components,
     check_frame_arguments,
-    make_frame,
-    require_source_binding,
-    resolve_rows,
-    unmodeled_field_reasons,
 )
-from kd._weak_form import (
-    WeakDesignError,
-    WeakFormDiagnostics,
-    WeakFormOptions,
-    WeakFrame,
-    WeakRefusal,
-    WeakTerm,
-    check_weak_dataset,
-    classify_weak_terms,
-    raise_weak_refusals,
-    resolve_weak_frame,
-    solve_weak,
-    weak_diagnostics,
-    weak_zero_model,
+from kd._refit_methods import (
+    EvaluationFailedError,
+    InvalidTermsError,
+    ResolvedFrame,
+    fit_fixed,
+    fit_valid,
+    refit_method,
+    resolve_refit_frame,
 )
+from kd._weak_form import WeakDesignError, WeakFormDiagnostics, WeakFormOptions
 from kd.core.equation import Evolution, LhsSpec, active_law, render_lhs_label
 from kd.core.equation._sketch_terms import lower_term
 from kd.core.expr.constant_fit import DEFAULT_STARTS, ConstantRefit, refit_literals
 from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.term_key import structure_term_key
-from kd.core.metrics import nmse as _metrics_nmse
 from kd.core.platform.builder import resolve_lhs_defaults
 from kd.core.small_terms import small_term_indices
 from kd.data import TabularDataset, interface_mask
@@ -175,10 +163,9 @@ if TYPE_CHECKING:
 
     from kd.core.equation import Sketch
     from kd.core.equation.sketch_input import SketchSpec
-    from kd.core.evaluator import EvaluationResult, Evaluator
+    from kd.core.evaluator import EvaluationResult
     from kd.data.schema import PDEDataset
     from kd.models import StoredSurrogate
-    from kd.search.protocol import PlatformComponents
     from kd.search.result import ExperimentResult
     from kd.viz.report import ReportResult
 
@@ -380,32 +367,6 @@ CV_DENOM_EPS = 1e-12
 
 
 
-class InvalidTermsError(ValueError):
-    """Raised when one or more terms are rejected and cannot be fitted.
-
-    Carries the COMPLETE rejection report so an agent sees every bad term in a
-    single round trip (strict mode), and is also raised when EVERY term is
-    rejected under ``skip_invalid=True`` (a silent empty fit is forbidden).
-
-    Attributes:
-        rejected: Every rejected term with its classification.
-    """
-
-    def __init__(self, rejected: list[TermRejection]) -> None:
-        self.rejected = list(rejected)
-        summary = ", ".join(f"{rej.term!r} ({rej.reason})" for rej in self.rejected)
-        super().__init__(f"Rejected terms: {summary}")
-
-
-class EvaluationFailedError(RuntimeError):
-    """Raised when the final fit is invalid (solver failure / non-finite MSE).
-
-    The penalty-sentinel result (``mse=1e10``, ``is_valid=False``) must never
-    reach the caller as a return value; this exception is raised instead,
-    carrying the underlying diagnostic message.
-    """
-
-
 
 
 
@@ -460,7 +421,10 @@ def validate_terms(
     term_list = _require_nonempty(terms)
     lhs_order_resolved = _resolve_lhs_order(dataset, lhs_order)
     components = build_components(
-        dataset, max_order=max_order, lhs_order=lhs_order_resolved
+        dataset,
+        max_order=max_order,
+        lhs_order=lhs_order_resolved,
+        provider_kind="finite_diff",
     )
     return classify_terms(term_list, components, max_order=max_order)
 
@@ -559,17 +523,20 @@ def evaluate_terms(
     )
     placement = _placed(constraint, term_list)
     components = build_components(
-        dataset, max_order=max_order, lhs_order=lhs_order_resolved
+        dataset,
+        max_order=max_order,
+        lhs_order=lhs_order_resolved,
+        provider_kind="finite_diff",
     )
     if placement is None:
         report = classify_terms(term_list, components, max_order=max_order)
         _handle_rejections(report, skip_invalid=skip_invalid)
-        return _fit_valid(components, report.valid, rows=rows)
+        return fit_valid(components, report.valid, rows=rows)
     union = [*term_list, *placement.appended]
     report = classify_terms(union, components, max_order=max_order)
     _refuse_rejected_fixed(report, placement.values)
     _handle_rejections(report, skip_invalid=skip_invalid)
-    return _fit_fixed(components, report.valid, placement.values, rows=rows)
+    return fit_fixed(components, report.valid, placement.values, rows=rows)
 
 
 @dataclass(frozen=True)
@@ -596,7 +563,7 @@ class RefitResult:
         lhs_order: The LHS derivative order the fit targeted, resolved from
             ``dataset.lhs_order`` when the caller passed ``None``.
         derivative_source: The method's name: ``"finite_diff"``,
-            ``"autograd"`` or ``"weak"``.
+            ``"autograd"``, ``"weak"`` or ``"fd2"``.
         mse: Residual MSE of the refit on the same target as ``nmse``.
         weak: Window, correction and solve diagnostics of a weak fit, None
             otherwise.
@@ -659,18 +626,33 @@ def refit_terms(
       field other than the LHS field is rejected: the model supplies only
       the LHS field.
     - ``"weak"``: integration by parts against compactly supported test
-      functions on the raw field (``kd-weak-v1``, defined in
+      functions on the raw field (``kd-weak-v2``, defined in
       ``kd._weak_form``): one real field, one spatial axis, a uniform grid,
-      first-order evolution, and the terms ``one``, the field, its square and
+      first- or second-order evolution, and the terms ``one``, the field, its square and
       cube (``n2``/``n3`` of it, or the raw products ``mul(u, u)`` and
       ``mul(mul(u, u), u)`` in either bracketing, each under its own label),
-      pure spatial derivatives of order 1 to 3 (``max_order`` bounds every
+      pure spatial derivatives of order 1 to 4 (``max_order`` bounds every
       spelling) and ``mul`` of the field with its first derivative.
       ``nmse`` is the weak residual MSE over the population variance of the
       integrated target, not a full-grid finite-difference NMSE, and
       ``condition_number`` is measured on unit-L2 columns. ``result.weak``
       holds the windows, correction and rank. Window rows overlap, so their
       count is not a count of independent observations.
+      Fourth-order columns require ``max_order=4``; use
+      ``WeakFormOptions(bump_degree=6)`` to reduce their quadrature error.
+      The default degree 4 preserves the original numerical behavior.
+    - ``"fd2"``: the ``finite_diff`` protocol with the three-point
+      second-order stencils of ``FiniteDiffProvider(accuracy=2)``
+      (``kd-fd2-v1``; the third derivative is the first derivative of the
+      second), a diagnostic profile. ``trim="by_order"`` removes 1 point per
+      first- or second-derivative pass and 2 per third-derivative pass.
+      ``Model(derivatives="fd2")`` selects the same provider for a search; on
+      SGA it replaces the platform terminals and the LHS, not the private
+      stencil of SGA's tree ``d``/``d2`` nodes.
+
+    Registered methods use the same fixed-target protocol. Their declared
+    capabilities control row selection, surrogate and weak options; their
+    implementation and component identities are included in the frame.
 
     Rows: ``trim=k`` drops ``k`` grid points at both ends of every axis, a
     mapping drops them per axis (unnamed axes keep everything), and
@@ -720,7 +702,8 @@ def refit_terms(
             ``dataset.lhs_order``.
         max_order: As in ``evaluate_terms``. The default 3 keeps third-order
             terminal tokens such as ``u_xxx`` resolvable.
-        method: ``"finite_diff"``, ``"autograd"`` or ``"weak"``.
+        method: A registered name from ``kd.refit_methods()``; built-ins are
+            ``"finite_diff"``, ``"autograd"``, ``"weak"`` and ``"fd2"``.
         trim: ``0`` (default), a nonnegative integer, a mapping from axis
             name to a nonnegative integer, or ``"by_order"``. Not with
             ``autograd`` as ``"by_order"`` (no stencils).
@@ -769,212 +752,27 @@ def refit_terms(
     )
     kept, dropped = _prune_small_terms(terms, coefficients, small_term_rtol, held)
     placement = _placed(constraint, kept)
-    check_frame_arguments(method, trim=trim, rows=rows, surrogate=surrogate, weak=weak)
+    selected_method = refit_method(method)
+    check_frame_arguments(
+        selected_method, trim=trim, rows=rows, surrogate=surrogate, weak=weak
+    )
     values = {} if placement is None else placement.values
     appended = () if placement is None else placement.appended
     term_list = _require_nonempty([*kept, *appended])
     lhs_order_resolved = _resolve_lhs_order(dataset, lhs_order)
-    if method == "weak":
-        members, refusals = _weak_members(
-            dataset, term_list, lhs_order=lhs_order_resolved, max_order=max_order
-        )
-        raise_weak_refusals(refusals)
-        frame, record = _weak_frame(dataset, weak, lhs_order=lhs_order_resolved)
-        return _weak_result(term_list, members, frame, record, dropped, values)
-    strong = _strong_frame(
+    frame = resolve_refit_frame(
         dataset,
         term_list,
-        method=method,
+        method=selected_method,
         lhs_order=lhs_order_resolved,
         max_order=max_order,
         trim=trim,
         rows=rows,
         surrogate=surrogate,
+        weak=weak,
     )
-    _handle_rejections(strong.report, skip_invalid=False)
-    if not values:
-        fit = _fit_valid(strong.components, strong.report.valid, rows=strong.rows)
-        return _strong_result(term_list, fit, strong.frame, dropped)
-    fit = _fit_fixed(strong.components, term_list, values, rows=strong.rows)
-    held_terms = tuple(term for term in term_list if term in values)
-    return _strong_result(term_list, fit, strong.frame, dropped, fixed=held_terms)
-
-
-@dataclass(frozen=True)
-class _StrongFrame:
-    """One resolved finite-difference or autograd frame and its components."""
-
-    components: PlatformComponents
-    report: TermValidationReport
-    rows: Tensor | None
-    frame: RefitFrame
-
-
-def _strong_frame(
-    dataset: PDEDataset,
-    terms: list[str],
-    *,
-    method: str,
-    lhs_order: int,
-    max_order: int,
-    trim: Trim,
-    rows: Tensor | None,
-    surrogate: StoredSurrogate | None,
-) -> _StrongFrame:
-    """Build components, validate ``terms`` once and resolve the fitting rows.
-
-    ``terms`` is the union the frame serves; ``trim="by_order"`` reads the
-    stencil footprints of its valid members.
-    """
-    if surrogate is not None:
-        require_source_binding(dataset, surrogate)
-    components = build_components(
-        dataset, max_order=max_order, lhs_order=lhs_order, surrogate=surrogate
-    )
-    report = classify_terms(terms, components, max_order=max_order)
-    if surrogate is not None:
-        report = _with_rejections(
-            report, unmodeled_field_reasons(report.valid, components.dataset)
-        )
-    margins, selected, rows_sha256 = resolve_rows(
-        components, trim=trim, rows=rows, terms=report.valid
-    )
-    frame = make_frame(
-        components.dataset,
-        method=method,
-        lhs_order=lhs_order,
-        trim=margins,
-        n_samples=_n_samples(components, selected),
-        rows_sha256=rows_sha256,
-        surrogate=surrogate,
-    )
-    return _StrongFrame(components, report, selected, frame)
-
-
-def _with_rejections(
-    report: TermValidationReport, reasons: Mapping[str, str]
-) -> TermValidationReport:
-    """``report`` with the valid terms named in ``reasons`` rejected."""
-    if not reasons:
-        return report
-    results = [
-        TermValidation(r.term, False, reasons[r.term]) if r.term in reasons else r
-        for r in report.results
-    ]
-    rejected = [TermRejection(r.term, r.reason or "") for r in results if not r.ok]
-    return TermValidationReport(
-        results=results,
-        valid=[r.term for r in results if r.ok],
-        rejected=rejected,
-        ok=not rejected,
-    )
-
-
-def _weak_members(
-    dataset: PDEDataset, terms: Sequence[str], *, lhs_order: int, max_order: int
-) -> tuple[dict[str, WeakTerm], list[WeakRefusal]]:
-    """Check the dataset for the weak form and classify ``terms``."""
-    resolved = resolve_lhs_defaults(dataset)
-    spatial_axis, _ = check_weak_dataset(resolved, lhs_order)
-    return classify_weak_terms(
-        terms, resolved, spatial_axis=spatial_axis, max_order=max_order
-    )
-
-
-def _weak_frame(
-    dataset: PDEDataset, options: WeakFormOptions | None, *, lhs_order: int
-) -> tuple[WeakFrame, RefitFrame]:
-    """Resolve the weak windows, target and sigma once, and their record."""
-    resolved = resolve_lhs_defaults(dataset)
-    spatial_axis, time_axis = check_weak_dataset(resolved, lhs_order)
-    frame = resolve_weak_frame(
-        resolved,
-        WeakFormOptions() if options is None else options,
-        spatial_axis=spatial_axis,
-        time_axis=time_axis,
-    )
-    record = make_frame(
-        resolved,
-        method="weak",
-        lhs_order=lhs_order,
-        trim=dict.fromkeys(cast(list[str], resolved.axis_order), 0),
-        n_samples=frame.n_windows,
-    )
-    return frame, record
-
-
-def _weak_result(
-    terms: Sequence[str],
-    members: Mapping[str, WeakTerm],
-    frame: WeakFrame,
-    record: RefitFrame,
-    dropped: tuple[tuple[str, float], ...],
-    fixed: Mapping[str, float] | None = None,
-) -> RefitResult:
-    """Fit ``terms`` on the weak ``frame``; a failed solve fails loud.
-
-    A term in ``fixed`` keeps its value (``solve_weak``).
-    """
-    held = {} if fixed is None else fixed
-    try:
-        solution = solve_weak(
-            frame, terms, [members[term] for term in terms], fixed=held
-        )
-    except np.linalg.LinAlgError as error:
-        raise EvaluationFailedError(f"weak least squares failed: {error}") from error
-    if not math.isfinite(solution.mse):
-        raise EvaluationFailedError("weak least squares produced a non-finite MSE")
-    return RefitResult(
-        terms=tuple(terms),
-        coefficients=tuple(float(c) for c in solution.coefficients),
-        dropped=dropped,
-        nmse=solution.nmse,
-        r2=solution.r2,
-        condition_number=solution.condition_number,
-        lhs_order=record.lhs_order,
-        derivative_source="weak",
-        mse=solution.mse,
-        weak=weak_diagnostics(
-            frame,
-            rank=solution.rank,
-            n_columns=sum(term not in held for term in terms),
-        ),
-        frame=record,
-        fixed=tuple(term for term in terms if term in held),
-    )
-
-
-def _n_samples(components: PlatformComponents, rows: Tensor | None) -> int:
-    """Number of fitted rows for a row selection (None is the full grid)."""
-    if rows is None:
-        return components.dataset.get_field(components.dataset.lhs_field).numel()
-    if rows.dtype == torch.bool:
-        return int(rows.sum().item())
-    return int(rows.numel())
-
-
-def _strong_result(
-    terms: Sequence[str],
-    fit: EvaluationResult,
-    frame: RefitFrame,
-    dropped: tuple[tuple[str, float], ...],
-    *,
-    fixed: tuple[str, ...] = (),
-) -> RefitResult:
-    assert fit.coefficients is not None
-    return RefitResult(
-        terms=tuple(terms),
-        coefficients=tuple(fit.coefficients.tolist()),
-        dropped=dropped,
-        nmse=fit.nmse,
-        r2=fit.r2,
-        condition_number=fit.condition_number,
-        lhs_order=frame.lhs_order,
-        derivative_source=frame.derivative_method,
-        mse=fit.mse,
-        frame=frame,
-        fixed=fixed,
-    )
+    frame.raise_refused()
+    return _fit_in(frame, term_list, dropped=dropped, fixed=values)
 
 
 @dataclass(frozen=True)
@@ -1080,13 +878,16 @@ def ablate_terms(
             failed; the message names the dropped term. A failed reduced fit
             never becomes zero importance.
     """
-    check_frame_arguments(method, trim=trim, rows=rows, surrogate=surrogate, weak=weak)
+    selected_method = refit_method(method)
+    check_frame_arguments(
+        selected_method, trim=trim, rows=rows, surrogate=surrogate, weak=weak
+    )
     term_list = _require_nonempty(terms)
     _refuse_duplicates(term_list)
-    frame = _union_frame(
+    frame = resolve_refit_frame(
         dataset,
         term_list,
-        method=method,
+        method=selected_method,
         lhs_order=_resolve_lhs_order(dataset, lhs_order),
         max_order=max_order,
         trim=trim,
@@ -1094,7 +895,7 @@ def ablate_terms(
         surrogate=surrogate,
         weak=weak,
     )
-    _raise_refused(frame)
+    frame.raise_refused()
     baseline = _fit_in(frame, term_list)
     assert baseline.mse is not None
     zero = baseline.mse == 0.0
@@ -1160,15 +961,18 @@ def score_term_sets(
             ``refit_terms`` (including a failure to resolve the frame).
         NotImplementedError: A dataset the method does not support.
     """
-    check_frame_arguments(method, trim=trim, rows=rows, surrogate=surrogate, weak=weak)
+    selected_method = refit_method(method)
+    check_frame_arguments(
+        selected_method, trim=trim, rows=rows, surrogate=surrogate, weak=weak
+    )
     if not term_sets:
         raise ValueError("score_term_sets needs at least one term set")
     sets = [tuple(_require_nonempty(term_set)) for term_set in term_sets]
     union = list(dict.fromkeys(term for term_set in sets for term in term_set))
-    frame = _union_frame(
+    frame = resolve_refit_frame(
         dataset,
         union,
-        method=method,
+        method=selected_method,
         lhs_order=_resolve_lhs_order(dataset, lhs_order),
         max_order=max_order,
         trim=trim,
@@ -1182,95 +986,42 @@ def score_term_sets(
     )
 
 
-@dataclass(frozen=True)
-class _UnionFrame:
-    """One frame resolved for a union of terms, and the terms it refuses."""
-
-    record: RefitFrame
-    refused: dict[str, str]
-    strong: _StrongFrame | None = None
-    weak: WeakFrame | None = None
-    members: Mapping[str, WeakTerm] | None = None
-    weak_refusals: tuple[WeakRefusal, ...] = ()
-
-
-def _union_frame(
-    dataset: PDEDataset,
-    terms: list[str],
+def _fit_in(
+    frame: ResolvedFrame,
+    terms: Sequence[str],
     *,
-    method: str,
-    lhs_order: int,
-    max_order: int,
-    trim: Trim,
-    rows: Tensor | None,
-    surrogate: StoredSurrogate | None,
-    weak: WeakFormOptions | None,
-) -> _UnionFrame:
-    if method == "weak":
-        members, refusals = _weak_members(
-            dataset, terms, lhs_order=lhs_order, max_order=max_order
-        )
-        frame, record = _weak_frame(dataset, weak, lhs_order=lhs_order)
-        return _UnionFrame(
-            record=record,
-            refused={r.term: r.reason for r in refusals},
-            weak=frame,
-            members=members,
-            weak_refusals=tuple(refusals),
-        )
-    strong = _strong_frame(
-        dataset,
-        terms,
-        method=method,
-        lhs_order=lhs_order,
-        max_order=max_order,
-        trim=trim,
-        rows=rows,
-        surrogate=surrogate,
+    dropped: tuple[tuple[str, float], ...] = (),
+    fixed: Mapping[str, float] | None = None,
+) -> RefitResult:
+    """Assemble one method-independent public result on the resolved frame."""
+    fit = frame.fit(terms, fixed=fixed)
+    return RefitResult(
+        terms=tuple(terms),
+        coefficients=fit.coefficients,
+        dropped=dropped,
+        nmse=fit.nmse,
+        r2=fit.r2,
+        condition_number=fit.condition_number,
+        lhs_order=frame.record.lhs_order,
+        derivative_source=frame.record.derivative_method,
+        mse=fit.mse,
+        weak=fit.weak,
+        frame=frame.record,
+        fixed=tuple(term for term in terms if fixed is not None and term in fixed),
     )
-    refused = {r.term: r.reason for r in strong.report.rejected}
-    return _UnionFrame(record=strong.frame, refused=refused, strong=strong)
-
-
-def _raise_refused(frame: _UnionFrame) -> None:
-    """Refuse the union as ``refit_terms`` would refuse it."""
-    if frame.strong is not None:
-        _handle_rejections(frame.strong.report, skip_invalid=False)
-    raise_weak_refusals(frame.weak_refusals)
-
-
-def _fit_in(frame: _UnionFrame, terms: Sequence[str]) -> RefitResult:
-    """Fit ``terms`` (all accepted by ``frame``) on the frame's target."""
-    if frame.strong is None:
-        assert frame.weak is not None and frame.members is not None
-        return _weak_result(terms, frame.members, frame.weak, frame.record, ())
-    fit = _fit_valid(frame.strong.components, list(terms), rows=frame.strong.rows)
-    return _strong_result(terms, fit, frame.record, ())
 
 
 def _reduced_fit(
-    frame: _UnionFrame, terms: Sequence[str]
+    frame: ResolvedFrame, terms: Sequence[str]
 ) -> tuple[tuple[float, ...], float, float]:
-    """``(coefficients, mse, nmse)`` of ``terms``, or of the zero model."""
+    """Fit a subset or score zero on the same resolved target."""
     if terms:
-        fit = _fit_in(frame, terms)
-        assert fit.mse is not None
+        fit = frame.fit(terms)
         return fit.coefficients, fit.mse, fit.nmse
-    if frame.strong is None:
-        assert frame.weak is not None
-        return ((), *weak_zero_model(frame.weak))
-    evaluator = cast("Evaluator", frame.strong.components.evaluator)
-    target = evaluator.lhs_target
-    selected = frame.strong.rows
-    if selected is not None:
-        if selected.dtype == torch.bool:
-            selected = selected.flatten().nonzero().flatten()
-        target = target.index_select(0, selected.to(target.device))
-    mse = float((target**2).mean().item())
-    return (), mse, _metrics_nmse(mse, float(target.var(correction=0).item()))
+    return (), *frame.zero_model()
 
 
-def _score_one(frame: _UnionFrame, terms: tuple[str, ...]) -> TermSetEntry:
+def _score_one(frame: ResolvedFrame, terms: tuple[str, ...]) -> TermSetEntry:
     refused = [term for term in terms if term in frame.refused]
     if refused:
         detail = "; ".join(f"'{term}': {frame.refused[term]}" for term in refused)
@@ -1859,12 +1610,23 @@ def refit_constants(
     Raises:
         TypeError: If ``dataset`` is not a ``TabularDataset``; grid data are
             refitted with ``evaluate_terms``.
-        KeyError: If a term names a column the dataset lacks.
+        KeyError: If a term names a column the dataset lacks, or calls a
+            function that is not an operator of the plain registry; the
+            message names the function and lists the operators. A term that
+            names ``c<k>`` when the dataset has no column of that name is
+            refused before any term is evaluated, literals or not: ``c<k>``
+            is the name the output gives a fitted constant, and the message
+            says to write the number in its place.
         ValueError: If the table has no rows or a non-finite target, if no
             candidate gives a finite fit, if a term evaluates to a scalar
             (every term must reference a column or ``one``), if a term is
-            neither funcall IR nor product notation, or if a column named
-            ``c<k>`` sits beside a refitted literal.
+            neither funcall IR nor product notation, if a column named
+            ``c<k>`` sits beside a refitted literal, or if a term calls an
+            operator with the wrong number of arguments; the message names
+            the operator, the count it takes and the count given, and for a
+            binary operator given more operands the nested spelling
+            ``add(add(a, b), c)``. Both call checks run before any term is
+            evaluated.
     """
     if not isinstance(dataset, TabularDataset):
         raise TypeError(
@@ -2032,54 +1794,3 @@ def _refuse_rejected_fixed(
     """
     if any(rejection.term in fixed for rejection in report.rejected):
         raise InvalidTermsError(report.rejected)
-
-
-def _fit_fixed(
-    components: PlatformComponents,
-    terms: list[str],
-    fixed: Mapping[str, float],
-    *,
-    rows: Tensor | None,
-) -> EvaluationResult:
-    """Fit the free ``terms`` to the target minus the fixed ones, fail-loud.
-
-    ``terms`` are pre-validated, in result order. With every term fixed
-    nothing is solved. Either way the returned equation is measured on the
-    original target, and a non-finite MSE raises.
-    """
-    base = cast("Evaluator", components.evaluator)
-    free = [term for term in terms if term not in fixed]
-    if free:
-        fit = _fit_valid(lowered_components(components, fixed), free, rows=rows)
-        result = merge_fixed(fit, terms, fixed, base=base, rows=rows)
-    else:
-        values = [fixed[term] for term in terms]
-        result = measure_fixed(base, terms, values, rows=rows, complexity=0)
-    if not math.isfinite(result.mse):
-        raise EvaluationFailedError(
-            "the equation under fixed coefficients has a non-finite MSE"
-        )
-    return result
-
-
-def _fit_valid(
-    components: PlatformComponents,
-    terms: list[str],
-    *,
-    rows: Tensor | None,
-) -> EvaluationResult:
-    """Fit pre-validated terms with the components' evaluator, fail-loud.
-
-    ``skip_invalid=False`` gives an honest fit and lets the solver-failure
-    path surface as ``EvaluationFailedError``; the penalty sentinel is never
-    returned. The evaluator executes the lowered IR (its column cache is
-    keyed by it); the result names ``terms`` as given.
-    """
-    evaluator = cast("Evaluator", components.evaluator)
-    irs = [lower_term(term) for term in terms]
-    result = evaluator.evaluate_terms(irs, skip_invalid=False, rows=rows)
-    if not result.is_valid:
-        raise EvaluationFailedError(
-            result.error_message or "Evaluation produced an invalid result"
-        )
-    return dataclasses.replace(result, terms=list(terms))

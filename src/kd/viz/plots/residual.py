@@ -21,11 +21,13 @@ from kd.viz.plots._field_panels import (
 from kd.viz.style import (
     CMAP_DIV,
     DPI,
+    FONTSIZE,
     INK_2,
     INK_MUTED,
     OBSERVED,
     PANEL_H,
     PANEL_W,
+    SMALL_FONTSIZE,
     SURFACE,
     style_context,
 )
@@ -38,7 +40,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HISTOGRAM_BINS = 30
-_WARNING_FONTSIZE = 12
+
+_STATS_HEADROOM = 1.45
 
 
 def plot_residual(
@@ -63,7 +66,7 @@ def plot_residual(
         ax_spatial: Axes = axes_arr[1]
         note = _sketch_fit_note(result)
         if note is not None:
-            fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
+            fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=FONTSIZE)
             warnings.append(note)
 
         if residuals is None:
@@ -105,7 +108,7 @@ def _render_histogram(
     if not np.isfinite(xlim) or xlim == 0.0:
         xlim = float(np.std(data)) or 1.0
 
-    ax.hist(
+    counts, _, _ = ax.hist(
         data,
         bins=_HISTOGRAM_BINS,
         range=(-xlim, xlim),
@@ -115,6 +118,9 @@ def _render_histogram(
     )
     ax.set_xlim(-xlim, xlim)
 
+
+    ax.set_ylim(0.0, float(np.max(counts)) * _STATS_HEADROOM)
+
     mean_val = float(np.mean(data))
     std_val = float(np.std(data))
     n_outliers = int(np.sum(abs_data > xlim))
@@ -123,16 +129,14 @@ def _render_histogram(
         annotation += f"\n{n_outliers} outside |r|>{xlim:.3g}"
 
     ax.text(
-        0.95,
-        0.95,
+        0.98,
+        0.98,
         annotation,
         transform=ax.transAxes,
         va="top",
         ha="right",
-        fontsize=9,
+        fontsize=SMALL_FONTSIZE,
         color=INK_2,
-
-        bbox={"facecolor": SURFACE, "edgecolor": "none", "alpha": 0.85, "pad": 2},
     )
 
 
@@ -245,7 +249,7 @@ def _empty_panel(ax: Axes, text: str, title: str) -> None:
         transform=ax.transAxes,
         ha="center",
         va="center",
-        fontsize=_WARNING_FONTSIZE,
+        fontsize=FONTSIZE,
         color=INK_MUTED,
     )
     ax.set_title(title)

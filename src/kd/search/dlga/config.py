@@ -243,7 +243,9 @@ class DLGAConfig:
     when ``surrogate_val_ratio`` is 0, since there is no validation loss to rank
     epochs by.
     """
-    training_dtype: TrainingDtype | None = DLGA_NN_1.training_dtype
+    training_dtype: TrainingDtype | None = field(
+        default=DLGA_NN_1.training_dtype, metadata={"legacy": None}
+    )
     """Floating precision the network is trained in: ``None``, the default, trains in
     the dataset's dtype; ``"float32"`` or ``"float64"`` names one. The trained network
     is cast back to the dataset's dtype, so the search differentiates and scores it in

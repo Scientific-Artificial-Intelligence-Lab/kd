@@ -38,8 +38,8 @@ def sample_observations(
         for name, grid in zip(axis_order, grids, strict=True)
     }
     targets = {
-        name: field.values.flatten()[index].float().to(device=device)
-        for name, field in fields.items()
+        name: fields[name].values.flatten()[index].float().to(device=device)
+        for name in sorted(fields)
     }
     return coords, targets
 

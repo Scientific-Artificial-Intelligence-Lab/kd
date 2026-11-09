@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from kd.core.evaluator import Evaluator
 from kd.core.jsonsafe import NO_MEASUREMENT
+from kd.core.platform.builder import lower_target
 from kd.search.discover.pinn.collocation import generate_collocation_points
 from kd.search.discover.pinn.cycle import (
     cycle_iterations,
@@ -15,11 +16,18 @@ from kd.search.discover.pinn.cycle import (
     make_local_coords,
     pretrain_split,
     rebuild_after_pinn,
+    rebuild_evaluator,
+    regenerate_metadata,
+    regenerated_context,
     run_pinn_phase,
 )
 from kd.search.discover.pinn.executor import PINNExecutor, make_pinn_dataset_from
 from kd.search.discover.pinn.model import PINNModel
 from kd.search.discover.pinn.observations import domain_bounds, sample_observations
+from kd.search.discover.sketch_backend import (
+    SketchGatedEvaluator,
+    assert_anchors_execute,
+)
 from kd.search.recorder import log_whitelisted_metrics
 
 if TYPE_CHECKING:
@@ -28,10 +36,13 @@ if TYPE_CHECKING:
     import torch
     from torch import Tensor
 
+    from kd.core.equation.sketch import Sketch
+    from kd.core.expr import FunctionRegistry
     from kd.data.schema import PDEDataset
     from kd.search.discover.config import DiscoverConfig, PINNConfig
     from kd.search.discover.engine import DiscoverEngine, EngineState
     from kd.search.discover.pinn.model import PretrainResult, TrainResult
+    from kd.search.discover.sketch_backend import DiscoverCompiled
     from kd.search.protocol import PlatformComponents
     from kd.search.recorder import VizRecorder
 
@@ -128,6 +139,85 @@ def _phase_measurements(train_result: TrainResult | None) -> dict[str, float]:
     }
 
 
+@dataclass(frozen=True, slots=True)
+class PinnSketch:
+
+    sketch: Sketch
+    compiled: DiscoverCompiled
+    registry: FunctionRegistry
+
+    @property
+    def pins(self) -> tuple[tuple[str, float], ...]:
+        return tuple((pin.term_ir, pin.value) for pin in self.sketch.pinned)
+
+    def gate(self, evaluator: Evaluator) -> SketchGatedEvaluator:
+        return SketchGatedEvaluator(
+            evaluator,
+            sketch=self.sketch,
+            compiled=self.compiled,
+            registry=self.registry,
+        )
+
+    def assert_executes(
+        self,
+        model: PINNModel,
+        colloc_coords: dict[str, Tensor],
+        metadata: PDEDataset,
+        platform: Evaluator,
+    ) -> None:
+        regen = regenerate_metadata(
+            model,
+            colloc_coords,
+            metadata,
+            lhs_field=metadata.lhs_field,
+            lhs_axis=metadata.lhs_axis,
+        )
+        lower_target(
+            regen.lhs_detached, self.pins, platform.executor, regenerated_context(regen)
+        )
+        assert_anchors_execute(
+            rebuild_evaluator(regen, platform.executor, platform.solver),
+            self.compiled.anchor_terms,
+        )
+
+
+def _check_field_order(stored: list[str] | None, field_names: list[str]) -> None:
+    if stored is None and len(field_names) > 1:
+        raise ValueError(
+            "DISCOVER checkpoint's mode2 state does not record the field order "
+            "of its network, and the dataset has the fields "
+            f"{field_names}: the stored output columns cannot be matched to "
+            "the fields. Start the PINN-mode run again."
+        )
+
+
+def _rebuild_on_network(
+    model: PINNModel,
+    colloc_coords: dict[str, Tensor],
+    metadata: PDEDataset,
+    platform: Evaluator,
+    sketch: PinnSketch | None,
+) -> Evaluator | SketchGatedEvaluator:
+    if sketch is None:
+        return rebuild_after_pinn(
+            model,
+            colloc_coords,
+            metadata,
+            executor=platform.executor,
+            solver=platform.solver,
+        )
+    return sketch.gate(
+        rebuild_after_pinn(
+            model,
+            colloc_coords,
+            metadata,
+            executor=platform.executor,
+            solver=platform.solver,
+            pins=sketch.pins,
+        )
+    )
+
+
 @dataclass(slots=True)
 class PinnRun:
 
@@ -137,7 +227,8 @@ class PinnRun:
     model: PINNModel
     executor: PINNExecutor
     platform: Evaluator
-    evaluator: Evaluator
+    evaluator: Evaluator | SketchGatedEvaluator
+    sketch: PinnSketch | None
     obs_coords: dict[str, Tensor]
     obs_targets: dict[str, Tensor]
     colloc_coords: dict[str, Tensor]
@@ -157,6 +248,7 @@ class PinnRun:
         config: DiscoverConfig,
         pinn: PINNConfig,
         components: PlatformComponents,
+        sketch: PinnSketch | None,
         *,
         sampling_seed: int,
         train: Callable[
@@ -188,8 +280,10 @@ class PinnRun:
             device=device,
         )
         _log_budget(pinn, obs_coords, colloc_coords, device)
-        pretrain_result, train_seconds = train(model, obs_coords, obs_targets)
         metadata = make_pinn_dataset_from(dataset)
+        if sketch is not None:
+            sketch.assert_executes(model, colloc_coords, metadata, platform)
+        pretrain_result, train_seconds = train(model, obs_coords, obs_targets)
         return cls(
             config=config,
             pinn=pinn,
@@ -197,13 +291,10 @@ class PinnRun:
             model=model,
             executor=PINNExecutor(components.registry),
             platform=platform,
-            evaluator=rebuild_after_pinn(
-                model,
-                colloc_coords,
-                metadata,
-                executor=platform.executor,
-                solver=platform.solver,
+            evaluator=_rebuild_on_network(
+                model, colloc_coords, metadata, platform, sketch
             ),
+            sketch=sketch,
             obs_coords=obs_coords,
             obs_targets=obs_targets,
             colloc_coords=colloc_coords,
@@ -221,6 +312,7 @@ class PinnRun:
         pinn: PINNConfig,
         engine: DiscoverEngine,
         components: PlatformComponents,
+        sketch: PinnSketch | None,
     ) -> PinnRun:
 
         def pretrain(
@@ -234,7 +326,7 @@ class PinnRun:
             return asdict(pretrained), seconds
 
         run = cls._on_untrained_network(
-            config, pinn, components, sampling_seed=config.seed, train=pretrain
+            config, pinn, components, sketch, sampling_seed=config.seed, train=pretrain
         )
         engine.begin_cycle(run.evaluator, 0)
         return run
@@ -246,6 +338,7 @@ class PinnRun:
         pinn: PINNConfig,
         components: PlatformComponents,
         block: Mapping[str, Any],
+        sketch: PinnSketch | None,
     ) -> PinnRun:
 
         def load(
@@ -253,6 +346,7 @@ class PinnRun:
             obs_coords: dict[str, Tensor],
             obs_targets: dict[str, Tensor],
         ) -> tuple[dict[str, Any], float]:
+            _check_field_order(block.get("field_names"), model.field_names)
             model.load_state_dict(block["pinn_state_dict"])
             return dict(block["pretrain_result"]), 0.0
 
@@ -260,6 +354,7 @@ class PinnRun:
             config,
             pinn,
             components,
+            sketch,
             sampling_seed=block["sampling_seed"],
             train=load,
         )
@@ -289,6 +384,7 @@ class PinnRun:
                 if self.phase_snapshot is None
                 else self.phase_snapshot
             ),
+            "field_names": list(self.model.field_names),
             "completed_generations": self.completed_generations,
             "cycle_idx": self.cycle_idx,
             "sampling_seed": self.sampling_seed,
@@ -339,16 +435,17 @@ class PinnRun:
                 local_sample_seed=self.config.seed,
             ),
             deadline=deadline,
+            pins=() if self.sketch is None else self.sketch.pins,
         )
         seconds = time.perf_counter() - started
         self.train_seconds += seconds
         if trained:
-            self.evaluator = rebuild_after_pinn(
+            self.evaluator = _rebuild_on_network(
                 self.model,
                 self.colloc_coords,
                 self.metadata,
-                executor=self.platform.executor,
-                solver=self.platform.solver,
+                self.platform,
+                self.sketch,
             )
         log_whitelisted_metrics(
             self.recorder,
@@ -382,4 +479,4 @@ class PinnRun:
         )
 
 
-__all__ = ["PinnRun"]
+__all__ = ["PinnRun", "PinnSketch"]

@@ -13,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from kd.core.expr.sympy_bridge import to_latex
 from kd.core.jsonsafe import JSON_INDENT_SPACES
+from kd.viz._math_svg import MathTypesetError, math_svg
 from kd.viz._result_data import _sketch_fit_note
 from kd.viz.equation_display import (
     STRUCTURE_ONLY_NOTE,
@@ -20,8 +21,6 @@ from kd.viz.equation_display import (
     expression_display,
     latex_display,
 )
-from kd.viz.plots._comparison_cells import _fitted_formatted
-from kd.viz.plots.equation_card import _truth_comparison
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -83,6 +82,12 @@ _FIGURE_DESCRIPTIONS = {
 }
 
 
+_ACRONYMS = {"Pde": "PDE", "Nmse": "NMSE", "Llm": "LLM", "Rms": "RMS"}
+
+
+_HEADINGS = {"coefficient_bar": "Coefficients", "pareto_front_table": "Pareto Front"}
+
+
 @dataclass
 class ReportResult:
 
@@ -126,8 +131,10 @@ class _FigureEntry:
 
 
 def _figure_title_from_path(path: Path) -> str:
-    stem = path.stem
-    return stem.replace("_", " ").replace("-", " ").title()
+    if path.stem in _HEADINGS:
+        return _HEADINGS[path.stem]
+    words = path.stem.replace("_", " ").replace("-", " ").title().split(" ")
+    return " ".join(_ACRONYMS.get(word, word) for word in words)
 
 
 def _build_figure_entries(
@@ -206,6 +213,17 @@ class _MathText:
 
     text: str
     tex: str | None
+    svg: str | None = None
+
+
+def _math_text(text: str, tex: str | None) -> _MathText:
+    if tex is None:
+        return _MathText(text, None)
+    try:
+        return _MathText(text, tex, svg=math_svg(tex))
+    except MathTypesetError as exc:
+        logger.debug("Equation shown as plain text offline (%s): %s", exc, tex)
+        return _MathText(text, tex)
 
 
 @dataclass(frozen=True)
@@ -231,13 +249,15 @@ def _run_sentence(result: ExperimentResult) -> str:
 
 
 def _law_text(result: ExperimentResult, display: EquationDisplay) -> _MathText:
+    from kd.viz.plots._comparison_cells import _fitted_formatted
+
     if not display.is_math:
         return _MathText(display.text, None)
     if display.note == STRUCTURE_ONLY_NOTE:
-        return _MathText(expression_display(result.best_expression).text, display.text)
+        return _math_text(expression_display(result.best_expression).text, display.text)
     formatted = _fitted_formatted(result)
     assert formatted is not None
-    return _MathText(f"{formatted.lhs} = {formatted.rhs}", display.text)
+    return _math_text(f"{formatted.lhs} = {formatted.rhs}", display.text)
 
 
 def _truth_text(truth: str) -> _MathText:
@@ -245,18 +265,20 @@ def _truth_text(truth: str) -> _MathText:
     if display.degraded:
         return _MathText(truth, None)
     tex = " = ".join(to_latex(part.strip()) for part in truth.split("=", 1))
-    return _MathText(display.text, tex)
+    return _math_text(display.text, tex)
 
 
 def _term_rows(
     result: ExperimentResult, truth: str | None
 ) -> tuple[list[_TermRow], list[str]]:
+    from kd.viz.plots.equation_card import _truth_comparison
+
     rows, normalization, notes = _truth_comparison(result, truth)
     if normalization is not None:
         notes = [*notes, normalization]
     return [
         _TermRow(
-            term=_MathText(expression_display(key).text, to_latex(key)),
+            term=_math_text(expression_display(key).text, to_latex(key)),
             published=f"{published:.6g}",
             truth=f"{expected:.6g}",
         )

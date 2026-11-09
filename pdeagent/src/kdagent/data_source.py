@@ -52,6 +52,10 @@ class InputVerificationError(ValueError):
     pass
 
 
+class InputIntegrityError(InputVerificationError):
+    pass
+
+
 def is_derived(dataset_id: str) -> bool:
     return DERIVED_SEPARATOR in dataset_id
 
@@ -105,6 +109,10 @@ def field_ref(parent: str, surrogate_id: str) -> str:
     return f"{parent}{DERIVED_SEPARATOR}field-{surrogate_id}"
 
 
+def savgol_ref(parent: str, window_length: int) -> str:
+    return f"{parent}{DERIVED_SEPARATOR}savgol{window_length}"
+
+
 def derived_reference(derived: Mapping[str, Any]) -> str:
     pinn = derived.get("pinn")
     if pinn is not None:
@@ -112,6 +120,9 @@ def derived_reference(derived: Mapping[str, Any]) -> str:
     network = derived.get("network")
     if network is not None:
         return field_ref(derived["from"], network["surrogate_id"])
+    savgol = derived.get("savgol")
+    if savgol is not None:
+        return savgol_ref(derived["from"], savgol["window_length"])
     return derived_ref(
         derived["from"], derived["lowpass_modes"], derived["time_window"]
     )
@@ -484,12 +495,12 @@ def _verify_derivation(
     data = Path(description["path"]).read_bytes()
     digest = hashlib.sha256(data).hexdigest()
     if written[dataset_id] != digest:
-        raise InputVerificationError(
+        raise InputIntegrityError(
             f"derived input {dataset_id}: its file (sha256 {digest}) is not the "
             f"one the controller wrote this run (sha256 {written[dataset_id]})"
         )
     if digest != description["source"]["sha256"]:
-        raise InputVerificationError(f"input file changed for reference {dataset_id}")
+        raise InputIntegrityError(f"input file changed for reference {dataset_id}")
     record = _read_derivation_record(data)
     if record is None:
         raise InputVerificationError(
@@ -518,7 +529,7 @@ def _verify_derivation(
     chain = derivation_chain(workspace, parent, written=written)
     parent_sha256 = chain[-1]["source"]["sha256"]
     if derived["parent_sha256"] != parent_sha256:
-        raise InputVerificationError(
+        raise InputIntegrityError(
             f"derived input {dataset_id} was written from a parent file with "
             f"sha256 {derived['parent_sha256']}, and the file of {parent} has "
             f"sha256 {parent_sha256}"
@@ -540,7 +551,7 @@ def _verify_artifact(
     path = workspace / network["artifact"]
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     if digest != network["artifact_sha256"]:
-        raise InputVerificationError(
+        raise InputIntegrityError(
             f"derived input {dataset_id}: the model it was sampled from, "
             f"{network['artifact']}, has sha256 {digest}, not the "
             f"{network['artifact_sha256']} it was sampled with"
@@ -566,7 +577,7 @@ def derivation_chain(
     with Path(description["path"]).open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     if digest != description["source"]["sha256"]:
-        raise InputVerificationError(f"input file changed for reference {dataset_id}")
+        raise InputIntegrityError(f"input file changed for reference {dataset_id}")
     return [description]
 
 

@@ -7,7 +7,7 @@ import math
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from kd.core.equation import Form, LawSignature, LhsSpec
 
@@ -138,6 +138,7 @@ class SegmentEntry:
     selection_forward: dict[str, Any] | None = None
     reason: str | None = None
     trained_surrogate: str | None = None
+    verify: dict[str, float] | None | Literal["unknown"] = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -198,6 +199,7 @@ def _entry_from_dict(payload: dict[str, Any]) -> SegmentEntry:
         ),
         reason=payload.get("reason"),
         trained_surrogate=payload.get("trained_surrogate"),
+        verify=payload.get("verify", "unknown"),
     )
 
 
@@ -244,6 +246,7 @@ class SegmentLedger:
         selection_forward: dict[str, Any] | None = None,
         reason: str | None = None,
         trained_surrogate: str | None = None,
+        verify: dict[str, float] | None | Literal["unknown"] = None,
     ) -> SegmentEntry:
         entry = SegmentEntry(
             run_id=run_id,
@@ -278,6 +281,7 @@ class SegmentLedger:
             selection_forward=deepcopy(selection_forward),
             reason=reason,
             trained_surrogate=trained_surrogate,
+            verify=deepcopy(verify),
         )
         self._require_not_recorded(run_id)
         self._require_parent(entry)

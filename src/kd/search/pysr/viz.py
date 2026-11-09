@@ -24,6 +24,7 @@ from kd.viz.plugin_panels import (
     last_logged_scalar,
     no_data_reason,
 )
+from kd.viz.style import MARKER_SIZE, RING_WIDTH, SERIES, SURFACE
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -68,12 +69,17 @@ _KD_NMSE_LABEL = "kd_nmse"
 
 
 
+
+
 _LINE_MARKER = "o"
-_LINE_MARKER_SIZE = 4
 _SCATTER_MARKER = "o"
-_SCATTER_MARKER_SIZE = 6
 _SELECTED_MARKER = "*"
-_SELECTED_MARKER_SIZE = 14
+_SELECTED_MARKER_SIZE = 24
+
+
+
+_POINT_COLOUR = SERIES[0]
+_SELECTED_COLOUR = SERIES[1]
 
 
 @dataclass(frozen=True)
@@ -105,11 +111,19 @@ class _ParetoPanel:
             return draw_no_data(ax, self.name, no_data_reason(recorder))
         if self.is_line:
             ax.plot(
-                x_values, y_values, marker=_LINE_MARKER, markersize=_LINE_MARKER_SIZE
+                x_values,
+                y_values,
+                marker=_LINE_MARKER,
+                markersize=MARKER_SIZE,
+                color=_POINT_COLOUR,
             )
         else:
             ax.scatter(
-                x_values, y_values, marker=_SCATTER_MARKER, s=_SCATTER_MARKER_SIZE
+                x_values,
+                y_values,
+                marker=_SCATTER_MARKER,
+                s=MARKER_SIZE**2,
+                color=_POINT_COLOUR,
             )
         _draw_selected(ax, self, recorder)
         n_logged = min(len(raw_x), len(raw_y))
@@ -247,6 +261,9 @@ def _draw_selected(ax: Axes, panel: _ParetoPanel, recorder: VizRecorder | None) 
         [selected_y],
         marker=_SELECTED_MARKER,
         s=_SELECTED_MARKER_SIZE**2,
+        color=_SELECTED_COLOUR,
+        edgecolors=SURFACE,
+        linewidths=RING_WIDTH,
         zorder=5,
     )
 

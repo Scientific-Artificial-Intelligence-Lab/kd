@@ -19,7 +19,7 @@ from kd.viz.plots._field_panels import (
     _RESIDUAL_SIGN,
     _bare_panel,
     _diverged_tag,
-    _range_note,
+    _panel_range_note,
     _robust_abs_max,
     _scale_colorbar,
 )
@@ -27,6 +27,7 @@ from kd.viz.style import (
     CMAP_DIV,
     DPI,
     FIGSIZE_SINGLE,
+    FONTSIZE,
     PANEL_H,
     PANEL_W,
     WARNING_INK,
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WARNING_FONTSIZE = 11
 _WARNING_WRAP_WIDTH = 60
 _N_TIME_SNAPSHOTS = 3
 _COLORBAR_LABEL = f"Error ({_RESIDUAL_SIGN})"
@@ -69,7 +69,7 @@ def plot_error_heatmap(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
@@ -104,7 +104,7 @@ def plot_error_heatmap(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
@@ -127,7 +127,7 @@ def plot_error_heatmap(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
@@ -151,7 +151,7 @@ def plot_error_heatmap(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Error Heatmap")
@@ -221,7 +221,8 @@ def _render_1d_error(
     _scale_colorbar([im], [ax], label=_COLORBAR_LABEL)
     ax.set_xlabel(time_axis)
     ax.set_ylabel(s_name)
-    ax.set_title(f"Error Heatmap{div_tag}" + _range_note(error_2d, (-vmax, vmax)))
+    ax.set_title(f"Error Heatmap{div_tag}")
+    _panel_range_note(ax, error_2d, (-vmax, vmax))
 
     return fig
 
@@ -279,10 +280,10 @@ def _render_2d_error(
         _bare_panel(ax)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(
-            f"Error Heatmap{div_tag} ({time_axis}={t_val:.3g})"
-            + _range_note(error_slice, (-vmax, vmax))
-        )
+
+
+        ax.set_title(f"{time_axis}={t_val:.3g}{div_tag}")
+        _panel_range_note(ax, error_slice, (-vmax, vmax))
 
     if mappable is not None:
         _scale_colorbar(

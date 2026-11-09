@@ -80,3 +80,45 @@ authors on the Hugging Face Hub (timeoutHao/KD-data, pinned revision,
 sha256-verified), and the `eqgpt` search plugin downloads them on first
 use, or reads a local copy named by KD_EQGPT_ASSET_DIR /
 KD_V1_WAVE_ASSETS (see src/kd/_assets/data/DATASETS.md).
+
+-------------------------------------------------------------------
+
+The local web UI (package kdui) bundles two JavaScript libraries,
+each with its license files beside it.
+
+Apache ECharts 6.1.0 (ESM build), used under the Apache License,
+Version 2.0 (the same license as this product; see LICENSE):
+
+  https://github.com/apache/echarts
+
+Its NOTICE file reads:
+
+  Apache ECharts
+  Copyright 2017-2026 The Apache Software Foundation
+
+  This product includes software developed at
+  The Apache Software Foundation (https://www.apache.org/).
+
+ECharts embeds parts of d3.js, used under the BSD 3-Clause License,
+whose text ships as src/kdui/static/vendor/echarts/LICENSE-d3:
+
+  Copyright 2010-2016 Mike Bostock
+  https://github.com/d3/d3
+
+The bundled files are:
+  src/kdui/static/vendor/echarts/echarts.esm.min.js
+  src/kdui/static/vendor/echarts/LICENSE
+  src/kdui/static/vendor/echarts/LICENSE-d3
+  src/kdui/static/vendor/echarts/NOTICE
+
+KaTeX 0.16.11, used under the MIT License (reproduced above; its text
+also ships as src/kdui/static/vendor/katex/LICENSE):
+
+  Copyright (c) 2013-2020 Khan Academy and other contributors
+  https://github.com/KaTeX/KaTeX
+
+The bundled files are:
+  src/kdui/static/vendor/katex/katex.min.js
+  src/kdui/static/vendor/katex/katex.min.css
+  src/kdui/static/vendor/katex/fonts/ (20 WOFF2 font files)
+  src/kdui/static/vendor/katex/LICENSE

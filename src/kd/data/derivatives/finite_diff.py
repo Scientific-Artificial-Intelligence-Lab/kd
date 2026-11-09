@@ -34,6 +34,22 @@ assert set(_MIN_POINTS_FOR_ORDER) == set(range(1, MAX_SUPPORTED_ORDER + 1))
 
 
 
+
+
+_STENCIL_REACH: dict[int, dict[int, int]] = {
+    4: {1: 2, 2: 2, 3: 2},
+    2: {1: 1, 2: 1, 3: 2},
+}
+assert all(
+    set(reach) == set(range(1, MAX_SUPPORTED_ORDER + 1))
+    for reach in _STENCIL_REACH.values()
+)
+
+
+
+
+
+
 UNIFORM_GRID_RTOL = 1e-4
 
 
@@ -194,6 +210,8 @@ def central_diff(
     axis: int,
     order: int,
     is_periodic: bool = False,
+    *,
+    accuracy: int = 4,
 ) -> torch.Tensor:
 
     if math.isinf(dx):
@@ -225,10 +243,15 @@ def central_diff(
             f"Order {order} derivative requires at least {min_points} points, "
             f"got {n_points}"
         )
+    _check_accuracy(accuracy)
 
 
     f_moved = f.movedim(axis, 0)
 
+    if accuracy == 2:
+        return _central_diff_second_order(f_moved, dx, order, is_periodic).movedim(
+            0, axis
+        )
     if is_periodic:
         return _central_diff_periodic(f_moved, dx, order).movedim(0, axis)
 
@@ -337,6 +360,37 @@ def _central_diff_periodic(
     return result
 
 
+def _check_accuracy(accuracy: int) -> None:
+    if accuracy not in _STENCIL_REACH:
+        raise ValueError(
+            f"accuracy must be one of {sorted(_STENCIL_REACH)}, got {accuracy}"
+        )
+
+
+def _central_diff_second_order(
+    u: torch.Tensor, dx: float, order: int, is_periodic: bool
+) -> torch.Tensor:
+    if order == 3:
+        second = _central_diff_second_order(u, dx, 2, is_periodic)
+        return _central_diff_second_order(second, dx, 1, is_periodic)
+    if is_periodic:
+        left = torch.roll(u, 1, 0)
+        right = torch.roll(u, -1, 0)
+        if order == 1:
+            return (right - left) / (2 * dx)
+        return (right - 2 * u + left) / (dx * dx)
+    out = torch.empty_like(u)
+    if order == 1:
+        out[1:-1] = (u[2:] - u[:-2]) / (2 * dx)
+        out[0] = (-3 * u[0] + 4 * u[1] - u[2]) / (2 * dx)
+        out[-1] = (3 * u[-1] - 4 * u[-2] + u[-3]) / (2 * dx)
+    else:
+        out[1:-1] = (u[2:] - 2 * u[1:-1] + u[:-2]) / (dx * dx)
+        out[0] = (2 * u[0] - 5 * u[1] + 4 * u[2] - u[3]) / (dx * dx)
+        out[-1] = (2 * u[-1] - 5 * u[-2] + 4 * u[-3] - u[-4]) / (dx * dx)
+    return out
+
+
 def is_uniform_grid(
     coords: torch.Tensor | np.ndarray,
     rtol: float = UNIFORM_GRID_RTOL,
@@ -423,12 +477,7 @@ class FiniteDiffProvider(DerivativeProvider):
         max_order: int = 3,
         accuracy: int = 4,
     ) -> None:
-
-        if accuracy != 4:
-            raise ValueError(
-                f"Only accuracy=4 is supported currently, got {accuracy}. "
-                f"Other accuracy levels will be added currently."
-            )
+        _check_accuracy(accuracy)
 
 
         if dataset.topology != DataTopology.GRID:
@@ -474,6 +523,17 @@ class FiniteDiffProvider(DerivativeProvider):
             return {}
         return {name: axis.values for name, axis in self._dataset.axes.items()}
 
+    @property
+    def accuracy(self) -> int:
+        return self._accuracy
+
+    def stencil_reach(self, order: int) -> int:
+        if order < 1 or order > MAX_SUPPORTED_ORDER:
+            raise ValueError(
+                f"order must be in [1, {MAX_SUPPORTED_ORDER}], got {order}"
+            )
+        return _STENCIL_REACH[self._accuracy][order]
+
     def _precompute_derivatives(self) -> None:
         if self._dataset.fields is None:
             return
@@ -491,6 +551,7 @@ class FiniteDiffProvider(DerivativeProvider):
                         axis_idx,
                         order,
                         is_periodic=periodic,
+                        accuracy=self._accuracy,
                     )
                     self._cache[(field_name, axis_name, order)] = deriv
 
@@ -546,7 +607,14 @@ class FiniteDiffProvider(DerivativeProvider):
         dx = self._dx[axis]
         stencil = self._is_periodic[axis] if is_periodic is None else is_periodic
 
-        return central_diff(expression, dx, axis_idx, order, is_periodic=stencil)
+        return central_diff(
+            expression,
+            dx,
+            axis_idx,
+            order,
+            is_periodic=stencil,
+            accuracy=self._accuracy,
+        )
 
     def available_derivatives(self) -> list[tuple[str, str, int]]:
         return list(self._cache.keys())

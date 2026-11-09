@@ -12,20 +12,29 @@ from kd.core.expr import format_pde
 from kd.search.recorder import BEST_SCORE_KEY
 from kd.search.result import DEFAULT_SCORE_KIND
 from kd.viz._result_data import _sketch_fit_note
-from kd.viz.axes import _get_axes, integer_ticks
+from kd.viz.axes import _get_axes, integer_ticks, value_bar_scale
 from kd.viz.gap_notes import append_subtitle
 from kd.viz.plots._comparison_cells import _expression_cell, _render_term_diff_cell
 from kd.viz.style import (
     BAND,
     BAND_ALPHA,
+    BAR_FILL,
     CONTEXT,
     CONTEXT_WIDTH,
+    FONTSIZE,
+    INK_2,
     INK_MUTED,
+    PANEL_H,
+    PANEL_W,
     REF_LINE_WIDTH,
     SERIES,
+    SERIES_DASHES,
+    SMALL_FONTSIZE,
+    draw_table,
     isolated_point_marks,
     style_context,
-    style_table,
+    table_height,
+    wrap_to_width,
 )
 
 if TYPE_CHECKING:
@@ -45,25 +54,39 @@ def plot_structure_comparison(
     style: dict[str, Any] | None = None,
 ) -> tuple[Figure, list[str]]:
     warnings = [f"{name}: {why}" for name, why in comparison.exclusions.items()]
+    table_h = table_height(len(comparison.results))
+    plot_h = 1.3 * PANEL_H
     with style_context(style):
-        fig = plt.figure(figsize=(13, 8), layout="constrained")
-        grid = fig.add_gridspec(2, 2, height_ratios=[1, 1.2])
+        fig = plt.figure(
+            figsize=(3 * PANEL_W, table_h + plot_h + 1.0), layout="constrained"
+        )
+        grid = fig.add_gridspec(2, 2, height_ratios=[table_h, plot_h], hspace=0.08)
         table_ax = fig.add_subplot(grid[0,:])
         progress_ax = fig.add_subplot(grid[1, 0])
         score_ax = fig.add_subplot(grid[1, 1])
-        _structure_comparison_table(comparison, table_ax)
         warnings.extend(_normalized_progress(comparison.results, progress_ax))
+
+        order = list(comparison.results)
         names = list(comparison.evaluations)
         values = [comparison.evaluations[name].nmse for name in names]
-        bars = score_ax.bar(names, values, color=SERIES[0], width=0.5)
-        score_ax.bar_label(
-            bars, labels=[f"{value:.2e}" for value in values], padding=3, fontsize=9
+        positions = np.arange(len(names), dtype=float)
+        bars = score_ax.bar(
+            positions,
+            values,
+            color=[SERIES[order.index(name) % len(SERIES)] for name in names],
+            width=BAR_FILL,
         )
-        score_ax.margins(y=0.2)
+        score_ax.bar_label(
+            bars,
+            labels=[f"{value:.2e}" for value in values],
+            padding=3,
+            fontsize=SMALL_FONTSIZE,
+            color=INK_2,
+        )
+        value_bar_scale(score_ax, values, headroom=0.2)
         score_ax.set(
             ylabel="NMSE (shared structure refit)", title="One ruler: lower is better"
         )
-        score_ax.tick_params(axis="x", labelrotation=20, labelsize=8)
         title = "One dataset, one ruler: structure refits"
         if comparison.reference is not None:
             title += f"\nReference: {comparison.reference}"
@@ -72,8 +95,25 @@ def plot_structure_comparison(
             pins = ", ".join(f"{t} = {v}" for t, v in comparison.fixed.items())
             note = "\n".join(filter(None, [note, f"Fixed coefficients: {pins}"]))
         if note:
-            fig.supxlabel(note, fontsize=9)
+            fig.supxlabel(note, fontsize=SMALL_FONTSIZE, color=INK_2)
+
+        _label_bars(score_ax, positions, names)
+        _structure_comparison_table(comparison, table_ax)
     return fig, warnings
+
+
+
+_LABEL_SLOT = 0.9
+
+
+def _label_bars(ax: Axes, positions: np.ndarray, labels: list[str]) -> None:
+    ax.set_xticks(positions, labels)
+    if not labels:
+        return
+    cast("Figure", ax.get_figure(root=True)).draw_without_rendering()
+    band = _LABEL_SLOT * ax.get_window_extent().width / len(labels)
+    font = ax.get_xticklabels()[0]
+    ax.set_xticks(positions, [wrap_to_width(label, font, band) for label in labels])
 
 
 def _structure_comparison_table(comparison: ComparisonResult, ax: Axes) -> None:
@@ -95,26 +135,17 @@ def _structure_comparison_table(comparison: ComparisonResult, ax: Axes) -> None:
                 f"{evaluation.r2:.4f}",
             ]
         rows.append([name, *cells, str(result.iterations)])
-    ax.axis("off")
-    table = ax.table(
-        cellText=rows,
-        colLabels=["Run", "Equation (shared refit)", "NMSE", "$R^2$", "Iterations"],
-        loc="center",
-        cellLoc="center",
-        colWidths=[0.16, 0.48, 0.12, 0.10, 0.14],
+    draw_table(
+        ax,
+        rows,
+        ["Run", "Equation (shared refit)", "NMSE", "$R^2$", "Iterations"],
+        text_columns=(0, 1),
     )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
-    style_table(table)
-    for (row, _), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_text_props(weight="bold")
 
 
 def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list[str]:
     notes = []
-    for name, result in results.items():
+    for index, (name, result) in enumerate(results.items()):
         scores = np.asarray(result.recorder.get(BEST_SCORE_KEY), dtype=float)
         finite = np.isfinite(scores)
         if not finite.any():
@@ -128,8 +159,10 @@ def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list
         ax.plot(
             np.arange(len(scores)),
             progress,
-            color=SERIES[len(ax.lines) % len(SERIES)],
+            color=SERIES[index % len(SERIES)],
+            linestyle=SERIES_DASHES[index % len(SERIES_DASHES)],
             label=name,
+            **isolated_point_marks(progress),
         )
     ax.set(
         xlabel="Iteration",
@@ -138,7 +171,7 @@ def _normalized_progress(results: dict[str, ExperimentResult], ax: Axes) -> list
     )
     integer_ticks(ax)
     if ax.lines:
-        ax.legend(fontsize=8, loc="lower right")
+        ax.legend(loc="lower right")
     if notes:
         append_subtitle(ax, "\n".join(notes))
     return notes
@@ -262,7 +295,8 @@ def render_overlaid_convergence(
                 iterations,
                 finite_scores,
                 label=label,
-                color=SERIES[(len(all_scores) - 1) % len(SERIES)],
+                color=SERIES[i % len(SERIES)],
+                linestyle=SERIES_DASHES[i % len(SERIES_DASHES)],
                 **isolated_point_marks(finite_scores),
             )
 
@@ -355,7 +389,7 @@ def render_overlaid_convergence(
                 "cross-algorithm mean/std band suppressed",
             )
         if any_data:
-            ax.legend(fontsize=8)
+            ax.legend(fontsize=SMALL_FONTSIZE)
 
     return warnings
 
@@ -393,9 +427,13 @@ def plot_score_bar(
 
     positions = np.arange(len(results), dtype=float)
     with style_context(style):
-        ax.bar(positions, r2_values, color=SERIES[0], width=0.5)
-        ax.set_xticks(positions)
-        ax.set_xticklabels(run_labels)
+
+        ax.bar(
+            positions,
+            r2_values,
+            color=[SERIES[i % len(SERIES)] for i in range(len(results))],
+            width=BAR_FILL,
+        )
         for i in invalid_positions:
 
 
@@ -412,13 +450,14 @@ def plot_score_bar(
                 transform=ax.get_xaxis_transform(),
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=SMALL_FONTSIZE,
                 color=INK_MUTED,
             )
         ax.set_ylabel("$R^2$")
         ax.set_title("Score Comparison")
         ax.axhline(y=1.0, color=CONTEXT, linewidth=REF_LINE_WIDTH)
         _annotate_sketch_metrics(ax, results, run_labels, warnings)
+        _label_bars(ax, positions, run_labels)
 
     return warnings
 
@@ -430,7 +469,7 @@ def plot_summary_table(
     labels: list[str] | None = None,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
-    ax = _get_axes(ax, style, figsize=(12, 5))
+    ax = _get_axes(ax, style, figsize=summary_table_figsize(len(results)), fill=True)
     warnings: list[str] = []
     run_labels = _run_labels(results, labels)
 
@@ -460,20 +499,14 @@ def plot_summary_table(
         )
 
     with style_context(style):
-        ax.axis("off")
-        table = ax.table(
-            cellText=table_data,
-            colLabels=col_labels,
-            loc="center",
-            cellLoc="center",
-        )
-        table.auto_set_font_size(False)
-        table.set_fontsize(8)
-        table.scale(1.0, 1.4)
-        style_table(table)
+        draw_table(ax, table_data, col_labels, text_columns=(0, 1, 5))
         _annotate_sketch_metrics(ax, results, run_labels, warnings)
 
     return warnings
+
+
+def summary_table_figsize(n_runs: int) -> tuple[float, float]:
+    return 3 * PANEL_W, table_height(n_runs)
 
 
 def _annotate_sketch_metrics(
@@ -491,7 +524,7 @@ def _annotate_sketch_metrics(
         ax.set_title(
             "Search-fit metrics (targets may differ)\n"
             "Not a comparison of full-equation quality",
-            fontsize="medium",
+            fontsize=FONTSIZE,
         )
         warnings.extend(notes)
 

@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from collections.abc import Callable, Iterator
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from kdagent import cards, experience_text, model_signals
+from kdagent import cards, experience_text, model_signals, trace_file
 from kdagent.advice import Advice
 from kdagent.experience import Retrieval
 from kdagent.prompt_text import render_pinned_glossary, render_task_section
@@ -51,6 +52,8 @@ TRUNCATION_NUDGE = (
 MAX_TRUNCATION_NUDGES = 2
 
 ANSWER_ENDS_RUN = "SubmittedAnswerEndsRun"
+
+MODEL_CALL_CAP = "ModelCallCap"
 
 STOP_ANSWER_SUBMITTED = "answer_submitted"
 
@@ -101,7 +104,8 @@ publish a search you have already run, to refit a search's law with its terms
 held fixed or score a variant term set without a new search
 (`refine_candidate`), to smooth a noisy input (`smooth_input`), to measure a
 law in a declared frame (`ablate_candidate`, `score_term_sets`,
-`verify_candidate`), to integrate one law per state of raw ODE trajectories
+`verify_candidate`), to select the fewest terms within a relative NMSE window
+(`select_support`), to integrate one law per state of raw ODE trajectories
 together (`verify_system`), to count the terms that recur across searches
 (`vote_terms`) and narrow a search to them (`make_sketch`), to make the
 structure the researcher states the constraint of every later search
@@ -114,6 +118,8 @@ ends with.
 
 With neither, the run ends with the default selection, which
 `primary.now_selected` names after every search (null when there is none).
+It ranks only the searches on the input the latest search of this run's
+target ran on: the raw input and each derived copy are ranked separately.
 After each search KD integrates the sealed law, with its own coefficients and
 left-hand side, forward from the first time slice of the input the search
 ran on, in a worker of at most 30 s (10 s of integration) that is charged to
@@ -136,9 +142,10 @@ systems whose error is at most twice the smallest, the one with the fewest
 terms over all states, and its law for this run's target is published with
 the system; when none of them has a finite error there is no default answer.
 Before that, the default answer comes from the searches of this run's target;
-a projection's searches have no forward value of their own, so one
-algorithm's searches are compared on its own score and several algorithms'
-by the same fewest-terms rule on `platform_nmse`.
+a projection's searches have neither a forward value nor `platform_nmse`, so
+one algorithm's searches are compared on its own score, and several
+algorithms' have no default answer: choose with `select_node` or
+`submit_answer`.
 
 `verify_candidate` checks a law three ways on one input: whether each term can
 be evaluated, how much the coefficients change when refitted on separate grid
@@ -151,11 +158,13 @@ largest dropped first), the fewest terms within twice the smallest forward
 error was the right answer 49 times, the smallest block dispersion 38 times
 and the same fewest-terms rule on `platform_nmse` 32 times.
 
-The Python interpreter can `import kd`: `kd.validate_terms(dataset, terms)`,
-`kd.block_dispersion(dataset, terms)` and
+The Python interpreter can `import kd`: `kd.validate_terms(dataset, terms, max_order=3)`,
+`kd.block_dispersion(dataset, terms, max_order=3)` and
 `kd.forward_error(dataset, terms, coefficients)` are the same three checks.
 The kd-tools skill gives a loading line for grid file inputs; these three
-functions take that loaded dataset.
+functions take that loaded dataset. The first two default to `max_order=2`,
+which refuses third-order terminal spellings; open-form derivatives are not
+gated by that parameter.
 `forward_error(..., max_seconds=10)` stops at a cooperative deadline and
 returns `reason="timeout"` (10 s per candidate was used there); a single long
 solver step is not interrupted, so keep `timeout` as the hard limit.
@@ -202,12 +211,11 @@ unresolved result instead of a law.
 """
 
 
-def render_experience(
-    summary: dict[str, Any], retrieval: Retrieval, advice: Advice | None
-) -> str:
+def render_experience(summary: dict[str, Any], retrieval: Retrieval) -> str:
     return experience_text.render(
         task_kind=retrieval["task_kind"],
         rows=retrieval["rows"],
+        refusals=retrieval["refusals"],
         readings={key: dict(value) for key, value in retrieval["readings"].items()},
         vocabulary=retrieval["vocabulary"],
         templates=retrieval["templates"],
@@ -215,8 +223,8 @@ def render_experience(
         min_support=retrieval["min_support"],
         rules_version=retrieval["rules_version"],
         dataset_id=summary["id"],
-        advice_id=None if advice is None else advice["advice_id"],
-        usage=[] if advice is None else advice["usage"],
+        usage_scope=retrieval.get("usage_scope"),
+        lessons=retrieval.get("lessons"),
     )
 
 
@@ -228,11 +236,13 @@ _SHELL_SENTENCES = (
     ),
     (
         "and the same fewest-terms rule on `platform_nmse` 32 times.\n\n"
-        "The Python interpreter can `import kd`: `kd.validate_terms(dataset, terms)`,\n"
-        "`kd.block_dispersion(dataset, terms)` and\n"
+        "The Python interpreter can `import kd`: `kd.validate_terms(dataset, terms, max_order=3)`,\n"
+        "`kd.block_dispersion(dataset, terms, max_order=3)` and\n"
         "`kd.forward_error(dataset, terms, coefficients)` are the same three checks.\n"
         "The kd-tools skill gives a loading line for grid file inputs; these three\n"
-        "functions take that loaded dataset.\n"
+        "functions take that loaded dataset. The first two default to `max_order=2`,\n"
+        "which refuses third-order terminal spellings; open-form derivatives are not\n"
+        "gated by that parameter.\n"
         "`forward_error(..., max_seconds=10)` stops at a cooperative deadline and\n"
         'returns `reason="timeout"` (10 s per candidate was used there); a single long\n'
         "solver step is not interrupted, so keep `timeout` as the hard limit.\n\n",
@@ -301,13 +311,28 @@ def compose_system_prompt(
         + json.dumps(summary, ensure_ascii=False)
     )
     if retrieval is not None:
-        prompt += (
-            "\nRetrieved experience:\n"
-            + json.dumps(retrieval["rows"], ensure_ascii=False)
-            + "\n"
-            + render_experience(summary, retrieval, advice)
-        )
+        prompt += "\n" + render_experience(summary, retrieval)
     return prompt
+
+
+def _reasoning_keeping_client() -> type[Any]:
+    import langchain_openai
+
+    class ChatOpenAI(langchain_openai.ChatOpenAI):
+        def _create_chat_result(
+            self, response: Any, generation_info: dict[str, Any] | None = None
+        ) -> Any:
+            result = super()._create_chat_result(response, generation_info)
+            for generation, choice in zip(
+                result.generations, response.choices, strict=True
+            ):
+                extra = choice.message.model_extra
+                text = extra.get("reasoning_content") or extra.get("reasoning")
+                if text:
+                    generation.message.additional_kwargs["reasoning_content"] = text
+            return result
+
+    return ChatOpenAI
 
 
 def build_model(
@@ -328,7 +353,18 @@ def build_model(
 
 
 
-    retries = 6 if preset else 2
+
+
+
+    retries = (6 if preset else 2) if config.max_retries is None else config.max_retries
+    if config.min_call_interval is not None:
+        from langchain_core.rate_limiters import InMemoryRateLimiter
+
+        options["rate_limiter"] = InMemoryRateLimiter(
+            requests_per_second=1 / config.min_call_interval,
+            check_every_n_seconds=0.5,
+            max_bucket_size=1,
+        )
     if config.protocol == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -352,8 +388,6 @@ def build_model(
             **options,
         )
 
-    from langchain_openai import ChatOpenAI
-
     if preset:
         import httpx
 
@@ -365,7 +399,7 @@ def build_model(
 
     if config.effort is not None:
         options["reasoning_effort"] = config.effort
-    client = ChatOpenAI if client_class is None else client_class
+    client = _reasoning_keeping_client() if client_class is None else client_class
     return client(
         model=config.model,
         base_url=config.base_url,
@@ -407,6 +441,33 @@ def _answer_ends_run_middleware() -> Any:
         return {"jump_to": "end"}
 
     return end_once_the_answer_is_in
+
+
+def _model_call_cap_middleware(limit: int) -> tuple[list[Any], Any]:
+    from langchain.agents.middleware import before_agent, before_model
+    from langchain_core.messages import AIMessage
+
+    lock = threading.Lock()
+    made = [0]
+
+    @before_agent(name=f"{MODEL_CALL_CAP}Start")
+    def start_count(_state: Any, _runtime: Any) -> None:
+        with lock:
+            made[0] = 0
+
+    @before_model(can_jump_to=["end"], name=MODEL_CALL_CAP)
+    def count_call(_state: Any, _runtime: Any) -> dict[str, Any] | None:
+        with lock:
+            if made[0] >= limit:
+                message = AIMessage(
+                    f"Model call limits exceeded: run limit ({made[0]}/{limit}), "
+                    "the agent and its subagents together"
+                )
+                return {"jump_to": "end", "messages": [message]}
+            made[0] += 1
+        return None
+
+    return [start_count, count_call], count_call
 
 
 def _answer_nudge_middleware() -> Any:
@@ -456,7 +517,7 @@ GENERAL_PURPOSE_DESCRIPTION = (
     "multi-step research in an isolated context window. It does not have the "
     "KD verbs (list_datasets, run_discovery, train_surrogate, prune_node, "
     "select_node, submit_answer, refine_candidate, smooth_input, "
-    "ablate_candidate, score_term_sets, verify_candidate, verify_system, "
+    "ablate_candidate, score_term_sets, select_support, verify_candidate, verify_system, "
     "vote_terms, make_sketch, set_sketch, finish_without_answer); run a "
     "search, train a "
     "surrogate, measure and submit the answer yourself."
@@ -466,6 +527,18 @@ GENERAL_PURPOSE_DESCRIPTION_NO_SHELL = GENERAL_PURPOSE_DESCRIPTION.replace(
     "reading files, running shell commands and ", "reading files and "
 )
 assert GENERAL_PURPOSE_DESCRIPTION_NO_SHELL != GENERAL_PURPOSE_DESCRIPTION
+
+TASK_DESCRIPTION = """Launch an ephemeral subagent to handle a complex, multi-step task in an isolated context window.
+
+Available agent types and the tools they have access to:
+{available_agents}
+
+Specify subagent_type to select the agent. Usage notes:
+- Launch multiple agents concurrently when their tasks are independent, using a single message with multiple tool calls.
+- Each invocation is stateless: the agent sees only the prompt you give it and returns a single final report. Put full detail in the prompt and state exactly what it should return.
+- The agent's report is not shown to the user; relay a summary yourself.
+- Tell the agent whether to create content, analyze, or only research, since it cannot see the user's intent.
+- The general-purpose agent has none of the KD verbs: a search, a surrogate training, a measurement, a selection or an answer cannot be delegated to it; make those calls yourself."""
 
 
 SKILLS_PROMPT = """## Skills
@@ -492,6 +565,7 @@ def build_agent(
     system_prompt: str,
     bare: bool = False,
     shell: bool = False,
+    max_model_calls: int | None = None,
 ) -> Any:
     from deepagents import FilesystemPermission, SubAgent, create_deep_agent
     from deepagents.backends import FilesystemBackend, LocalShellBackend
@@ -499,14 +573,14 @@ def build_agent(
     from deepagents.middleware.skills import SkillsMiddleware
     from deepagents.profiles import HarnessProfile, register_harness_profile
 
+    overrides = {"execute": EXECUTE_DESCRIPTION, "task": TASK_DESCRIPTION}
     register_harness_profile(
-        "openai",
-        HarnessProfile(tool_description_overrides={"execute": EXECUTE_DESCRIPTION}),
+        "openai", HarnessProfile(tool_description_overrides=overrides)
     )
     register_harness_profile(
         "anthropic",
         HarnessProfile(
-            tool_description_overrides={"execute": EXECUTE_DESCRIPTION},
+            tool_description_overrides=overrides,
             excluded_middleware=frozenset({"SummarizationMiddleware"}),
         ),
     )
@@ -529,6 +603,10 @@ def build_agent(
 
 
     middleware: list[Any] = [_answer_ends_run_middleware(), _answer_nudge_middleware()]
+    if max_model_calls is not None:
+        main_cap, subagent_cap = _model_call_cap_middleware(max_model_calls)
+        middleware.extend(main_cap)
+        general_purpose["middleware"] = [subagent_cap]
     if not bare:
         middleware.insert(
             0,
@@ -566,28 +644,22 @@ def build_agent(
     )
 
 
-def _flatten_run(run: Any) -> Iterator[Any]:
-    yield run
-    for child in run.child_runs:
-        yield from _flatten_run(child)
-
-
 def file_tracer(path: Path) -> Any:
     from langchain_core.tracers.base import BaseTracer
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
+    lock = threading.Lock()
 
     class _FileTracer(BaseTracer):
         name = "kdagent_file_tracer"
 
         def _persist_run(self, run: Any) -> None:
-            with path.open("a", encoding="utf-8") as sink:
-                for node in _flatten_run(run):
-                    sink.write(
-                        json.dumps(node.model_dump(), default=str, ensure_ascii=False)
-                    )
-                    sink.write("\n")
+            pass
+
+        def _on_run_update(self, run: Any) -> None:
+            with lock:
+                trace_file.append_row(path, run.model_dump())
 
     return _FileTracer()
 
@@ -598,6 +670,7 @@ def run_loop(
     trace_path: Path,
     recursion_limit: int = 100,
     metadata: dict[str, Any] | None = None,
+    on_answer: Callable[[Answer | None], None] | None = None,
 ) -> RunLoopResult:
     from langgraph.errors import GraphRecursionError
 
@@ -627,6 +700,8 @@ def run_loop(
             messages = chunk["messages"]
             answer_nudges = chunk[ANSWER_NUDGES]
             truncation_nudges = chunk[TRUNCATION_NUDGES]
+            if on_answer is not None and chunk.get(ANSWER) != answer:
+                on_answer(chunk.get(ANSWER))
             answer = chunk.get(ANSWER)
     except GraphRecursionError as exc:
         error = exc

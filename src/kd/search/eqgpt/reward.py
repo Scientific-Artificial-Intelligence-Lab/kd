@@ -81,7 +81,12 @@ def _drop_inf_rows(matrix: np.ndarray) -> np.ndarray:
     return matrix[~np.isneginf(matrix).any(axis=1)]
 
 
-def compute_reward(A: np.ndarray, *, sparsity_alpha: float) -> RewardResult:
+def compute_reward(
+    A: np.ndarray,
+    *,
+    sparsity_alpha: float,
+    n_protected: int = 0,
+) -> RewardResult:
     A = np.asarray(A, dtype=np.float64)
     if A.ndim != 2 or A.shape[1] == 0:
         return _invalid(0, ())
@@ -89,7 +94,7 @@ def compute_reward(A: np.ndarray, *, sparsity_alpha: float) -> RewardResult:
     deduplication = deduplicate_columns(A)
     deduped = deduplication.matrix
     keep_indices = tuple(int(index) for index in deduplication.keep_indices)
-    n_terms = deduped.shape[1]
+    n_terms = deduped.shape[1] - n_protected
 
     filtered = _drop_inf_rows(deduped)
     if filtered.shape[0] == 0:

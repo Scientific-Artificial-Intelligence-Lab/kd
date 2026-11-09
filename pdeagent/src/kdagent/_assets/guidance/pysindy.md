@@ -13,7 +13,13 @@ requires normalized columns. The
 default absolute threshold 0.1 is larger than the smallest true coefficient,
 expanded into monomials, on 3 of 7 benchmark problems; on one of them a
 noise-free probe gave empty support at 0.1, a wrong law at 0.01 and the
-right law at 0.001. Empty
-support raises an error naming the active threshold. One solve gives one
+right law at 0.001. Empty STLSQ support can trigger the bounded sketch
+subset fit described under Method. If support stays empty without a
+replacement, the error names the active threshold; an empty winning subset
+instead reports "hole-count selection chose the empty law". One run gives one
 evaluation; changing `generations` cannot add search, and repeating the same
 settings adds no independent evidence. Read `primary.law` for coefficients.
+
+The recorder exposes `native_nmse`, `refit_nmse`, `support_size` and
+`stlsq_history`. The history retains the STLSQ trajectory even when the
+hole-count step replaces its result.

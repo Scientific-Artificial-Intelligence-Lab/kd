@@ -68,6 +68,17 @@ class EndpointConfig:
     model: str
     api_key: str = field(repr=False)
     effort: str | None = None
+    min_call_interval: float | None = None
+    max_retries: int | None = None
+    max_model_calls: int | None = None
+
+    def pacing(self) -> dict[str, float | int]:
+        values = {
+            "min_call_interval": self.min_call_interval,
+            "max_retries": self.max_retries,
+            "max_model_calls": self.max_model_calls,
+        }
+        return {key: value for key, value in values.items() if value is not None}
 
 
 class MissingConfigError(ValueError):
@@ -291,8 +302,17 @@ def resolve_config(
     base_url: str | None = None,
     model: str | None = None,
     effort: str | None = None,
+    min_call_interval: float | None = None,
+    max_retries: int | None = None,
+    max_model_calls: int | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> EndpointConfig:
+    if min_call_interval is not None and not min_call_interval > 0:
+        raise ValueError("min_call_interval must be a positive number of seconds")
+    if max_retries is not None and max_retries < 0:
+        raise ValueError("max_retries must be zero or more")
+    if max_model_calls is not None and max_model_calls < 1:
+        raise ValueError("max_model_calls must be one or more")
     selected, values = _merge_settings(
         saved,
         endpoint,
@@ -318,6 +338,9 @@ def resolve_config(
         values["model"],
         values["api_key"],
         values.get("effort"),
+        min_call_interval,
+        max_retries,
+        max_model_calls,
     )
 
 

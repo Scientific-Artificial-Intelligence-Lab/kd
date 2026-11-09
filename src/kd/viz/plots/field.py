@@ -33,8 +33,10 @@ from kd.viz.plots._field_panels import (
 from kd.viz.style import (
     CMAP_SEQ,
     DPI,
+    FONTSIZE,
     PANEL_H,
     PANEL_W,
+    SCATTER_SIZE,
     WARNING_INK,
     style_context,
 )
@@ -80,7 +82,7 @@ def plot_field_comparison(
                 0.5,
                 "axis_order unavailable",
                 transform=ax.transAxes,
-                fontsize=14,
+                fontsize=FONTSIZE,
                 color=WARNING_INK,
                 ha="center",
                 va="center",
@@ -417,6 +419,7 @@ def _row_heading(ax: Axes, heading: str) -> None:
 
 
 _RAW_FIELD_FIGSIZE = (7.0, 3.2)
+_STEADY_FIGSIZE = (PANEL_W + 1.2, PANEL_H + 0.6)
 
 
 def plot_field(
@@ -426,36 +429,188 @@ def plot_field(
     field: str | None = None,
     style: dict[str, Any] | None = None,
 ) -> None:
-    name = dataset.lhs_field if field is None else field
-    values = dataset.get_field(name).detach().cpu().numpy().astype(np.float64)
-    spatial = dataset.spatial_axes
-    if len(spatial) != 1:
+    layout = _drawn_layout(dataset)
+    if layout is None:
         raise ValueError(
-            f"plot_field draws one spatial axis, dataset {dataset.name!r} has "
-            f"{len(spatial)} spatial axes {spatial}"
+            f"plot_field cannot draw dataset {dataset.name!r}: "
+            f"{_layout_text(dataset)}. It draws one spatial axis, a GRID "
+            "over two spatial axes, or steady data over two coordinates; "
+            "kd.preview(dataset) describes any layout as text"
         )
-    time_axis, spatial_axis = dataset.lhs_axis, spatial[0]
+    if layout == "snapshots" and ax is not None:
+        raise ValueError(
+            f"plot_field draws dataset {dataset.name!r} (two spatial "
+            f"axes {dataset.spatial_axes}) as a row of snapshots in its own "
+            "figure; call it without ax"
+        )
+    name = _raw_field_name(dataset, field)
+    values = dataset.get_field(name).detach().cpu().numpy().astype(np.float64)
+    with style_context(style):
+        if layout == "one":
+            _draw_one_spatial_axis(dataset, values, name, dataset.spatial_axes[0], ax)
+        elif layout == "snapshots":
+            _draw_snapshot_row(dataset, values, name, dataset.spatial_axes)
+        else:
+            order = dataset.axis_order
+            assert order is not None
+            _draw_steady(dataset, values, name, (order[0], order[1]), ax)
+
+
+def _drawn_layout(dataset: PDEDataset) -> str | None:
+    order = dataset.axis_order
+    if dataset.lhs_order == 0:
+        return "steady" if order is not None and len(order) == 2 else None
+    if not dataset.lhs_axis:
+        return None
+    spatial = dataset.spatial_axes
+    if len(spatial) == 1:
+        return "one"
+    if len(spatial) == 2 and dataset.topology is DataTopology.GRID:
+        return "snapshots"
+    return None
+
+
+def _raw_field_name(dataset: PDEDataset, field: str | None) -> str:
+    if field is not None:
+        return field
+    if dataset.lhs_field:
+        return dataset.lhs_field
+    assert dataset.fields is not None
+    names = list(dataset.fields)
+    if len(names) != 1:
+        raise ValueError(
+            f"dataset {dataset.name!r} names no left-hand-side field and has "
+            f"fields {names}; pass field= to choose one"
+        )
+    return names[0]
+
+
+def _layout_text(dataset: PDEDataset) -> str:
+    topology = dataset.topology.name
+    if dataset.lhs_order == 0:
+        return f"steady {topology} data over coordinates {dataset.axis_order}"
+    if not dataset.lhs_axis:
+        return (
+            f"{topology} evolution data (lhs_order={dataset.lhs_order}) over "
+            f"{dataset.axis_order} whose lhs_axis and lhs_field are not set; "
+            "declare the left-hand side, or lhs_order=0 for steady data"
+        )
+    spatial = dataset.spatial_axes
+    return (
+        f"{topology} data over evolution axis {dataset.lhs_axis!r} with "
+        f"{len(spatial)} spatial axes {spatial}"
+    )
+
+
+def _draw_one_spatial_axis(
+    dataset: PDEDataset,
+    values: NDArray[np.floating],
+    name: str,
+    spatial_axis: str,
+    ax: Axes | None,
+) -> None:
+    time_axis = dataset.lhs_axis
     t = dataset.get_coords(time_axis).detach().cpu().numpy()
     s = dataset.get_coords(spatial_axis).detach().cpu().numpy()
     title = f"{name}({spatial_axis}, {time_axis})"
-    with style_context(style):
-        if ax is None:
-            _, ax = plt.subplots(figsize=_RAW_FIELD_FIGSIZE, dpi=DPI)
-        if dataset.topology is DataTopology.SCATTERED:
-            points = ax.scatter(
-                t, s, c=values, s=8, cmap=CMAP_SEQ, linewidths=0, rasterized=True
-            )
-            _scale_colorbar([points], [ax])
-            ax.grid(False)
-            ax.set_xlabel(time_axis)
-            ax.set_ylabel(spatial_axis)
-            ax.set_title(title)
-            return
-
-        order = dataset.axis_order
-        assert order is not None
-        grid = np.moveaxis(values, order.index(time_axis), -1)
-        mesh = _pcolormesh_panel(
-            ax, t, s, grid, title, time_axis=time_axis, spatial_axis=spatial_axis
+    if ax is None:
+        _, ax = plt.subplots(figsize=_RAW_FIELD_FIGSIZE, dpi=DPI)
+    if dataset.topology is DataTopology.SCATTERED:
+        points = ax.scatter(
+            t, s, c=values, s=8, cmap=CMAP_SEQ, linewidths=0, rasterized=True
         )
-        _scale_colorbar([mesh], [ax])
+        _scale_colorbar([points], [ax])
+        ax.grid(False)
+        ax.set_xlabel(time_axis)
+        ax.set_ylabel(spatial_axis)
+        ax.set_title(title)
+        return
+
+    order = dataset.axis_order
+    assert order is not None
+    grid = np.moveaxis(values, order.index(time_axis), -1)
+    mesh = _pcolormesh_panel(
+        ax, t, s, grid, title, time_axis=time_axis, spatial_axis=spatial_axis
+    )
+    _scale_colorbar([mesh], [ax])
+
+
+def _draw_snapshot_row(
+    dataset: PDEDataset,
+    values: NDArray[np.floating],
+    name: str,
+    spatial: list[str],
+) -> None:
+    time_axis = dataset.lhs_axis
+    order = dataset.axis_order
+    assert order is not None
+    time_dim = order.index(time_axis)
+    t = dataset.get_coords(time_axis).detach().cpu().numpy()
+    steps = _pick_time_steps(values.shape[time_dim], _N_TIME_SNAPSHOTS)
+    fig, axes_arr = plt.subplots(
+        1,
+        len(steps),
+        figsize=(PANEL_W * len(steps), PANEL_H),
+        dpi=DPI,
+        layout="constrained",
+        squeeze=False,
+    )
+    panels: list[Axes] = list(axes_arr.flat)
+    extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(dataset, spatial)
+
+    limits = _field_limits(values, None, "sequential")
+    images = [
+        _heatmap_panel(
+            panel,
+            np.take(values, step, axis=time_dim),
+            f"{time_axis}={float(t[step]):.3g}",
+            limits=limits,
+            extent=extent,
+            xlabel=xlabel,
+            ylabel=ylabel,
+        )
+        for panel, step in zip(panels, steps, strict=True)
+    ]
+    _scale_colorbar(images, panels)
+    fig.suptitle(f"{name}({spatial[0]}, {spatial[1]}, {time_axis})")
+
+
+def _draw_steady(
+    dataset: PDEDataset,
+    values: NDArray[np.floating],
+    name: str,
+    coords: tuple[str, str],
+    ax: Axes | None,
+) -> None:
+    first, second = coords
+    if ax is None:
+        _, ax = plt.subplots(figsize=_STEADY_FIGSIZE, dpi=DPI, layout="constrained")
+    if dataset.topology is DataTopology.SCATTERED:
+        mappable: Any = ax.scatter(
+            dataset.get_coords(first).detach().cpu().numpy(),
+            dataset.get_coords(second).detach().cpu().numpy(),
+            c=values,
+            s=SCATTER_SIZE,
+            cmap=CMAP_SEQ,
+            linewidths=0,
+            rasterized=True,
+        )
+        ax.grid(False)
+        ax.set_xlabel(first)
+        ax.set_ylabel(second)
+        ax.set_title(f"{name}({first}, {second})")
+    else:
+
+
+        extent, xlabel, ylabel = _imshow_extent_for_spatial_axes(
+            dataset, [second, first]
+        )
+        mappable = _heatmap_panel(
+            ax,
+            values.T,
+            f"{name}({first}, {second})",
+            extent=extent,
+            xlabel=xlabel,
+            ylabel=ylabel,
+        )
+    _scale_colorbar([mappable], [ax])

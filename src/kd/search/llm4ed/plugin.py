@@ -28,9 +28,12 @@ from kd.llm import (
     TapeRecordingProvider,
 )
 from kd.search.descriptor import (
+    EnvironmentRequirement,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.llm4ed import viz as _viz_helpers
@@ -40,7 +43,11 @@ from kd.search.llm4ed.config import (
     Llm4edConfig,
     config_to_json_safe_dict,
 )
-from kd.search.llm4ed.fd import build_operand_columns_axes
+from kd.search.llm4ed.fd import (
+    EDL_MAX_ORDER,
+    build_operand_columns_axes,
+    interior_rows,
+)
 from kd.search.llm4ed.filter_score import filter_score
 from kd.search.llm4ed.parse import is_placeholder, parse_equation, reads_as_symbol
 from kd.search.llm4ed.pool import ElitePool, PoolItem
@@ -75,6 +82,7 @@ from kd.search.llm4ed.score import (
 )
 from kd.search.llm4ed.sketch_backend import (
     SKETCH_LEVELS,
+    TABULAR_SKETCH_LEVELS,
     Llm4edCompiled,
     compile_for_llm4ed,
 )
@@ -95,6 +103,7 @@ if TYPE_CHECKING:
     from kd.llm import LLMProvider
     from kd.search.protocol import PlatformComponents
     from kd.search.recorder import VizRecorder
+    from kd.search.registry import DerivativeSelection
     from kd.viz.extension import PlotInfo
 
 logger = logging.getLogger(__name__)
@@ -104,6 +113,12 @@ FloatArray = npt.NDArray[np.float64]
 
 
 SPATIAL_AXES: Final[tuple[str, ...]] = ("x", "y")
+
+
+_GRID_FIELD_DEFAULTS: Final[dict[str, int]] = {
+    "edge_trim": 0,
+    "max_derivative_order": EDL_MAX_ORDER,
+}
 
 _STRUCTURAL_SCORE_ERRORS: Final[frozenset[str]] = frozenset(
     {
@@ -232,7 +247,7 @@ def _spatial_axes_of(dataset: PDEDataset) -> list[str]:
 
 
 def _dataset_columns(
-    dataset: PDEDataset,
+    dataset: PDEDataset, config: Llm4edConfig
 ) -> tuple[FloatArray, dict[str, FloatArray], str]:
     spatial_axes = _spatial_axes_of(dataset)
     assert dataset.axis_order and dataset.fields and dataset.axes
@@ -247,7 +262,13 @@ def _dataset_columns(
         return axis_info[name].values.detach().cpu().numpy().astype(np.float64)
 
     axes = {name: values(name) for name in spatial_axes}
-    lhs, features = build_operand_columns_axes(u, axes, values(lhs_axis))
+    lhs, features = build_operand_columns_axes(
+        u, axes, values(lhs_axis), max_order=config.max_derivative_order
+    )
+    if config.edge_trim:
+        rows = interior_rows(u.shape, config.edge_trim)
+        lhs = lhs[rows]
+        features = {name: column[rows] for name, column in features.items()}
     return lhs, features, f"u_{lhs_axis}"
 
 
@@ -293,6 +314,8 @@ def _tabular_columns(
 class Llm4edPlugin:
 
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "LLM4ED sparse reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -310,28 +333,57 @@ class Llm4edPlugin:
         algorithm="llm4ed",
         summary="Budgeted LLM proposal and sparse-reward PDE and tabular search.",
         cost_class="medium",
+        requirements=RuntimeRequirements(
+            extras=(),
+            import_names=(),
+            environment=(
+
+
+                EnvironmentRequirement(
+                    name="OPENAI_API_KEY", required=True, unless_argument="provider"
+                ),
+            ),
+        ),
         modes=(
             InstrumentMode(
                 name="default",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
                 field_names=("u",),
                 spatial_axes=SPATIAL_AXES,
                 description="LLM proposals over field u and spatial axes x and y.",
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="plugin",
                 lhs_orders=frozenset({1}),
                 refused_fields={"functions": "non_default"},
                 sketch=SKETCH_LEVELS,
             ),
             InstrumentMode(
                 name="tabular",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
                 description=(
                     "LLM formula proposals over the feature columns of a table."
                 ),
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
+                derivative_service="none",
                 lhs_orders=frozenset({0}),
+                refused_fields={name: "non_default" for name in _GRID_FIELD_DEFAULTS},
+                sketch=TABULAR_SKETCH_LEVELS,
             ),
         ),
         knobs=(
@@ -351,6 +403,13 @@ class Llm4edPlugin:
                 "stop_threshold",
                 "float",
                 "Reward threshold for completion.",
+                resume_tier="resume_safe",
+            ),
+            Knob(
+                "fit_stop_threshold",
+                "float",
+                "Optional completion threshold for the best sparse-reward "
+                "candidate's unrounded 1/(1+NRMSE). None disables fit stopping.",
                 resume_tier="resume_safe",
             ),
             Knob(
@@ -385,12 +444,14 @@ class Llm4edPlugin:
                 resume_tier="resume_safe",
             ),
         ),
-        segmentation=Segmentation(
-            archive="progress", unit="rounds", reseed=True
+        segmentation=Segmentation(archive="progress", unit="rounds", reseed=True),
+
+
+
+
+        identity_breaking_fields=frozenset(
+            {"functions", "edge_trim", "max_derivative_order"}
         ),
-
-
-        identity_breaking_fields=frozenset({"functions"}),
 
 
 
@@ -412,6 +473,13 @@ class Llm4edPlugin:
                 f"functions={list(config.functions)} applies to the LLM4ED tabular "
                 "mode only; the default PDE mode takes none"
             )
+        if mode == "tabular":
+            for name, default in _GRID_FIELD_DEFAULTS.items():
+                if getattr(config, name) != default:
+                    raise ValueError(
+                        f"{name}={getattr(config, name)!r} applies to the LLM4ED "
+                        "default PDE mode only; the tabular mode has no grid"
+                    )
         self._mode = mode
         self._config = config
         self._provider = provider
@@ -432,6 +500,7 @@ class Llm4edPlugin:
         self._lhs: FloatArray | None = None
         self._features: dict[str, FloatArray] | None = None
         self._lhs_name: str | None = None
+        self._l0_penalty: float = config.l0_penalty
 
 
         self._operands: tuple[str, ...] = ()
@@ -444,6 +513,8 @@ class Llm4edPlugin:
 
         self._best_reward: float = 0.0
         self._best_expression: str = ""
+
+        self._best_fit_score: float = 0.0
 
 
         self._llm_seed_counter: int = 0
@@ -482,6 +553,8 @@ class Llm4edPlugin:
         self._tokens_out: int = 0
         self._usage_reporting_calls: int = 0
         self._completed_calls: int = 0
+
+        self._served_models: set[str] = set()
 
 
     def list_plots(self) -> list[PlotInfo]:
@@ -555,7 +628,7 @@ class Llm4edPlugin:
         self._lhs, self._features, self._lhs_name = (
             _tabular_columns(components)
             if self._mode == "tabular"
-            else _dataset_columns(components.dataset)
+            else _dataset_columns(components.dataset, self._config)
         )
         self._operands = tuple(self._features)
         self._spatial_axes = (
@@ -564,6 +637,11 @@ class Llm4edPlugin:
             else tuple(_spatial_axes_of(components.dataset))
         )
         self._prepare_sketch(components)
+
+
+        self._l0_penalty = self._config.l0_penalty * (
+            float(np.var(self._lhs)) if self._config.l0_relative else 1.0
+        )
 
 
 
@@ -580,17 +658,13 @@ class Llm4edPlugin:
             assert self._pending_state is not None
             initial_calls = int(self._pending_state["call_counts"])
         if self._provider is None:
-            self._provider = self._build_default_provider(
-                initial_calls=initial_calls
-            )
+            self._provider = self._build_default_provider(initial_calls=initial_calls)
             self._provider_self_built = True
         elif self._provider_self_built:
 
 
 
-            self._provider = self._build_default_provider(
-                initial_calls=initial_calls
-            )
+            self._provider = self._build_default_provider(initial_calls=initial_calls)
         self._provider.prepare()
 
         if is_restore:
@@ -609,14 +683,38 @@ class Llm4edPlugin:
         self._reseed_pending = False
         self._pending_state = None
         self._prepared = True
+        self._best_fit_score = 0.0
+        if (
+            is_restore
+            and self._config.fit_stop_threshold is not None
+            and self._best_expression
+        ):
+            self._best_fit_score = 1.0 / (
+                1.0 + math.sqrt(self.build_final_result().nmse)
+            )
 
     def _prepare_sketch(self, components: PlatformComponents) -> None:
         self._sketch_compiled = None
         task = components.task
         if task is None:
             return
+        if self._config.max_derivative_order > EDL_MAX_ORDER:
+            raise ValueError(
+                f"max_derivative_order={self._config.max_derivative_order} does "
+                "not take a sketch: the sketch's exit check verifies the answer "
+                "with kd's platform finite differences, which stop at third order"
+            )
         assert self._lhs is not None and self._features is not None
-        compiled = compile_for_llm4ed(task.sketch, self._operands)
+        order = task.sketch.lhs_spec.order
+        if (order == 0) != (self._mode == "tabular"):
+            raise ValueError(
+                f"Llm4edPlugin(mode={self._mode!r}) does not take a sketch of LHS "
+                f"order {order}: the tabular mode takes order 0, the default "
+                "mode an evolution sketch"
+            )
+        compiled = compile_for_llm4ed(
+            task.sketch, self._operands, frozenset(self._config.functions)
+        )
         self._sketch_compiled = compiled
         self._operands = compiled.operands
         if not task.compiled.closed:
@@ -644,6 +742,9 @@ class Llm4edPlugin:
         survivors: list[PoolItem] = []
         seen_scores: list[float] = []
         score_cache: dict[float, str] = {}
+        limit = self._config.reward_limit
+        below_limit = duplicates = 0
+        budget_exhausted = False
         while (
             len(survivors) < target
             and self._round_llm_calls < self._config.max_llm_calls_per_propose
@@ -659,13 +760,15 @@ class Llm4edPlugin:
                     len(survivors),
                     exc,
                 )
+                budget_exhausted = True
                 break
-            kept = filter_score(
-                self._score_response(text),
-                self._config.reward_limit,
-                seen_scores,
-                score_cache,
-            )
+            scored = self._score_response(text)
+            kept = filter_score(scored, limit, seen_scores, score_cache)
+
+
+            below = sum(1 for item in scored if not item.score > limit)
+            below_limit += below
+            duplicates += len(scored) - below - len(kept)
             seen_scores.extend(item.score for item in kept)
             survivors.extend(kept)
 
@@ -678,7 +781,37 @@ class Llm4edPlugin:
             terms = _display_terms(self._round_cache[item.expression])
             permutation = permute_terms(list(terms), self._rng)
             self._display[item.expression] = (permutation, terms)
+        if budget_exhausted:
+            ended = "run_budget"
+        else:
+            ended = "filled" if len(survivors) >= target else "round_cap"
+        self._log_round_summary(
+            phase, ended, below_limit, duplicates, len(survivors), len(batch)
+        )
         return [item.expression for item in batch]
+
+    def _log_round_summary(
+        self,
+        phase: str,
+        ended: str,
+        below_limit: int,
+        duplicates: int,
+        kept: int,
+        returned: int,
+    ) -> None:
+        logger.info(
+            "LLM4ED round=%d phase=%s requests=%d ended=%s invalid=%d "
+            "dropped_below_limit=%d dropped_duplicate_score=%d kept=%d returned=%d",
+            self._phase_counter,
+            phase,
+            self._round_llm_calls,
+            ended,
+            self._round_invalid,
+            below_limit,
+            duplicates,
+            kept,
+            returned,
+        )
 
     def evaluate(self, candidates: list[str]) -> list[EvaluationResult]:
         self._require_prepared()
@@ -723,6 +856,8 @@ class Llm4edPlugin:
             if item.score > self._best_reward:
                 self._best_reward = item.score
                 self._best_expression = item.expression
+                if self._config.fit_stop_threshold is not None:
+                    self._best_fit_score = 1.0 / (1.0 + math.sqrt(result.nmse))
 
 
         self._population = members
@@ -798,7 +933,6 @@ class Llm4edPlugin:
         log_search_trajectory(recorder, candidates)
 
 
-
     def build_final_result(self) -> EvaluationResult:
         self._require_prepared()
         if not self._best_expression:
@@ -827,10 +961,13 @@ class Llm4edPlugin:
 
     @property
     def artifacts(self) -> dict[str, Any] | None:
+        artifacts: dict[str, Any] = {}
+        if self._served_models:
+            artifacts["llm_served_models"] = sorted(self._served_models)
         path = self._config.tape_record_path
         if path is None:
-            return None
-        artifacts: dict[str, Any] = {"llm_tape_path": path}
+            return artifacts or None
+        artifacts["llm_tape_path"] = path
         tape = Path(path)
         if tape.is_file():
             raw = tape.read_bytes()
@@ -852,7 +989,17 @@ class Llm4edPlugin:
 
     @property
     def is_done(self) -> bool:
-        return self._best_reward >= self._config.stop_threshold
+        if self._best_reward >= self._config.stop_threshold:
+            return True
+        threshold = self._config.fit_stop_threshold
+        if threshold is not None and self._best_fit_score >= threshold:
+            logger.info(
+                "LLM4ED stopping: fit_stop_threshold=%s fit=%s",
+                threshold,
+                self._best_fit_score,
+            )
+            return True
+        return False
 
 
     @property
@@ -966,9 +1113,7 @@ class Llm4edPlugin:
             extra_body=self._config.extra_body,
         )
         if self._config.tape_record_path is not None:
-            inner = TapeRecordingProvider(
-                inner, path=self._config.tape_record_path
-            )
+            inner = TapeRecordingProvider(inner, path=self._config.tape_record_path)
         return BudgetedProvider(
             inner,
             max_calls=self._config.max_llm_calls_per_run,
@@ -984,6 +1129,7 @@ class Llm4edPlugin:
         self._tokens_out = 0
         self._usage_reporting_calls = 0
         self._completed_calls = 0
+        self._served_models = set()
 
     def _reset_search_state(self) -> None:
         self._population = []
@@ -1052,8 +1198,7 @@ class Llm4edPlugin:
         self._llm_seed_counter = int(state["llm_seed_counter"])
         self._call_counts = int(state["call_counts"])
         self._invalid_counts = {
-            str(label): int(count)
-            for label, count in state["invalid_counts"].items()
+            str(label): int(count) for label, count in state["invalid_counts"].items()
         }
         self._best_reward = float(state["best"]["reward"])
         self._best_expression = str(state["best"]["expression"])
@@ -1067,9 +1212,7 @@ class Llm4edPlugin:
     def _current_phase(self) -> str:
         if self._phase_counter == 0:
             return INITIALIZATION
-        return _EDL_PHASE_ORDER[
-            (self._phase_counter - 1) % len(_EDL_PHASE_ORDER)
-        ]
+        return _EDL_PHASE_ORDER[(self._phase_counter - 1) % len(_EDL_PHASE_ORDER)]
 
     def _build_prompt(self, phase: str, n: int) -> str:
         if self._mode == "tabular":
@@ -1091,26 +1234,30 @@ class Llm4edPlugin:
         return prompt + hint
 
     def _build_tabular_prompt(self, phase: str, n: int) -> str:
-        assert self._lhs_name is not None and self._features is not None
+        assert self._lhs_name is not None
         target = self._lhs_name
-        variables = tuple(self._features)
+        variables = self._operands
         functions = self._config.functions
+        compiled = self._sketch_compiled
+        hint = "" if compiled is None else compiled.hint
         if phase == INITIALIZATION:
-            return build_tabular_initialization_prompt(
+            prompt = build_tabular_initialization_prompt(
                 self._config.init_num,
                 target=target,
                 variables=variables,
                 functions=functions,
             )
-        history = self._assemble_history(phase)
-        build = (
-            build_tabular_evolution_prompt
-            if phase == EVOLUTION
-            else build_tabular_optimize_prompt
-        )
-        return build(
-            history, n, target=target, variables=variables, functions=functions
-        )
+        else:
+            history = self._assemble_history(phase)
+            build = (
+                build_tabular_evolution_prompt
+                if phase == EVOLUTION
+                else build_tabular_optimize_prompt
+            )
+            prompt = build(
+                history, n, target=target, variables=variables, functions=functions
+            )
+        return prompt + hint
 
     def _assemble_history(self, phase: str) -> str:
         members = list(self._population)
@@ -1128,9 +1275,7 @@ class Llm4edPlugin:
                 term_set = "{" + ", ".join(member.terms) + "}"
                 lines.append(f"{index}: {term_set}\n")
             else:
-                lines.append(
-                    f"{index}: {member.permutation} score: {member.score}\n"
-                )
+                lines.append(f"{index}: {member.permutation} score: {member.score}\n")
         return "".join(lines)
 
     def _complete(self, prompt: str) -> str:
@@ -1152,6 +1297,7 @@ class Llm4edPlugin:
 
 
         self._completed_calls += 1
+        self._served_models.add(response.model)
         if response.usage is not None:
             self._tokens_in += response.usage.prompt_tokens
             self._tokens_out += response.usage.completion_tokens
@@ -1195,6 +1341,7 @@ class Llm4edPlugin:
             elementwise_dedup=tabular or len(self._spatial_axes) > 1,
             target=self._lhs_name if tabular else None,
             distinct_skeletons=tabular,
+            l0_penalty=self._l0_penalty,
             gate=self._sketch_compiled,
         )
 
@@ -1259,11 +1406,7 @@ class Llm4edPlugin:
             f"{len(score.term_irs)})"
         )
         coefficients = raw * factors
-        selected = [
-            index
-            for index, value in enumerate(coefficients)
-            if value != 0.0
-        ]
+        selected = [index for index, value in enumerate(coefficients) if value != 0.0]
         return EvaluationResult(
             mse=mse,
             nmse=nmse,

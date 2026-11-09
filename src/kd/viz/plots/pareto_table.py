@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING, Any
 
 from kd.viz.axes import _get_axes
 from kd.viz.equation_display import expression_display
-from kd.viz.style import FIGSIZE_SINGLE, INK_MUTED, style_context, style_table
+from kd.viz.style import (
+    FIGSIZE_SINGLE,
+    INK_MUTED,
+    draw_table,
+    style_context,
+    table_height,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -19,8 +25,8 @@ def plot_pareto_table(
     *,
     style: dict[str, Any] | None = None,
 ) -> list[str]:
-    ax = _get_axes(ax, style, figsize=FIGSIZE_SINGLE)
     entries = result.pareto_front()
+    ax = _get_axes(ax, style, figsize=pareto_table_figsize(len(entries)), fill=True)
     displays = [expression_display(entry.expression) for entry in entries]
     with style_context(style):
         ax.axis("off")
@@ -36,18 +42,15 @@ def plot_pareto_table(
             ]
             for entry, display in zip(entries, displays, strict=True)
         ]
-        table = ax.table(
-            cellText=rows,
-            colLabels=["Complexity", "Loss", "Scale", "Expression"],
-            loc="center",
-            cellLoc="left",
+        draw_table(
+            ax, rows, ["Complexity", "Loss", "Scale", "Expression"], text_columns=(3,)
         )
-        table.auto_set_font_size(False)
-        table.set_fontsize(8)
-        table.auto_set_column_width(range(4))
-        style_table(table)
         ax.set_title("Pareto Front")
     return [display.note for display in displays if display.note is not None]
+
+
+def pareto_table_figsize(n_entries: int) -> tuple[float, float]:
+    return FIGSIZE_SINGLE[0], table_height(max(n_entries, 1))
 
 
 __all__ = ["plot_pareto_table"]

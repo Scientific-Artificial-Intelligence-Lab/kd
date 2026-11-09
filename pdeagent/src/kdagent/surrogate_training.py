@@ -6,6 +6,8 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import kd
+
 from kdagent.data_source import resolve_input
 from kdagent.episode_worker import (
     IsolatedTraining,
@@ -41,6 +43,11 @@ def surrogate_parameter_names(schema: dict[str, Any]) -> list[str]:
     return sorted(
         set(schema["surrogate_fields"])
         | {
+            row["name"]
+            for row in schema["facade_params"]
+            if row["name"] == "derivatives"
+        }
+        | {
             name
             for mode in schema["modes"]
             for params in mode["order_params"].values()
@@ -72,10 +79,16 @@ def training_model_kwargs(
     schema: dict[str, Any], params: dict[str, Any]
 ) -> dict[str, Any]:
     model_kwargs = dict(params)
-    if any(mode["provider_kind"] != "autograd" for mode in schema["modes"]) and any(
-        row["name"] == "derivatives" for row in schema["facade_params"]
+    if "derivatives" in params:
+        return model_kwargs
+    if any(
+        mode["requires_surrogate"] and not mode["selected_by"]
+        for mode in schema["modes"]
     ):
-        model_kwargs["derivatives"] = "autograd"
+        return model_kwargs
+    modes = [mode for mode in schema["modes"] if mode["requires_surrogate"]]
+    if len(modes) == 1:
+        model_kwargs.update(modes[0]["selected_by"])
     return model_kwargs
 
 
@@ -84,24 +97,38 @@ def takes_training_dtype(
 ) -> bool:
     if not any(field["name"] == "training_dtype" for field in schema["fields"]):
         return False
-    defaults = {row["name"]: row["default"] for row in schema["facade_params"]}
-    return any(
-        "training_dtype" not in mode["refused_fields"]
-        for mode in schema["modes"]
-        if ("tabular" in mode["topologies"]) == table
-        if all(
-            model_kwargs.get(name, defaults[name]) == value
-            for name, value in mode["selected_by"].items()
-        )
-        if mode["selector"] is None
-        or (model_kwargs.get(mode["selector"]["field"]) is not None)
-        == mode["selector"]["present"]
-    )
+    mode = selected_mode(schema, model_kwargs, table=table)
+    return "training_dtype" not in mode["refused_fields"]
+
+
+def selected_mode(
+    schema: dict[str, Any], params: Mapping[str, Any], *, table: bool = False
+) -> dict[str, Any]:
+    topology = kd.DataTopology.TABULAR if table else kd.DataTopology.GRID
+    name = kd.execution_mode_for_request(schema["algorithm"], topology, params)
+    return next(mode for mode in schema["modes"] if mode["name"] == name)
+
+
+def uses_surrogate(mode: dict[str, Any], params: Mapping[str, Any]) -> bool:
+    if mode["derivative_service"] == "platform":
+        provider = params.get("derivatives", mode["provider_kind"])
+        return kd.derivative_provider(provider).surrogate
+    return bool(mode["requires_surrogate"])
 
 
 def resolve_training_params(
     schema: dict[str, Any], params: dict[str, Any], run_choice: str | None
 ) -> dict[str, Any]:
+
+
+    params = dict(params)
+    if "derivatives" in params:
+        default_kwargs = training_model_kwargs(schema, {})
+        default_mode = selected_mode(schema, default_kwargs)
+        if params["derivatives"] == default_kwargs.get(
+            "derivatives", default_mode["provider_kind"]
+        ):
+            del params["derivatives"]
     if not takes_training_dtype(
         schema, training_model_kwargs(schema, params), table=False
     ):

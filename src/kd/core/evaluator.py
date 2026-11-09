@@ -273,8 +273,13 @@ class Evaluator:
             if col is None:
 
                 try:
-                    result = self._executor.execute(term, self._context)
-                    col = result.value.flatten()
+
+
+                    col = (
+                        self._executor.execute(term, self._context)
+                        .value.detach()
+                        .flatten()
+                    )
                 except (SearchInterrupted, torch.cuda.OutOfMemoryError):
 
 

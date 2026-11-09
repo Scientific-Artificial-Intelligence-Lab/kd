@@ -16,7 +16,6 @@ from kd.viz.plots._dim_utils import (
     _slice_nd_to_2d,
 )
 from kd.viz.plots._field_panels import (
-    _WARNING_FONTSIZE,
     _WARNING_WRAP_WIDTH,
     _bare_panel,
     _diverged_tag,
@@ -35,6 +34,7 @@ from kd.viz.style import (
     OBSERVED,
     PANEL_H,
     PANEL_W,
+    SMALL_FONTSIZE,
     WARNING_INK,
     style_context,
 )
@@ -85,7 +85,7 @@ def plot_time_slices(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=SMALL_FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Time Slices")
@@ -110,7 +110,7 @@ def plot_time_slices(
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
-                fontsize=_WARNING_FONTSIZE,
+                fontsize=SMALL_FONTSIZE,
                 color=WARNING_INK,
             )
             ax.set_title("Time Slices")
@@ -391,6 +391,6 @@ def _add_warning_text(ax: Axes, msg: str) -> None:
         transform=ax.transAxes,
         ha="center",
         va="top",
-        fontsize=_WARNING_FONTSIZE,
+        fontsize=SMALL_FONTSIZE,
         color=WARNING_INK,
     )

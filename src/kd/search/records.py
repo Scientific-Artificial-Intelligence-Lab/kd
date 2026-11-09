@@ -85,7 +85,8 @@ _RUN_COST_REQUIRED_FIELDS = frozenset(
 _RUN_COST_SPARSE_FIELDS = frozenset(
     {
         "stop_reason", "max_seconds", "peak_rss_bytes",
-        "cuda_max_memory_allocated_bytes", "device",
+        "cuda_max_memory_allocated_bytes", "device", "max_iterations",
+        "iterations",
     }
 )
 _RUN_COST_OPTIONAL_FIELDS = (
@@ -185,6 +186,8 @@ class RunCost:
     peak_rss_bytes: int | None = None
     cuda_max_memory_allocated_bytes: int | None = None
     device: str | None = None
+    max_iterations: int | None = None
+    iterations: int | None = None
 
     def __post_init__(self) -> None:
         if self.stop_reason is not None and self.stop_reason not in STOP_REASON_VOCAB:
@@ -218,6 +221,8 @@ class RunCost:
             "tokens_cached",
             "peak_rss_bytes",
             "cuda_max_memory_allocated_bytes",
+            "max_iterations",
+            "iterations",
         ):
             value = getattr(self, field)
             if value is not None and value < 0:
@@ -237,6 +242,16 @@ class RunCost:
                 "RunCost.boundary_invalid_results must not exceed "
                 f"boundary_results; got {self.boundary_invalid_results!r} > "
                 f"{self.boundary_results!r}"
+            )
+
+        if (
+            self.iterations is not None
+            and self.max_iterations is not None
+            and self.iterations > self.max_iterations
+        ):
+            raise RunCostValueError(
+                "RunCost.iterations must not exceed max_iterations; got "
+                f"{self.iterations!r} > {self.max_iterations!r}"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -273,6 +288,8 @@ class RunCost:
                 "cuda_max_memory_allocated_bytes"
             ),
             device=data.get("device"),
+            max_iterations=data.get("max_iterations"),
+            iterations=data.get("iterations"),
         )
 
 

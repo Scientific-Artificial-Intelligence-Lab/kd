@@ -1,6 +1,7 @@
 
 from kd.core.expr.executor import ExecutorResult, PythonExecutor, has_open_form_diff
 from kd.core.expr.jet import Monomial, jet_monomials, jet_polynomial, monomial_label
+from kd.core.expr.monomial_keys import term_monomial_keys, undefined_terms
 from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.sympy_bridge import (
     FormattedEquation,
@@ -51,6 +52,8 @@ __all__ = [
     "jet_monomials",
     "jet_polynomial",
     "monomial_label",
+    "term_monomial_keys",
+    "undefined_terms",
 
     "FormattedEquation",
     "are_equivalent",

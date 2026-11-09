@@ -8,10 +8,18 @@ from kd.core.linear_solve._helpers import (
 from kd.core.linear_solve.base import SolveResult, SparseSolver
 from kd.core.linear_solve.least_squares import LeastSquaresSolver
 from kd.core.linear_solve.lstsq import deterministic_lstsq
+from kd.core.linear_solve.registry import (
+    register_sparse_solver,
+    sparse_solver,
+    sparse_solvers,
+)
 from kd.core.linear_solve.stridge import STRidgeSolver
 from kd.core.linear_solve.svd_null_space import SVDNullSpaceSolver
 
 __all__ = [
+    "sparse_solver",
+    "sparse_solvers",
+    "register_sparse_solver",
     "SolveResult",
     "SparseSolver",
     "LeastSquaresSolver",

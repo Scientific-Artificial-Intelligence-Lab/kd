@@ -4,20 +4,26 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal
 
+import numpy as np
 import torch
 from torch import Tensor
 
 from kd.core.equation import HOMOGENEOUS_LHS_LABEL, Form, LhsSpec, render_lhs_label
-from kd.core.equation.sketch import Sketch, anchor_basis
+from kd.core.equation.sketch import Sketch
 from kd.core.evaluator import EvaluationResult
+from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.core.term_cache import TermColumnCache
 from kd.data.schema import DataTopology, PDEDataset
 from kd.search.descriptor import (
+    EnvironmentRequirement,
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ModeSelector,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.eqgpt import _scoring
@@ -42,6 +48,7 @@ from kd.search.eqgpt.ir_map import (
     sentence_to_rhs_terms,
 )
 from kd.search.eqgpt.pool import dedup_sentence, merge_top_k
+from kd.search.eqgpt.reward import deduplicate_columns
 from kd.search.eqgpt.sampling import (
     Sampler,
     SamplingConfig,
@@ -50,7 +57,6 @@ from kd.search.eqgpt.sampling import (
 from kd.search.eqgpt.sketch_backend import (
     EqGPTCompiled,
     compile_for_eqgpt,
-    fit_candidate,
     refuse_candidate,
 )
 from kd.search.eqgpt.vocab import VOCAB_SHA256, Vocab, load_vocab
@@ -70,6 +76,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.search.recorder import VizRecorder
+    from kd.search.registry import DerivativeSelection
     from kd.search.result import ExperimentResult
 
 
@@ -117,14 +124,22 @@ _NO_MEASUREMENT: Final[float] = NO_MEASUREMENT
 
 
 
+
 _SKETCH_LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
     field_axis_set="generation_enforced",
 )
+
+
+
+
+
+
+_SKETCH_FIT_POLICY: Final[str] = "anchors-protected-v1"
 
 
 def _optimizer_state_to_cpu(state: dict[str, Any]) -> dict[str, Any]:
@@ -145,6 +160,8 @@ def _optimizer_state_to_cpu(state: dict[str, Any]) -> dict[str, Any]:
 
 class EqGPTPlugin:
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "EqGPT reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -163,15 +180,33 @@ class EqGPTPlugin:
             "field u, and of scattered 2-D steady relations; no u_tt"
         ),
         cost_class="heavy",
+        requirements=RuntimeRequirements(
+            extras=(),
+            import_names=(),
+            environment=(
+
+
+                EnvironmentRequirement(name="KD_EQGPT_ASSET_DIR", required=False),
+            ),
+        ),
         modes=(
             InstrumentMode(
                 name="single_wave",
+                resources=ResourceHints(
+                    preferred_device=None,
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
+                config_values={"steady": False, "case_filter": None},
                 required_params=frozenset({"sparsity_alpha"}),
                 field_names=("u",),
                 spatial_axes=("x", "y", "z"),
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="platform",
                 description=(
                     "Grid evolution in field u with spatial axes from x/y/z and time t."
                 ),
@@ -180,10 +215,20 @@ class EqGPTPlugin:
             ),
             InstrumentMode(
                 name="wave_multicase",
+                resources=ResourceHints(
+                    preferred_device=None,
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
+                required_params=frozenset({"case_filter"}),
+                selector=ModeSelector("case_filter", present=True),
                 selectable_from_data=False,
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID, DataTopology.SCATTERED}),
                 provider_kind="none",
+                derivative_service="none",
                 description=(
                     "Reproduction of the bundled wave-breaking "
                     "cases only; not selectable from benchmark data."
@@ -192,13 +237,29 @@ class EqGPTPlugin:
             ),
             InstrumentMode(
                 name="steady",
+                resources=ResourceHints(
+                    preferred_device=None,
+                    memory_estimate_gb=7.5,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Peak RSS of kd's full-corpus steady search with the "
+                        "pretrained GPT on the eitech and disk cases (sin "
+                        "activation, CPU); on the smile case (rational "
+                        "activation) the same test reached about 16 GiB before "
+                        "earlyoom stopped it, so the peak depends on the case."
+                    ),
+                ),
+                config_values={"steady": True},
                 selected_by={"steady": True, "start_words": ["S"]},
                 required_params=frozenset({"sparsity_alpha", "steady_activation"}),
                 field_names=("u",),
                 spatial_axes=("x", "y"),
+                spatial_axes_exact=True,
                 forms=frozenset({Form.HOMOGENEOUS}),
                 topologies=frozenset({DataTopology.SCATTERED}),
                 provider_kind="none",
+                derivative_service="none",
                 description=(
                     "Scattered (x, y), field u, homogeneous; "
                     "retrains a surrogate inside every call."
@@ -463,7 +524,12 @@ class EqGPTPlugin:
 
 
 
+        self._term_cache = TermColumnCache()
+
+
+
         masked_tokens = self._compile_task(components.task, vocab, base_masked)
+        self._check_anchor_columns(components)
         is_restore = self._restore_pending and self._pending_state is not None
         if self._backend is None:
             self._backend = self._build_default_backend(vocab)
@@ -505,9 +571,6 @@ class EqGPTPlugin:
         self._sampler = Sampler(self._backend, vocab, sampling_config)
         self._pending_cache = {}
         self._n_dropped = None
-
-
-        self._term_cache = TermColumnCache()
 
         if self._restore_pending and self._pending_state is not None:
             self._apply_state(self._pending_state)
@@ -574,6 +637,39 @@ class EqGPTPlugin:
             self._sketch = task.sketch
         return base_masked | compiled.masked_tokens
 
+    def _check_anchor_columns(self, components: PlatformComponents) -> None:
+        compiled = self._sketch_compiled
+        if compiled is None or not compiled.anchor_terms:
+            return
+        assert self._lhs_flat is not None and components.context is not None
+        columns: list[Tensor] = []
+        for term in compiled.anchor_terms:
+            try:
+                column = _scoring.execute_term(
+                    components.executor, components.context, term, self._term_cache
+                )
+            except torch.cuda.OutOfMemoryError:
+                raise
+            except (ValueError, KeyError, RuntimeError, IndexError) as exc:
+                if is_cpu_alloc_failure(exc):
+                    raise
+                raise ValueError(
+                    f"EqGPT sketch anchor {term!r} cannot be executed on this "
+                    f"dataset's platform context: {exc}"
+                ) from exc
+            columns.append(column)
+        matrix = torch.stack([self._lhs_flat, *columns], dim=1)
+        slots = deduplicate_columns(matrix.detach().cpu().numpy()).provenance
+        names = ("the target column", *map(repr, compiled.anchor_terms))
+        for index, term in enumerate(compiled.anchor_terms, start=1):
+            first = int(np.flatnonzero(slots == slots[index])[0])
+            if first != index:
+                raise ValueError(
+                    f"EqGPT sketch anchor {term!r} has the same column as "
+                    f"{names[first]} on this dataset, so the fit cannot hold "
+                    "both; drop one of them"
+                )
+
     def propose(self, n: int) -> list[str]:
         self._require_prepared()
         assert self._sampler is not None and self._vocab is not None
@@ -636,7 +732,7 @@ class EqGPTPlugin:
     ) -> EvaluationResult:
         assert self._vocab is not None
         assert self._lhs_flat is not None and self._components is not None
-        fitted = candidate
+        protected: tuple[str, ...] = ()
         if self._sketch is not None:
             assert self._sketch_compiled is not None
             refusal = refuse_candidate(candidate, self._sketch, self._sketch_compiled)
@@ -648,13 +744,13 @@ class EqGPTPlugin:
                     terms=candidate.split(" + "),
                     reason="structural_reject",
                 )
-            fitted = fit_candidate(candidate, self._sketch)
+            protected = self._sketch_compiled.anchor_terms
         context = self._components.context
 
 
         assert context is not None
-        result = _scoring.score_candidate(
-            candidate=fitted,
+        return _scoring.score_candidate(
+            candidate=candidate,
             sentence=sentence,
             vocab=self._vocab,
             variables=self._gate_variables,
@@ -663,8 +759,8 @@ class EqGPTPlugin:
             lhs_flat=self._lhs_flat,
             sparsity_alpha=self._config.sparsity_alpha,
             term_cache=self._term_cache,
+            protected_terms=protected,
         )
-        return result if fitted == candidate else replace(result, expression=candidate)
 
     def _score_wave(
         self, candidate: str, sentence: list[int] | None
@@ -824,15 +920,18 @@ class EqGPTPlugin:
         assert self._lhs_flat is not None and self._components is not None
         context = self._components.context
         assert context is not None
+        anchors: tuple[str, ...] = ()
         if self._sketch is not None:
-            terms = [terms[index] for index in anchor_basis(terms, self._sketch)]
+            assert self._sketch_compiled is not None
+            anchors = self._sketch_compiled.anchor_terms
         return _scoring.refit_final(
-            terms=terms,
+            terms=[*anchors, *terms],
             executor=self._components.executor,
             context=context,
             target=self._lhs_flat.detach(),
             best_reward=best_reward,
             term_cache=self._term_cache,
+            n_protected=len(anchors),
         )
 
     def build_result_target(self) -> Tensor:
@@ -881,6 +980,7 @@ class EqGPTPlugin:
                 "rng_state": self._rng.get_state(),
                 "reward_history": [list(h) for h in self._reward_history],
                 "fingerprints": self._build_fingerprints(),
+                "sketch_fit_policy": _SKETCH_FIT_POLICY,
             }
         if self._pending_state is not None:
             return dict(self._pending_state)
@@ -1053,6 +1153,17 @@ class EqGPTPlugin:
 
     def _apply_state(self, state: dict[str, Any]) -> None:
         assert self._backend is not None
+        if (
+            self._sketch_compiled is not None
+            and self._sketch_compiled.anchor_terms
+            and state.get("sketch_fit_policy") != _SKETCH_FIT_POLICY
+        ):
+            raise ValueError(
+                "EqGPT checkpoint sketch_fit_policy must be "
+                f"{_SKETCH_FIT_POLICY!r} for an anchored sketch, got "
+                f"{state.get('sketch_fit_policy')!r}; a run saved while anchors "
+                "were generated cannot be resumed"
+            )
         backend_state = state.get("backend_state")
         if backend_state:
             self._backend.load_state_dict(backend_state)

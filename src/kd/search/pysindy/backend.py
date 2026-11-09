@@ -43,6 +43,7 @@ class _PySINDyOptimizerBackend:
             "max_iter": cfg.max_iter,
             "normalize_columns": cfg.normalize_columns,
             "unbias": cfg.unbias,
+            "alpha": cfg.alpha,
         }
         kwargs.update(cfg.extra_optimizer_kwargs or {})
         optimizer = STLSQ(**kwargs)

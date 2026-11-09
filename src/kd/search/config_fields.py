@@ -13,6 +13,7 @@ from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any, Final, Literal, Union, get_args, get_origin
 
 from kd.search.resume_policy import resolve_field_tier
+from kd.search.run_spec import canonicalize_config
 
 if TYPE_CHECKING:
     from kd.search.protocol import FacadeWiringContract
@@ -87,9 +88,9 @@ def _json_kind(annotation: Any) -> str | None:
         return _literal_kind(inner)
     origin = get_origin(inner)
     args = get_args(inner)
-    valid_sequence = (
-        origin in (list, frozenset) and len(args) == 1
-    ) or (origin is tuple and len(args) == 2 and args[1] is Ellipsis)
+    valid_sequence = (origin in (list, frozenset) and len(args) == 1) or (
+        origin is tuple and len(args) == 2 and args[1] is Ellipsis
+    )
     if valid_sequence:
         element_kind = _SCALAR_KINDS.get(args[0])
         if element_kind is not None:
@@ -136,13 +137,16 @@ def _json_default(value: Any) -> Any:
 
 
 def _default_of(field: dataclasses.Field[Any], json_kind: str | None) -> Any:
-    if json_kind is None:
-        return None
     if field.default is not dataclasses.MISSING:
-        return _json_default(field.default)
-    if field.default_factory is not dataclasses.MISSING:
-        return _json_default(field.default_factory())
-    return None
+        value = field.default
+    elif field.default_factory is not dataclasses.MISSING:
+        value = field.default_factory()
+    else:
+        return None
+    value = _json_default(value)
+    if json_kind is None:
+        return canonicalize_config({field.name: value})[field.name]
+    return value
 
 
 @functools.lru_cache(maxsize=None)
@@ -196,6 +200,11 @@ def _field_row(
         ),
         "nullable": nullable,
         "default": _default_of(field, raw_kind),
+        "legacy": (
+            {"value": _json_default(field.metadata["legacy"])}
+            if "legacy" in field.metadata
+            else None
+        ),
         "required": (
             field.default is dataclasses.MISSING
             and field.default_factory is dataclasses.MISSING
@@ -203,7 +212,9 @@ def _field_row(
         "settable_from": (
             "facade"
             if facade_param is not None
-            else "json" if raw_kind is not None else "python"
+            else "json"
+            if raw_kind is not None
+            else "python"
         ),
         "facade_param": facade_param,
         "resume_tier": resume_tier,
@@ -280,9 +291,7 @@ def _wrong_type(algorithm: str, spec: dict[str, Any], value: Any) -> TypeError:
 
 def _snapshot_json_containers(value: Any) -> Any:
     if type(value) is dict:
-        return {
-            key: _snapshot_json_containers(item) for key, item in value.items()
-        }
+        return {key: _snapshot_json_containers(item) for key, item in value.items()}
     if type(value) is list:
         return [_snapshot_json_containers(item) for item in value]
     return value
@@ -381,9 +390,7 @@ def _coerce_list(spec: dict[str, Any], value: list[Any]) -> Any:
     return list(value)
 
 
-def _closed_field_error(
-    algorithm: str, spec: dict[str, Any], value: Any
-) -> TypeError:
+def _closed_field_error(algorithm: str, spec: dict[str, Any], value: Any) -> TypeError:
     asset_hint = (
         " For EqGPT asset paths, set KD_EQGPT_ASSET_DIR or pass a Path via config=."
         if algorithm == "eqgpt" and "Path" in spec["type"]
@@ -429,9 +436,7 @@ def normalize_config_kwargs(
             else:
                 raise _closed_field_error(algorithm, spec, value)
         else:
-            normalized[name] = _validate_json_value(
-                algorithm, spec, value, hints[name]
-            )
+            normalized[name] = _validate_json_value(algorithm, spec, value, hints[name])
     return normalized
 
 

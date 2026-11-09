@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import torch
@@ -17,6 +19,7 @@ from kd.core.expr import PythonExecutor
 from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import SparseSolver
 from kd.core.oom import is_cpu_alloc_failure
+from kd.core.platform.builder import lower_target
 from kd.data.derivatives.autograd import (
     AutogradProvider,
 )
@@ -24,9 +27,10 @@ from kd.data.schema import PDEDataset
 from kd.search.discover.builder import _make_magnitude_filter
 from kd.search.discover.engine import extract_active_terms
 from kd.search.discover.pinn._memory_log import _log_memory
-from kd.search.discover.stability import stability_select
+from kd.search.discover.stability import StabilityEvaluator, stability_select
 
 if TYPE_CHECKING:
+    from kd.core.evaluator import EvaluationResult
     from kd.search.discover.config import DiscoverConfig, PINNConfig
     from kd.search.discover.engine import (
         CandidateSnapshot,
@@ -40,6 +44,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DEGENERATE_BOUNDS_REL_EPS = 1e-6
+
+
+class FinalEvaluator(StabilityEvaluator, Protocol):
+
+    def evaluate_expression(self, expr: str) -> EvaluationResult:
+        pass
+
 
 
 
@@ -92,7 +103,7 @@ def _validate_metadata_consistency(
     source_dataset: PDEDataset,
     pinn_metadata: PDEDataset,
 ) -> None:
-    for field_name in ("lhs_field", "lhs_axis"):
+    for field_name in ("lhs_field", "lhs_axis", "lhs_order"):
         source_val = getattr(source_dataset, field_name)
         pinn_val = getattr(pinn_metadata, field_name)
         if source_val != pinn_val:
@@ -122,7 +133,7 @@ def regenerate_metadata(
 ) -> RegeneratedData:
     regen_coords = _clone_collocation_coords(model, colloc_coords)
     provider = AutogradProvider(model, regen_coords, dataset_metadata)
-    lhs = provider.get_derivative(lhs_field, lhs_axis, 1)
+    lhs = provider.get_derivative(lhs_field, lhs_axis, dataset_metadata.lhs_order)
     lhs_detached = lhs.detach().reshape(-1)
     return RegeneratedData(
         lhs_detached=lhs_detached,
@@ -132,17 +143,41 @@ def regenerate_metadata(
     )
 
 
+def regenerated_context(regen_data: RegeneratedData) -> ExecutionContext:
+    return ExecutionContext(
+        dataset=regen_data.dataset_metadata,
+        derivative_provider=regen_data.provider,
+        device=regen_data.lhs_detached.device,
+    )
+
+
 def rebuild_evaluator(
     regen_data: RegeneratedData,
     executor: PythonExecutor,
     solver: SparseSolver,
 ) -> Evaluator:
-    context = ExecutionContext(
-        dataset=regen_data.dataset_metadata,
-        derivative_provider=regen_data.provider,
-        device=regen_data.lhs_detached.device,
+    return Evaluator(
+        executor, solver, regenerated_context(regen_data), lhs=regen_data.lhs_detached
     )
-    return Evaluator(executor, solver, context, lhs=regen_data.lhs_detached)
+
+
+def _lowered_regenerated_target(
+    regen_data: RegeneratedData,
+    pins: Sequence[tuple[str, float]],
+    executor: PythonExecutor,
+) -> Tensor:
+    lowered = lower_target(
+        regen_data.lhs_detached, pins, executor, regenerated_context(regen_data)
+    )
+    variance = float(lowered.var(correction=0).detach().item())
+    if not math.isfinite(variance) or variance <= 0.0:
+        raise ValueError(
+            "lowered sketch target variance must be finite and positive; "
+            "the pinned terms explain this target exactly, leaving no "
+            "residual to regress — the sketch is effectively closed on "
+            "this data (drop the unknown clauses, or reconsider the pins)"
+        )
+    return lowered
 
 
 def _clone_collocation_coords(
@@ -312,11 +347,14 @@ def run_pinn_phase(
     cycle_idx: int,
     local_coords: dict[str, Tensor] | None,
     deadline: float | None = None,
+    pins: Sequence[tuple[str, float]] = (),
 ) -> tuple[dict[str, float], bool, TrainResult | None]:
     skip = {"best_reward": engine.best_reward}
     terms, coefficients = _trainable_terms(engine, evaluator, config, cycle_idx)
     if not terms:
         return skip, False, None
+    terms = [*terms, *(term for term, _value in pins)]
+    coefficients = [*coefficients, *(value for _term, value in pins)]
     saved_state = {k: v.clone() for k, v in model.state_dict().items()}
     try:
         train_result = model.train_pinn(
@@ -380,6 +418,7 @@ def rebuild_after_pinn(
     *,
     executor: PythonExecutor,
     solver: SparseSolver,
+    pins: Sequence[tuple[str, float]] = (),
 ) -> Evaluator:
     regen = regenerate_metadata(
         model,
@@ -388,6 +427,10 @@ def rebuild_after_pinn(
         lhs_field=dataset_metadata.lhs_field,
         lhs_axis=dataset_metadata.lhs_axis,
     )
+    if pins:
+        regen = replace(
+            regen, lhs_detached=_lowered_regenerated_target(regen, pins, executor)
+        )
     return rebuild_evaluator(regen, executor, solver)
 
 
@@ -424,7 +467,7 @@ def _evaluate_selected_candidate(
 
 def _select_stable(
     candidates: list[CandidateSnapshot],
-    evaluator: Evaluator,
+    evaluator: FinalEvaluator,
     config: DiscoverConfig,
     stability_seed: int | None,
     kept: _StabilityOutcome,
@@ -505,7 +548,7 @@ def _with_stability_outcome(
 def _apply_stability_selection(
     engine: DiscoverEngine,
     final_state: EngineState,
-    evaluator: Evaluator,
+    evaluator: FinalEvaluator,
     config: DiscoverConfig,
     stability_seed: int | None,
 ) -> EngineState:
@@ -536,7 +579,7 @@ def _apply_stability_selection(
 def finalize_cycle_state(
     engine: DiscoverEngine,
     final_state: EngineState,
-    evaluator: Evaluator,
+    evaluator: FinalEvaluator,
     config: DiscoverConfig,
     *,
     stability_seed: int | None,
@@ -707,6 +750,7 @@ def _infer_bounds(
 
 
 __all__ = [
+    "FinalEvaluator",
     "PINNCycleResult",
     "PINNCycleRunner",
     "RegeneratedData",
@@ -717,5 +761,6 @@ __all__ = [
     "rebuild_after_pinn",
     "rebuild_evaluator",
     "regenerate_metadata",
+    "regenerated_context",
     "run_pinn_phase",
 ]

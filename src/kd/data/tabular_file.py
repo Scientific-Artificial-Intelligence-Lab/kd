@@ -30,8 +30,8 @@ class TabularNpzRecognizer:
 TABULAR_NPZ = TabularNpzRecognizer()
 
 
-def load_tabular(path: Path, *, name: str | None = None) -> TabularDataset:
-    path = path.resolve()
+def load_tabular(path: str | Path, *, name: str | None = None) -> TabularDataset:
+    path = Path(path).resolve()
     with np.load(path, allow_pickle=False) as data:
         if data["format"].item() != TABULAR_NPZ_FORMAT:
             raise ValueError(f"format must be {TABULAR_NPZ_FORMAT}")

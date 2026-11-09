@@ -1,15 +1,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     anchor_carried_by,
     anchor_spelled_by,
+    clause_entry,
     constraint_admits,
     pinned_monomials,
+    term_keys,
 )
 from kd.core.expr.jet import Monomial, jet_monomials
 from kd.core.expr.term_features import analyze_term
@@ -24,6 +26,8 @@ _LEVELS = SketchClauseLevels(
     operator_set="generation_enforced",
     field_axis_set="generation_enforced",
 )
+
+_TABULAR_LEVELS = replace(_LEVELS, derivative_order="unsupported")
 
 _PINNED = "pinned"
 _PINNED_ALIAS = "pinned-alias"
@@ -40,6 +44,11 @@ class PySINDyCompiled:
     report: CompileReport
     dropped: tuple[tuple[str, str], ...]
     hole_count_bounds: tuple[int, int] | None
+    anchor_keys: frozenset[str]
+
+
+def _levels(sketch: Sketch) -> SketchClauseLevels:
+    return _TABULAR_LEVELS if sketch.lhs_spec.order == 0 else _LEVELS
 
 
 def _closed_compilation(
@@ -49,7 +58,7 @@ def _closed_compilation(
     return PySINDyCompiled(
         effective_terms=config_terms,
         report=CompileReport(
-            levels=_LEVELS,
+            levels=_levels(sketch),
             notes=(
                 "closed sketch: configured library remains unfiltered because "
                 "the search result is discarded",
@@ -58,16 +67,21 @@ def _closed_compilation(
         ),
         dropped=(),
         hole_count_bounds=None,
+        anchor_keys=frozenset(),
     )
 
 
-def _config_law_keys(config_terms: tuple[str, ...]) -> tuple[str | None, ...]:
+def _config_law_keys(
+    sketch: Sketch, config_terms: tuple[str, ...]
+) -> tuple[str | None, ...]:
     keys: list[str | None] = []
     for term in config_terms:
         try:
-            keys.append(law_term_key(term))
+            column_keys = term_keys(term, sketch)
         except ValueError:
             keys.append(None)
+            continue
+        keys.append(column_keys[0] if len(column_keys) == 1 else None)
     return tuple(keys)
 
 
@@ -75,16 +89,16 @@ def _assert_anchors_representable(
     sketch: Sketch, config_keys: tuple[str | None, ...]
 ) -> frozenset[str]:
     available = frozenset(key for key in config_keys if key is not None)
-    anchor_entries = tuple(
-        (anchor, law_term_key(anchor.term_ir)) for anchor in sketch.anchored
-    )
-    for anchor, key in anchor_entries:
+    keys: set[str] = set()
+    for anchor in sketch.anchored:
+        key = clause_entry(anchor.term_ir, 1.0, sketch).key
         if key not in available:
             raise ValueError(
                 f"PySINDy anchors require configured term {anchor.term_ir!r}, "
                 "but its law identity is absent from config.terms"
             )
-    return frozenset(key for _anchor, key in anchor_entries)
+        keys.add(key)
+    return frozenset(keys)
 
 
 def _exclude_pinned(
@@ -93,7 +107,9 @@ def _exclude_pinned(
     config_keys: tuple[str | None, ...],
     pin_monomials: frozenset[Monomial],
 ) -> tuple[list[tuple[str, str | None]], list[tuple[str, str]]]:
-    pinned_keys = {law_term_key(pin.term_ir) for pin in sketch.pinned}
+    pinned_keys = {
+        clause_entry(pin.term_ir, pin.value, sketch).key for pin in sketch.pinned
+    }
     remaining: list[tuple[str, str | None]] = []
     dropped: list[tuple[str, str]] = []
     for term, key in zip(config_terms, config_keys, strict=True):
@@ -200,8 +216,9 @@ def _assert_hole_feasibility(
 
 
     assignable = {
-        key: analyze_term(term, sketch.vocabulary)
-        for term, key in ((term, law_term_key(term)) for term in effective_terms)
+        key: analyze_term(key, sketch.vocabulary)
+        for term in effective_terms
+        for key in term_keys(term, sketch)
         if key not in anchor_keys
     }
     for hole in sketch.holes:
@@ -262,7 +279,7 @@ def compile_for_pysindy(
         return _closed_compilation(sketch, config_terms)
 
     pin_monomials = pinned_monomials(sketch)
-    config_keys = _config_law_keys(config_terms)
+    config_keys = _config_law_keys(sketch, config_terms)
     anchor_keys = _assert_anchors_representable(sketch, config_keys)
     _assert_operator_clauses_representable(sketch, config_terms)
     remaining, dropped = _exclude_pinned(
@@ -271,16 +288,22 @@ def compile_for_pysindy(
     effective_terms = _filter_for_holes(sketch, remaining, anchor_keys, dropped)
     _assert_non_empty(sketch, effective_terms)
     _assert_hole_feasibility(sketch, effective_terms, anchor_keys)
+    anchor_columns = frozenset(
+        law_term_key(term)
+        for term, key in remaining
+        if key in anchor_keys and term in effective_terms
+    )
     frozen_dropped = tuple(dropped)
     hole_count_bounds = _hole_count_bounds(sketch)
     return PySINDyCompiled(
         effective_terms=effective_terms,
         report=CompileReport(
-            levels=_LEVELS,
+            levels=_levels(sketch),
             notes=_compile_notes(sketch, frozen_dropped, hole_count_bounds),
         ),
         dropped=frozen_dropped,
         hole_count_bounds=hole_count_bounds,
+        anchor_keys=anchor_columns,
     )
 
 

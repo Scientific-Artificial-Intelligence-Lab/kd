@@ -45,6 +45,9 @@ candidate is fitted against the time derivative of the order
 order. With `lhs_auto_select` enabled, each candidate is fitted against both
 the first and second time derivative and the branch with the lower NMSE is
 used, so the returned law can carry the order the dataset does not declare.
+A sketch overrides `lhs_auto_select`: candidates fit only its left-hand-side
+order. If the admitted sketch holes allow no products, compilation limits
+each searched module to one token.
 
 Each generation scores the population, retains the better half, refills it
 with random genomes, exchanges a module between adjacent pairs, then mutates
@@ -63,11 +66,15 @@ selected structure on that surrogate domain.
 
 The recorder distinguishes surrogate training from genetic search. Read the
 training and validation losses alongside the per-generation fitness,
-diversity and complexity series. A small NMSE is evidence of a fit on that
+diversity and complexity series. Training loss series are absent when the
+network is injected or restored from a checkpoint, since that call trains
+no network. A small NMSE is evidence of a fit on that
 domain, and does not by itself establish recovery of the generating equation.
-If changing the seed or population budget improves the result, the search
-budget was relevant; repeated poor fits also warrant checking the library
-and surrogate accuracy.
+If changing the population budget improves the result, the search budget was
+relevant. On a fresh call without an injected network, `seed` also controls
+network training. With an injected or checkpoint-restored network, changing
+the seed varies only the genetic search. Repeated poor fits also warrant
+checking the library and surrogate accuracy.
 
 ## References
 
@@ -88,7 +95,10 @@ Eq. (6) and that implementation compare raw MSE, which also varies with
 the target branch's variance. The length penalty is configurable; the author's
 tutorial fixes it for its demonstration. The genetic mechanism is checked
 against that implementation, with corrected crossover indexing and selection
-of candidates with duplicate fitness values. The adaptive variable-coefficient
+of candidates with duplicate fitness values. KD mutates a nonzero gene by
+one library index in either direction; index zero can redraw any library
+index. The earlier implementation redraws the selected gene uniformly from
+0 to 3. The adaptive variable-coefficient
 extension is not part of this implementation.
 
 </div>

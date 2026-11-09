@@ -88,24 +88,36 @@ jobs:
         # The same three zip checks the release export runs before a push:
         # top-level packages, required package-data, declared extras. The
         # three constants below are hand copies of the export's constants; a
-        # unit test in the source repository compares them. The export's
-        # fourth check (kd-agent entry point and the per-algorithm skill
-        # resources) enumerates algorithms through an importable kd; this job
-        # inspects the zip only and deliberately does not repeat it.
+        # unit test in the source repository compares them. A required member
+        # ending in "/" needs a member below it; any other must be a member
+        # (as a prefix, LICENSE would accept LICENSE-d3). The export's other
+        # checks (the kd-agent and kd-ui entry points, and the per-algorithm
+        # skill resources, which it enumerates through an importable kd) are
+        # deliberately not repeated: this job inspects the zip only.
         shell: python3 {0}
         run: |
           import glob
           import sys
           import zipfile
 
-          PACKAGES = {"kd", "kdagent"}
+          PACKAGES = {"kd", "kdagent", "kdui"}
           REQUIRED_MEMBERS = (
               "kd/py.typed",
               "kd/viz/templates/report.html",
               "kd/_assets/data/",
               "kd/search/eqgpt/_assets/",
+              "kdui/py.typed",
+              "kdui/static/index.html",
+              "kdui/static/vendor/echarts/echarts.esm.min.js",
+              "kdui/static/vendor/echarts/LICENSE",
+              "kdui/static/vendor/echarts/LICENSE-d3",
+              "kdui/static/vendor/echarts/NOTICE",
+              "kdui/static/vendor/katex/katex.min.js",
+              "kdui/static/vendor/katex/katex.min.css",
+              "kdui/static/vendor/katex/fonts/",
+              "kdui/static/vendor/katex/LICENSE",
           )
-          EXTRAS = {"pysr", "agent", "all"}
+          EXTRAS = {"pysr", "agent", "ui", "all"}
 
           wheels = glob.glob("dist/*.whl")
           if len(wheels) != 1:
@@ -120,7 +132,11 @@ jobs:
           packages = {t for t in top_level if not t.endswith(".dist-info")}
           if packages != PACKAGES:
               errors.append(f"top-level packages {sorted(packages)}, expected {sorted(PACKAGES)}")
-          missing = [r for r in REQUIRED_MEMBERS if not any(n.startswith(r) for n in names)]
+          missing = [
+              r
+              for r in REQUIRED_MEMBERS
+              if not (any(n.startswith(r) for n in names) if r.endswith("/") else r in names)
+          ]
           if missing:
               errors.append(f"missing package-data {missing}")
           extras = {
@@ -213,6 +229,15 @@ jobs:
           uv pip install --python .venv "${wheel}[agent]" --torch-backend=auto
           .venv/bin/kd-agent --help
           .venv/bin/python -c "import kdagent.orchestration"
+
+      - name: UI extra and the kd-ui command
+        # Building the web app imports FastAPI, so the import is the check that
+        # the extra installs and imports.
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv pip install --python .venv "${wheel}[ui]" --torch-backend=auto
+          .venv/bin/kd-ui --help
+          .venv/bin/python -c "import kdui.app"
 
   publish:
     needs: [build, smoke]

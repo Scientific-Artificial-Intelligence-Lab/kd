@@ -90,13 +90,23 @@ def _nested_fields(
 
 
 def _effective_fields(
-    schema: dict[str, Any], effective: Mapping[str, Any]
+    schema: dict[str, Any],
+    effective: Mapping[str, Any],
+    *,
+    retain_conditioning: bool = False,
 ) -> dict[str, Any]:
     config = {}
     for field in schema["fields"]:
         name = field["name"]
         if name not in effective:
             raise ValueError(f"effective_config missing {name}")
+        if retain_conditioning and name in {"terms", "library"}:
+
+
+
+            if json.dumps(effective[name]) != json.dumps(field["default"]):
+                config[name] = deepcopy(effective[name])
+            continue
         keep, value = _field_value(field, effective[name])
         if not keep:
             continue
@@ -119,12 +129,17 @@ def _facade_controls(
         if param["config_field"] is not None:
             continue
         name = param["name"]
-        if name not in facade:
-            raise ValueError(f"facade_params missing {name}")
-        if name in effective and effective[name] != facade[name]:
+        if name == "derivatives" and name not in facade:
+
+            value = param["default"]
+        else:
+            if name not in facade:
+                raise ValueError(f"facade_params missing {name}")
+            value = facade[name]
+        if name in effective and effective[name] != value:
             raise ValueError(f"{name}: sealed and facade controls disagree")
         if name != "generations":
-            controls[name] = deepcopy(facade[name])
+            controls[name] = deepcopy(value)
     return controls
 
 
@@ -132,6 +147,8 @@ def _selected_modes(
     schema: dict[str, Any],
     config: Mapping[str, Any],
     report: Mapping[str, Any],
+    *,
+    retain_conditioning: bool = False,
 ) -> list[dict[str, Any]]:
     modes = []
     for mode in schema["modes"]:
@@ -145,16 +162,33 @@ def _selected_modes(
             (config.get(selector["field"]) is not None) != selector["present"]
         ):
             continue
-        if any(config.get(key) != value for key, value in verdict.params.items()):
+        if any(
+            config.get(key) is None
+            if (value == "<set>" and key in mode["required_params"])
+            or (
+                retain_conditioning
+                and key == mode["names_from"]
+                and value == "<build from this input's fields and axes>"
+            )
+            else config.get(key) != value
+            for key, value in verdict.params.items()
+        ):
             continue
         modes.append(mode)
     return modes
 
 
-def _check_extra_settings(schema: dict[str, Any], effective: Mapping[str, Any]) -> None:
+def _check_extra_settings(
+    schema: dict[str, Any],
+    effective: Mapping[str, Any],
+    *,
+    retain_conditioning: bool = False,
+) -> None:
     known = {field["name"] for field in schema["fields"]}
     metadata = {"algorithm", "provider_kind", "small_term_rtol", "searched_vocabulary"}
     for key, value in effective.items():
+        if retain_conditioning and key == "sketch":
+            continue
         if key in known or key in metadata or key.endswith(("_fingerprint", "_sha256")):
             continue
         if key in {"sketch", "surrogate", "field_model"} and value is None:
@@ -168,17 +202,39 @@ def normalize_pipeline(
     effective_config: Mapping[str, Any],
     facade_params: Mapping[str, Any],
     report: Mapping[str, Any],
+    retain_conditioning: bool = False,
 ) -> dict[str, Any]:
     schema = _schema(algorithm)
-    _check_extra_settings(schema, effective_config)
-    config = _effective_fields(schema, effective_config)
+    _check_extra_settings(
+        schema, effective_config, retain_conditioning=retain_conditioning
+    )
+    config = _effective_fields(
+        schema, effective_config, retain_conditioning=retain_conditioning
+    )
     config.update(_facade_controls(schema, effective_config, facade_params))
-    modes = _selected_modes(schema, config, report)
+    modes = _selected_modes(
+        schema, config, report, retain_conditioning=retain_conditioning
+    )
     if len(modes) != 1:
         raise ValueError(f"{algorithm}: effective config has no unique accepted mode")
     pipeline = {"algorithm": algorithm, "mode": modes[0]["name"], "config": config}
-    action_experience.validate_pipeline(pipeline)
     kd.Model(algorithm=algorithm, **config)
+    if retain_conditioning:
+        conditioning = {
+            name: config.pop(name)
+            for name in ("terms", "library")
+            if name in config and config[name] is not None
+        }
+        for name in ("terms", "library"):
+            config.pop(name, None)
+        if effective_config.get("sketch") is not None:
+            conditioning["sketch"] = kd.sketch_to_dict(
+                kd.sketch_from_dict(effective_config["sketch"])
+            )
+        if conditioning:
+            pipeline["conditioning"] = conditioning
+    else:
+        action_experience.validate_pipeline(pipeline)
     return pipeline
 
 

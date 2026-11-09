@@ -3,20 +3,29 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
 import torch
 from torch import Tensor
 
-from kd.core.evaluator import Evaluator
 from kd.search.discover.engine import CandidateSnapshot
 
 CV_DENOM_EPS = 1e-12
 DEFAULT_N_BOOTSTRAP = 100
 DEFAULT_N_INNER_BOOTSTRAP = 10
 NMSE_DUPLICATE_TOL = 1e-5
+
+
+class StabilityEvaluator(Protocol):
+
+    @property
+    def lhs_target(self) -> Tensor:
+        pass
+
+    def build_theta_matrix(self, terms: list[str]) -> tuple[Tensor, list[str]]:
+        pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +47,7 @@ class StabilitySelectionResult:
 
 def stability_select(
     candidates: Sequence[CandidateSnapshot],
-    evaluator: Evaluator,
+    evaluator: StabilityEvaluator,
     *,
     top_k: int,
     n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
@@ -101,7 +110,7 @@ def _find_duplicate_index(
 
 def _collect_candidate_stats(
     candidate: CandidateSnapshot,
-    evaluator: Evaluator,
+    evaluator: StabilityEvaluator,
     lhs: np.ndarray,
     n_bootstrap: int,
     n_inner_bootstrap: int,
@@ -216,6 +225,7 @@ def _to_numpy_matrix(tensor: Tensor) -> npt.NDArray[np.float64]:
 __all__ = [
     "CV_DENOM_EPS",
     "StabilityCandidateStats",
+    "StabilityEvaluator",
     "StabilitySelectionResult",
     "stability_select",
 ]

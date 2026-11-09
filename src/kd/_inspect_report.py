@@ -141,6 +141,17 @@ class FieldReport:
             second-order central second differences
             ``A = u[i-1] - 2*u[i] + u[i+1]`` (step 1) and
             ``B = u[i-2] - 2*u[i] + u[i+2]`` (step 2).
+        constant_axes: Grid axes along which every observed slice is exactly
+            equal, in axis order. Only axes with at least two samples qualify.
+            ``None`` means unmeasured (non-grid, no axes, or non-finite field).
+            This describes observations, not a declaration of a physical role;
+            measurement noise can make a static coefficient vary in the input.
+        noise_limited_axes: Eligible grid axes whose pooled von Neumann ratio
+            is within three standard deviations of independent Gaussian white
+            noise (mean 2). Measures unresolved ordered variation, not a
+            physical role. Correlated noise and temporally white dynamics
+            limit this interpretation. Exact constants are reported separately.
+            ``None`` means no eligible axis was measured.
 
     Here ``u[i]`` is the field value at index ``i`` (0-based) along the axis,
     out of ``n`` points. Both gaps use the common interior ``2 <= i <= n-3``.
@@ -169,6 +180,8 @@ class FieldReport:
     noise_estimate: dict[str, float]
     first_derivative_gap: dict[str, float]
     second_derivative_gap: dict[str, float]
+    constant_axes: list[str] | None = None
+    noise_limited_axes: list[str] | None = None
 
     def __post_init__(self) -> None:
         """Validate the field report domain."""
@@ -205,6 +218,14 @@ class FieldReport:
                 axis: sanitize_float(value)
                 for axis, value in self.second_derivative_gap.items()
             },
+            "constant_axes": (
+                None if self.constant_axes is None else list(self.constant_axes)
+            ),
+            "noise_limited_axes": (
+                None
+                if self.noise_limited_axes is None
+                else list(self.noise_limited_axes)
+            ),
         }
 
 

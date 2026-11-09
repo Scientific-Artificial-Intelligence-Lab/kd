@@ -11,10 +11,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from kd.data._prediction import _predicted_dataset
 from kd.data.diagnostics import MIN_STENCIL_POINTS, noise_estimate
 from kd.data.schema import (
-    AxisInfo,
-    FieldData,
     PDEDataset,
     compute_dataset_fingerprint,
 )
@@ -74,7 +73,7 @@ def surrogate_field(
     field = _single_field(dataset, what="surrogate_field")
     _require_model_names(dataset, model, field)
     predicted = _predict(dataset, model, field, batch_size)
-    return _sampled_dataset(dataset, field, predicted)
+    return _predicted_dataset(dataset, {field: predicted})
 
 
 def network_smooth(
@@ -199,30 +198,6 @@ def _predict(
             f"{field!r} on the grid"
         )
     return out.reshape(shape)
-
-
-def _sampled_dataset(dataset: PDEDataset, field: str, values: Tensor) -> PDEDataset:
-    assert dataset.axes is not None and dataset.axis_order is not None
-    assert dataset.fields is not None
-    source = dataset.fields[field]
-    axes = {
-        name: AxisInfo(info.name, info.values.clone(), False, info.allow_nan)
-        for name, info in dataset.axes.items()
-    }
-    return PDEDataset(
-        name=dataset.name,
-        task_type=dataset.task_type,
-        topology=dataset.topology,
-        axes=axes,
-        axis_order=list(dataset.axis_order),
-        fields={field: FieldData(source.name, values, allow_nan=source.allow_nan)},
-        lhs_field=dataset.lhs_field,
-        lhs_axis=dataset.lhs_axis,
-        lhs_order=dataset.lhs_order,
-        noise_level=dataset.noise_level,
-        ground_truth=None,
-        source=dataset.source,
-    )
 
 
 def _training_points(

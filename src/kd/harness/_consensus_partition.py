@@ -98,6 +98,9 @@ def _dependency_stratum(
     run_spec: RunSpec,
     schema_by_instrument: Mapping[str, Mapping[str, Any]],
 ) -> DependencyStratum:
+    identity = run_spec.config.get("derivative_provider")
+    if identity is not None:
+        return _as_stratum(identity["name"])
     if instrument not in schema_by_instrument:
         return "undeclared"
 
@@ -122,15 +125,6 @@ def _dependency_stratum(
 
 
 def _as_stratum(value: Any) -> DependencyStratum:
-    if value == "finite_diff":
-        return "finite_diff"
-    if value == "autograd":
-        return "autograd"
-    if value == "none":
-        return "none"
-    if value == "undeclared":
-        return "undeclared"
-    raise ValueError(
-        f"provider_kind {value!r} is outside the stratum vocabulary "
-        "{finite_diff, autograd, none, undeclared}"
-    )
+    if isinstance(value, str) and value:
+        return value
+    raise ValueError(f"provider_kind must be a non-empty string, got {value!r}")

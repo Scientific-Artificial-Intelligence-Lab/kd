@@ -9,6 +9,12 @@ from functools import lru_cache
 from itertools import combinations
 from typing import cast
 
+from kd.core.equation._sketch_entries import (
+    SketchEntry,
+    aggregate_entries,
+    sketch_entries,
+    whole_term_key,
+)
 from kd.core.equation.projection import active_law
 
 
@@ -17,10 +23,9 @@ from kd.core.equation.projection import active_law
 from kd.core.equation.signature import (
     LAWSIG_DOMAIN,
     _scalar_value,
-    law_term_entry,
     law_term_key,
 )
-from kd.core.equation.types import Equation, Evolution, LhsSpec
+from kd.core.equation.types import Equation, Evolution, LhsSpec, Regression
 from kd.core.expr.jet import JetExpansion, Monomial, jet_expansion, jet_monomials
 from kd.core.expr.term_features import (
     ColumnFingerprint,
@@ -189,6 +194,9 @@ class SketchVerdict:
 
 def _validate_lhs(sketch: Sketch) -> None:
     lhs = sketch.lhs_spec
+    if lhs.order == 0:
+        _validate_target(sketch)
+        return
     if lhs.field not in sketch.vocabulary.fields:
         raise ValueError(f"LHS field {lhs.field!r} is outside the vocabulary")
     if lhs.axis not in sketch.vocabulary.coordinates:
@@ -199,11 +207,46 @@ def _validate_lhs(sketch: Sketch) -> None:
         raise ValueError("LHS order must be at least 1")
 
 
+def _validate_target(sketch: Sketch) -> None:
+    lhs = sketch.lhs_spec
+    if lhs.axis != "":
+        raise ValueError(
+            f"LHS of order 0 is a table's target and has no axis, got {lhs.axis!r}"
+        )
+    if sketch.vocabulary.coordinates:
+        raise ValueError(
+            "the vocabulary of an order-0 sketch has no coordinates, got "
+            f"{sorted(sketch.vocabulary.coordinates)!r}"
+        )
+    if lhs.field in sketch.vocabulary.fields:
+        raise ValueError(
+            f"LHS target {lhs.field!r} is in the vocabulary; the target is not a term"
+        )
+
+
+def _validate_single_terms(sketch: Sketch, term_irs: Sequence[str]) -> None:
+    for term_ir in term_irs:
+        keys = [entry.key for entry in sketch_entries(term_ir, 1.0, regression=True)]
+        if len(keys) != 1:
+            raise ValueError(
+                f"clause term {term_ir!r} reads as the REGRESSION terms {keys!r}; "
+                "give each term of a sum its own clause"
+            )
+        if keys[0] != whole_term_key(term_ir):
+            raise ValueError(
+                f"clause term {term_ir!r} reads as the REGRESSION term "
+                f"{keys[0]!r}: a sign, a number or the unit term 'one' inside a "
+                f"product folds into the coefficient; write the term as {keys[0]!r}"
+            )
+
+
 def _validate_clauses(sketch: Sketch) -> None:
     term_irs = tuple(clause.term_ir for clause in sketch.pinned) + tuple(
         clause.term_ir for clause in sketch.anchored
     )
-    keys = tuple(law_term_key(term_ir) for term_ir in term_irs)
+    if sketch.lhs_spec.order == 0:
+        _validate_single_terms(sketch, term_irs)
+    keys = tuple(clause_entry(term_ir, 1.0, sketch).key for term_ir in term_irs)
     if len(keys) != len(set(keys)):
         raise ValueError("pinned and anchored clauses collide by law-identity")
     for term_ir in term_irs:
@@ -262,6 +305,11 @@ def _validate_holes(sketch: Sketch) -> None:
     if len(ids) != len(set(ids)):
         raise ValueError("Sketch hole id values must be unique")
     for hole in sketch.holes:
+        if sketch.lhs_spec.order == 0 and hole.constraint.max_deriv_order is not None:
+            raise ValueError(
+                f"hole {hole.id!r} bounds max_deriv_order, but an order-0 sketch "
+                "has no derivatives"
+            )
         unknown_fields = _outside(hole.constraint.fields, sketch.vocabulary.fields)
         if unknown_fields:
             raise ValueError(f"Hole fields outside vocabulary: {unknown_fields!r}")
@@ -284,7 +332,7 @@ def _validate_holes(sketch: Sketch) -> None:
 def _validate_pin_support(sketch: Sketch) -> None:
     policy = sketch.match_policy
     for pin in sketch.pinned:
-        _key, wanted = law_term_entry(pin.term_ir, pin.value)
+        wanted = clause_entry(pin.term_ir, pin.value, sketch).value
         band = policy.coeff_atol + policy.coeff_rtol * abs(wanted)
         if policy.support_threshold > abs(wanted) + band:
             raise ValueError(
@@ -391,18 +439,33 @@ def _carried(key: str, sketch: Sketch) -> _AnchorColumn | None:
     )
 
 
+def term_keys(term_ir: str, sketch: Sketch) -> list[str]:
+    entries = sketch_entries(term_ir, 1.0, regression=sketch.lhs_spec.order == 0)
+    return list(dict.fromkeys(entry.key for entry in entries))
+
+
+def clause_entry(term_ir: str, value: float, sketch: Sketch) -> SketchEntry:
+    (entry,) = sketch_entries(term_ir, value, regression=sketch.lhs_spec.order == 0)
+    return entry
+
+
 def anchor_spelled_by(term_ir: str, sketch: Sketch) -> str | None:
-    key = law_term_key(term_ir)
+    keys = term_keys(term_ir, sketch)
+    if len(keys) != 1:
+        return None
+    (key,) = keys
     column = _spelled(key, analyze_term(key, sketch.vocabulary), sketch)
     return None if column is None else column.term_ir
 
 
 def anchor_carried_by(term_ir: str, sketch: Sketch) -> str | None:
-    key = law_term_key(term_ir)
-    if _spelled(key, analyze_term(key, sketch.vocabulary), sketch) is not None:
-        return None
-    column = _carried(key, sketch)
-    return None if column is None else column.term_ir
+    for key in term_keys(term_ir, sketch):
+        if _spelled(key, analyze_term(key, sketch.vocabulary), sketch) is not None:
+            continue
+        column = _carried(key, sketch)
+        if column is not None:
+            return column.term_ir
+    return None
 
 
 def anchor_basis(term_irs: Sequence[str], sketch: Sketch) -> tuple[int, ...]:
@@ -410,8 +473,12 @@ def anchor_basis(term_irs: Sequence[str], sketch: Sketch) -> tuple[int, ...]:
     seen: set[tuple[ColumnFingerprint, JetExpansion]] = set()
     for index, term_ir in enumerate(term_irs):
         try:
-            key = law_term_key(term_ir)
-            column = _spelled(key, analyze_term(key, sketch.vocabulary), sketch)
+            keys = term_keys(term_ir, sketch)
+            column = (
+                _spelled(keys[0], analyze_term(keys[0], sketch.vocabulary), sketch)
+                if len(keys) == 1
+                else None
+            )
         except ValueError:
             column = None
         if column is not None:
@@ -452,7 +519,33 @@ def term_admission(
     anchor_fingerprints: frozenset[ColumnFingerprint],
 ) -> str | None:
     try:
-        key = law_term_key(term_ir)
+        keys = term_keys(term_ir, sketch)
+    except ValueError:
+        return f"term {term_ir!r} is outside the sketch vocabulary"
+    for key in keys:
+        refusal = _key_admission(
+            key,
+            term_ir,
+            sketch,
+            pinned_keys=pinned_keys,
+            pinned_monomials=pinned_monomials,
+            anchor_fingerprints=anchor_fingerprints,
+        )
+        if refusal is not None:
+            return refusal
+    return None
+
+
+def _key_admission(
+    key: str,
+    term_ir: str,
+    sketch: Sketch,
+    *,
+    pinned_keys: frozenset[str],
+    pinned_monomials: frozenset[Monomial],
+    anchor_fingerprints: frozenset[ColumnFingerprint],
+) -> str | None:
+    try:
         features = analyze_term(key, sketch.vocabulary)
         pinned = key in pinned_keys or bool(
             pinned_monomials
@@ -466,7 +559,7 @@ def term_admission(
     except ValueError:
         return f"term {term_ir!r} is outside the sketch vocabulary"
     if pinned:
-        return f"term {term_ir!r} regenerates a pinned column"
+        return f"term {term_ir!r} regenerates a pinned or anchored column"
     if spelled:
         return None
     if carried is not None:
@@ -478,9 +571,12 @@ def term_admission(
     return f"no sketch hole admits term {term_ir!r}"
 
 
-def _aggregate_law(eq: Evolution, support_threshold: float) -> dict[str, float]:
-    projected = cast(Evolution, active_law(eq))
-    grouped: dict[str, list[float]] = {}
+def _aggregate_law(
+    eq: Evolution | Regression, support_threshold: float
+) -> dict[str, float]:
+    projected = cast(Evolution | Regression, active_law(eq))
+    regression = isinstance(projected, Regression)
+    entries = []
     for term_ir, coefficient in projected.terms:
         scalar = _scalar_value(coefficient)
 
@@ -489,9 +585,8 @@ def _aggregate_law(eq: Evolution, support_threshold: float) -> dict[str, float]:
 
         if not math.isfinite(scalar):
             raise ValueError(f"law coefficient for term {term_ir!r} must be finite")
-        key, value = law_term_entry(term_ir, scalar)
-        grouped.setdefault(key, []).append(value)
-    aggregated = {key: math.fsum(values) for key, values in grouped.items()}
+        entries.extend(sketch_entries(term_ir, scalar, regression=regression))
+    aggregated = {key: entry.value for key, entry in aggregate_entries(entries).items()}
 
 
 
@@ -508,7 +603,8 @@ def _pinned_verdicts(
 ) -> tuple[PinnedVerdict, ...]:
     verdicts: list[PinnedVerdict] = []
     for pin in sketch.pinned:
-        key, expected = law_term_entry(pin.term_ir, pin.value)
+        entry = clause_entry(pin.term_ir, pin.value, sketch)
+        key, expected = entry.key, entry.value
         observed = active.get(key)
         band = sketch.match_policy.coeff_atol + (
             sketch.match_policy.coeff_rtol * abs(expected)
@@ -565,7 +661,7 @@ def _anchored_verdicts(
         verdicts.append(
             AnchoredVerdict(
                 term_ir=anchor.term_ir,
-                law_key=law_term_key(anchor.term_ir),
+                law_key=clause_entry(anchor.term_ir, 1.0, sketch).key,
                 observed=observed,
                 matched=observed is not None,
             )
@@ -618,8 +714,10 @@ def _assign_holes(
 
 
 def _match_sketch(sketch: Sketch, eq: Equation) -> SketchVerdict:
-    if not isinstance(eq, Evolution):
-        raise TypeError(f"{SKETCH_SCHEMA_TAG} matches EVOLUTION equations only")
+    if not isinstance(eq, Evolution | Regression):
+        raise TypeError(
+            f"{SKETCH_SCHEMA_TAG} matches EVOLUTION and REGRESSION equations only"
+        )
     active = _aggregate_law(eq, sketch.match_policy.support_threshold)
     pinned = _pinned_verdicts(sketch, active)
     anchored, anchored_keys, repeated = _anchored_verdicts(sketch, active)
@@ -685,10 +783,12 @@ __all__ = [
     "anchor_basis",
     "anchor_carried_by",
     "anchor_spelled_by",
+    "clause_entry",
     "constraint_admits",
     "pinned_monomials",
     "require_complete_sketch",
     "sketch_from_dict",
     "sketch_to_dict",
     "term_admission",
+    "term_keys",
 ]

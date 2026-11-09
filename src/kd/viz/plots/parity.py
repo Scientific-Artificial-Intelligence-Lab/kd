@@ -9,7 +9,15 @@ import numpy as np
 
 from kd.viz._result_data import _fit_target_label, _sketch_fit_note
 from kd.viz.axes import _get_axes
-from kd.viz.style import INK_2, REF_LINE_WIDTH, SERIES, style_context
+from kd.viz.style import (
+    INK_2,
+    REF_LINE_WIDTH,
+    SCATTER_ALPHA,
+    SCATTER_SIZE,
+    SERIES,
+    SMALL_FONTSIZE,
+    style_context,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -36,8 +44,8 @@ def plot_parity(
         ax.scatter(
             actual,
             predicted,
-            s=6,
-            alpha=0.35,
+            s=SCATTER_SIZE,
+            alpha=SCATTER_ALPHA,
             linewidths=0,
             color=SERIES[0],
             label="Samples",
@@ -77,7 +85,7 @@ def plot_parity(
             r2_text,
             transform=ax.transAxes,
             va="top",
-            fontsize=10,
+            fontsize=SMALL_FONTSIZE,
             color=INK_2,
         )
         ax.grid(True, axis="both")

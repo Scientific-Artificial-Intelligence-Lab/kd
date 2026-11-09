@@ -107,6 +107,10 @@ class _Jet:
     def name(self, name: str) -> Expr:
         if name == UNITY_TOKEN:
             return sympy.Integer(1)
+        if name == self.vocabulary.gauge_constant:
+
+
+            return sympy.Symbol(name)
         if name in self.coordinates:
             return self.coordinates[name]
         if name in self.vocabulary.fields:

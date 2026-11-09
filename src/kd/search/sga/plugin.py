@@ -16,7 +16,6 @@ from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.signature import law_term_entry
 from kd.core.equation.sketch import (
     Sketch,
-    anchor_basis,
     anchor_spelled_by,
     constraint_admits,
     term_admission,
@@ -44,6 +43,8 @@ from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.protocol import PlatformComponents
@@ -77,6 +78,7 @@ from kd.search.sga.pde import PDE
 from kd.search.sga.sketch_backend import SGACompiled, compile_for_sga
 from kd.search.sga.tabular_registry import build_tabular_registry
 from kd.search.sga.train import (
+    _ZERO_COL_EPS,
     CandidateResult,
     TrainResult,
     evaluate_candidate,
@@ -94,6 +96,7 @@ if TYPE_CHECKING:
 
     from kd.core.executor.context import ExecutionContext
     from kd.data.schema import PDEDataset
+    from kd.search.registry import DerivativeSelection
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +106,8 @@ _RESTART_SEED_STRIDE = 1000
 
 _FIELD_MODEL_ARTIFACT_FORMAT = "kd-field-model-v1"
 _TABULAR_SCORE_POLICY = "canonical-basis-aic-floor-v2"
+
+_SKETCH_FIT_POLICY = "anchors-protected-v1"
 
 
 def _field_model_artifact(model: FieldModel) -> dict[str, str | int]:
@@ -132,7 +137,7 @@ _MAX_ADMISSION_REFUSALS_PER_INDIVIDUAL = 500
 
 _SKETCH_LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -224,6 +229,7 @@ def _safe_evaluate_aic(
     diff_ctx: DiffContext | None,
     *,
     active_support_only: bool = False,
+    n_protected: int = 0,
 ) -> tuple[float, PDE]:
     try:
         cr = evaluate_candidate(
@@ -234,6 +240,7 @@ def _safe_evaluate_aic(
             config,
             diff_ctx=diff_ctx,
             active_support_only=active_support_only,
+            n_protected=n_protected,
         )
         return cr.aic_score, cr.pruned_pde
     except SearchInterrupted:
@@ -249,6 +256,8 @@ class SGAPlugin:
 
 
 
+
+    derivative_selection: DerivativeSelection | None = None
 
     score_kind: ClassVar[str] = "AIC"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
@@ -266,6 +275,7 @@ class SGAPlugin:
         algorithm="sga",
         summary="Genetic PDE and tabular search with SGA's internal sparse fit.",
         cost_class="medium",
+        requirements=RuntimeRequirements(extras=(), import_names=(), environment=()),
 
 
 
@@ -279,13 +289,29 @@ class SGAPlugin:
         modes=(
             InstrumentMode(
                 name="default",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=0.74,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Sampled peak RSS of a kd-bench worker's process group on "
+                        "burgers-sine (CPU, kd defaults), 2026-10-02."
+                    ),
+                ),
+                config_values={"use_autograd": False},
                 selected_by={"derivatives": "finite_diff"},
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="platform",
                 sketch=_SKETCH_LEVELS,
                 description="Platform finite-difference derivatives.",
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
                 score_frame=SCORE_FRAME_NATIVE_INTERNAL,
                 refused_fields={
                     "functions": "non_default",
@@ -295,28 +321,59 @@ class SGAPlugin:
             ),
             InstrumentMode(
                 name="autograd",
+                resources=ResourceHints(
+                    preferred_device="cuda",
+                    memory_estimate_gb=1.69,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Peak RSS of one fit on kd.load_burgers on a 12 GB CUDA "
+                        "card at kd's default budget and 1000 surrogate epochs, "
+                        "2026-10-23 (card peak 181 MiB); the same fit on CPU "
+                        "peaked at 0.93 GiB."
+                    ),
+                ),
+                requires_surrogate=True,
+                config_values={"use_autograd": True},
                 selected_by={"derivatives": "autograd"},
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
+                derivative_service="plugin",
                 sketch=_SKETCH_LEVELS,
                 description=(
                     "SGA trains its own field surrogate and differentiates it with "
                     'autograd; the facade selects it with derivatives="autograd".'
                 ),
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
-                refused_fields={"functions": "non_default", "constants": "non_default"},
+                refused_fields={
+                    "functions": "non_default",
+                    "constants": "non_default",
+                },
             ),
             InstrumentMode(
                 name="tabular",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
+                derivative_service="none",
                 lhs_orders=frozenset({0}),
                 score_frame=SCORE_FRAME_NATIVE_INTERNAL,
                 description="Algebraic structure search over fixed regression columns.",
                 refused_fields={
+                    "target_lhs_order": "non_default",
                     "use_autograd": "non_default",
                     "field_model": "non_default",
                     "autograd_train_epochs": "non_default",
@@ -438,7 +495,14 @@ class SGAPlugin:
 
 
         identity_breaking_fields=frozenset(
-            {"use_autograd", "field_model", "functions", "constants", "training_dtype"}
+            {
+                "use_autograd",
+                "field_model",
+                "functions",
+                "constants",
+                "training_dtype",
+                "target_lhs_order",
+            }
         ),
 
 
@@ -468,6 +532,10 @@ class SGAPlugin:
             raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
         self._mode = mode
         self._config = config or SGAConfig()
+        if mode == "tabular" and self._config.target_lhs_order != 1:
+            raise ValueError(
+                "target_lhs_order is a PDE-only setting; omit it for tabular data"
+            )
         if mode == "tabular":
             self._validate_tabular_config()
         elif self._config.functions or self._config.constants:
@@ -506,6 +574,9 @@ class SGAPlugin:
         self._diff_ctx: DiffContext | None = None
         self._default_terms: Tensor | None = None
         self._default_term_name: str | None = None
+        self._n_protected: int = 0
+        self._protected_names: tuple[str, ...] = ()
+        self._sketch_fit_policy: str | None = None
         self._y: Tensor | None = None
         self._sketch: Sketch | None = None
         self._sketch_compiled: SGACompiled | None = None
@@ -605,7 +676,7 @@ class SGAPlugin:
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=2,
-            lhs_order=1,
+            lhs_order=self._config.target_lhs_order,
             needs_surrogate=False,
         )
 
@@ -648,6 +719,21 @@ class SGAPlugin:
                 )
         elif dataset.topology is DataTopology.TABULAR:
             raise ValueError("A TABULAR dataset requires SGA mode='tabular'")
+
+        if (
+            self._restore_pending
+            and components.task is not None
+            and components.task.sketch.anchored
+            and self._sketch_fit_policy != _SKETCH_FIT_POLICY
+        ):
+            raise ValueError(
+                f"SGA checkpoint sketch_fit_policy is {self._sketch_fit_policy!r}, "
+                f"not {_SKETCH_FIT_POLICY!r}: it was written while the search "
+                "generated anchored terms, so its population can hold spellings "
+                "of an anchor that a resume would fit beside the protected anchor "
+                "column. An anchored-sketch checkpoint of that policy cannot be "
+                "resumed; start a fresh run."
+            )
         restored_vars = list(self._vars) if self._restore_pending else None
         self._prepared = False
         self._clear_pending_generation()
@@ -666,6 +752,7 @@ class SGAPlugin:
         if not self._restore_pending:
             self._reset_search_state()
         self._restore_pending = False
+        self._sketch_fit_policy = _SKETCH_FIT_POLICY
         dataset = components.dataset
         context = components.context
         if context is None:
@@ -821,6 +908,17 @@ class SGAPlugin:
         else:
             self._default_terms = None
             self._default_term_name = None
+
+        protected = self._anchor_columns()
+        self._n_protected = len(protected)
+        self._protected_names = tuple(key for key, _column in protected)
+        if protected:
+            block = torch.stack([column for _key, column in protected], dim=1)
+            self._default_terms = (
+                block
+                if self._default_terms is None
+                else torch.cat([block, self._default_terms], dim=1)
+            )
 
 
         if self._population is None:
@@ -1032,7 +1130,7 @@ class SGAPlugin:
             nmse=metrics_nmse(candidate.mse, self._target_variance()),
             r2=self._compute_r2(predicted),
             score=candidate.aic_score,
-            complexity=len(candidate.selected_indices),
+            complexity=len(candidate.selected_indices) - self._n_protected,
             coefficients=candidate.coefficients.detach(),
             is_valid=is_valid,
             error_message="" if is_valid else "Invalid AIC or MSE",
@@ -1082,6 +1180,8 @@ class SGAPlugin:
             state["score_policy"] = _TABULAR_SCORE_POLICY
             state["vocabulary"] = self._vocabulary()
             state["basis_feature_order"] = list(self._basis_feature_order)
+        elif self._sketch_fit_policy is not None:
+            state["sketch_fit_policy"] = self._sketch_fit_policy
         return state
 
     @state.setter
@@ -1116,6 +1216,8 @@ class SGAPlugin:
         if self._mode == "tabular" and "basis_feature_order" not in value:
             raise ValueError("SGA tabular checkpoint requires basis_feature_order")
         self._reset_search_state()
+
+        self._sketch_fit_policy = value.get("sketch_fit_policy")
         if self._mode == "tabular":
             self._basis_feature_order = tuple(value["basis_feature_order"])
         if "population" in value:
@@ -1210,12 +1312,13 @@ class SGAPlugin:
     def _fit_candidate(self, pde: PDE) -> CandidateResult:
         if self._mode == "default":
             return evaluate_candidate(
-                self._one_column_per_anchor(pde),
+                pde,
                 self._data_dict,
                 self._default_terms,
                 self._y if self._y is not None else torch.zeros(1),
                 self._config,
                 diff_ctx=self._diff_ctx,
+                n_protected=self._n_protected,
             )
         assert self._basis_compiler is not None and self._y is not None
         terms = self._basis_compiler.compile(pde, self._basis_feature_order)
@@ -1235,24 +1338,16 @@ class SGAPlugin:
             fitted_terms=fitted_terms,
         )
 
-    def _one_column_per_anchor(self, pde: PDE) -> PDE:
-        sketch = self._sketch
-        if sketch is None or not sketch.anchored:
-            return pde
-        kept = anchor_basis([tree_to_kd_expr(tree) for tree in pde.terms], sketch)
-        if len(kept) == pde.width:
-            return pde
-        return PDE(terms=[pde.terms[index].copy() for index in kept])
-
     def _safe_candidate_aic(self, pde: PDE) -> tuple[float, PDE]:
         if self._mode == "default":
             return _safe_evaluate_aic(
-                self._one_column_per_anchor(pde),
+                pde,
                 self._data_dict,
                 self._default_terms,
                 self._y,
                 self._config,
                 self._diff_ctx,
+                n_protected=self._n_protected,
             )
         try:
             result = self._fit_candidate(pde)
@@ -1348,8 +1443,8 @@ class SGAPlugin:
     def _build_term_list(self, pde: PDE) -> list[str]:
         terms = [tree_to_kd_expr(tree) for tree in pde.terms]
         if self._default_term_name is not None:
-            return [self._default_term_name, *terms]
-        return terms
+            return [*self._protected_names, self._default_term_name, *terms]
+        return [*self._protected_names, *terms]
 
     def _target_variance(self) -> float:
         if self._y is None or self._y.numel() < 2:
@@ -1381,6 +1476,27 @@ class SGAPlugin:
             )
         self._y = lowered
 
+    def _anchor_columns(self) -> list[tuple[str, Tensor]]:
+        compiled = self._sketch_compiled
+        if compiled is None:
+            return []
+        columns: list[tuple[str, Tensor]] = []
+        for key, tree in compiled.anchored:
+            column = execute_tree(tree, self._data_dict, self._diff_ctx)
+            if not bool(torch.isfinite(column).all().item()):
+                raise ValueError(
+                    f"anchored sketch term {key!r} evaluates to a non-finite "
+                    "column on SGA's own footing; fix the anchor or the dataset"
+                )
+            if float(torch.linalg.norm(column).item()) <= _ZERO_COL_EPS:
+                raise ValueError(
+                    f"anchored sketch term {key!r} evaluates to a zero column on "
+                    "SGA's own footing, so it cannot be fitted; fix the anchor or "
+                    "the dataset"
+                )
+            columns.append((key, column))
+        return columns
+
     def _sketch_admissible(self, pde: PDE) -> bool:
         sketch = self._sketch
         compiled = self._sketch_compiled
@@ -1399,7 +1515,7 @@ class SGAPlugin:
                 term_ir,
                 sketch,
                 pinned_keys=compiled.pinned_keys,
-                pinned_monomials=compiled.pinned_monomials,
+                pinned_monomials=compiled.reserved_monomials,
                 anchor_fingerprints=compiled.anchor_fingerprints,
             )
             if reason is not None:
@@ -1483,7 +1599,13 @@ class SGAPlugin:
         if self._mode == "tabular":
             return self._trajectory_lhs_label
         if self._default_term_name and self._lhs_axis:
-            return f"{self._default_term_name}_{self._lhs_axis}"
+            return render_lhs_label(
+                LhsSpec(
+                    self._default_term_name,
+                    self._lhs_axis,
+                    self._config.target_lhs_order,
+                )
+            )
         return ""
 
     @staticmethod
@@ -1561,17 +1683,10 @@ class SGAPlugin:
             lhs_order = getattr(dataset, "lhs_order", 1)
 
 
-
-
-
-
-            if lhs_order != 1:
+            if lhs_order != self._config.target_lhs_order:
                 raise ValueError(
-                    f"SGA only supports a first-order LHS (u_t); the dataset "
-                    f"declares lhs_order={lhs_order} "
-                    f"({dataset.lhs_field}_{dataset.lhs_axis * lhs_order}). "
-                    f"Second-order LHS (u_tt) discovery is not supported by SGA "
-                    f"(deferred to DATA-4)."
+                    f"SGA target_lhs_order={self._config.target_lhs_order} "
+                    f"does not match dataset lhs_order={lhs_order}."
                 )
             try:
                 get_deriv = self._resolve_get_derivative(context)
@@ -1581,7 +1696,8 @@ class SGAPlugin:
                 return _numeric_flatten(deriv)
             except (KeyError, ValueError) as exc:
                 raise ValueError(
-                    f"LHS derivative {dataset.lhs_field}_{dataset.lhs_axis} "
+                    "LHS derivative "
+                    f"{dataset.lhs_field}_{dataset.lhs_axis * lhs_order} "
                     f"not available. SGA requires the LHS target derivative "
                     f"to be computable from the dataset."
                 ) from exc
@@ -1620,12 +1736,13 @@ class SGAPlugin:
         lhs_field = dataset.lhs_field
         lhs_axis = dataset.lhs_axis
         if lhs_field and lhs_axis and len(lhs_axis) == 1:
-            legacy_alias = f"{lhs_field}{lhs_axis}"
+            legacy_alias = f"{lhs_field}{lhs_axis * self._config.target_lhs_order}"
             if legacy_alias in field_names:
                 raise ValueError(
                     f"Field name '{legacy_alias}' conflicts with LHS derivative "
-                    f"alias ({lhs_field}_{lhs_axis}). This would allow the LHS "
-                    f"derivative to leak into the RHS variable pool."
+                    f"alias ({lhs_field}_{lhs_axis * self._config.target_lhs_order}). "
+                    "This would allow the LHS derivative to leak "
+                    "into the RHS variable pool."
                 )
 
     def _add_derivatives(
@@ -1699,7 +1816,7 @@ class SGAPlugin:
             model=field_model,
             coords=grad_coords,
             dataset=dataset,
-            max_order=1,
+            max_order=self._config.target_lhs_order,
         )
 
     def _autograd_training_data(
@@ -2386,7 +2503,7 @@ class SGAPlugin:
             nmse=metrics_nmse(mse, self._target_variance()),
             r2=self._r2_from_mse(mse),
             score=aic,
-            complexity=len(result.selected_indices),
+            complexity=len(result.selected_indices) - self._n_protected,
             coefficients=result.coefficients,
             is_valid=is_valid,
             error_message="" if is_valid else "Invalid AIC or MSE",

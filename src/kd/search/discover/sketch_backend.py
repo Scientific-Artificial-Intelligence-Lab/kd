@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -11,14 +12,13 @@ from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
-    anchor_basis,
     constraint_admits,
     pinned_monomials,
     term_admission,
 )
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
-from kd.core.expr.jet import Monomial
+from kd.core.expr.jet import Monomial, jet_monomials
 from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.term_features import (
     ColumnFingerprint,
@@ -27,6 +27,7 @@ from kd.core.expr.term_features import (
     column_fingerprint,
 )
 from kd.core.expr.terms import split_terms
+from kd.core.metrics import aic
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
 from kd.search.discover.config import DiscoverConfig
 from kd.search.discover.tokens.library import (
@@ -36,11 +37,10 @@ from kd.search.discover.tokens.library import (
     LibraryConfig,
 )
 from kd.search.result import invalid_evaluation_result
-from kd.search.term_utils import fold_add
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -71,6 +71,15 @@ class _ExpressionEvaluator(Protocol):
         pass
 
 
+class _TermEvaluator(_ExpressionEvaluator, Protocol):
+
+    def evaluate_terms(self, terms: list[str]) -> EvaluationResult:
+        pass
+
+    def build_theta_matrix(self, terms: list[str]) -> tuple[Tensor, list[str]]:
+        pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class DiscoverCompiled:
 
@@ -78,8 +87,9 @@ class DiscoverCompiled:
     max_diff_order: int | None
     repeat_tokens: tuple[str, ...]
     pinned_keys: frozenset[str]
-    pinned_monomials: frozenset[Monomial]
+    reserved_monomials: frozenset[Monomial]
     anchor_fingerprints: frozenset[ColumnFingerprint]
+    anchor_terms: tuple[str, ...]
     report: CompileReport
     dropped: tuple[tuple[str, str], ...]
 
@@ -94,23 +104,6 @@ def _is_derivative_token(name: str) -> bool:
 
 def _feature_tokens(operators: list[str]) -> list[str]:
     return [name for name in operators if not _is_derivative_token(name)]
-
-
-def _axis_diff_tokens(operators: list[str], axis: str) -> dict[str, int]:
-    tokens: dict[str, int] = {}
-    for name in operators:
-        match = DIFF_OPERATOR_PATTERN.fullmatch(name)
-        if match is not None and match.group(2) == axis:
-            tokens[name] = int(match.group(1) or "1")
-    return tokens
-
-
-def _composable(order: int, parts: list[int]) -> bool:
-    reachable = {0}
-    for total in range(1, order + 1):
-        if any(total - part in reachable for part in parts):
-            reachable.add(total)
-    return order in reachable
 
 
 def _term_axes(features: TermFeatures) -> frozenset[str]:
@@ -158,64 +151,6 @@ def _effective_cap(
     if config_cap is None:
         return sketch_cap, sketch_cap
     return min(config_cap, sketch_cap), sketch_cap
-
-
-def _assert_anchor_symbols(
-    term: str, features: TermFeatures, library: LibraryConfig
-) -> None:
-    fields = sorted(features.base_fields - set(library.state_vars))
-    if fields:
-        raise ValueError(
-            f"DISCOVER anchor {term!r} requires fields {fields!r} absent from "
-            "config.library.state_vars"
-        )
-    coordinates = sorted(features.coordinate_dependencies - set(library.coord_vars))
-    if coordinates:
-        raise ValueError(
-            f"DISCOVER anchor {term!r} requires coordinates {coordinates!r} absent "
-            "from config.library.coord_vars"
-        )
-
-
-def _assert_anchor_orders(
-    term: str, features: TermFeatures, operators: list[str], effective: int | None
-) -> None:
-    for _field, multiindex in sorted(features.derivative_multiindices):
-        for axis, order in multiindex:
-            tokens = _axis_diff_tokens(operators, axis)
-            if not _composable(order, list(tokens.values())):
-                raise ValueError(
-                    f"DISCOVER anchor {term!r} requires derivative order {order} "
-                    f"on axis {axis!r}, which the configured diff tokens "
-                    f"{list(tokens)!r} cannot compose"
-                )
-    order = features.max_total_derivative_order
-    if effective is not None and order > effective:
-        raise ValueError(
-            f"DISCOVER anchor {term!r} requires derivative order {order} but "
-            f"max_diff_order={effective} caps generation"
-        )
-
-
-def _assert_anchors_generable(
-    sketch: Sketch,
-    anchors: tuple[TermFeatures, ...],
-    config: DiscoverConfig,
-    effective: int | None,
-) -> None:
-    for anchor, features in zip(sketch.anchored, anchors, strict=True):
-        _assert_anchor_symbols(anchor.term_ir, features, config.library)
-        missing = _uncovered_features(features.operators, config.library.operators)
-        if missing:
-            raise ValueError(
-                f"DISCOVER anchor {anchor.term_ir!r} requires operator features "
-                f"{sorted(missing)!r} that no configured token builds without "
-                "adding a feature the anchor lacks (div brings mul and recip "
-                "together)"
-            )
-        _assert_anchor_orders(
-            anchor.term_ir, features, config.library.operators, effective
-        )
 
 
 def _admitted_names(
@@ -334,17 +269,12 @@ def _assert_rootable(
     if library.operators:
         return
     holes = tuple(hole.id for hole in sketch.holes)
-    widen = (
-        f"; holes {holes!r}: configure add or sub so bare terminals become "
-        "summands, or widen a hole's operators or max_deriv_order"
-        if holes
-        else "; configure add or sub, or an operator the anchors need"
-    )
     raise ValueError(
         "DISCOVER effective vocabulary keeps no operator token after sketch "
         f"constraints (configured operators {configured.operators!r}), and a "
         "DISCOVER expression cannot be a lone terminal (LengthConstraint forbids "
-        f"a terminal root){widen}"
+        f"a terminal root); holes {holes!r}: configure add or sub so bare "
+        "terminals become summands, or widen a hole's operators or max_deriv_order"
     )
 
 
@@ -401,20 +331,14 @@ def _assert_required_holes_live(sketch: Sketch, library: LibraryConfig) -> None:
         )
 
 
-def _assert_single_term_capacity(
-    sketch: Sketch,
-    library: LibraryConfig,
-    anchor_fingerprints: frozenset[ColumnFingerprint],
-) -> None:
+def _assert_single_term_capacity(sketch: Sketch, library: LibraryConfig) -> None:
     if any(name in _SEPARATORS for name in library.operators):
         return
-    hole_terms = sum(hole.min_count for hole in sketch.holes)
-    required = len(anchor_fingerprints) + hole_terms
+    required = sum(hole.min_count for hole in sketch.holes)
     if required < 2:
         return
     raise ValueError(
-        f"DISCOVER sketch requires {required} terms ({len(anchor_fingerprints)} "
-        f"distinct anchor columns plus hole min_count total {hole_terms}), but "
+        f"DISCOVER sketch requires {required} terms (hole min_count total), but "
         "neither add nor sub is configured (kept operators "
         f"{library.operators!r}), so every DISCOVER expression is a single "
         "term; configure add or sub"
@@ -471,10 +395,11 @@ def _boundary_notes(sketch: Sketch) -> list[str]:
         )
     if sketch.anchored:
         notes.append(
-            "anchor generability is judged on the token grammar (fields, "
-            "coordinates, operator features, per-axis orders); configured priors "
-            "such as TrigConstraint or DiffChildConstraint can still keep an "
-            "anchor out of reach"
+            "the token library keeps the fields, axes, operators and derivative "
+            "orders the anchors need, as before the fit took the anchors over "
+            "(the narrowed library is not part of the resume identity), so the "
+            "generator can still propose a spelling of an anchor, which the "
+            "gate refuses"
         )
     return notes
 
@@ -490,14 +415,18 @@ def _notes(
 ) -> tuple[str, ...]:
     pins = ", ".join(pin.term_ir for pin in sketch.pinned) or "none"
     notes = [
-        "anchors and hole counts are exit-checked",
+        "hole counts are exit-checked",
+        "anchors are supplied to the fit, not generated: the anchored columns "
+        "are appended to every candidate's fit, their indices are always "
+        "selected and they are not counted in its complexity; the exit still "
+        "requires |coefficient| >= support_threshold, so with "
+        "support_threshold=0 an anchored clause fails only on an exactly zero "
+        "coefficient",
         "token narrowing bounds generation; the evaluator gate refuses, before "
         "scoring, any term outside the sketch vocabulary, any term on a pinned "
-        "law key or sharing a jet monomial with a pin, any term carrying an "
-        "anchor's jet monomial without spelling the anchor, and any term no "
-        "hole admits unless it spells an anchor (column fingerprint and jet "
-        "expansion); a candidate's later spellings of one anchor are left out "
-        "of its fit",
+        "law key, any term sharing a jet monomial with a pin or an anchor (so "
+        "no generated term spells or carries an anchored column), and any "
+        "other term no hole admits",
         f"max_diff_order effective={effective} (config={config.max_diff_order}, "
         f"sketch={sketch_cap})",
     ]
@@ -510,6 +439,13 @@ def _notes(
         and hole.constraint.max_deriv_order > effective
     )
     notes.append(f"pinned terms are owned by lower/lift: {pins}")
+    if config.pinn is not None:
+        notes.append(
+            "PINN mode: pins deducted from every rebuilt collocation target and "
+            "included in the PINN residual, anchors fitted on every rebuilt "
+            "evaluator and included with their fitted coefficients; verification "
+            "on the platform finite-difference footing"
+        )
     notes.extend(_boundary_notes(sketch))
     if repeat_tokens != tuple(config.repeat_tokens):
         notes.append(f"repeat_tokens narrowed to {list(repeat_tokens)!r}")
@@ -526,8 +462,9 @@ def _closed_compilation(config: DiscoverConfig) -> DiscoverCompiled:
         max_diff_order=config.max_diff_order,
         repeat_tokens=tuple(config.repeat_tokens),
         pinned_keys=frozenset(),
-        pinned_monomials=frozenset(),
+        reserved_monomials=frozenset(),
         anchor_fingerprints=frozenset(),
+        anchor_terms=(),
         report=CompileReport(
             levels=_LEVELS,
             notes=(
@@ -539,16 +476,38 @@ def _closed_compilation(config: DiscoverConfig) -> DiscoverCompiled:
     )
 
 
+def _assert_holes_to_search(sketch: Sketch) -> None:
+    if sketch.holes:
+        return
+    anchors = [item.term_ir for item in sketch.anchored]
+    raise ValueError(
+        f"DISCOVER sketch anchors {anchors!r} and has no hole, so there is "
+        "nothing to search: anchors are supplied to the fit, not generated. "
+        "Fit them directly with kd.refit_terms(dataset, [a.term_ir for a in "
+        "sketch.anchored], sketch=sketch), with the resolved sketch; sketch= "
+        "supplies the pinned values only, adds no anchor columns of its own "
+        "and certifies nothing, and the refit runs on finite differences "
+        "unless method= names another footing"
+    )
+
+
+def _reserved_monomials(sketch: Sketch) -> frozenset[Monomial]:
+    anchors: set[Monomial] = set()
+    for item in sketch.anchored:
+        anchors.update(jet_monomials(law_term_key(item.term_ir), sketch.vocabulary))
+    return pinned_monomials(sketch).union(anchors)
+
+
 def compile_for_discover(sketch: Sketch, config: DiscoverConfig) -> DiscoverCompiled:
     if not sketch.anchored and not sketch.holes:
         return _closed_compilation(config)
+    _assert_holes_to_search(sketch)
     anchors = tuple(
         analyze_term(item.term_ir, sketch.vocabulary) for item in sketch.anchored
     )
-    pin_monomials = pinned_monomials(sketch)
+    reserved = _reserved_monomials(sketch)
     _assert_operator_clauses_generable(sketch, config.library.operators)
     effective, sketch_cap = _effective_cap(sketch, anchors, config.max_diff_order)
-    _assert_anchors_generable(sketch, anchors, config, effective)
     admitted = _admitted_names(sketch, anchors)
     dropped: list[tuple[str, str]] = []
     library = _narrow_library(
@@ -557,8 +516,7 @@ def compile_for_discover(sketch: Sketch, config: DiscoverConfig) -> DiscoverComp
     _assert_state_variable(sketch, library, config.library, admitted[0])
     _assert_rootable(sketch, library, config.library)
     _assert_required_holes_live(sketch, library)
-    anchor_fingerprints = frozenset(column_fingerprint(item) for item in anchors)
-    _assert_single_term_capacity(sketch, library, anchor_fingerprints)
+    _assert_single_term_capacity(sketch, library)
 
 
     removed = {name for name, _reason in dropped}
@@ -569,8 +527,9 @@ def compile_for_discover(sketch: Sketch, config: DiscoverConfig) -> DiscoverComp
         max_diff_order=effective,
         repeat_tokens=repeat_tokens,
         pinned_keys=frozenset(law_term_key(pin.term_ir) for pin in sketch.pinned),
-        pinned_monomials=pin_monomials,
-        anchor_fingerprints=anchor_fingerprints,
+        reserved_monomials=reserved,
+        anchor_fingerprints=frozenset(column_fingerprint(item) for item in anchors),
+        anchor_terms=tuple(item.term_ir for item in sketch.anchored),
         report=CompileReport(
             levels=_LEVELS,
             notes=_notes(
@@ -597,11 +556,24 @@ def narrowed_config(
     )
 
 
+def assert_anchors_execute(
+    evaluator: _TermEvaluator, anchor_terms: Sequence[str]
+) -> None:
+    for term in anchor_terms:
+        result = evaluator.evaluate_terms([term])
+        if not result.is_valid:
+            raise ValueError(
+                f"DISCOVER anchor {term!r} cannot be fitted on this run's "
+                f"evaluator ({result.error_message}); anchors are supplied to "
+                "the fit of every candidate, so each one must execute"
+            )
+
+
 class SketchGatedEvaluator:
 
     def __init__(
         self,
-        evaluator: _ExpressionEvaluator,
+        evaluator: _TermEvaluator,
         *,
         sketch: Sketch,
         compiled: DiscoverCompiled,
@@ -618,6 +590,9 @@ class SketchGatedEvaluator:
 
     def invalidate_term_cache(self) -> None:
         self._inner.invalidate_term_cache()
+
+    def build_theta_matrix(self, terms: list[str]) -> tuple[Tensor, list[str]]:
+        return self._inner.build_theta_matrix(terms)
 
     def evaluate_expression(self, expr: str) -> EvaluationResult:
         try:
@@ -636,12 +611,30 @@ class SketchGatedEvaluator:
                     terms=terms,
                     reason="structural_reject",
                 )
-        kept = anchor_basis(terms, self._sketch)
-        if len(kept) == len(terms):
+        anchors = self._compiled.anchor_terms
+        if not anchors:
             return self._inner.evaluate_expression(expr)
-        fitted = fold_add([terms[index] for index in kept])
+        return self._fit_with_anchors(expr, terms, anchors)
+
+    def _fit_with_anchors(
+        self, expr: str, terms: list[str], anchors: tuple[str, ...]
+    ) -> EvaluationResult:
+        result = self._inner.evaluate_terms([*terms, *anchors])
+        if not result.is_valid:
+            return dataclasses.replace(result, expression=expr)
+        if result.selected_indices is not None:
+            raise NotImplementedError(
+                "the DISCOVER sketch gate appends the anchors to a least-squares "
+                "fit, which keeps every column; this evaluator's solver selected "
+                f"{result.selected_indices} of {[*terms, *anchors]}"
+            )
+        own = len(terms)
         return dataclasses.replace(
-            self._inner.evaluate_expression(fitted), expression=expr
+            result,
+            expression=expr,
+            selected_indices=list(range(own + len(anchors))),
+            complexity=own,
+            score=aic(result.mse, own, self._inner.lhs_target.numel()),
         )
 
     def _refusal(self, term: str) -> str | None:
@@ -650,7 +643,7 @@ class SketchGatedEvaluator:
             term,
             self._sketch,
             pinned_keys=compiled.pinned_keys,
-            pinned_monomials=compiled.pinned_monomials,
+            pinned_monomials=compiled.reserved_monomials,
             anchor_fingerprints=compiled.anchor_fingerprints,
         )
 
@@ -658,6 +651,7 @@ class SketchGatedEvaluator:
 __all__ = [
     "DiscoverCompiled",
     "SketchGatedEvaluator",
+    "assert_anchors_execute",
     "compile_for_discover",
     "narrowed_config",
 ]

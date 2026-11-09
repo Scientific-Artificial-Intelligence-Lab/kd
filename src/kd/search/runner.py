@@ -51,11 +51,13 @@ from kd.search.checkpoint_payload import (
 from kd.search.descriptor import (
     InstrumentDescriptor,
     assert_sketch_supported,
+    execution_mode,
     mode_for_topology,
 )
 from kd.search.protocol import (
     DerivativeSourceAlgorithm,
     DiscoveryTask,
+    FacadeWiringContract,
     IterativeSearchAlgorithm,
     PlatformComponents,
     ScoreContract,
@@ -72,7 +74,11 @@ from kd.search.record_assembly import (
 )
 from kd.search.recorder import VizRecorder
 from kd.search.records import RecordSchemaError, RunCost
-from kd.search.registry import execution_identity
+from kd.search.registry import (
+    DerivativeSelectionAlgorithm,
+    algorithm_execution_identity,
+    bind_derivative_selection,
+)
 from kd.search.result import (
     DEFAULT_SCORE_DIRECTION,
     DEFAULT_SCORE_KIND,
@@ -195,16 +201,25 @@ class ExperimentRunner:
 
         self._task: DiscoveryTask | None = None
 
+
+
+
+
+
+        self.resolved_config: dict[str, Any] | None = None
+
     def run(
         self,
         components: PlatformComponents,
         *,
         preprocessing_seconds: float | None = None,
     ) -> ExperimentResult:
+        self.resolved_config = None
         self._task = components.task
         self._assert_algorithm_protocol()
         self._assert_sketch_capability()
         self._assert_dataset_supported(components)
+        self._bind_execution_selection(components)
         self._assert_run_identity_serializable()
         self._warn_if_small_term_drop_unused()
         self._current_iteration = 0
@@ -236,6 +251,32 @@ class ExperimentRunner:
         finally:
             components.recorder = recorder_before
 
+    def _bind_execution_selection(self, components: PlatformComponents) -> None:
+        if not isinstance(self._algorithm, DerivativeSelectionAlgorithm):
+            return
+        mode = execution_mode(
+            cast(FacadeWiringContract, self._algorithm).descriptor,
+            components.dataset.topology,
+            self._algorithm.config,
+            lhs_order=components.dataset.lhs_order,
+        )
+        if mode.derivative_service == "platform":
+            if components.derivative_provider is None:
+                return
+            bind_derivative_selection(
+                self._algorithm,
+                derivative_provider=components.derivative_provider,
+                default_derivative_provider=mode.provider_kind,
+                mode=mode.name,
+            )
+        elif mode.component_fields:
+            bind_derivative_selection(
+                self._algorithm,
+                derivative_provider=None,
+                default_derivative_provider=None,
+                mode=mode.name,
+            )
+
     def _run_search(
         self,
         components: PlatformComponents,
@@ -250,6 +291,7 @@ class ExperimentRunner:
         self._pending_restore_state = None
         searched_vocabulary = self._sealed_searched_vocabulary()
 
+        self.resolved_config = canonicalize_config(self._result_config())
         for cb in callbacks:
             cb.on_experiment_start(self._algorithm)
 
@@ -667,6 +709,8 @@ class ExperimentRunner:
             peak_rss_bytes=peak_rss_bytes(),
             cuda_max_memory_allocated_bytes=cuda_peak_bytes(components.device),
             device="cpu" if components.device is None else str(components.device),
+            max_iterations=self._max_iterations,
+            iterations=self._current_iteration,
         )
 
     def _build_sketch_outcome(
@@ -802,11 +846,14 @@ class ExperimentRunner:
         components: PlatformComponents,
         final_eval: EvaluationResult,
     ) -> LhsSpec | None:
+        dataset = components.dataset
+        if dataset.topology is DataTopology.TABULAR:
+
+            return LhsSpec(final_eval.lhs_name or dataset.lhs_field, "", 0)
         lhs_name = final_eval.lhs_name
         if isinstance(lhs_name, str) and lhs_name:
             return self._lhs_spec_from_name(components, lhs_name)
 
-        dataset = components.dataset
         if dataset.lhs_field and dataset.lhs_axis:
             return LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
         return None
@@ -845,8 +892,18 @@ class ExperimentRunner:
 
     def _result_config(self) -> dict[str, Any]:
         config = dict(self._algorithm.config)
-        config.update(execution_identity(_algorithm_name(self._algorithm)))
-        if _implements_member(self._algorithm, "derivative_source"):
+        config.update(
+            algorithm_execution_identity(
+                self._algorithm, _algorithm_name(self._algorithm)
+            )
+        )
+        if (
+            isinstance(self._algorithm, DerivativeSelectionAlgorithm)
+            and self._algorithm.derivative_selection is not None
+            and self._algorithm.derivative_selection.name is not None
+        ):
+            config["provider_kind"] = self._algorithm.derivative_selection.name
+        elif _implements_member(self._algorithm, "derivative_source"):
             config["provider_kind"] = cast(
                 DerivativeSourceAlgorithm, self._algorithm
             ).derivative_source

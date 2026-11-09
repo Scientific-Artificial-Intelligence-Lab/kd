@@ -10,7 +10,6 @@ from kd.core.equation.signature import law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     TermConstraint,
-    anchor_basis,
     constraint_admits,
     pinned_monomials,
     term_admission,
@@ -24,14 +23,14 @@ from kd.core.expr.term_features import (
     column_fingerprint,
 )
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
-from kd.search.eqgpt.gates import REDUNDANT_COMBOS, missing_variables
+from kd.search.eqgpt.gates import missing_variables
 from kd.search.eqgpt.ir_map import TOKEN_IR_ATOM, sentence_to_rhs_terms
 from kd.search.eqgpt.sampling import OPERATOR_IDS
 from kd.search.eqgpt.vocab import DIV_ID, FIRST_TERM_ID, MUL_ID, Vocab
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -54,8 +53,9 @@ class EqGPTCompiled:
     masked_tokens: frozenset[int]
     gate_variables: tuple[str, ...]
     pinned_keys: frozenset[str]
-    pinned_monomials: frozenset[Monomial]
+    reserved_monomials: frozenset[Monomial]
     anchor_fingerprints: frozenset[ColumnFingerprint]
+    anchor_terms: tuple[str, ...]
     report: CompileReport
     dropped: tuple[tuple[str, str], ...]
 
@@ -130,35 +130,6 @@ def _assert_operator_clauses_generable(sketch: Sketch, grammar: _Grammar) -> Non
             )
 
 
-def _inside(anchor: TermFeatures, features: TermFeatures) -> bool:
-    return (
-        features.base_fields <= anchor.base_fields
-        and features.coordinate_dependencies <= anchor.coordinate_dependencies
-        and features.derivative_multiindices <= anchor.derivative_multiindices
-        and features.operators <= anchor.operators
-    )
-
-
-def _chain_matches(
-    target: TermFeatures, chain: Sequence[TermFeatures], grammar: _Grammar
-) -> bool:
-    union = (
-        frozenset().union(*(f.base_fields for f in chain)),
-        frozenset().union(*(f.coordinate_dependencies for f in chain)),
-        frozenset().union(*(f.derivative_multiindices for f in chain)),
-    )
-    if union != (
-        target.base_fields,
-        target.coordinate_dependencies,
-        target.derivative_multiindices,
-    ):
-        return False
-    operators = frozenset().union(*(f.operators for f in chain))
-    return any(
-        target.operators == operators | joined for joined in grammar.operators.values()
-    )
-
-
 def _chain_term(chain: Sequence[int], operator: int, vocab: Vocab) -> str:
     sentence = [chain[0]]
     for token in chain[1:]:
@@ -167,114 +138,25 @@ def _chain_term(chain: Sequence[int], operator: int, vocab: Vocab) -> str:
     return term
 
 
-def _spelling_length(
-    target: TermFeatures, grammar: _Grammar, sketch: Sketch, vocab: Vocab
-) -> int | None:
-    fingerprint = column_fingerprint(target)
-    if any(
-        column_fingerprint(features) == fingerprint
-        for features in grammar.atoms.values()
-    ):
-        return 1
-    inside = [
-        token for token, features in grammar.atoms.items() if _inside(target, features)
-    ]
-    if not inside or not _chain_matches(
-        target, [grammar.atoms[token] for token in inside], grammar
-    ):
-        return None
-    longest = max(2, len(inside), target.power_degree)
-    return next(
-        (
-            size
-            for size in range(2, longest + 1)
-            for chain in itertools.combinations_with_replacement(inside, size)
-            for operator in grammar.operators
-            if column_fingerprint(
-                analyze_term(
-                    law_term_key(_chain_term(chain, operator, vocab)),
-                    sketch.vocabulary,
-                )
-            )
-            == fingerprint
-        ),
-        None,
-    )
-
-
-def _anchor_spellings(
-    sketch: Sketch,
-    anchors: tuple[TermFeatures, ...],
-    grammar: _Grammar,
-    vocab: Vocab,
-) -> dict[ColumnFingerprint, int]:
-    spellings: dict[ColumnFingerprint, int] = {}
-    for anchor, features in zip(sketch.anchored, anchors, strict=True):
-        length = _spelling_length(features, grammar, sketch, vocab)
-        if length is not None:
-            spellings[column_fingerprint(features)] = length
-            continue
-        words = [
-            vocab.id2word[token]
-            for token, atom in grammar.atoms.items()
-            if _inside(features, atom)
-        ]
-        live = [vocab.id2word[token] for token in grammar.operators]
-        raise ValueError(
-            f"EqGPT anchor {anchor.term_ir!r} cannot be spelled from the vocabulary "
-            f"atoms under this dataset's mask (atoms fitting inside it: {words!r}; "
-            f"operator tokens {live!r}); the base mask removes the atoms above "
-            "the provider's derivative order, every t-bearing atom, the atoms "
-            "on an undeclared axis, the IR-inexpressible tokens and the tokens in "
-            "config.masked_tokens"
-        )
-    return spellings
-
-
-def _assert_anchors_not_redundant(
-    anchor_fingerprints: frozenset[ColumnFingerprint],
-    grammar: _Grammar,
-    vocab: Vocab,
-) -> None:
-    words = frozenset(
-        vocab.id2word[token]
-        for token, features in grammar.atoms.items()
-        if column_fingerprint(features) in anchor_fingerprints
-    )
-    for combo in REDUNDANT_COMBOS:
-        if combo <= words:
-            raise ValueError(
-                f"EqGPT anchors spelled by the tokens {sorted(combo)!r} form a "
-                "redundant combination that the reference reward gate zeroes: "
-                "every sentence carrying all of them scores 0 and is outranked by "
-                "any positive-reward sentence; drop one anchor"
-            )
-
-
 def _assert_capacity(
     sketch: Sketch,
-    spellings: dict[ColumnFingerprint, int],
     witness_lengths: dict[str, int],
     max_length: int,
     prefix_len: int,
 ) -> None:
     capacity = (max_length - prefix_len + 1) // 2
-    hole_atoms = sum(
+    required = sum(
         hole.min_count * witness_lengths[hole.id]
         for hole in sketch.holes
         if hole.min_count >= 1
     )
-    anchor_atoms = sum(spellings.values())
-    required = anchor_atoms + hole_atoms
     if required > capacity:
         raise ValueError(
-            f"EqGPT sketch requires {required} term positions ({anchor_atoms} for "
-            f"{len(spellings)} distinct anchor columns, each spelled by its "
-            f"shortest atom or * / chain, plus {hole_atoms} for the required holes, "
-            "min_count times the atoms of each hole's shortest admitted term "
-            f"{witness_lengths!r}), but max_length={max_length} with the "
-            f"{prefix_len}-token start prefix fits at most {capacity} term "
-            "positions per sentence"
+            f"EqGPT sketch requires {required} term positions for the required "
+            "holes, min_count times the atoms of each hole's shortest admitted "
+            f"term {witness_lengths!r} (anchors take none), but "
+            f"max_length={max_length} with the {prefix_len}-token start prefix "
+            f"fits at most {capacity} term positions per sentence"
         )
 
 
@@ -292,12 +174,7 @@ def _joins(constraint: TermConstraint, grammar: _Grammar) -> bool:
     )
 
 
-def _atom_kept(
-    features: TermFeatures,
-    sketch: Sketch,
-    anchors: tuple[TermFeatures, ...],
-    grammar: _Grammar,
-) -> bool:
+def _atom_kept(features: TermFeatures, sketch: Sketch, grammar: _Grammar) -> bool:
     for hole in sketch.holes:
         constraint = hole.constraint
         if _fits(constraint, features) and (
@@ -306,31 +183,29 @@ def _atom_kept(
             or _joins(constraint, grammar)
         ):
             return True
-    return any(_inside(anchor, features) for anchor in anchors)
+    return False
 
 
-def _operator_kept(
-    features: frozenset[str], sketch: Sketch, anchors: tuple[TermFeatures, ...]
-) -> bool:
+def _operator_kept(features: frozenset[str], sketch: Sketch) -> bool:
     return any(
         hole.constraint.operators is None or features <= hole.constraint.operators
         for hole in sketch.holes
-    ) or any(features <= anchor.operators for anchor in anchors)
+    )
 
 
 def _sketch_mask(
-    sketch: Sketch, anchors: tuple[TermFeatures, ...], grammar: _Grammar
+    sketch: Sketch, grammar: _Grammar
 ) -> tuple[dict[int, TermFeatures], frozenset[int], list[int]]:
     kept: dict[int, TermFeatures] = {}
     filtered: list[int] = []
     for token, features in grammar.atoms.items():
-        if _atom_kept(features, sketch, anchors, grammar):
+        if _atom_kept(features, sketch, grammar):
             kept[token] = features
         else:
             filtered.append(token)
     kept_operators: set[int] = set()
     for token, joined in grammar.operators.items():
-        if _operator_kept(joined, sketch, anchors):
+        if _operator_kept(joined, sketch):
             kept_operators.add(token)
         else:
             filtered.append(token)
@@ -379,10 +254,10 @@ def _assert_required_holes_live(
         raise ValueError(
             f"EqGPT hole {hole.id!r} admits no generable term: no kept token, and "
             "no two kept tokens joined by a kept * or /, spell a term it admits "
-            f"off the pinned columns (kept tokens {words!r}, operator tokens "
-            f"{operators!r}); every vocabulary atom is spelled over the field 'u' "
-            "and the axes x, y, z, t; widen the hole's clause, admit mul, or drop "
-            "the covering pin"
+            f"off the pinned and anchored columns (kept tokens {words!r}, operator "
+            f"tokens {operators!r}); every vocabulary atom is spelled over the "
+            "field 'u' and the axes x, y, z, t; widen the hole's clause, admit "
+            "mul, or drop the covering pin or anchor"
         )
     return lengths
 
@@ -402,8 +277,8 @@ def _assert_term_token_left(
         return
     raise ValueError(
         "EqGPT sketch leaves no term token to sample: the base mask plus the "
-        "sketch mask cover the vocabulary, or only atoms on a pinned column remain "
-        "with * and / masked; widen a hole or drop a clause"
+        "sketch mask cover the vocabulary, or only atoms on a pinned or anchored "
+        "column remain with * and / masked; widen a hole or drop a clause"
     )
 
 
@@ -458,8 +333,9 @@ def _assert_gate_axes_carried(
             continue
         gate = (
             f"the start prefix {list(start_words)!r} does not spell it and no pin "
-            "carries it, but the reference declared-variable reward gate zeroes "
-            "every sentence that lacks it, so every candidate would score 0"
+            "or anchor carries it, but the reference declared-variable reward "
+            "gate zeroes every sentence that lacks it, so every candidate would "
+            "score 0"
         )
         if not base_carriers[axis]:
             raise ValueError(
@@ -472,8 +348,8 @@ def _assert_gate_axes_carried(
         words = [vocab.id2word[token] for token in kept]
         raise ValueError(
             f"EqGPT sketch mask keeps no term token carrying axis {axis!r} (kept "
-            f"tokens {words!r}), {gate}; admit a term on {axis!r} in a hole or pin "
-            "one"
+            f"tokens {words!r}), {gate}; admit a term on {axis!r} in a hole, or "
+            "pin or anchor one"
         )
 
 
@@ -510,12 +386,14 @@ def _field_free_notes(
 
 def _gate_note(
     pinned_axes: frozenset[str],
+    anchor_carriers: dict[str, list[str]],
     gate_variables: tuple[str, ...],
     field_free: list[str],
 ) -> str:
     parts = [
         f"declared-variable gate: axes carried by pins {sorted(pinned_axes)!r} "
-        "count as present, so the gate judges the generated sentence on "
+        f"and by the anchors {anchor_carriers!r} (axis: anchored terms) count as "
+        "present, so the gate judges the generated sentence on "
         f"{list(gate_variables)!r}",
         *field_free,
     ]
@@ -526,6 +404,7 @@ def _gate_note(
 def _boundary_notes(
     sketch: Sketch,
     pinned_axes: frozenset[str],
+    anchor_carriers: dict[str, list[str]],
     gate_variables: tuple[str, ...],
     field_free: list[str],
 ) -> list[str]:
@@ -548,12 +427,9 @@ def _boundary_notes(
             "identities (sin or cos squared, log of exp) would respell a pin "
             "too, but the vocabulary has no cos or log atom"
         )
-    if sketch.pinned or field_free:
-        notes.append(_gate_note(pinned_axes, gate_variables, field_free))
-    if sketch.anchored:
+    if sketch.pinned or anchor_carriers or field_free:
         notes.append(
-            "anchor generability is judged on the token grammar (atoms, *, /), not "
-            "on the pretrained model's propensity"
+            _gate_note(pinned_axes, anchor_carriers, gate_variables, field_free)
         )
     return notes
 
@@ -561,22 +437,33 @@ def _boundary_notes(
 def _report(
     sketch: Sketch,
     pinned_axes: frozenset[str],
+    anchor_carriers: dict[str, list[str]],
     gate_variables: tuple[str, ...],
     field_free: list[str],
     dropped: tuple[tuple[str, str], ...],
 ) -> CompileReport:
     pins = ", ".join(pin.term_ir for pin in sketch.pinned) or "none"
     notes = [
-        "anchors and hole counts are exit-checked",
-        "the sketch token mask bounds generation; the pre-score gate refuses any "
-        "term outside the sketch vocabulary, any term on a pinned law key or "
-        "sharing a jet monomial with a pin, any term carrying an anchor's jet "
-        "monomial without spelling the anchor, and any term no hole admits "
-        "unless it spells an anchor (column fingerprint and jet expansion); a "
-        "candidate's later spellings of one anchor are left out of its fit",
+        "anchors are supplied to the fit, not generated: each anchored column "
+        "is executed once on the platform context and stacked after the LHS in "
+        "every scored matrix and in the final refit, where a candidate column "
+        "equal to it is the twin dropped and the anchors count neither in the "
+        "sparsity factor nor in the complexity; the exit still requires "
+        "|coefficient| >= support_threshold, so with support_threshold=0 an "
+        "anchored clause fails only on an exactly zero coefficient",
+        "hole counts are exit-checked",
+        "the sketch token mask bounds generation and keeps no atom only an "
+        "anchor uses; the pre-score gate refuses any term outside the sketch "
+        "vocabulary, any term on a pinned law key or sharing a jet monomial "
+        "with a pin or an anchor (so a generated term neither spells nor "
+        "carries an anchored column), and any term no hole admits",
         f"pinned terms are owned by lower/lift: {pins}",
     ]
-    notes.extend(_boundary_notes(sketch, pinned_axes, gate_variables, field_free))
+    notes.extend(
+        _boundary_notes(
+            sketch, pinned_axes, anchor_carriers, gate_variables, field_free
+        )
+    )
     notes.extend(f"masked {word!r}: {reason}" for word, reason in dropped)
     return CompileReport(levels=_LEVELS, notes=tuple(notes))
 
@@ -586,8 +473,9 @@ def _closed_compilation(variables: tuple[str, ...]) -> EqGPTCompiled:
         masked_tokens=frozenset(),
         gate_variables=variables,
         pinned_keys=frozenset(),
-        pinned_monomials=frozenset(),
+        reserved_monomials=frozenset(),
         anchor_fingerprints=frozenset(),
+        anchor_terms=(),
         report=CompileReport(
             levels=_LEVELS,
             notes=(
@@ -610,9 +498,12 @@ def _dropped(
 
 
 def _pin_facts(sketch: Sketch) -> tuple[_Pins, frozenset[str]]:
+    anchored: set[Monomial] = set()
+    for anchor in sketch.anchored:
+        anchored.update(jet_monomials(law_term_key(anchor.term_ir), sketch.vocabulary))
     pins = _Pins(
         keys=frozenset(law_term_key(pin.term_ir) for pin in sketch.pinned),
-        monomials=pinned_monomials(sketch),
+        monomials=pinned_monomials(sketch) | anchored,
         vocabulary=sketch.vocabulary,
     )
     pinned_axes = frozenset().union(
@@ -624,16 +515,29 @@ def _pin_facts(sketch: Sketch) -> tuple[_Pins, frozenset[str]]:
     return pins, pinned_axes
 
 
-def _base_checks(
-    sketch: Sketch,
-    anchors: tuple[TermFeatures, ...],
-    grammar: _Grammar,
-    vocab: Vocab,
-) -> dict[ColumnFingerprint, int]:
-    _assert_operator_clauses_generable(sketch, grammar)
-    spellings = _anchor_spellings(sketch, anchors, grammar, vocab)
-    _assert_anchors_not_redundant(frozenset(spellings), grammar, vocab)
-    return spellings
+def _anchor_carriers(
+    sketch: Sketch, anchors: tuple[TermFeatures, ...]
+) -> dict[str, list[str]]:
+    carriers: dict[str, list[str]] = {}
+    for anchor, features in zip(sketch.anchored, anchors, strict=True):
+        for axis in sorted(_term_axes(features)):
+            carriers.setdefault(axis, []).append(anchor.term_ir)
+    return dict(sorted(carriers.items()))
+
+
+def _assert_holes_present(sketch: Sketch) -> None:
+    if sketch.holes:
+        return
+    raise ValueError(
+        "EqGPT cannot search an anchors-only sketch: anchors are supplied to the "
+        "fit, not generated, so without a hole there is no term left to "
+        "generate. Fit the anchored terms directly with "
+        "kd.refit_terms(dataset, [a.term_ir for a in sketch.anchored], "
+        "sketch=sketch), with the resolved sketch; its sketch= supplies the "
+        "pinned values only, adds no anchor columns of its own and certifies "
+        "nothing, and its default footing is finite differences (choose method= "
+        "for another)"
+    )
 
 
 def compile_for_eqgpt(
@@ -647,19 +551,25 @@ def compile_for_eqgpt(
 ) -> EqGPTCompiled:
     if not sketch.anchored and not sketch.holes:
         return _closed_compilation(variables)
+    _assert_holes_present(sketch)
     anchors = tuple(
         analyze_term(item.term_ir, sketch.vocabulary) for item in sketch.anchored
     )
     pins, pinned_axes = _pin_facts(sketch)
-    gate_variables = tuple(axis for axis in variables if axis not in pinned_axes)
+    anchor_carriers = _anchor_carriers(sketch, anchors)
+    gate_variables = tuple(
+        axis
+        for axis in variables
+        if axis not in pinned_axes and axis not in anchor_carriers
+    )
     grammar = _grammar(sketch, vocab, base_masked)
-    spellings = _base_checks(sketch, anchors, grammar, vocab)
-    kept, kept_operators, filtered = _sketch_mask(sketch, anchors, grammar)
+    _assert_operator_clauses_generable(sketch, grammar)
+    kept, kept_operators, filtered = _sketch_mask(sketch, grammar)
     masked = frozenset((*grammar.outside, *filtered))
     witness_lengths = _assert_required_holes_live(
         sketch, kept, kept_operators, pins, vocab
     )
-    _assert_capacity(sketch, spellings, witness_lengths, max_length, len(start_words))
+    _assert_capacity(sketch, witness_lengths, max_length, len(start_words))
     _assert_term_token_left(kept, kept_operators, pins, vocab)
     _assert_operator_position_live(base_masked, masked, start_words, max_length, vocab)
     carriers = _axis_carriers(gate_variables, kept, start_words, vocab)
@@ -671,9 +581,12 @@ def compile_for_eqgpt(
         masked_tokens=masked,
         gate_variables=gate_variables,
         pinned_keys=pins.keys,
-        pinned_monomials=pins.monomials,
-        anchor_fingerprints=frozenset(spellings),
-        report=_report(sketch, pinned_axes, gate_variables, field_free, dropped),
+        reserved_monomials=pins.monomials,
+        anchor_fingerprints=frozenset(column_fingerprint(item) for item in anchors),
+        anchor_terms=tuple(item.term_ir for item in sketch.anchored),
+        report=_report(
+            sketch, pinned_axes, anchor_carriers, gate_variables, field_free, dropped
+        ),
         dropped=dropped,
     )
 
@@ -687,7 +600,7 @@ def refuse_candidate(
             term,
             sketch,
             pinned_keys=compiled.pinned_keys,
-            pinned_monomials=compiled.pinned_monomials,
+            pinned_monomials=compiled.reserved_monomials,
             anchor_fingerprints=compiled.anchor_fingerprints,
         )
         if reason is not None:
@@ -695,12 +608,4 @@ def refuse_candidate(
     return None
 
 
-def fit_candidate(candidate: str, sketch: Sketch) -> str:
-    terms = candidate.split(" + ") if candidate else []
-    kept = anchor_basis(terms, sketch)
-    if len(kept) == len(terms):
-        return candidate
-    return " + ".join(terms[index] for index in kept)
-
-
-__all__ = ["EqGPTCompiled", "compile_for_eqgpt", "fit_candidate", "refuse_candidate"]
+__all__ = ["EqGPTCompiled", "compile_for_eqgpt", "refuse_candidate"]

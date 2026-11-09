@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -32,9 +33,16 @@ from kdagent.data_source import (
     sealed_input_failure,
 )
 from kdagent.episode_worker import prepare_catalog, prepare_file
+from kdagent.experience import Retrieval
 from kdagent.report import write_report
 from kdagent.session import Session
-from kdagent.state import ANSWER, ANSWER_NUDGES, TRUNCATION_NUDGES, RunLoopResult
+from kdagent.state import (
+    ANSWER,
+    ANSWER_NUDGES,
+    TRUNCATION_NUDGES,
+    Answer,
+    RunLoopResult,
+)
 
 _PUBLIC_ANSWER_SOURCE = {
     "submitted": "submitted",
@@ -50,10 +58,13 @@ _TRACE_ADVICE_KEYS = ("advice_sha256",)
 
 _EXPLICITLY_SELECTED = "selected"
 
+_INTERRUPTED_SELECTED = "interrupted_selected"
+
 
 _NO_ANSWER = {
     "answer": None,
     "answer_source": None,
+    "answer_origin": None,
     "answer_provenance": None,
     "answer_input": None,
     "answer_system": None,
@@ -94,6 +105,7 @@ def _input_columns(
             "lowpass_modes": None,
             "time_window": None,
             "pinn": None,
+            "savgol": None,
             "verified": False,
             "verification_failure": failure,
         }
@@ -128,6 +140,7 @@ def _input_columns(
         "lowpass_modes": None if derived is None else derived["lowpass_modes"],
         "time_window": None if derived is None else derived["time_window"],
         "pinn": None if derived is None else derived.get("pinn"),
+        "savgol": None if derived is None else derived.get("savgol"),
         "verified": True,
         "verification_failure": None,
     }
@@ -155,6 +168,11 @@ def _answer_result(loop_result: RunLoopResult, session: Session) -> dict[str, An
         return {
             "answer": answer["law"],
             "answer_source": _PUBLIC_ANSWER_SOURCE[source],
+            "answer_origin": (
+                None
+                if answer["provenance"] is None
+                else answer["provenance"].get("answer_origin")
+            ),
             "answer_provenance": answer["provenance"],
             "answer_input": _answer_input(session, answer["provenance"]),
             "answer_system": system,
@@ -166,6 +184,11 @@ def _answer_result(loop_result: RunLoopResult, session: Session) -> dict[str, An
     run_id = provenance["run_id"]
     if session.ledger.is_pruned(run_id):
         return dict(_NO_ANSWER)
+    provenance = {
+        **provenance,
+        "answer_origin": "search_terms",
+        "origin_ref": {"kind": "search", "run_id": run_id},
+    }
     explicit = (
         session.ledger.selected_system == system["system_id"]
         if system is not None
@@ -176,6 +199,7 @@ def _answer_result(loop_result: RunLoopResult, session: Session) -> dict[str, An
         "answer_source": (
             _EXPLICITLY_SELECTED if explicit else _PUBLIC_ANSWER_SOURCE[source]
         ),
+        "answer_origin": "search_terms",
         "answer_provenance": provenance,
         "answer_input": _answer_input(session, provenance),
         "answer_system": system,
@@ -195,6 +219,40 @@ def _abstention(loop_result: RunLoopResult) -> dict[str, Any]:
         "reason": answer["reason"],
         "evidence_run_ids": list(answer["evidence_run_ids"]),
     }
+
+
+def interrupted_answer(answer: Answer | None, session: Session) -> dict[str, Any]:
+    captured = RunLoopResult(
+        messages=[],
+        stop_reason="interrupted",
+        answer=answer,
+        answer_nudges=0,
+        truncation_nudges=0,
+    )
+    published = {
+        **_answer_result(captured, session),
+        **_answer_receipt(captured, session),
+        **_abstention(captured),
+    }
+    if published["answer_source"] is None:
+        return {}
+    if published["answer_source"] in (
+        _PUBLIC_ANSWER_SOURCE["selected"],
+        _EXPLICITLY_SELECTED,
+    ):
+        published["answer_source"] = _INTERRUPTED_SELECTED
+    return published
+
+
+InterruptedReading = Callable[[], dict[str, Any]]
+
+
+def interrupted_reading(answer: Answer | None, session: Session) -> InterruptedReading:
+    published = interrupted_answer(answer, session)
+    if published.get("answer_source") != _INTERRUPTED_SELECTED:
+        return lambda: published
+    run_id = published["answer_provenance"]["run_id"]
+    return lambda: {} if session.ledger.is_pruned(run_id) else published
 
 
 def run(
@@ -219,6 +277,7 @@ def run(
     training_dtype: str | None = None,
     initial_sketch: dict[str, Any] | None = None,
     llm4ed: Llm4edConfig | None = None,
+    on_interrupted_answer: Callable[[InterruptedReading], None] | None = None,
 ) -> dict[str, Any]:
     from kdagent import orchestration
 
@@ -249,6 +308,13 @@ def run(
         workspace / orchestration.TRACE_FILENAME,
         recursion_limit,
         metadata=metadata,
+        on_answer=(
+            None
+            if on_interrupted_answer is None
+            else lambda answer: on_interrupted_answer(
+                interrupted_reading(answer, session)
+            )
+        ),
     )
     return finish_run(loop_result, session, config=config, record=record)
 
@@ -274,6 +340,7 @@ def finish_run(
         **_abstention(loop_result),
         "endpoint": config.endpoint,
         "model": config.model,
+        **config.pacing(),
     }
     if session.user_sketch_id is not None:
         result["sketch_sha256"] = session.sketches[session.user_sketch_id][
@@ -414,11 +481,13 @@ def prepare_run(
         system_prompt=system_prompt,
         bare=bare,
         shell=shell,
+        max_model_calls=config.max_model_calls,
     )
     llm4ed_record = {} if llm4ed is None else {"llm4ed": llm4ed.public()}
     metadata = {
         "endpoint": config.endpoint,
         "model": config.model,
+        **config.pacing(),
         "dataset_id": dataset_id,
         "recursion_limit": recursion_limit,
         "bare": bare,
@@ -428,6 +497,7 @@ def prepare_run(
 
         **{key: prior_record[key] for key in _TRACE_PRIOR_KEYS if prior is not None},
         **{key: memory_record[key] for key in _TRACE_MEMORY_KEYS if memory is not None},
+        **({} if memory is None else _retrieved_counts(retrieval)),
         **{key: advice_record[key] for key in _TRACE_ADVICE_KEYS if advice is not None},
         **(
             {}
@@ -455,6 +525,15 @@ def prepare_run(
         "target": None if summary is None else summary["target"],
     }
     return session, agent, metadata, record
+
+
+def _retrieved_counts(retrieval: Retrieval | None) -> dict[str, int]:
+    if retrieval is None:
+        return {"memory_rows_retrieved": 0, "memory_refusals_retrieved": 0}
+    return {
+        "memory_rows_retrieved": len(retrieval["rows"]),
+        "memory_refusals_retrieved": len(retrieval["refusals"]),
+    }
 
 
 def _check_workspace(workspace: Path) -> None:

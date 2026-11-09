@@ -11,6 +11,14 @@ or invent another input column. Use the field and axis names in the dataset;
 supplied terms are used as given, and adding an axis does not expand them. An
 unresolvable term fails the fit. Compound derivatives use `u_x_t` or `diff_t(u_x)`, not `u_xt`.
 
+For a second time-derivative target, set `target_lhs_order=2` and use a
+dataset whose left-hand side is second order. The selected order must match
+the dataset; the search does not choose between time orders. Terms that
+directly spell the selected target are refused, including repeated first
+derivatives that spell a second derivative. A first time derivative remains
+an admissible feature for a second-order target. Changing the target order
+requires a new lineage. Tabular mode refuses this setting when nondefault.
+
 Tabular data selects tabular mode, where feature columns supply the inputs
 automatically and `terms` is refused. Grids other than one-field `u` with
 spatial axes `x`, `y` or both require explicit `terms`. Both modes read `binary_operators` and
@@ -86,7 +94,10 @@ the input columns, reported score and, for PDEs, additive coefficients.
 Configured operators must have a KD IR representation; a custom operator or
 `^` can make conversion fail.
 
-Additional backend settings pass unchanged through `extra_pysr_kwargs`.
+Additional backend settings pass through `extra_pysr_kwargs`. The
+`timeout_in_seconds` exception takes the smaller of the configured timeout
+and the deadline-derived bound when a deadline exists; without a deadline,
+the configured value is preserved (or there is no timeout if it is absent).
 A seed sets `random_state`; bitwise repeatability also needs PySR's
 `deterministic=True` and serial execution. A resumed search retains the
 backend's state rather than starting a fresh seeded population.

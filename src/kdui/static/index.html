@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>KD</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="vendor/katex/katex.min.css">
+    <link rel="stylesheet" href="app.css">
+    <!-- KaTeX is the upstream UMD build; it sets window.katex before the modules run. -->
+    <script defer src="vendor/katex/katex.min.js"></script>
+    <script type="module" src="js/app.js"></script>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="top" id="kd-header"></header>
+      <main id="kd-main" tabindex="-1"><p class="state loading">Loading KD</p></main>
+      <aside class="tray" id="kd-tray" aria-label="Runs on this machine"></aside>
+    </div>
+    <div class="toasts" id="kd-toasts" aria-live="polite"></div>
+  </body>
+</html>

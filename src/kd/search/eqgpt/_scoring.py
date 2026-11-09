@@ -11,7 +11,11 @@ from kd.core.equation import Form
 from kd.core.evaluator import EvaluationResult
 from kd.core.oom import is_cpu_alloc_failure
 from kd.search.eqgpt.gates import should_zero_reward
-from kd.search.eqgpt.reward import RewardResult, compute_reward
+from kd.search.eqgpt.reward import (
+    RewardResult,
+    compute_reward,
+    deduplicate_columns,
+)
 from kd.search.eqgpt.vocab import E_ID, PAD_ID, S_ID
 from kd.search.result import invalid_evaluation_result
 
@@ -57,6 +61,7 @@ def score_candidate(
     lhs_flat: Tensor | None,
     sparsity_alpha: float,
     term_cache: TermColumnCache | None = None,
+    protected_terms: tuple[str, ...] = (),
 ) -> EvaluationResult:
     terms = candidate.split(" + ") if candidate else []
     if sentence is None:
@@ -68,10 +73,9 @@ def score_candidate(
     if should_zero_reward(words, variables):
         return gate_zero_result(candidate, terms)
 
+    fitted = [*protected_terms, *terms]
     try:
-        columns = [
-            execute_term(executor, context, term, term_cache) for term in terms
-        ]
+        columns = [execute_term(executor, context, term, term_cache) for term in fitted]
         if lhs_flat is None:
             if not columns:
                 raise ValueError("free-pivot scoring requires at least one term")
@@ -93,7 +97,11 @@ def score_candidate(
             candidate, terms, f"execution error: {exc}", is_error=True
         )
 
-    rr = compute_reward(matrix.detach().cpu().numpy(), sparsity_alpha=sparsity_alpha)
+    rr = compute_reward(
+        matrix.detach().cpu().numpy(),
+        sparsity_alpha=sparsity_alpha,
+        n_protected=len(protected_terms),
+    )
     is_free_pivot = lhs_flat is None
     valid = math.isfinite(rr.r2) if is_free_pivot else rr.coefficients.size > 0
     r2 = rr.r2 if math.isfinite(rr.r2) else -float("inf")
@@ -104,8 +112,13 @@ def score_candidate(
 
 
     coeffs = (
-        _aligned_coefficients(rr, len(terms), free_pivot=is_free_pivot)
+        _aligned_coefficients(rr, len(fitted), free_pivot=is_free_pivot)
         if valid
+        else None
+    )
+    selected = (
+        [index - 1 for index in rr.keep_indices[1:]]
+        if protected_terms and valid
         else None
     )
 
@@ -118,8 +131,9 @@ def score_candidate(
         coefficients=coeffs,
         is_valid=valid,
         error_message="" if valid else "invalid/degenerate reward matrix",
+        selected_indices=selected,
         residuals=None,
-        terms=list(terms),
+        terms=fitted,
         expression=candidate,
         form=Form.HOMOGENEOUS if is_free_pivot else Form.EVOLUTION,
     )
@@ -202,18 +216,28 @@ def refit_final(
     target: Tensor,
     best_reward: float,
     term_cache: TermColumnCache | None = None,
+    n_protected: int = 0,
 ) -> EvaluationResult:
     try:
-        columns = [
-            execute_term(executor, context, term, term_cache) for term in terms
-        ]
+        columns = [execute_term(executor, context, term, term_cache) for term in terms]
         theta = torch.stack(columns, dim=1).double()
         target64 = target.double()
+        kept = (
+            [
+                index - 1
+                for index in deduplicate_columns(
+                    torch.column_stack([target64, theta]).detach().cpu().numpy()
+                ).keep_indices.tolist()[1:]
+            ]
+            if n_protected
+            else None
+        )
+        basis = theta if kept is None else theta[:, kept]
 
 
 
 
-        solution = torch.linalg.lstsq(theta, target64.unsqueeze(1)).solution.squeeze(1)
+        solution = torch.linalg.lstsq(basis, target64.unsqueeze(1)).solution.squeeze(1)
     except torch.cuda.OutOfMemoryError:
 
         raise
@@ -227,6 +251,10 @@ def refit_final(
             reason="evaluation_error",
         )
 
+    if kept is not None:
+        solution = torch.zeros(
+            len(terms), dtype=solution.dtype, device=solution.device
+        ).index_copy(0, torch.as_tensor(kept, device=solution.device), solution)
     predicted = (theta @ solution).float()
     residuals = (predicted - target).detach()
     mse = float(torch.mean(residuals**2).item())
@@ -251,10 +279,11 @@ def refit_final(
         nmse=nmse,
         r2=r2,
         score=best_reward,
-        complexity=len(terms),
+        complexity=len(terms) if kept is None else len(kept) - n_protected,
         coefficients=solution.float().detach(),
         is_valid=True,
         error_message="",
+        selected_indices=kept,
         residuals=residuals,
         terms=terms,
         expression=" + ".join(terms),

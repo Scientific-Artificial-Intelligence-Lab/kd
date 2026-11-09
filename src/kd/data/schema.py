@@ -629,12 +629,10 @@ class PDEDataset:
                 (the single source of truth). NOTE: a dataset can *carry* a
                 second-order LHS, but whether a given search algorithm can
                 *discover* it is enforced fail-loud at fit time
-                (``assert_dataset_supported``). DLGA is the one packaged plugin
-                whose target order is configurable —
-                ``DLGAConfig(target_lhs_order=2)``, or the ``wave_preset()`` /
-                ``kg_preset()`` factories — so ``u_tt`` is supported end-to-end
-                there; every other plugin fixes its target order per mode (see
-                each plugin's ``InstrumentDescriptor.modes``).
+                (``assert_dataset_supported``). Modes declaring order 2
+                accept ``target_lhs_order=2``; the selected order must
+                match this dataset. See each plugin's
+                ``InstrumentDescriptor.modes`` for supported orders.
             periodic: Iterable of axis names that are periodic.
             name: Dataset identifier (printed in repr).
             ground_truth: Optional ground-truth equation string.

@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 from kd.data.derivatives.autograd import AutogradProvider
 from kd.data.regression import TabularDataset
 from kd.data.schema import AxisInfo, DataTopology, FieldData, PDEDataset, TaskType
+from kd.data.source import DatasetSource
 from kd.data.tabular_bridge import _validate_names
 from kd.data.trajectory import (
     Trajectory,
@@ -111,7 +112,9 @@ class TrajectoryRegression:
         metadata: dict[str, Any],
         arrays: NumericArrays,
         training_reports: dict[str, TrainingResult],
+        file_source: DatasetSource | None = None,
     ) -> None:
+        self.file_source = file_source
         self._metadata = json.loads(_json_bytes(metadata))
         self._arrays = {
             name: np.array(value, dtype=np.float64, order="C", copy=True)
@@ -174,6 +177,7 @@ class TrajectoryRegression:
                 f"{meta['name']}: {meta['derivatives']} derivatives; "
                 f"{state_source} RHS states; trim={trim} per trajectory end."
             ),
+            file_source=self.file_source,
         )
 
     def _projection_name(
@@ -360,5 +364,8 @@ def prepare_trajectory_regression(
         "derived_seeds": seeds,
     }
     return TrajectoryRegression(
-        metadata=metadata, arrays=arrays, training_reports=reports
+        metadata=metadata,
+        arrays=arrays,
+        training_reports=reports,
+        file_source=trajectories.file_source,
     )

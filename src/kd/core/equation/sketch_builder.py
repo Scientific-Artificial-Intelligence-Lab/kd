@@ -53,10 +53,10 @@ def sketch_from_anchors(
 def dataset_vocabulary(
     dataset: PDEDataset, override: TermVocabulary | None = None
 ) -> TermVocabulary:
-    vocabulary = TermVocabulary(
-        fields=frozenset(dataset.fields or ()),
-        coordinates=frozenset(dataset.axes or ()),
-    )
+    names = frozenset(dataset.fields or ())
+    if dataset.lhs_order == 0:
+        names -= {dataset.lhs_field}
+    vocabulary = TermVocabulary(fields=names, coordinates=frozenset(dataset.axes or ()))
     if override is None:
         return vocabulary
     fields = sorted(override.fields - vocabulary.fields)

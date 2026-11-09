@@ -8,12 +8,26 @@ from numpy.typing import NDArray
 
 __all__ = [
     "MIN_STENCIL_POINTS",
+    "axis_noise_limited",
     "noise_estimate",
     "second_derivative_gap",
     "first_derivative_gap",
 ]
 
 MIN_STENCIL_POINTS = 5
+
+
+def axis_noise_limited(values: NDArray[np.float64], axis: int) -> bool:
+    u = _prepare_axis(values, axis)
+    n = u.shape[0]
+    m = u.size // n
+    centered = u - u.mean(axis=0, keepdims=True)
+    energy = float(np.sum(centered**2))
+    if energy == 0.0:
+        return False
+    ratio = float(np.sum(np.diff(u, axis=0) ** 2)) / energy
+    variance = 4.0 * (n - 2) / ((n - 1) * (m * (n - 1) + 2))
+    return math.isfinite(ratio) and abs(ratio - 2.0) <= 3.0 * math.sqrt(variance)
 
 
 def _prepare_axis(values: NDArray[np.float64], axis: int) -> NDArray[np.float64]:

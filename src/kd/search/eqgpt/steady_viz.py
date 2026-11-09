@@ -8,6 +8,18 @@ import numpy as np
 
 from kd.viz.equation_display import expression_display
 from kd.viz.extension import PlotInfo
+from kd.viz.style import (
+    BAR_FILL,
+    CMAP_SEQ,
+    INK_2,
+    REF_LINE_WIDTH,
+    SCATTER_ALPHA,
+    SCATTER_SIZE,
+    SERIES,
+    SMALL_FONTSIZE,
+    SURFACE,
+    style_colorbar,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -68,17 +80,25 @@ def render_steady_residual_domain(
         return _degrade(ax, _NON_FINITE)
     magnitude = np.abs(residual_arr[finite])
     ax_3d = cast(Any, ax)
-    ax_3d.scatter(
+    points = ax_3d.scatter(
         x_arr[finite],
         y_arr[finite],
         magnitude,
         c=magnitude,
-        s=10,
+        cmap=CMAP_SEQ,
+        s=SCATTER_SIZE,
         rasterized=True,
     )
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax_3d.set_zlabel("|residual|")
+    for axis in (ax_3d.xaxis, ax_3d.yaxis, ax_3d.zaxis):
+        axis.set_pane_color(SURFACE)
+
+
+    style_colorbar(
+        ax.figure.colorbar(points, ax=ax, shrink=0.6, pad=0.12, label="|residual|")
+    )
     return []
 
 
@@ -106,12 +126,20 @@ def render_steady_term_balance(
     if not np.isfinite(rms).all():
         return _degrade(ax, _NON_FINITE)
     colors = [
-        "tab:orange" if index == pivot_index else "tab:blue"
-        for index in range(len(labels))
+        SERIES[1] if index == pivot_index else SERIES[0] for index in range(len(labels))
     ]
-    bars = ax.bar(labels, rms, color=colors)
+    bars = ax.bar(labels, rms, color=colors, width=BAR_FILL)
     bars[pivot_index].set_label("Pivot")
-    ax.text(pivot_index, rms[pivot_index], "pivot", ha="center", va="bottom")
+    ax.annotate(
+        "pivot",
+        xy=(pivot_index, rms[pivot_index]),
+        xytext=(0.0, 3.0),
+        textcoords="offset points",
+        ha="center",
+        va="bottom",
+        fontsize=SMALL_FONTSIZE,
+        color=INK_2,
+    )
     ax.set_ylabel("Column RMS")
     return [display.note for display in displays if display.note is not None]
 
@@ -133,10 +161,18 @@ def render_steady_surrogate_fit(
         return _degrade(ax, _NON_FINITE)
     observed_finite = observed_arr[finite]
     predicted_finite = predicted_arr[finite]
-    ax.scatter(observed_finite, predicted_finite, s=12, rasterized=True)
+    ax.scatter(
+        observed_finite,
+        predicted_finite,
+        s=SCATTER_SIZE,
+        alpha=SCATTER_ALPHA,
+        color=SERIES[0],
+        rasterized=True,
+    )
     lower = float(min(observed_finite.min(), predicted_finite.min()))
     upper = float(max(observed_finite.max(), predicted_finite.max()))
-    ax.plot([lower, upper], [lower, upper], linestyle="--", color="black")
+
+    ax.plot([lower, upper], [lower, upper], color=INK_2, linewidth=REF_LINE_WIDTH)
     centered = observed_finite - observed_finite.mean()
     denominator = float(np.sum(np.square(centered)))
     if denominator > 0.0:
@@ -144,7 +180,7 @@ def render_steady_surrogate_fit(
         r2_text = f"R² = {1.0 - numerator / denominator:.4f}"
     else:
         r2_text = "R² undefined (constant observations)"
-    ax.text(0.05, 0.95, r2_text, transform=ax.transAxes, va="top")
+    ax.text(0.05, 0.95, r2_text, transform=ax.transAxes, va="top", color=INK_2)
     ax.set_xlabel("Observed u")
     ax.set_ylabel("Predicted u")
     return []

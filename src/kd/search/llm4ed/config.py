@@ -23,10 +23,12 @@ Design pins:
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from kd.search.llm4ed.columns import FUNCTION_NAMES
+from kd.search.llm4ed.fd import EDL_MAX_ORDER, MAX_ORDERS
+from kd.search.llm4ed.stridge import DEFAULT_L0_PENALTY
 
 
 
@@ -86,7 +88,8 @@ class Llm4edConfig:
     """
     stop_threshold: float = _DEFAULT_STOP_THRESHOLD
     """``is_done`` fires when ``best_reward >= stop_threshold``. Default ``0.995``
-    (EDL); reward direction is max, range ~(0, 1].
+    (EDL). Sparse reward includes a per-term penalty: a nonempty exact fit
+    scores at most ``0.99``. Use ``fit_stop_threshold`` to stop on fit alone.
     """
     reward_limit: float = _DEFAULT_REWARD_LIMIT
     """``filter_score`` drops candidates with ``score <= reward_limit``. Default
@@ -120,7 +123,7 @@ class Llm4edConfig:
     provider is injected).
     """
     base_url: str | None = None
-    """Optional endpoint override for the default provider."""
+    """Endpoint URL required by the default provider unless a provider is injected."""
     tape_record_path: str | None = None
     """Optional JSONL path. When set (and no provider is injected), the default chain
     wraps the transport in a ``TapeRecordingProvider`` so every real
@@ -136,6 +139,46 @@ class Llm4edConfig:
     ``cos``, ``exp``, ``log``, ``sqrt``), evaluated without protection: a
     candidate with a non-finite column is dropped. The default PDE mode refuses
     a non-empty value.
+    """
+    edge_trim: int = 0
+    """Grid cells dropped at each end of every axis (space and time) from the
+    regression rows after the finite differences, so no scored row uses a
+    one-sided boundary stencil. ``0`` (default) keeps every row, as EDL does
+    (its loaders crop some datasets before differencing instead). Default
+    mode only; it changes the columns every candidate is scored on. The
+    residuals then cover the interior rows only, so the report's residual
+    panels fall back from heatmaps to line plots (with a warning).
+    """
+    l0_penalty: float = DEFAULT_L0_PENALTY
+    """STRidge's selection penalty per nonzero term, added to the in-sample
+    MSE. Default ``1e-5``, EDL's ``sparse_calculate`` value.
+    """
+    l0_relative: bool = False
+    """Multiply ``l0_penalty`` by the population variance of the target, so the
+    penalty scales with the data. ``False`` (default) is EDL's absolute penalty,
+    which outweighs a real term when ``var(u_t)`` is near ``1e-5``.
+    """
+    max_derivative_order: int = EDL_MAX_ORDER
+    """Highest spatial derivative in the operand vocabulary: ``3`` (default,
+    EDL's ``u_x, u_xx, u_xxx``) or ``4``, which adds ``u_xxxx`` (and ``u_yyyy``
+    on two axes), computed as ``Diff2(Diff2(u))``, to the columns, the prompts
+    and the parser. Default mode only, and not with a sketch: kd's platform
+    finite differences stop at third order, so the sketch's exit check, and
+    finite-difference refits and consensus verification, cannot evaluate a
+    ``u_xxxx`` answer.
+    """
+    fit_stop_threshold: float | None = field(default=None, metadata={"legacy": None})
+    """Optional threshold in ``(0, 1]`` for the best sparse-reward candidate's
+    unrounded ``1 / (1 + NRMSE)``. ``None`` (default) disables fit stopping.
+    NRMSE is RMSE divided by the target's population standard deviation on
+    the native scoring rows, after edge trimming and sketch pin subtraction
+    when applicable. Candidate ranking and the sparse reward stay unchanged.
+    Either this threshold or ``stop_threshold`` can stop the run, inclusively,
+    after a completed round. The record uses ``algorithm_done``; an INFO log
+    names the fit threshold and measured fit when this criterion fires.
+    Set via ``Model(algorithm="llm4ed", fit_stop_threshold=0.995)`` or this
+    config. It may change on resume; the carried best candidate is re-evaluated
+    on the native scoring rows. This is an in-sample fit criterion.
     """
 
     def __post_init__(self) -> None:
@@ -155,6 +198,18 @@ class Llm4edConfig:
         object.__setattr__(self, "temperature", temperature)
         object.__setattr__(self, "stop_threshold", stop_threshold)
         object.__setattr__(self, "reward_limit", reward_limit)
+        if self.fit_stop_threshold is not None:
+            object.__setattr__(
+                self,
+                "fit_stop_threshold",
+                _validated_float(
+                    "fit_stop_threshold",
+                    self.fit_stop_threshold,
+                    min_value=0.0,
+                    max_value=1.0,
+                    min_inclusive=False,
+                ),
+            )
 
         for name in (
             "max_tokens",
@@ -179,6 +234,29 @@ class Llm4edConfig:
         if self.extra_body is not None and not isinstance(self.extra_body, dict):
             raise ValueError(
                 f"extra_body must be None or a dict, got {self.extra_body!r}"
+            )
+        if (
+            isinstance(self.edge_trim, bool)
+            or not isinstance(self.edge_trim, int)
+            or self.edge_trim < 0
+        ):
+            raise ValueError(
+                f"edge_trim must be a non-negative int, got {self.edge_trim!r}"
+            )
+        object.__setattr__(
+            self,
+            "l0_penalty",
+            _validated_float("l0_penalty", self.l0_penalty, min_value=0.0),
+        )
+        if not isinstance(self.l0_relative, bool):
+            raise ValueError(f"l0_relative must be a bool, got {self.l0_relative!r}")
+        if (
+            isinstance(self.max_derivative_order, bool)
+            or self.max_derivative_order not in MAX_ORDERS
+        ):
+            raise ValueError(
+                f"max_derivative_order must be one of {list(MAX_ORDERS)}, got "
+                f"{self.max_derivative_order!r}"
             )
         unknown = sorted(set(self.functions) - FUNCTION_NAMES)
         if unknown:
@@ -218,11 +296,15 @@ def config_to_json_safe_dict(config: Llm4edConfig) -> dict[str, Any]:
 
     All ``Llm4edConfig`` fields are already JSON-native (float / int / str /
     dict / ``None``, and the ``functions`` tuple of str), so this is
-    ``dataclasses.asdict`` plus a stable key order;
+    ``dataclasses.asdict`` with disabled ``fit_stop_threshold`` omitted to
+    preserve historical default config payloads;
     it exists as the single serialization seam the ``config`` property and the
     plugin share (and to keep parity with the EqGPT module API).
     """
-    return asdict(config)
+    result = asdict(config)
+    if config.fit_stop_threshold is None:
+        del result["fit_stop_threshold"]
+    return result
 
 
 def _validated_float(

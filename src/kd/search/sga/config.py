@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 
@@ -225,7 +225,9 @@ class SGAConfig:
     ``use_autograd=True`` and ``field_model is None``; ignored in finite-diff
     mode (same handling as ``autograd_train_epochs``)."""
 
-    training_dtype: TrainingDtype | None = None
+    training_dtype: TrainingDtype | None = field(
+        default=None, metadata={"legacy": None}
+    )
     """Floating precision the auto-trained FieldModel is trained in: ``None``
     (default) trains in the dataset's dtype; ``"float32"`` or ``"float64"`` names
     one. The trained surrogate is cast back to the dataset's dtype, so SGA's
@@ -266,6 +268,13 @@ class SGAConfig:
     counts only the selected columns. Only the tabular mode accepts a
     non-empty value."""
 
+    target_lhs_order: int = field(default=1, metadata={"legacy": 1})
+    """Time-derivative target order, matching dataset.lhs_order.
+
+    Finite differences and autograd accept 1 or 2.
+    Tabular mode refuses a nondefault value.
+    """
+
     def __post_init__(self) -> None:
         """Validate restart intervals, the tabular vocabulary and autograd fields.
 
@@ -280,6 +289,11 @@ class SGAConfig:
         even though finite differences ignore the training fields, so
         switching to autograd keeps the constraints intact.
         """
+        if type(self.target_lhs_order) is not int or self.target_lhs_order not in (
+            1,
+            2,
+        ):
+            raise ValueError("target_lhs_order must be the integer 1 or 2")
         if self.restart_interval is not None and self.restart_interval < 1:
             raise ValueError("restart_interval must be None or >= 1")
         validate_training_dtype(self.training_dtype)

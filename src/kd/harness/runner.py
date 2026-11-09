@@ -23,6 +23,7 @@ from kd.harness.episode import (
     STATUS_COMPLETED,
     STATUS_RAISED,
     EpisodeOutcome,
+    EpisodeOutputError,
     run_episode,
 )
 from kd.harness.jobs import JobResult, run_jobs
@@ -41,6 +42,7 @@ from kd.harness.supervise import (
     check_memory_cap_available,
 )
 from kd.search.records import RunRecord
+from kd.search.registry import execution_mode_for_request
 from kd.search.run_catalog import append_catalog_row, catalog_row_from_record
 
 if TYPE_CHECKING:
@@ -231,12 +233,27 @@ def _catalog_row_for_outcome(
     )
 
 
+def entry_dependencies(
+    entry: PlanEntry, dataset: PDEDataset
+) -> list[dict[str, str | None]]:
+    mode = execution_mode_for_request(
+        entry.instrument,
+        dataset.topology,
+        entry.model_kwargs,
+        lhs_order=dataset.lhs_order,
+    )
+    return kd.execution_dependencies(
+        entry.instrument, mode=mode, params=entry.model_kwargs
+    )
+
+
 def _parallel_devices(
     plan: ExperimentPlan,
     *,
     model_factory: Callable[..., Any],
     device: str | None,
     parallel: ParallelOptions,
+    datasets: Mapping[str, PDEDataset],
 ) -> list[str | None]:
     if model_factory is not Model:
         raise ValueError(
@@ -246,14 +263,15 @@ def _parallel_devices(
         )
     local = sorted(
         {
-            entry.instrument
+            f"{dependency['kind']}:{dependency['name']}"
             for entry in plan.entries
-            if kd.extension_source("algorithm", entry.instrument) == "process"
+            for dependency in entry_dependencies(entry, datasets[entry.dataset_ref])
+            if dependency["source"] == "process"
         }
     )
     if local:
         raise ValueError(
-            f"instruments {local} are registered in this process only; a "
+            f"components {local} are registered in this process only; a "
             "parallel child imports kd without them. Register them from an "
             "installed kd.extensions entry-point hook, or run the plan serially"
         )
@@ -338,6 +356,9 @@ class _ParallelBatch:
             self._root / key / JOB_FILENAME,
             {
                 "entry": entry.to_dict(),
+                "dependencies": entry_dependencies(
+                    entry, self._datasets[entry.dataset_ref]
+                ),
                 "entry_index": index,
                 "dataset_file": str(dataset_file),
                 "device": device,
@@ -387,6 +408,17 @@ class _ParallelBatch:
         entry = self._plan.entries[index]
         job_dir = self._root / result.job.key
         outcome = _collected_outcome(job_dir, index, entry, result.process)
+        if outcome.status == STATUS_COMPLETED and result.process.returncode != 0:
+
+
+
+            logger.error(
+                "entry %d: completed, but its worker exited with returncode %s "
+                "after staging the outcome; see %s",
+                index,
+                result.process.returncode,
+                job_dir / WORKER_LOG_FILENAME,
+            )
         self._store.add_outcome(outcome)
         self.outcomes[index] = outcome
         _write_json_atomic(
@@ -441,17 +473,24 @@ def _run_serial(
 
 
 
-        outcome = run_episode(
-            entry=entry,
-            entry_index=entry_index,
-            dataset=datasets[entry.dataset_ref],
-            model_factory=model_factory,
-            device=device,
 
 
-            persist_outcome=store.add_outcome,
-            **episode_kwargs,
-        )
+
+        try:
+            outcome = run_episode(
+                entry=entry,
+                entry_index=entry_index,
+                dataset=datasets[entry.dataset_ref],
+                model_factory=model_factory,
+                device=device,
+
+
+                persist_outcome=store.add_outcome,
+                **episode_kwargs,
+            )
+        except EpisodeOutputError as exc:
+            logger.exception("entry %d: requested outputs failed", entry_index)
+            outcome = exc.outcome
         outcomes.append(outcome)
         if catalog_path is not None:
             if outcome.run_dir is None or outcome.run_id is None:
@@ -506,7 +545,11 @@ def run_plan(
         []
         if parallel is None
         else _parallel_devices(
-            plan, model_factory=model_factory, device=device, parallel=parallel
+            plan,
+            model_factory=model_factory,
+            device=device,
+            parallel=parallel,
+            datasets=normalized,
         )
     )
 

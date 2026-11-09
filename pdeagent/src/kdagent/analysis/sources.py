@@ -10,6 +10,7 @@ from typing import Any
 import kd
 
 from kdagent.model_signals import is_truncated
+from kdagent.trace_file import read_rows
 
 
 
@@ -47,7 +48,7 @@ def budget_params() -> set[str]:
 
 
 def load_trace(workspace: Path) -> list[dict[str, Any]]:
-    rows = [json.loads(line) for line in workspace.joinpath("trace.jsonl").open()]
+    rows = read_rows(workspace / "trace.jsonl")
     rows.sort(key=lambda r: r["start_time"])
     return rows
 
@@ -74,6 +75,7 @@ ENVELOPE_VERBS = frozenset(
         "smooth_input",
         "ablate_candidate",
         "score_term_sets",
+        "select_support",
         "verify_candidate",
         "verify_system",
         "vote_terms",

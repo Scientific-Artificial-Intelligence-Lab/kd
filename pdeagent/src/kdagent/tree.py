@@ -283,6 +283,9 @@ def _record(
         report_projection=report_projection(report),
         sketch=sketch,
         surrogate=surrogate,
+
+
+        verify="unknown",
         platform_nmse=platform_nmse,
         platform_frame=platform_frame,
         platform_coefficients=platform_coefficients,
@@ -515,7 +518,11 @@ def _status(
     ]
     prior = None if prior_path is None else priors.load_prior(prior_path)
     excluded = None if prior is None else prior.get("excluded")
-    decision = criteria.selection_decision(ledger, dataset_id=dataset)
+    decision = criteria.selection_decision(
+        ledger,
+        dataset_id=dataset,
+        exclude=criteria.undefined_law_runs(ledger, dataset_id=dataset),
+    )
     return {
         "tree": ledger.to_dict(),
         "systems": ledger.systems_dict(),
@@ -562,7 +569,12 @@ def _system_decision(
     target = kd.derivative_target(
         cast(dict[str, Any], description)["projection"]["target_state"]
     )
-    return criteria.system_decision(ledger, raw_fingerprint=fingerprint, target=target)
+    return criteria.system_decision(
+        ledger,
+        raw_fingerprint=fingerprint,
+        target=target,
+        exclude=criteria.undefined_systems(ledger),
+    )
 
 
 def _leaf(

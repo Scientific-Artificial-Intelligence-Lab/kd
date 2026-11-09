@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from kd.core.jsonsafe import finite_or_none
+from kd.viz.axes import value_bar_scale
 from kd.viz.plugin_panels import PanelSet, draw_no_data, last_logged_scalar
+from kd.viz.style import BAR_FILL, INK_2, SERIES, SMALL_FONTSIZE
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -39,6 +41,9 @@ _NATIVE_BAR_LABEL = "native"
 _REFIT_BAR_LABEL = "refit"
 
 
+_LINEAR_HEADROOM = 0.4
+
+
 @dataclass(frozen=True)
 class _AgreementPanel:
 
@@ -63,9 +68,8 @@ class _AgreementPanel:
             return draw_no_data(ax, self.name, reason)
         warnings: list[str] = []
         heights = [value for _, value in bars]
-        ax.bar([label for label, _ in bars], heights)
-        if all(height > 0 for height in heights):
-            ax.set_yscale("log")
+        ax.bar([label for label, _ in bars], heights, color=SERIES[0], width=BAR_FILL)
+        value_bar_scale(ax, heights, headroom=_LINEAR_HEADROOM)
         notes: list[str] = []
         if isinstance(support, int) and not isinstance(support, bool):
             notes.append(f"support size: {support}")
@@ -87,6 +91,8 @@ class _AgreementPanel:
                 transform=ax.transAxes,
                 ha="left",
                 va="top",
+                fontsize=SMALL_FONTSIZE,
+                color=INK_2,
             )
         return warnings
 

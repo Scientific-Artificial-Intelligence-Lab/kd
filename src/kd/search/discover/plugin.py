@@ -11,6 +11,7 @@ from torch import Tensor
 
 from kd.core.equation import Form
 from kd.core.equation.rendering import render_lhs_label
+from kd.core.equation.sketch import Sketch
 from kd.core.equation.types import LhsSpec
 from kd.core.evaluator import EvaluationResult
 from kd.core.platform.requirements import DerivativeReqs
@@ -23,6 +24,8 @@ from kd.search.descriptor import (
     InstrumentMode,
     Knob,
     ModeSelector,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.discover import viz as _viz_helpers
@@ -39,6 +42,8 @@ from kd.search.discover.sketch_backend import (
     DiscoverCompiled,
     SketchGatedEvaluator,
     _ExpressionEvaluator,
+    _TermEvaluator,
+    assert_anchors_execute,
     compile_for_discover,
     narrowed_config,
 )
@@ -71,6 +76,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.search.discover.pinn.plugin_run import PinnRun
+    from kd.search.registry import DerivativeSelection
 
 ALGORITHM_NAME = "discover"
 MIN_PROPOSAL_COUNT = 1
@@ -97,9 +103,16 @@ _MODE2_STATE_KEY = "mode2"
 
 
 
+SKETCH_FIT_POLICY_KEY = "sketch_fit_policy"
+_SKETCH_FIT_POLICY = "anchors-protected-v1"
+
+
+
+
+
 _SKETCH_LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -228,6 +241,8 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
 
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "reward"
     score_direction: ClassVar[Literal["min", "max"]] = "max"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -246,20 +261,36 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             "terms (grid) or tabular expressions"
         ),
         cost_class="heavy",
+        requirements=RuntimeRequirements(extras=(), import_names=(), environment=()),
         modes=(
             InstrumentMode(
                 name="mode1",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=2.5,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Peak RSS of a mode1 worker in the 2026-09-19 kdagent grid "
+                        "lanes (CPU), at every batch size those lanes ran."
+                    ),
+                ),
                 spatial_axes=DEFAULT_SPATIAL_AXES,
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="platform",
                 description=(
                     "Grid search whose default vocabulary is every field of "
                     "the dataset (the target is its left-hand side), the "
                     "grid's spatial axes (x, and y on a 2-D grid), t, and "
                     "diff and diff2 along each spatial axis."
                 ),
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
 
 
 
@@ -271,6 +302,13 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
             InstrumentMode(
                 name="mode2",
+                resources=ResourceHints(
+                    preferred_device=None,
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
 
 
 
@@ -279,25 +317,39 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
+                derivative_service="plugin",
                 description=(
                     "PINN surrogate mode that pretrains one network on every "
                     "field of the observations, searches mode1's vocabulary on "
                     "its autograd derivatives, and retrains the network on the "
                     "best equation at every cycle boundary."
                 ),
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
                 score_frame=SCORE_FRAME_SURROGATE_FIELD,
-
-
-
+                sketch=_SKETCH_LEVELS,
                 selector=ModeSelector("pinn", present=True),
             ),
             InstrumentMode(
                 name="tabular",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=0.9,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Whole-process peak RSS of one tabular fit (CPU), 2026-10-03."
+                    ),
+                ),
                 default_overrides={"batch_size": 500, "epsilon": 0.05},
+                refused_fields={"target_lhs_order": "non_default"},
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
+                derivative_service="none",
                 description="Facade-reachable tabular regression mode.",
                 lhs_orders=frozenset({0}),
             ),
@@ -396,7 +448,9 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             ),
         ),
         segmentation=Segmentation(archive="progress", unit="iterations", reseed=True),
-        identity_breaking_fields=frozenset({"library", "max_diff_order", "pinn"}),
+        identity_breaking_fields=frozenset(
+            {"library", "max_diff_order", "pinn", "target_lhs_order"}
+        ),
         config_artifact_keys=frozenset(),
         surrogate_fields=frozenset(),
     )
@@ -410,6 +464,10 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if mode not in {"default", "tabular"}:
             raise ValueError(f"Unknown DISCOVER mode: {mode!r}.")
         self._config = config or DiscoverConfig()
+        if mode == "tabular" and self._config.target_lhs_order != 1:
+            raise ValueError(
+                "target_lhs_order is a PDE-only setting; omit it for tabular data"
+            )
 
 
         self._engine_config = self._config
@@ -427,6 +485,10 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
 
 
         self._pending_mode2: dict[str, Any] | None = None
+
+
+
+        self._fit_policy: str | None = _SKETCH_FIT_POLICY
         self._front = ParetoTracker()
         self._tabular_deduplicator: TabularDeduplicator | None = None
         torch.manual_seed(self._config.seed)
@@ -466,6 +528,8 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     def prepare(self, components: PlatformComponents) -> None:
         self.refuse_unsupported_names(components.dataset)
         self._deadline = None
+        task = components.task
+        self._refuse_old_fit_policy(task)
         restore_state = self._pending_state
         if (
             self._restore_pending
@@ -473,10 +537,12 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             and self._engine is not None
         ):
             restore_state = self._engine.state
-        task = components.task
         self._compile_task(task, self._dataset_config(components.dataset))
         torch.manual_seed(self._config.seed)
         platform_evaluator = self._coerce_evaluator(components.evaluator)
+        gated_sketch = self._gated_sketch(task)
+        if gated_sketch is not None and self._active_pinn is None:
+            assert_anchors_execute(platform_evaluator, gated_sketch[1].anchor_terms)
         self._engine = build_engine(self._engine_config, mode=self._mode)
         self._evaluator = platform_evaluator
         self._pinn_run = None
@@ -485,17 +551,25 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         if pinn is not None:
 
 
-            from kd.search.discover.pinn.plugin_run import PinnRun
+            from kd.search.discover.pinn.plugin_run import PinnRun, PinnSketch
 
+            pinn_sketch = (
+                None
+                if gated_sketch is None
+                else PinnSketch(*gated_sketch, registry=components.registry)
+            )
 
 
 
 
             self._pinn_run = (
-                PinnRun.start(self._config, pinn, self._engine, components)
+                PinnRun.start(self._config, pinn, self._engine, components, pinn_sketch)
                 if mode2_block is None
-                else PinnRun.restore(self._config, pinn, components, mode2_block)
+                else PinnRun.restore(
+                    self._config, pinn, components, mode2_block, pinn_sketch
+                )
             )
+
             self._evaluator = self._pinn_run.evaluator
         if not self._restore_pending:
 
@@ -526,15 +600,12 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 tabular_evaluator,
                 lhs_name=components.dataset.lhs_field,
             )
-        if (
-            task is not None
-            and self._sketch_compiled is not None
-            and not task.compiled.closed
-        ):
+        if gated_sketch is not None and self._pinn_run is None:
+            sketch, compiled = gated_sketch
             self._evaluator = SketchGatedEvaluator(
-                self._evaluator,
-                sketch=task.sketch,
-                compiled=self._sketch_compiled,
+                platform_evaluator,
+                sketch=sketch,
+                compiled=compiled,
                 registry=components.registry,
             )
         self._recorder = components.recorder
@@ -569,6 +640,34 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         self._restore_pending = False
         self._pending_state = None
         self._pending_mode2 = None
+        self._fit_policy = _SKETCH_FIT_POLICY
+
+    def _refuse_old_fit_policy(self, task: DiscoveryTask | None) -> None:
+        if (
+            not self._restore_pending
+            or task is None
+            or not task.sketch.anchored
+            or self._fit_policy == _SKETCH_FIT_POLICY
+        ):
+            return
+        raise ValueError(
+            f"DISCOVER checkpoint {SKETCH_FIT_POLICY_KEY} is {self._fit_policy!r}, "
+            f"not {_SKETCH_FIT_POLICY!r}: it was written before anchors were "
+            "supplied to the fit, and its search state may spell an anchor, so "
+            "a sketch with anchors cannot resume it; start the run again"
+        )
+
+    def _gated_sketch(
+        self, task: DiscoveryTask | None
+    ) -> tuple[Sketch, DiscoverCompiled] | None:
+        if (
+            self._mode != "default"
+            or task is None
+            or self._sketch_compiled is None
+            or task.compiled.closed
+        ):
+            return None
+        return task.sketch, self._sketch_compiled
 
     def _dataset_config(self, dataset: PDEDataset) -> DiscoverConfig:
         axes = list(dataset.spatial_axes)
@@ -713,7 +812,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
         return DerivativeReqs(
             provider_kind="finite_diff",
             max_atomic_order=2,
-            lhs_order=1,
+            lhs_order=self._config.target_lhs_order,
             needs_surrogate=False,
         )
 
@@ -792,6 +891,8 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             "algorithm": ALGORITHM_NAME,
             ENGINE_STATE_KEY: payload,
         }
+        if self._mode == "default" and self._fit_policy is not None:
+            state[SKETCH_FIT_POLICY_KEY] = self._fit_policy
         if self._pinn_run is not None:
             state[_MODE2_STATE_KEY] = self._pinn_run.state_block(self._require_engine())
         elif self._pending_mode2 is not None:
@@ -805,6 +906,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
             self._pending_state = None
             self._pending_mode2 = None
             self._restore_pending = False
+            self._fit_policy = _SKETCH_FIT_POLICY
             self._front = ParetoTracker()
             if pinn_mode:
                 self._drop_prepared_run()
@@ -834,10 +936,13 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 f"DISCOVER checkpoint mode {stored_mode!r} does not match "
                 f"plugin mode {self._mode!r}."
             )
+
+        fit_policy = value.get(SKETCH_FIT_POLICY_KEY)
         parsed = _parse_state_payload(value)
         if self._mode == "tabular":
             self._front = self._front_from_extras(parsed.extras)
         self._pending_state = parsed
+        self._fit_policy = fit_policy
         self._restore_pending = True
         if pinn_mode:
             self._pending_mode2 = copy.deepcopy(value[_MODE2_STATE_KEY])
@@ -871,7 +976,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
     def get_plot_data(self, name: str) -> dict[str, Any]:
         return _viz_helpers.get_data(name, self._recorder)
 
-    def _coerce_evaluator(self, evaluator: object) -> _ExpressionEvaluator:
+    def _coerce_evaluator(self, evaluator: object) -> _TermEvaluator:
         if not hasattr(evaluator, "evaluate_expression"):
             raise TypeError(
                 "DISCOVERPlugin requires components.evaluator exposing "
@@ -879,7 +984,7 @@ class DISCOVERPlugin(IterativeSearchAlgorithm):
                 "Assemble the platform with an evaluator (PlatformBuilder "
                 "default) to run DISCOVER."
             )
-        return cast(_ExpressionEvaluator, evaluator)
+        return cast(_TermEvaluator, evaluator)
 
     def _coerce_tabular_evaluator(self, evaluator: object) -> _TabularEvaluator:
         if not hasattr(evaluator, "build_theta_matrix") or not hasattr(

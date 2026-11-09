@@ -28,8 +28,9 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
 
     "kd-fd-v1": SchemaEntry(1, "kd._refit_frame"),
+    "kd-fd2-v1": SchemaEntry(1, "kd._refit_frame"),
     "kd-autograd-v1": SchemaEntry(1, "kd._refit_frame"),
-    "kd-weak-v1": SchemaEntry(1, "kd._weak_form"),
+    "kd-weak-v2": SchemaEntry(2, "kd._weak_form"),
 
     "kd-term-v1": SchemaEntry(1, "kd.core.equation.library"),
     "kd-termlib-v1": SchemaEntry(1, "kd.core.equation.library"),
@@ -44,6 +45,9 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
     "kd-rundir-v1": SchemaEntry(1, "kd.search.run_dir"),
     "kd-runcat-v1": SchemaEntry(1, "kd.search.run_catalog"),
     "kd-iterevent-v1": SchemaEntry(1, "kd.search.iteration_events"),
+
+
+
     "kd-runphase-v1": SchemaEntry(1, "kd.search.iteration_events"),
     "kd-ckptman-v1": SchemaEntry(2, "kd.search._checkpoint_manifest_verify"),
     "kd-confighash-v1": SchemaEntry(1, "kd.search._checkpoint_manifest_verify"),
@@ -61,6 +65,6 @@ SCHEMA_REGISTRY: Final[Mapping[str, SchemaEntry]] = {
 
     "kd-plan-v1": SchemaEntry(1, "kd.harness.plan"),
     "kd-consensus-v1": SchemaEntry(1, "kd.harness.consensus"),
-    "kd-stratum-rules-v1": SchemaEntry(1, "kd.harness.consensus"),
+    "kd-stratum-rules-v2": SchemaEntry(2, "kd.harness.consensus"),
     "kd-eligibility-rules-v1": SchemaEntry(1, "kd.harness.consensus"),
 }

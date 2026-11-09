@@ -23,15 +23,14 @@ from kd.core.expr.registry import FunctionRegistry
 from kd.core.expr.terms import split_terms
 from kd.core.interrupt import SearchInterrupted
 from kd.core.linear_solve import (
-    LeastSquaresSolver,
     SparseSolver,
-    SVDNullSpaceSolver,
+    sparse_solver,
 )
 from kd.core.metrics import NMSE_EPS
 from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
-from kd.data.derivatives.autograd import AutogradProvider
+from kd.data.derivatives.base import SurrogateDerivativeProvider
 from kd.data.schema import DataTopology, PDEDataset
 from kd.models._training_precision import omit_default_training_dtype
 from kd.models.field_model import FieldModel
@@ -46,6 +45,8 @@ from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.dlga import viz as _viz_helpers
@@ -70,6 +71,7 @@ from kd.search.dlga.surrogate_store import (
 from kd.search.protocol import DiscoveryTask, PlatformComponents
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
+from kd.search.term_utils import fold_add
 from kd.search.trajectory import (
     active_fit_terms,
     log_search_trajectory,
@@ -81,6 +83,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.models.trainer import TrainingResult
+    from kd.search.registry import DerivativeSelection
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +167,8 @@ class DLGAPlugin:
 
 
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "DLGA fitness"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -181,9 +186,23 @@ class DLGAPlugin:
         algorithm="dlga",
         summary="Neural-surrogate genetic search for constant-coefficient PDEs.",
         cost_class="heavy",
+        requirements=RuntimeRequirements(extras=(), import_names=(), environment=()),
         modes=(
             InstrumentMode(
                 name="default",
+                resources=ResourceHints(
+                    preferred_device="cuda",
+                    memory_estimate_gb=8.4,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Worker ru_maxrss on burgers-sine (LHS order 1) on CPU at kd's "
+                        "default population, 2026-10-02; LHS order 2 and CUDA runs not "
+                        "measured."
+                    ),
+                ),
+                requires_surrogate=True,
+                component_fields={"solver": "sparse_solver"},
                 order_params={
                     1: {"target_lhs_order": 1},
                     2: {"target_lhs_order": 2},
@@ -194,6 +213,7 @@ class DLGAPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="autograd",
+                derivative_service="platform",
                 description=(
                     "The raw field and every derivative order are read from a "
                     "trained neural surrogate. Calibrated surrogate budget: "
@@ -333,7 +353,7 @@ class DLGAPlugin:
         else:
             self._provided_model = None
         self._model: nn.Module | None = None
-        self._provider: AutogradProvider | None = None
+        self._provider: SurrogateDerivativeProvider | None = None
         self._context: SurrogateContext | None = None
         self._evaluators: dict[str, Evaluator] = {}
         self._lhs_targets: dict[str, Tensor] = {}
@@ -505,16 +525,16 @@ class DLGAPlugin:
                 "PlatformBuilder."
             )
         provider = components.context.derivative_provider
-        if not isinstance(provider, AutogradProvider):
+        if not isinstance(provider, SurrogateDerivativeProvider):
             raise RuntimeError(
                 "DLGAPlugin.prepare expected SurrogateContext to wrap an "
-                f"AutogradProvider; got {type(provider).__name__}."
+                f"surrogate derivative provider; got {type(provider).__name__}."
             )
         self._provider = provider
         self._context = components.context
 
 
-        self._model = getattr(provider, "model", None)
+        self._model = provider.model
         self._network_provenance = self._provenance_of(
             components.context.training_result
         )
@@ -543,14 +563,18 @@ class DLGAPlugin:
         self._last_fitness = None
         if self._population is None:
             self._rng.manual_seed(self._config.seed)
-            self._population = random_population(
-                pop_size=self._config.pop_size,
-                rng=self._rng,
-                library_size=len(self._library),
-                max_modules=self._config.max_modules,
-                max_module_length=self._max_module_length,
-                partial_prob=self._config.partial_prob,
-                genes_prob=self._config.genes_prob,
+            self._population = (
+                []
+                if self._anchors_only
+                else random_population(
+                    pop_size=self._config.pop_size,
+                    rng=self._rng,
+                    library_size=len(self._library),
+                    max_modules=self._config.max_modules,
+                    max_module_length=self._max_module_length,
+                    partial_prob=self._config.partial_prob,
+                    genes_prob=self._config.genes_prob,
+                )
             )
         elif restored_fitness is not None:
             self._evolve_population(self._population, restored_fitness)
@@ -574,9 +598,17 @@ class DLGAPlugin:
             }
         return self._restored_provenance
 
+    @property
+    def _anchors_only(self) -> bool:
+        compiled = self._sketch_compiled
+        return compiled is not None and not compiled.library
+
     def propose(self, n: int) -> list[str]:
         del n
         self._require_prepared()
+        if self._anchors_only:
+            assert self._sketch_compiled is not None
+            return [fold_add(list(self._sketch_compiled.anchor_terms))]
         return [
             genome_to_expression(genome, self._library)
             for genome in (self._population or [])
@@ -698,6 +730,10 @@ class DLGAPlugin:
         population: list[Genome],
         fitness: list[float],
     ) -> None:
+        if self._anchors_only:
+            self._last_result_genomes = None
+            self._last_fitness = None
+            return
         keep = max(1, self._config.pop_size // 2)
         survivors = select_survivors(population, fitness, keep=keep)
         elite = survivors[0]
@@ -941,7 +977,9 @@ class DLGAPlugin:
     ) -> EvaluationResult:
         terms: list[str] | None = None
         if self._sketch_compiled is not None and self._sketch_compiled.gated:
-            terms = self._admitted_terms(expression)
+
+
+            terms = [] if self._anchors_only else self._admitted_terms(expression)
             if terms is None:
                 return self._invalid_result(
                     expression,
@@ -1011,9 +1049,7 @@ class DLGAPlugin:
         )
 
     def _make_solver(self) -> SparseSolver:
-        if self._config.solver == "svd_null_space":
-            return SVDNullSpaceSolver()
-        return LeastSquaresSolver()
+        return sparse_solver(self._config.solver)
 
     def refuse_unmodeled_fields(self, dataset: PDEDataset) -> None:
         fields = set(dataset.fields or {})

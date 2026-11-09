@@ -22,8 +22,7 @@ if TYPE_CHECKING:
     from kd.core.integrator import IntegrationResult
 
 _RESIDUAL_PERCENTILE = 99.0
-_WARNING_FONTSIZE = 9
-_WARNING_WRAP_WIDTH = 38
+_WARNING_WRAP_WIDTH = 36
 _COLORBAR_FRACTION = 0.05
 _COLORBAR_PAD = 0.02
 _NOTE_GAP_POINTS = 3.0
@@ -177,7 +176,7 @@ def _warning_panel(ax: Axes, reason: str, label: str = "Predicted") -> None:
         transform=ax.transAxes,
         ha="center",
         va="center",
-        fontsize=_WARNING_FONTSIZE,
+        fontsize=kd_style.SMALL_FONTSIZE,
         color=kd_style.WARNING_INK,
     )
     ax.set_title(label)
@@ -265,7 +264,7 @@ def _panel_range_note(
     note = _range_note(data, limits).strip()
     if not note:
         return
-    ax.annotate(
+    text = ax.annotate(
         note,
         xy=(0.0, 0.0),
         xycoords=("axes fraction", ax.xaxis.label),
@@ -273,9 +272,11 @@ def _panel_range_note(
         textcoords="offset points",
         ha="left",
         va="top",
-        color=kd_style.INK_MUTED,
-        fontsize="small",
+        color=kd_style.INK_2,
+        fontsize=kd_style.SMALL_FONTSIZE,
     )
+    if text.get_window_extent().width > ax.get_window_extent().width:
+        text.set_text(note.replace("actual ", "actual\n", 1))
 
 
 def _robust_abs_max(data: NDArray[np.floating]) -> float:

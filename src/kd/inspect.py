@@ -42,6 +42,7 @@ from kd.data.derivatives.finite_diff import (
 )
 from kd.data.diagnostics import (
     MIN_STENCIL_POINTS,
+    axis_noise_limited,
     first_derivative_gap,
     noise_estimate,
     second_derivative_gap,
@@ -190,6 +191,7 @@ def preview_report(dataset: PDEDataset | TabularDataset) -> DatasetReport:
 
 
     diagnostic_axes = _diagnostic_axes(axes)
+    grid_axes = axes if dataset.topology is DataTopology.GRID else None
     fields: list[FieldReport] | None
     field_dtypes: set[torch.dtype] = set()
     if dataset.fields is None:
@@ -199,7 +201,9 @@ def preview_report(dataset: PDEDataset | TabularDataset) -> DatasetReport:
         for field_name, field in dataset.fields.items():
             field_dtypes.add(field.values.dtype)
             fields.append(
-                _build_field_report(field_name, field.values, warnings, diagnostic_axes)
+                _build_field_report(
+                    field_name, field.values, warnings, diagnostic_axes, grid_axes
+                )
             )
 
 
@@ -394,19 +398,39 @@ def _diagnostic_axes(axes: list[AxisReport] | None) -> list[tuple[int, str]]:
 
 def _field_diagnostics(
     values: torch.Tensor, axes: list[tuple[int, str]]
-) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
-    """Measure relative noise and derivative gaps along the supplied axes."""
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], list[str] | None]:
+    """Measure noise, derivative gaps and ordered variation on eligible axes."""
     if not axes:
-        return {}, {}, {}
+        return {}, {}, {}, None
     arr = values.detach().to(torch.float64).cpu().numpy()
     noise: dict[str, float] = {}
     first_gap: dict[str, float] = {}
     second_gap: dict[str, float] = {}
+    noise_limited: list[str] = []
     for index, name in axes:
         noise[name] = noise_estimate(arr, axis=index)
         first_gap[name] = first_derivative_gap(arr, axis=index)
         second_gap[name] = second_derivative_gap(arr, axis=index)
-    return noise, first_gap, second_gap
+        if axis_noise_limited(arr, axis=index):
+            noise_limited.append(name)
+    return noise, first_gap, second_gap, noise_limited
+
+
+def _constant_axes(
+    values: torch.Tensor, axes: list[AxisReport] | None
+) -> list[str] | None:
+    """Measure exact slice equality; derivative consistency cannot prove this."""
+    if axes is None:
+        return None
+    values = values.detach()
+    return [
+        axis.name
+        for index, axis in enumerate(axes)
+        if axis.n > 1
+        and torch.equal(
+            values, values.select(index, 0).unsqueeze(index).expand_as(values)
+        )
+    ]
 
 
 def _build_field_report(
@@ -414,6 +438,7 @@ def _build_field_report(
     values: torch.Tensor,
     warnings: list[str],
     axes: list[tuple[int, str]],
+    grid_axes: list[AxisReport] | None,
 ) -> FieldReport:
     """Measure one field and append any field-specific warnings."""
     nan_count = int(torch.isnan(values).sum().item())
@@ -444,7 +469,7 @@ def _build_field_report(
         vmax = float(values.max().item())
         vmean = float(values.mean().item())
 
-    noise, first_gap, second_gap = _field_diagnostics(
+    noise, first_gap, second_gap, noise_limited = _field_diagnostics(
         values, axes if nan_count == 0 and inf_count == 0 else []
     )
     return FieldReport(
@@ -459,6 +484,12 @@ def _build_field_report(
         noise_estimate=noise,
         first_derivative_gap=first_gap,
         second_derivative_gap=second_gap,
+        noise_limited_axes=noise_limited,
+        constant_axes=(
+            _constant_axes(values, grid_axes)
+            if nan_count == 0 and inf_count == 0
+            else None
+        ),
     )
 
 

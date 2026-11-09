@@ -35,7 +35,7 @@ from kd.viz.plots._field_panels import (
     _residual_limits,
     _scale_colorbar,
 )
-from kd.viz.style import CMAP_DIV, DPI, INK_MUTED, PANEL_H, PANEL_W, style_context
+from kd.viz.style import CMAP_DIV, DPI, FONTSIZE, INK_2, PANEL_H, PANEL_W, style_context
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -319,7 +319,7 @@ def _init_animation_figure(
     _draw_frame(movie, axes, images, frame_idx)
 
     if suptitle is not None:
-        fig.suptitle(suptitle, color=INK_MUTED, fontsize="medium")
+        fig.suptitle(suptitle, color=INK_2, fontsize=FONTSIZE)
     n_fields = 1 if movie.pred_field is None else 2
     _scale_colorbar(
         images[:n_fields],

@@ -23,7 +23,14 @@ from kd.core.law_judge import judge_law, law_from_equation
 from kd.viz._result_data import _equation_data, _equation_lhs, _sketch_fit_note
 from kd.viz.equation_display import RENDER_ERRORS, latex_display
 from kd.viz.plots.equation import plot_equation
-from kd.viz.style import FIGSIZE_SINGLE, INK_2, style_context, style_table
+from kd.viz.style import (
+    FIGSIZE_SINGLE,
+    INK_2,
+    SMALL_FONTSIZE,
+    draw_table,
+    style_context,
+    table_height,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -38,6 +45,8 @@ TermRow = tuple[str, float, float]
 
 _NORMALIZATION_NOTE = "Homogeneous comparison uses the published normalization."
 _EXPANSION_NOTE = "Rows list both laws expanded into monomials."
+
+_EQUATION_H = 1.25
 
 
 _IDENTIFIER = re.compile(r"\b([A-Za-z_]\w*)\b(\s*\()?")
@@ -217,29 +226,23 @@ def _comparison_rows(rows: list[TermRow]) -> list[list[str]]:
 
 
 def _draw_comparison(ax: Axes, rows: list[list[str]], note: str | None) -> None:
-    ax.axis("off")
-    table = ax.table(
-        cellText=rows,
-        colLabels=["Term", "Published", "Ground truth"],
-        cellLoc="center",
-        loc="center",
-        colWidths=[0.5, 0.25, 0.25],
+    draw_table(
+        ax,
+        rows,
+        ["Term", "Published", "Ground truth"],
+        text_columns=(0,),
+        col_widths=[2, 1, 1],
     )
-    table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1, 1.6)
-    style_table(table)
-    for (row, _col), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_text_props(weight="bold")
     if note is not None:
-        ax.text(
-            0.5,
-            0.02,
+        ax.annotate(
             note,
-            transform=ax.transAxes,
+            xy=(0.5, 0.0),
+            xycoords="axes fraction",
+            xytext=(0.0, -6.0),
+            textcoords="offset points",
             ha="center",
-            fontsize=9,
+            va="top",
+            fontsize=SMALL_FONTSIZE,
             color=INK_2,
         )
 
@@ -262,12 +265,13 @@ def _draw_card(
     notes: list[str],
     style: dict[str, Any] | None,
 ) -> tuple[Figure, list[str]]:
+    table_h = table_height(len(rows))
     fig, axes = plt.subplots(
         2 if rows else 1,
         1,
-        figsize=(FIGSIZE_SINGLE[0], 3.2 + 0.4 * len(rows)),
+        figsize=(FIGSIZE_SINGLE[0], _EQUATION_H + (table_h + 0.6 if rows else 0.0)),
         squeeze=False,
-        gridspec_kw={"height_ratios": [1, 1.5]} if rows else None,
+        gridspec_kw={"height_ratios": [_EQUATION_H, table_h]} if rows else None,
         layout="constrained",
     )
     ax = axes[0, 0]
@@ -281,7 +285,7 @@ def _draw_card(
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=10,
+        fontsize=SMALL_FONTSIZE,
         color=INK_2,
     )
     fit_note = _sketch_fit_note(result)
@@ -295,7 +299,7 @@ def _draw_card(
             transform=ax.transAxes,
             ha="center",
             va="top",
-            fontsize=9,
+            fontsize=SMALL_FONTSIZE,
             color=INK_2,
             wrap=True,
         )

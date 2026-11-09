@@ -675,7 +675,19 @@ class DiscoverConfig:
     ``PINNConfig.cycle_n_iterations`` generations.
     """
 
+    target_lhs_order: int = field(default=1, metadata={"legacy": 1})
+    """Time-derivative target order, matching dataset.lhs_order.
+
+    MODE1 and PINN mode accept 1 or 2.
+    Tabular mode refuses a nondefault value.
+    """
+
     def __post_init__(self) -> None:
+        if type(self.target_lhs_order) is not int or self.target_lhs_order not in (
+            1,
+            2,
+        ):
+            raise ValueError("target_lhs_order must be the integer 1 or 2")
         if self.seed < 0:
             raise ValueError(f"seed must be >= 0, got {self.seed}")
         if self.stability_selection < 0:

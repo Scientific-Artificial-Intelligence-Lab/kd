@@ -16,14 +16,11 @@ from kd.harness.consensus_verify import MemberVerification
 
 
 CONSENSUS_ARTIFACT_TAG: Final[str] = "kd-consensus-v1"
-STRATUM_RULES_VERSION: Final[str] = "kd-stratum-rules-v1"
+STRATUM_RULES_VERSION: Final[str] = "kd-stratum-rules-v2"
 ELIGIBILITY_RULES_VERSION: Final[str] = "kd-eligibility-rules-v1"
 
 
-DependencyStratum = Literal["finite_diff", "autograd", "none", "undeclared"]
-DEPENDENCY_STRATA: Final[frozenset[str]] = frozenset(
-    {"finite_diff", "autograd", "none", "undeclared"}
-)
+DependencyStratum = str
 
 
 
@@ -390,7 +387,6 @@ __all__ = [
     "ConsensusReport",
     "CorroborationLevel",
     "CountLevel",
-    "DEPENDENCY_STRATA",
     "DatasetConsensus",
     "DependencyProfile",
     "DependencyStratum",

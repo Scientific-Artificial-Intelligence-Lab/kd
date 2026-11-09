@@ -11,12 +11,15 @@ derivative on the same trajectories, and `verify_system` integrates one search
 per state together and compares the result with the observations; once a
 system has a result, the default answer is this target's law in the best
 system (the kd-tools skill gives the rule).
-The discover, pysr, pysindy and sga tabular modes derive their inputs from
+The discover, pysr, pysindy, sga and llm4ed tabular modes derive their inputs from
 the feature columns; `terms` is not accepted. Numeric constants inside
 regression expressions are allowed. Discover and PySR report a whole expression
 and its outer coefficient; PySINDy reports selected polynomial terms and
 coefficients; SGA reports a sum of searched expression terms over the feature
-columns with one coefficient each. PySINDy's library contains only polynomials.
+columns with one coefficient each. LLM4ED also reports several fitted terms
+and fits numeric constants inside them; its unary functions are those in
+`functions`. It is available only when this run has an operator-configured
+LLM4ED endpoint. PySINDy's library contains only polynomials.
 
 ### Availability
 

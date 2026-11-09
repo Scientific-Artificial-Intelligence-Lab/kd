@@ -21,6 +21,7 @@ from kd.viz.plugin_panels import (
     sanitize_y,
     series_gap_annotator,
 )
+from kd.viz.style import BAR_FILL, INK_MUTED, SERIES, SMALL_FONTSIZE
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -86,7 +87,7 @@ PER_CASE_PLOT_INFO = PlotInfo(
 )
 _PER_CASE_XLABEL = "case"
 _PER_CASE_YLABEL = "reward"
-_PER_CASE_LABEL_FONTSIZE = 6
+_PER_CASE_LABEL_FONTSIZE = SMALL_FONTSIZE
 
 
 
@@ -191,7 +192,7 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> list[str]:
         per_case[name] if is_measured(per_case[name]) else NO_MEASUREMENT
         for name in names
     ]
-    ax.bar(positions, heights)
+    ax.bar(positions, heights, color=SERIES[0], width=BAR_FILL)
     ax.set_xticks(positions)
     ax.set_xticklabels(
         [_short_case(name) for name in names],
@@ -216,6 +217,7 @@ def render_per_case_reward(ax: Axes, per_case: dict[str, float]) -> list[str]:
                 ha="center",
                 va="bottom",
                 fontsize=_PER_CASE_LABEL_FONTSIZE,
+                color=INK_MUTED,
             )
     append_subtitle(ax, _PER_CASE_SCOPE_CAPTION)
     return [_PER_CASE_SCOPE_WARNING]

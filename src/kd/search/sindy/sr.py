@@ -13,7 +13,7 @@ from kd.core.evaluator import Evaluator
 from kd.core.executor.context import ExecutionContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
 from kd.core.interrupt import SearchInterrupted
-from kd.core.linear_solve import STRidgeSolver
+from kd.core.linear_solve import sparse_solver
 from kd.data._field_names import (
     is_reserved_field_name,
     reserved_field_name_message,
@@ -59,7 +59,7 @@ class SINDyRegressor:
         lhs = _to_tensor(y_arr)
         evaluator = Evaluator(
             PythonExecutor(FunctionRegistry.create_default()),
-            STRidgeSolver(),
+            sparse_solver("stridge"),
             context,
             lhs=lhs,
         )

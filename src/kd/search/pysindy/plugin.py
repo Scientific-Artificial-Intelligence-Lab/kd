@@ -10,7 +10,6 @@ from torch import Tensor
 
 from kd.core.equation import Form, LhsSpec
 from kd.core.equation.library import TermLibrarySpec
-from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.signature import law_term_key
 from kd.core.evaluator import EvaluationResult, Evaluator
 from kd.core.platform.requirements import DerivativeReqs
@@ -20,6 +19,8 @@ from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.protocol import PlatformComponents
@@ -37,20 +38,18 @@ from kd.search.pysindy.config import PySINDyConfig
 from kd.search.pysindy.hole_subset import HOLE_SUBSET_MAX, select_hole_subset
 from kd.search.pysindy.sketch_backend import compile_for_pysindy
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
-from kd.search.term_utils import infer_max_atomic_order
+from kd.search.term_utils import infer_max_atomic_order, refuse_target_derivatives
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from kd.search.protocol import DiscoveryTask
+    from kd.search.registry import DerivativeSelection
 
 ALGORITHM_NAME = "pysindy"
 INITIAL_BEST_EXPRESSION = ""
 INITIAL_BEST_SCORE = float("inf")
-
-_MIN_ATOMIC_ORDER = 1
-_LHS_ORDER = 1
 
 
 
@@ -76,6 +75,8 @@ _EMPTY_LAW_MESSAGE = (
 
 class PySINDyPlugin:
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "NMSE"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -95,9 +96,20 @@ class PySINDyPlugin:
             "(grid mode) or a feature-derived polynomial library (tabular mode)."
         ),
         cost_class="light",
+        requirements=RuntimeRequirements(extras=(), import_names=(), environment=()),
         modes=(
             InstrumentMode(
                 name="default",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=0.8,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Sampled peak RSS of a kd-bench worker's process group on "
+                        "burgers-sine (CPU), 2026-10-02."
+                    ),
+                ),
                 field_names=("u",),
                 spatial_axes=("x", "y"),
                 names_from="terms",
@@ -106,6 +118,7 @@ class PySINDyPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="platform",
                 sketch=SketchClauseLevels(
                     fixed_terms="lowered",
                     anchors="fit_enforced",
@@ -114,15 +127,38 @@ class PySINDyPlugin:
                     operator_set="generation_enforced",
                     field_axis_set="generation_enforced",
                 ),
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
             ),
             InstrumentMode(
                 name="tabular",
-                refused_fields={"terms": "any"},
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
+                refused_fields={"terms": "any", "target_lhs_order": "non_default"},
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
+                derivative_service="none",
                 description="Polynomial regression on tabular X -> y data.",
+
+
+
+
+                sketch=SketchClauseLevels(
+                    fixed_terms="lowered",
+                    anchors="fit_enforced",
+                    hole_count="exit_checked",
+                    operator_set="generation_enforced",
+                    field_axis_set="generation_enforced",
+                ),
                 lhs_orders=frozenset({0}),
             ),
         ),
@@ -163,7 +199,7 @@ class PySINDyPlugin:
 
 
         segmentation=Segmentation(archive="conclusion", unit="fits", reseed=False),
-        identity_breaking_fields=frozenset({"terms"}),
+        identity_breaking_fields=frozenset({"terms", "target_lhs_order"}),
         config_artifact_keys=frozenset(),
         surrogate_fields=frozenset(),
     )
@@ -179,30 +215,34 @@ class PySINDyPlugin:
     ) -> None:
         if mode not in ("default", "tabular"):
             raise ValueError(f"mode must be 'default' or 'tabular', got {mode!r}")
-        if task is not None and mode == "tabular":
+        if task is not None and (task.sketch.lhs_spec.order == 0) != (
+            mode == "tabular"
+        ):
             raise ValueError(
-                "PySINDyPlugin(mode='tabular') does not take a task: the "
-                "descriptor declares every sketch clause unsupported on the "
-                "tabular mode"
+                f"PySINDyPlugin(mode={mode!r}) does not take a sketch of LHS "
+                f"order {task.sketch.lhs_spec.order}: the tabular mode takes "
+                "order 0, the default mode an evolution sketch"
             )
         self._mode = mode
         self._lhs_name: str | None = None
         self._config = config or PySINDyConfig()
-        self._anchor_keys = frozenset(
-            law_term_key(anchor.term_ir)
-            for anchor in (() if task is None else task.sketch.anchored)
-        )
+        if mode == "tabular" and self._config.target_lhs_order != 1:
+            raise ValueError(
+                "target_lhs_order is a PDE-only setting; omit it for tabular data"
+            )
         if task is None:
             effective_terms = self._config.terms
             self._sketch_compile_report: CompileReport | None = None
             self._pinned_terms: tuple[str, ...] = ()
             self._hole_count_bounds: tuple[int, int] | None = None
+            self._anchor_keys: frozenset[str] = frozenset()
         else:
             compiled = compile_for_pysindy(task.sketch, self._config.terms)
             effective_terms = compiled.effective_terms
             self._sketch_compile_report = compiled.report
             self._pinned_terms = tuple(pin.term_ir for pin in task.sketch.pinned)
             self._hole_count_bounds = compiled.hole_count_bounds
+            self._anchor_keys = compiled.anchor_keys
         self._library = TermLibrarySpec.from_terms(effective_terms)
         self._backend_factory = backend_factory or default_backend_factory
         self._evaluator: Evaluator | None = None
@@ -224,22 +264,10 @@ class PySINDyPlugin:
     def refuse_lhs_terms(self, dataset: PDEDataset) -> None:
         if self._mode == "tabular":
             return
-        lhs = render_lhs_label(
-            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order)
+        refuse_target_derivatives(
+            self._library.terms,
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order),
         )
-
-
-        target_terms = {
-            lhs,
-            f"diff_{dataset.lhs_axis}({dataset.lhs_field})",
-            f"diff1_{dataset.lhs_axis}({dataset.lhs_field})",
-        }
-        for term in self._library.terms:
-            if term in target_terms:
-                raise ValueError(
-                    f"terms contains LHS {lhs!r} as {term!r}: tautology; "
-                    f"remove that term"
-                )
 
     def prepare(self, components: PlatformComponents) -> None:
         self.refuse_lhs_terms(components.dataset)
@@ -345,8 +373,8 @@ class PySINDyPlugin:
         max_order = infer_max_atomic_order([*self._library.terms, *self._pinned_terms])
         return DerivativeReqs(
             provider_kind="finite_diff",
-            max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),
-            lhs_order=_LHS_ORDER,
+            max_atomic_order=max(self._config.target_lhs_order, max_order),
+            lhs_order=self._config.target_lhs_order,
             needs_surrogate=False,
         )
 

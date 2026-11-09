@@ -16,8 +16,9 @@ publishes a structured answer with support
 and aligned coefficients; `finish_without_answer` ends the run with an
 explicit unresolved result instead. `refine_candidate` refits a search's law
 with its terms held fixed. `smooth_input` writes a smoothed copy of the
-pinned grid input (low-passed, or a network's field) as a new input whose id
-every data tool accepts. `ablate_candidate`, `score_term_sets` and
+pinned grid input (low-passed, Savitzky-Golay-smoothed, or a network's field)
+as a new input whose id every data tool accepts. `select_support` selects a
+support by term count within a relative NMSE window. `ablate_candidate`, `score_term_sets` and
 `verify_candidate` measure a law in a declared frame; `verify_system`
 integrates one search's law per state of raw ODE trajectories together and
 compares the result with the observations; `vote_terms` counts the
@@ -26,11 +27,18 @@ from that evidence for `run_discovery(sketch_id=...)`. `set_sketch` binds the
 terms the researcher states as the Sketch every later search runs under. Use
 the pinned input's id, or an id derived from it, for every data tool.
 
+Before configuring an algorithm for `run_discovery`, read its full skill card:
+the skill description lists only its essentials, and the card holds its
+requirements, resource hints, mode notes and parameter table.
+
 Every tool that takes terms (a law's `support`, `terms`, `term_sets`,
 anchors and Sketch terms) reads KD's term notation: a name (`u`, `u_xx`), a
 product (`u*u_x`), a positive integer power (`u**2`) or KD's IR
 (`mul(u,u_x)`, `n2(u)`), mixed freely; a sum, infix division or `^` is
-refused. A result names each term as you wrote it, in your order. kd's
+refused. A mixed partial puts an underscore before each further axis
+(`u_x_y`, `u_x_t`) or nests `diff_<axis>` (`diff_y(u_x)`); `u_xy` is not a
+name kd defines and is refused as undefined. A result names each term as you
+wrote it, in your order. kd's
 law-term identity decides when two spellings are one term: in a vote, for a
 Sketch anchor, and for whether a refit's terms came from the search.
 
@@ -51,7 +59,7 @@ that dataset. For an input with a projection `p = d["projection"]`, the same
 call loads the raw trajectories, and `kd.trajectories_to_tabular(raw,
 p["target_state"], trim=p["trim"])`, renamed to the id with
 `dataclasses.replace`, is the table its searches fit.
-`kd.validate_terms(dataset, terms)` executes each term
+`kd.validate_terms(dataset, terms, max_order=3)` executes each term
 without fitting and lists the rejected ones with a reason. On grid data,
 `kd.forward_error(dataset, terms, coefficients)` integrates a first-order law
 from the first time slice and returns `value`, the relative L2 error against
@@ -61,9 +69,11 @@ cooperative deadline and returns `reason="timeout"`; a single long solver
 step is not interrupted, so keep `timeout` as the hard limit.
 `verify_candidate` runs the same three checks in a worker under its own hard
 limit.
-`kd.block_dispersion(dataset, terms)` refits the terms on four blocks along
+`kd.block_dispersion(dataset, terms, max_order=3)` refits the terms on four blocks along
 the first spatial axis and returns one number: the mean over terms of each
-coefficient's coefficient of variation across the blocks. In 58 of 105
+coefficient's coefficient of variation across the blocks. Both functions
+default to `max_order=2`, which refuses third-order terminal spellings such
+as `u_xxx`; open-form derivatives are not gated by this parameter. In 58 of 105
 stored benchmark cases (seven problems, relative noise 0 to 5e-2, three
 seeds; each case holds the final answers of the fixed pipelines run on it)
 the pipelines' answers disagreed, all 58 at noise 0 to 1e-2; there, with
@@ -84,7 +94,11 @@ restored search state. A new segment's generation budget is additional work.
 Read `failures` and status first; a `partial` result is not a successful
 search. `primary.law` contains support, aligned coefficients and lhs;
 `primary.equation` is the equation display. Read structured values instead of
-extracting coefficients from display text. A null law is not submittable.
+extracting coefficients from display text. A null law is not submittable,
+and neither is a law with an undefined term (one that divides by, or takes
+the log of, an identically zero expression): `submit_answer` and
+`select_node` refuse it (`undefined_term`) and the default selection skips
+it, although `run_discovery` returns it as a success.
 `diagnostics.score_kind`, `score_direction`, `nmse`, `mse` and
 `segment_report` describe fit and segment facts. Native scores and derivative
 domains do not establish comparisons across algorithms.
@@ -93,7 +107,10 @@ measurements, with `unavailable_reason` when that evaluation is unsupported.
 `term_count` is the number of terms in the law.
 `primary.now_selected` names the `run_id` this run publishes if you submit
 nothing: your `select_node` choice, otherwise the default selection over the
-tree, or null when that has no answer.
+searches on the input the latest search ran on, or null when that has no
+answer. The raw input and each derived copy (low-passed, network or PINN
+field) are ranked separately: a better search on another copy is published
+only when you select or submit it.
 After each search KD measures the sealed law once, in a separate worker:
 the forward error of the law with its own coefficients and left-hand side
 (not `platform_coefficients`), integrated with Radau from the first time
@@ -111,27 +128,39 @@ forward error is at most twice the smallest, then the smaller error, then
 the earlier search; a search without a forward value is left out and not
 ranked against the others, and when none has a value there is no default
 answer. Only when every search is `inapplicable` are they ranked the same
-way on `platform_nmse`. Laws with different left-hand sides are never
-ranked against each other; choose one with `select_node` or `submit_answer`.
+way on `platform_nmse`. Tables, ODE projections and steady inputs have no
+`platform_nmse`, so there the searches of several algorithms have no default
+answer. Laws with different left-hand sides are never ranked against each
+other; choose one with `select_node` or `submit_answer`.
 On raw ODE trajectories (an input with a `projection`) every search's
 `selection_forward` is `inapplicable`, so until a system `verify_system`
 measured has a result, the searches of this run's target are ranked by the
-rules above: one algorithm's on its own score, several algorithms' on
-`platform_nmse`. From then on the systems decide the default answer (see
-Verification), and `primary.now_selected` names the winning system's member
-for this run's target.
+rules above: one algorithm's on its own score, while several algorithms'
+have no default answer (a projection has no `platform_nmse`), so choose with
+`select_node` or `submit_answer`. From then on the systems decide the default
+answer (see Verification), and `primary.now_selected` names the winning
+system's member for this run's target.
 `provenance.headline_coefficient_source` says whether coefficients are native
 or refitted; `provenance.run_id` names the search for selection and resume.
 `provenance.run_dir` points to `record.json` (sealed evidence), `recorder.json`
 (iteration series) and `phases.jsonl` (phase boundaries). The fitted target is
-in `evidence.catalog_fit.lhs_spec`.
+in `evidence.catalog_fit.lhs_spec`. A sketch run also writes `sketch.json`
+in that directory. Its `compile_report.notes` describe the configured
+backend compilation; `diagnostics.sketch` does not include those notes.
+For example, PySINDy's hole-count note does not prove a subset replacement
+actually happened.
 
 ## Continuation
 
 Use `resume_from_run_id` for the latest checkpoint; add `resume_iteration`
 to roll back and fork. `resume_safe` parameters can change on resume,
-`init_only` parameters cannot affect restored state, and `identity_breaking`
-parameters require a new lineage. An archive classified `conclusion` cannot
+changing an `init_only` parameter is refused on resume, and
+`identity_breaking` parameters require a new lineage. A resume inherits the
+parent's seed, Sketch, surrogate and residual threshold when you omit them,
+but not its `params`: an omitted parameter takes its default. Repeat every
+parameter the parent set; one that then differs from the checkpoint is
+refused when it is `init_only` or `identity_breaking`, and a `resume_safe`
+one runs at its default. An archive classified `conclusion` cannot
 resume; rerun it with other parameters. `decision_parent` records the parent
 of a fresh switch or narrowing decision. A segment report contains
 observations, not a decision about which branch deserves more budget.
@@ -150,16 +179,28 @@ arm found the equation and the other did not:
 - More budget: SGA (population 10) from 20 to 100 generations raised the
   success count on each of 3 problems, from 6/10 to 7/10, 1/10 to 3/10 and
   9/10 to 10/10; on two of them the count stopped changing after 40
-  generations. DISCOVER from 8000 to 96000 evaluations left four problems at
-  0/3, 0/3, 1/3 and 1/3, from 0/3 each.
+  generations. DISCOVER from 8000 to 96000 evaluations (112000 on one of
+  the two that stayed at 0/3) left four problems at 0/3, 0/3, 1/3 and 1/3,
+  from 0/3 each.
+
+The SGA checkpoint resume/fork and generation-budget counts above were
+measured on 2026-09-18, before the 2026-10-07 STRidge first-round
+empty-support correction, and have not been remeasured on current code.
 
 ## Refining a candidate
 
 `refine_candidate(run_id=...)` refits the coefficients of that search's law
 with its terms held fixed and returns a law that `submit_answer` accepts with
 the same `run_id`; pass `law` (for example the law with a term removed) or
-`terms` to refit a variant instead. On grid data it is one least-squares fit
-on the whole grid with finite-difference derivatives; on a table it refits
+`terms` to refit a variant instead. `submit_answer` admits either the cited
+search's terms (including subsets and equivalent expanded spellings) or an
+exact term set measured by a receipt from this run on that search's input
+or a registered input with the same root. The sealed search LHS is unchanged.
+The receipt route accepts the same term spellings and multiplicity in any
+order, but no unmeasured subset or union of separate fits. On grid data it is one least-squares fit
+on the whole grid with finite-difference derivatives by default; grid laws
+without a time-derivative left-hand side (homogeneous or order zero) are
+refused as `unsupported_form`. On a table it refits
 the numeric constants inside the terms. It is not a search and counts against
 no evaluation cap. Without smoothing, `diagnostics.nmse` is in the frame of
 `platform_nmse`, so a refined law compares directly with the searches.
@@ -172,7 +213,7 @@ input's root (the pinned input) or an input derived from that root this run,
 never another root. `method` is `"finite_diff"` (default), `"autograd"`
 (derivatives of the model `surrogate_id` names, which has to be trained on
 that input) or `"weak"` (integrals against test-function windows, set by
-`weak`: `half_widths`, `spectrum_tau`, `noise_correction`, `noise_sigma`;
+`weak`: `half_widths`, `spectrum_tau`, `noise_correction`, `noise_sigma`, `bump_degree`;
 see Weak form below). `trim` drops boundary rows after the derivatives are
 taken (finite differences only: an integer, a per-axis mapping or
 `"by_order"`). `diagnostics.refit_frame` is kd's resolved frame (input
@@ -188,15 +229,21 @@ refined law with `submit_answer(law=<its primary.law>, run_id=<the search>,
 refinement_id=<its id>)`; the answer then carries that refinement's
 measurement and input (`provenance.producer_ref`). A law that differs from
 every search law and refined law of this run, even in the last digit of one
-coefficient or in the spelling of one term (`mul(u,u_x)` for a returned
-`u*u_x`), is recorded as edited: it is accepted, carries no measurement, and
-the input its coefficients came from is unknown.
+coefficient, is recorded as edited when its support qualifies: it carries
+no measurement, and its coefficient input is unknown. Receipt support
+matching requires the same term spellings; equivalent spellings remain
+available through the search route. `answer_provenance.answer_origin`
+records `search_terms`, `search_terms_dropped` or `receipt_measured`, with
+`origin_ref` naming the authorizing search or receipt. The receipt's input
+must still verify against this run's registered files. `refinement_id`
+binds the exact law and coefficients; omit it when editing coefficients.
 
-Measured on stored benchmark records:
+Measured by refitting stored benchmark records on 2026-10-18:
 - On noise-free data the refit corrected 20 of 20 DLGA answers that had a
   second time derivative and the right terms, all on one problem; each had
   one coefficient 12.7% off before the refit, and the deviation comes from
-  the trained network. On noise-free data the refit changed no correct
+  one shared cached network: these are 20 search answers, not 20 independent
+  network trials. On noise-free data the refit changed no correct
   answer into a wrong one.
 - An answer with extra small terms: the measured gain (under
   `small_term_rtol` below) came from `small_term_rtol` in `run_discovery`
@@ -206,10 +253,14 @@ Measured on stored benchmark records:
 - On noisy data a finite-difference refit is not better than the algorithm's
   own coefficients: of 108 noisy answers with the right terms, the
   algorithms' coefficients passed on 64 and the refit on 57.
-- Do not replace DLGA's coefficients with a finite-difference refit on noisy
-  data. DLGA takes derivatives from its trained network; at 1% noise its
+- On the measured raw noisy data, replacing DLGA's coefficients with a
+  finite-difference refit worsened the result. DLGA takes derivatives from
+  its trained network; at 1% noise its
   Burgers and KdV coefficients were 0.1% to 3.5% off, and on Burgers a refit
-  moved them far off (refit NMSE 0.91).
+  moved them far off (refit NMSE 0.91). This observation does not cover a
+  refit on a separately prepared network field. Derive that field with
+  `smooth_input(method="network")`, then pass its id as
+  `evaluation_input_id` to `refine_candidate` and state its method and trim.
 - A refit on a smoothed field (`savgol_window`) is another derivative source,
   to be judged on each problem: on the same noisy answers it turned 8 failures
   into passes and 16 passes into failures.
@@ -221,17 +272,41 @@ Three parameters with measured values:
   from the algorithm's result without a refit: at 1e-4 it turned 73 of 1641
   noise-free answers right and none wrong, and 27 of 1678 later answers
   (noisy ones included) right and none wrong; at 1e-3 it turned 29 answers
-  on one problem wrong.
+  on one problem wrong. The 1641-answer study used 2026-09 benchmark
+  records; the 1678-answer recount was reported on 2026-10-18. These are
+  retrospective filters of stored answers, including SGA results from before
+  its 2026-10-07 STRidge change, not new searches on current code.
 - `restart_interval` (SGA) redraws the population every k generations. With
   k = 5 and population 10, SGA found the right equation on 23 seeds where the
   run without restarts did not, and the reverse happened on 4 (two problems,
   same evaluation count); on five more problems the count was 38 against 19.
+  These 2026-09-18/19 studies used scripted restarts before built-in
+  `restart_interval` (2026-10-05) and the 2026-10-07 STRidge correction;
+  the figures have not been remeasured on current code.
 - `savgol_window` smooths every field before the search (or the refit). With
-  window 11, SGA found the right equation on 40 of 84 noisy runs against 29
-  without; on noise-free Burgers it found it on 0 of 3 against 3 of 3,
-  because the window spans the shock.
+  window 11, SGA (population 10, restarting every five generations) found
+  the right equation on 27 of 63 noisy runs at relative noise 1e-4 to 1e-2
+  against 11 without, and 13 of 21 noise-free runs against 18 without. On
+  noise-free Burgers it found it on 0 of 3 against 3 of 3, because the
+  window spans the shock. These 2026-09-20 runs used that study's own
+  restart script and predate the same STRidge correction.
 
 ## Noisy data
+
+`smooth_input(dataset_id, method="savgol", savgol_window=21)` applies
+Savitzky-Golay smoothing to every field along every grid axis, including
+time, with polynomial order 3 and polynomial edge handling (`mode="interp"`).
+The window must be odd, at least 5, and no longer than any grid axis. It
+supports multi-field grids and keeps the axes, field names, shape,
+left-hand side and periodic flags. Its derived id is `<id>+savgol21`, and
+`primary.savgol` records `window_length` and `polyorder`. It has the same
+reuse and chain verification rules as the low-pass copy below. Low-pass
+and network arguments do not apply to this method and are refused.
+Pass the derived id as `input_id` to `score_term_sets` or
+`ablate_candidate`: with the same method and trim, their fits use the same
+field as `refine_candidate(savgol_window=21)` on the parent, so a batch of
+term sets can be scored in one call. The derived id also goes to
+`run_discovery` and `train_surrogate` wherever the parent id does.
 
 `smooth_input(dataset_id, lowpass_modes, time_window=0)` writes a copy of the
 pinned grid input in which every field keeps only its lowest `lowpass_modes`
@@ -280,8 +355,8 @@ ordinary derived input that every search and measurement takes. A
 retrains it nor makes it a surrogate of another instrument, and a
 `smooth_input` network is refused as a search surrogate.
 
-The envelope's `primary.energy_kept` is, per smoothed axis, the fraction of
-the target field's spectral energy the kept modes hold;
+The low-pass envelope's `primary.energy_kept` is, per smoothed axis, the
+fraction of the target field's spectral energy the kept modes hold;
 `diagnostics.spectrum.<axis>` adds the axis length `n`, `modes_at_0.99` and
 `modes_at_0.999` (the smallest count whose kept fraction reaches that value)
 and `modes_at_knee`, the first count past which the remaining energy is the
@@ -290,13 +365,21 @@ computed from the whole spectrum, so the first call with any legal count
 reports them.
 
 Recipe, by data features:
-1. Judge the noise from the input's data report (`noise_estimate` per axis,
-   as a fraction of the field's standard deviation; the preview compares the
-   field with a smoothed copy of itself). At or above about 0.3 %,
-   finite-difference derivatives of second order and above are dominated by
-   noise, and the finite-difference searches (pysindy, sga default, discover,
-   pysr, eqgpt) return a wrong structure or an empty support on the raw
-   input. The data report's `periodic` flag per axis decides which transform
+1. Judge the noise from the input's data report: `noise_estimate` per axis,
+   a robust spread of the second differences along that axis as a fraction
+   of the field's standard deviation. In the measurements the input glossary
+   quotes, refits of the true law on finite differences of the raw field
+   failed on every problem at relative noise 1e-3, where the reading along x
+   was 0.0010 to 0.0018, and passed on some at 1e-4 (readings up to 0.0008).
+   From a reading of about 0.001, finite-difference derivatives of second
+   order and above are dominated by noise, and the finite-difference searches
+   (pysindy, sga default, discover, pysr, eqgpt) return a wrong structure or
+   an empty support on the raw input. The reading does not separate noise
+   from sharp features: one clean field read 0.0044 to 0.0046 along x at every
+   noise level up to 1e-3, and a refit of its true law on raw finite
+   differences passed without noise; on such a field run one search on the
+   raw input as well.
+   The data report's `periodic` flag per axis decides which transform
    that axis gets; the route needs a periodic axis to be flagged (below).
 2. Call `smooth_input` once with any legal count and read
    `diagnostics.spectrum`. Use `modes_at_knee`, not `modes_at_0.999`: the
@@ -311,16 +394,26 @@ Recipe, by data features:
    default library cannot spell a third or fourth derivative or a cubic
    field: pass `terms` where the data report's order or the fit says so.
 4. Refit the agreed support with `refine_candidate` on each count (the
-   `run_id` of a search on that derived input, or `lowpass_modes` and
+   `run_id` of a search on that derived input whose returned law contains
+   every term of the support, or `lowpass_modes` and
    `time_window` on a raw-input search's `run_id`) and keep the count at
    which the coefficients stop moving between neighbouring counts (within
-   about 2 %); below the knee they move with every count. Drop terms below
-   about 1 % of the largest with `small_term_rtol` and read `nmse`, `r2`
-   and `condition_number` on the same frame: a working copy brings the
+   about 2 %); below the knee they move with every count. Do not remove a
+   term because its coefficient is small relative to another coefficient.
+   Before removing it, run `ablate_candidate` on the full candidate and
+   compare `delta_mse` and `relative_rise` in the same measurement frame; a
+   small change on one noisy frame is inconclusive. Read `nmse`, `r2` and
+   `condition_number` on the same frame: a working copy brings the
    library's condition number down by one to four orders of magnitude.
-5. Submit the support whose coefficients keep their sign and size across the
-   neighbouring counts, the raw frame and two algorithms or two seeds. A
-   small `nmse` after smoothing is not evidence of the right coefficients
+5. Agreement across smoothing levels or seeds measures stability, not
+   independent validation. A PINN field trained with the candidate law in
+   its residual cannot confirm that law. Compare term sets with
+   `score_term_sets` in one frame, or use `select_support` to choose the
+   fewest terms within a relative NMSE window in that frame, and use
+   `verify_candidate` where it applies. Keep the law a search returned as a
+   candidate; do not replace its coefficients with a smoothed or PINN refit without comparing the two
+   in a named frame. A small `nmse` after smoothing is not evidence of the
+   right coefficients
    when two library columns are collinear (a field that stays one decaying
    mode has `u_xx` proportional to `u`; the library's condition number is in
    the thousands on the raw field and stays high on every copy): the refit
@@ -388,7 +481,9 @@ when that is a derived input, on the run's device: 2000 joint epochs on a 256 by
 6 minutes on one card running alone, after a 5000-epoch pretraining. On one
 CPU thread a joint epoch took 0.85 s and a pretraining epoch 0.024 s on that
 grid (second-order law), so the same call is about 30 minutes there and a
-third-order law longer: on a CPU run budget `pinn_epochs` to the time left.
+third-order law longer: on a CPU run start it only when that time is left
+rather than cutting `pinn_epochs` (in one agent run a refit cut to 250 joint
+epochs ended 18 % off).
 
 Recipe, by data features, when the noise estimate is several per cent or
 more:
@@ -444,7 +539,8 @@ pretraining epochs, on one card:
 
 A number is measured in one frame, an input and a derivative source:
 - raw: the pinned input with finite differences;
-- filtered: a low-passed copy (`<id>+lowpass...`) or a refit's inline
+- filtered: a low-passed copy (`<id>+lowpass...`), a Savitzky-Golay copy
+  (`<id>+savgol<window>`) or a refit's inline
   smoothing (`lowpass_modes`, `savgol_window`);
 - network: a network's field (`<id>+field-...`) with finite differences, or
   `method="autograd"` with the network's `surrogate_id` on the input it was
@@ -456,22 +552,56 @@ A number is measured in one frame, an input and a derivative source:
 A search's `platform_nmse`, and a finite-difference `refine_candidate` refit
 without `evaluation_input_id` or inline smoothing, are measured on the input
 that search ran on: in the raw frame only for a search on the pinned input,
-in that input's frame for a search on a low-passed copy or a network field.
+in that input's frame for a search on a low-passed or Savitzky-Golay copy
+or a network field.
 A smaller `nmse` in one frame than in another says nothing about which law
 is right: the frames measure different things. Compare candidates in one
 frame, and name the frame with every number you report.
 
+## Support selection
+
+`select_support` takes the same arguments as `score_term_sets`, plus
+`ratio` (default 2.0, finite and at least 1). Supply either explicit
+`term_sets`, or `terms` with `subsets_up_to`; all sets are scored in one
+batch in the same declared frame. It chooses the fewest terms among entries
+whose NMSE is at most `lowest * ratio`, breaking a size tie by lower NMSE.
+There is no absolute error floor: when `lowest` is zero, only zero-NMSE
+entries qualify. Entries with null `fit` or null `fit.nmse` cannot be chosen.
+
+`primary.entries` retains the entire table, ranked by increasing NMSE with
+unavailable scores last, and includes each entry's `size`.
+`primary.chosen` is the entire selected entry (`terms`, `fit`, `size`,
+`failure`, `failure_kind`); `primary.ratio`, `lowest` and `window` expose the
+selection rule, and `primary.evidence_id` identifies the measurement.
+If no entry has a usable NMSE, the result is `partial` with the failure
+`no_scored_sets`: the table and its `evidence_id` stand, and nothing is
+chosen. Read its failures before using the result.
+
+Each finite nonempty scored entry also carries `law` and `refinement_id`;
+`ablate_candidate` supplies these on its baseline and reduced rows for a
+successful search. Submit the law and receipt on that same `run_id`, or
+refit with `refine_candidate` first. Failed fits and the empty ablation
+model have no submission receipt. Selection measures a proposed support;
+it does not establish that the search found it or that a PINN field
+independently confirms it.
+
 ## Weak form
 
-`method="weak"` (`refine_candidate`, `ablate_candidate`, `score_term_sets`)
+`method="weak"` (`refine_candidate`, `ablate_candidate`, `score_term_sets`,
+`select_support`)
 moves every derivative onto a smooth test function, so noise is not
 differentiated. It takes one field on one spatial axis, a uniform grid and a
-first-order time derivative, and only the terms `one`, the field, its square
+first- or second-order time derivative, and only the terms `one`, the field, its square
 and cube (`n2(u)`, `n3(u)`, or the raw products `mul(u,u)` and
 `mul(mul(u,u),u)` in either bracketing, for a field `u`), pure spatial
-derivatives of order one to three and the field times its first spatial
+derivatives of order one to four and the field times its first spatial
 derivative (`mul` in either order); any other term is refused, never fitted
-another way. A raw product keeps its own label in the result. Windows have
+another way. For fourth-order spatial terms set `max_order` to 4 and pass
+`weak={{"bump_degree": 6}}` (the defaults remain 3 and 4). The weak frame
+accepts `u_xxxx`, `diff_x(u_xxx)` and `diff2_x(u_xx)`; finite-difference
+frames keep `max_order=3` and require the nested spellings, because kd's
+finite-difference terminal/stencil cap remains third order.
+A raw product keeps its own label in the result. Windows have
 to fit inside the grid, so a short
 axis leaves few of them; `diagnostics.weak` reports the windows, the rank
 and the column count. Without `half_widths`, the widths follow each axis's
@@ -729,21 +859,29 @@ run, across seeds or algorithms; the task text is not a source. No field
 records which searches justified a pin.
 A pin with a wrong coefficient is not repaired by the search: a hole
 candidate whose expansion shares a monomial with a pinned term is refused
-before scoring, so no hole term can offset the pin, and the law then fails
-the exit residual gate. In a rerun on a noise-free 128 by 51 Burgers grid, a
+before scoring. This does not cover every rational or joint-term respelling
+(see the algorithm card and compile notes), so pin reservation alone does not
+establish the physical coefficient. In a 2026-09-25 rerun on a noise-free
+128 by 51 Burgers grid, a
 pin with the wrong sign gave no certified law in 8 of 8 DISCOVER runs and 10
-of 10 SGA runs.
+of 10 SGA runs. Those SGA results predate the 2026-10-07 STRidge
+correction and have not been remeasured on current code.
 No hole clause excludes an explicit coordinate factor along an axis the hole
 differentiates: `fields` limits which data fields a term contains, and `axes`
 limits derivative axes and coordinate factors together, so `axes: ["x"]`
 refuses any dependence on t but still admits a factor of x. Leaving x out of
 `vocabulary.coordinates` makes its derivatives unresolvable.
 `small_term_rtol` is not applied on a sketch run.
-Use the input's names. The per-algorithm table declares each clause's level;
-tabular modes do not accept sketches. Operator constraints use IR feature
+Use the input's names. The per-algorithm table declares each clause's level.
+On tabular data the `lhs_spec` is the target with `axis` `""` and `order` 0,
+`vocabulary.coordinates` is empty, the target is not one of
+`vocabulary.fields`, and no hole sets `max_deriv_order`. A tabular law is
+read as a sum: its terms are split at additions, numbers inside a product
+join its coefficient, and its constant is the term `one`; a feature name
+containing `_` cannot be used in a sketch. Operator constraints use IR feature
 names, such as `mul` and `recip`, not search-backend spellings.
 
-What the levels mean. `lowered`: the clause is compiled into the search arithmetic itself, as a pinned term deducted from the regression target before the fit. `generation_enforced`: the clause filters which candidates the search may generate, which decides how fast a compliant law is found rather than whether it is compliant. `fit_enforced`: the anchored column is in every fit, never thresholded, and its coefficient is not shrunk by the penalty; the exit still requires |coefficient| >= support_threshold, and at support_threshold=0 an anchored clause on a fit_enforced backend fails only on an exactly zero coefficient. `exit_checked`: the search itself is not constrained by that clause at all, and compliance is judged only at the exit.
+What the levels mean. `lowered`: the clause is compiled into the search arithmetic itself, as a pinned term deducted from the regression target before the fit. `generation_enforced`: the clause filters which candidates the search may generate, which decides how fast a compliant law is found rather than whether it is compliant. `fit_enforced`: the anchored column is in every fit, never thresholded, and its coefficient is not shrunk by the penalty; the exit still requires |coefficient| >= support_threshold, and at support_threshold=0 an anchored clause on a fit_enforced backend fails only on an exactly zero coefficient. `exit_checked`: compliance is judged at exit; a backend may also act on the clause before exit, as described in its algorithm card.
 
 There are two exit gates. First, every used clause is judged whatever its level; `diagnostics.sketch.satisfied` reports that clause verdict. Second, the full law must pass the exit residual verification policy on the platform footprint (by default NMSE <= 0.05). `diagnostics.sketch.certified` reports whether kd delivered a solution after both gates. A law can satisfy every clause yet fail the residual gate: `satisfied` true, `certified` false and a null `primary.law`; `diagnostics.sketch.failure` explains the refusal. kd never delivers a law that fails either gate, but the search may find no certified law. A false `certified` and a null `primary.law` are expected outcomes, and clause failure is likelier when more used clauses sit at `exit_checked`.
 
@@ -772,28 +910,33 @@ and an earlier answer keep the Sketch they were found under. When the run was
 given a user Sketch, it is the active one for the whole run and `set_sketch`
 cannot replace it.
 
-The residual gate uses platform finite differences of the data the search
-sees, after `savgol_window` smoothing when that is set, and `run_discovery`
-cannot change it. Least-squares fits of the true terms on finite differences
-of unsmoothed noisy benchmark fields had median NMSE above 0.05 on 4 of 7
-problems at relative noise 1e-4, 6 of 7 at 1e-3 and 7 of 7 at 1e-2 and 5e-2,
-so on such data a sketch cannot certify the true law. After smoothing with
-window 11 they were above 0.05 on 1 of 7 problems without noise and at 1e-4,
-3 of 7 at 1e-3, 6 of 7 at 1e-2 and 7 of 7 at 5e-2.
+The configured residual threshold applies on the actual verification frame
+and input; the default is 0.05. A historical finite-difference measurement
+is not an execution of every current backend's exit gate. Least-squares fits
+of the true terms on unsmoothed benchmark fields had median NMSE above
+0.05 on 4 of 7 problems at relative noise 1e-4, 6 of 7 at 1e-3 and 7 of 7
+at 1e-2 and 5e-2. After window-11 smoothing the counts were 1 of 7 without
+noise and at 1e-4, 2 of 7 at 1e-3, 6 of 7 at 1e-2 and 7 of 7 at 5e-2.
+These are medians over three noise draws measured on 2026-09-20 using the
+benchmark judge's finite differences, not current exit-gate results.
 
 An earlier comparison of sketch runs with blind search ran on code of
-2026-09-12, before two derivative fixes, on that 128 by 51 Burgers grid with
+2026-09-12, after that day's executor fix but before the 2026-09-15
+periodic-boundary fix and the 2026-10-07 STRidge change, on that 128 by 51
+Burgers grid with
 relative noise added, with SGA (population 20, 100 generations, five seeds)
 and coefficients judged within 40% on SGA's own derivatives. Blind search
 found the equation on 3 of 5 seeds at noise 1e-4 and 4 of 5 at 2e-4, and a
 constrained hole on 5 of 5 at both. Without noise both found it on 5 of 5,
 and a pinned term with a constrained hole took a median 6.3 s against 17.2 s
 blind. At 3e-4 and above every arm found it on 0 of 5. That comparison covers
-one problem and one algorithm. On current code, DISCOVER on KdV with a pinned
-term and a constrained hole, in three sketch configurations (pinned, hole
-only, wrong pin) over three rounds and two budgets, certified 0 of 24 runs,
-and 6 blind runs did not find the equation either; the hole candidates
-carried coordinate factors the sketch could not exclude.
+one problem and one algorithm, not current-code performance; the later
+fixes' effect on that generated grid was not measured. On 2026-10-18,
+DISCOVER on KdV with a pinned term and a constrained hole, in three sketch
+configurations (pinned, hole only, wrong pin) over three rounds and two
+parameter settings, certified 0 of 27 runs. Six blind runs did not find the
+equation either; in 18 of the 27 sketch runs the hole candidates carried
+coordinate factors the sketch could not exclude.
 
 ## Surrogates
 
@@ -821,8 +964,15 @@ refuse it.
 
 The operator fixes the device for the whole run (`kd-agent run --device`,
 cpu or cuda): every search and every surrogate training runs there, and no
-call takes a device. The numbers below were measured on the CPU. In one
-pilot of 42 agent runs, ten DLGA searches used their whole 60-minute cap and
-two separate DLGA surrogate trainings took 51 and 57 minutes; none of the 42
-final answers came from DLGA. With four CPU trainings in parallel, 5000
-surrogate epochs took 2638 s; kd's default is 50000.
+call takes a device. When the run has a time budget, a search without
+`max_search_seconds` is capped at the run's remaining time, so a dlga search
+that trains its own network at the default 50000 epochs
+(`surrogate_max_epochs` omitted) can spend the rest of the run. The
+following historical pilot used one CPU thread per worker. Of
+42 agent runs, ten DLGA searches exhausted their 60-minute cap and none of
+the final answers came from DLGA. Two separate DLGA surrogate trainings at
+50000 epochs, kd's default, hit their budget limits after 51 and 57 minutes
+(`training_timeout`), retaining no network.
+These are not completed-training timings. In another measurement, with
+four CPU trainings in parallel, 5000 epochs took 2638 s on a 256 by 201
+grid at relative noise 1e-2; these durations are not present-day defaults.

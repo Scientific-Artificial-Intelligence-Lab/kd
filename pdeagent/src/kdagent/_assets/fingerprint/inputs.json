@@ -57,7 +57,9 @@
             "second_derivative_gap": {
               "x": 0.01578921334771648,
               "t": 0.006912420299514913
-            }
+            },
+            "constant_axes": [],
+            "noise_limited_axes": []
           }
         ],
         "lhs_field": "u",
@@ -65,8 +67,8 @@
         "lhs_label": "u_t",
         "lhs_order": 1,
         "warnings": [
-          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
-          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+          "axis 'x' has only 9 points (<16) \u2014 small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) \u2014 small grid (n<16) may make fits unstable"
         ]
       },
       "inventory": {
@@ -161,7 +163,9 @@
             "second_derivative_gap": {
               "x": 0.01578921334771648,
               "t": 0.006912420299514913
-            }
+            },
+            "constant_axes": [],
+            "noise_limited_axes": []
           }
         ],
         "lhs_field": "u",
@@ -169,8 +173,8 @@
         "lhs_label": "u_tt",
         "lhs_order": 2,
         "warnings": [
-          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
-          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+          "axis 'x' has only 9 points (<16) \u2014 small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) \u2014 small grid (n<16) may make fits unstable"
         ]
       },
       "inventory": {
@@ -281,7 +285,9 @@
               "x": 0.015789213347716016,
               "y": 1.4437017112392526e-15,
               "t": 0.006912420299514722
-            }
+            },
+            "constant_axes": [],
+            "noise_limited_axes": []
           }
         ],
         "lhs_field": "u",
@@ -289,9 +295,9 @@
         "lhs_label": "u_t",
         "lhs_order": 1,
         "warnings": [
-          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
-          "axis 'y' has only 6 points (<16) — small grid (n<16) may make fits unstable",
-          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+          "axis 'x' has only 9 points (<16) \u2014 small grid (n<16) may make fits unstable",
+          "axis 'y' has only 6 points (<16) \u2014 small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) \u2014 small grid (n<16) may make fits unstable"
         ]
       },
       "inventory": {
@@ -394,7 +400,9 @@
             "second_derivative_gap": {
               "x": 0.01578921334771648,
               "t": 0.006912420299514913
-            }
+            },
+            "constant_axes": [],
+            "noise_limited_axes": []
           },
           {
             "name": "v",
@@ -419,7 +427,9 @@
             "second_derivative_gap": {
               "x": 0.06519949673284971,
               "t": 0.02727135598091758
-            }
+            },
+            "constant_axes": [],
+            "noise_limited_axes": []
           }
         ],
         "lhs_field": "u",
@@ -427,8 +437,8 @@
         "lhs_label": "u_t",
         "lhs_order": 1,
         "warnings": [
-          "axis 'x' has only 9 points (<16) — small grid (n<16) may make fits unstable",
-          "axis 't' has only 7 points (<16) — small grid (n<16) may make fits unstable"
+          "axis 'x' has only 9 points (<16) \u2014 small grid (n<16) may make fits unstable",
+          "axis 't' has only 7 points (<16) \u2014 small grid (n<16) may make fits unstable"
         ]
       },
       "inventory": {
@@ -521,7 +531,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           }
         ],
         "lhs_field": null,
@@ -598,7 +610,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           },
           {
             "name": "y",
@@ -613,7 +627,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           }
         ],
         "lhs_field": "y",
@@ -682,7 +698,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           },
           {
             "name": "dx_dt",
@@ -697,7 +715,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           }
         ],
         "lhs_field": "dx_dt",
@@ -766,7 +786,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           },
           {
             "name": "y",
@@ -781,7 +803,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           },
           {
             "name": "z",
@@ -796,7 +820,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           },
           {
             "name": "dx_dt",
@@ -811,7 +837,9 @@
             "inf_count": 0,
             "noise_estimate": {},
             "first_derivative_gap": {},
-            "second_derivative_gap": {}
+            "second_derivative_gap": {},
+            "constant_axes": null,
+            "noise_limited_axes": null
           }
         ],
         "lhs_field": "dx_dt",
@@ -905,7 +933,8 @@
           "device": "cpu",
           "blas_threads": 1,
           "python_hash_seed": 0,
-          "soft_seconds": 60.0
+          "soft_seconds": 60.0,
+          "budget_tier": null
         },
         "result": {
           "structure_rate": 0.5,
@@ -918,7 +947,8 @@
         },
         "support": {
           "n_runs": 6,
-          "n_problems": 3
+          "n_problems": 3,
+          "n_refused": 0
         }
       },
       {
@@ -942,7 +972,8 @@
           "device": "cpu",
           "blas_threads": 1,
           "python_hash_seed": 0,
-          "soft_seconds": 60.0
+          "soft_seconds": 60.0,
+          "budget_tier": null
         },
         "result": {
           "structure_rate": 0.5,
@@ -955,6 +986,181 @@
         },
         "support": {
           "n_runs": 6,
+          "n_problems": 3,
+          "n_refused": 0
+        }
+      }
+    ],
+    "refusals": [
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": "pysindy",
+          "status": "registered_name_with_suffix"
+        },
+        "params": {
+          "declared": [
+            "terms",
+            "threshold"
+          ],
+          "undeclared": 0
+        },
+        "refusal": {
+          "phase": "construction",
+          "exception": "NotImplementedError",
+          "category": "unregistered_algorithm",
+          "correction": {
+            "modes": [
+              "default",
+              "tabular"
+            ]
+          }
+        },
+        "support": {
+          "n_calls": 58,
+          "n_problems": 17
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": "pysr",
+          "status": "registered"
+        },
+        "params": {
+          "declared": [
+            "maxsize",
+            "niterations",
+            "terms"
+          ],
+          "undeclared": 0
+        },
+        "refusal": {
+          "phase": "construction",
+          "exception": "TypeError",
+          "category": "facade_owned_field",
+          "correction": {
+            "fields": {
+              "niterations": "generations"
+            }
+          }
+        },
+        "support": {
+          "n_calls": 18,
+          "n_problems": 11
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": "sga",
+          "status": "registered"
+        },
+        "params": {
+          "declared": [],
+          "undeclared": 1
+        },
+        "refusal": {
+          "phase": "construction",
+          "exception": "TypeError",
+          "category": "undeclared_parameter",
+          "correction": null
+        },
+        "support": {
+          "n_calls": 6,
+          "n_problems": 4
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": "dlga",
+          "status": "registered"
+        },
+        "params": {
+          "declared": [],
+          "undeclared": 0
+        },
+        "refusal": {
+          "phase": "fit",
+          "exception": "NotImplementedError",
+          "category": "no_mode_accepts_input",
+          "correction": {
+            "modes": [
+              "default"
+            ]
+          }
+        },
+        "support": {
+          "n_calls": 4,
+          "n_problems": 3
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": "sga",
+          "status": "registered"
+        },
+        "params": {
+          "declared": [
+            "derivatives"
+          ],
+          "undeclared": 0
+        },
+        "refusal": {
+          "phase": "construction",
+          "exception": "ValueError",
+          "category": "argument_refused",
+          "correction": null
+        },
+        "support": {
+          "n_calls": 3,
+          "n_problems": 3
+        }
+      },
+      {
+        "match": {
+          "task_kind": "pde-evolution",
+          "topology": "grid",
+          "n_axes": 2
+        },
+        "algorithm": {
+          "name": null,
+          "status": "unregistered"
+        },
+        "params": {
+          "declared": [],
+          "undeclared": 1
+        },
+        "refusal": {
+          "phase": "construction",
+          "exception": "NotImplementedError",
+          "category": "unregistered_algorithm",
+          "correction": null
+        },
+        "support": {
+          "n_calls": 3,
           "n_problems": 3
         }
       }

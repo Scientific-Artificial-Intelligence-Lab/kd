@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
@@ -12,6 +13,8 @@ from kd.core.platform.sketch_compile import (
     SketchClauseLevels,
     used_clauses,
 )
+from kd.data.derivatives import derivative_provider, derivative_providers
+from kd.data.derivatives.registry import DerivativeProviderEntry
 from kd.data.schema import DataTopology
 from kd.search.config_fields import field_specs
 
@@ -53,13 +56,71 @@ class ModeSelector:
     present: bool
 
 
+@dataclass(frozen=True, kw_only=True)
+class EnvironmentRequirement:
+
+    name: str
+    required: bool
+    unless_argument: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("environment requirement name must be non-empty")
+        if self.unless_argument is not None and not self.required:
+            raise ValueError(
+                f"environment requirement {self.name!r}: unless_argument applies "
+                "only to a required variable"
+            )
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuntimeRequirements:
+
+    extras: tuple[str, ...]
+    import_names: tuple[str, ...]
+    environment: tuple[EnvironmentRequirement, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ResourceHints:
+
+    preferred_device: Literal["cpu", "cuda"] | None
+    memory_estimate_gb: float | None
+    memory_basis: Literal["measured", "estimated", "unknown"]
+    memory_platform: Literal["linux", "win32", "darwin"] | None
+    memory_context: str
+
+    def __post_init__(self) -> None:
+        if self.memory_estimate_gb is None:
+            if self.memory_basis != "unknown" or self.memory_platform is not None:
+                raise ValueError(
+                    "an unknown memory estimate has memory_basis='unknown' and "
+                    "no memory_platform"
+                )
+            return
+        if not (math.isfinite(self.memory_estimate_gb) and self.memory_estimate_gb > 0):
+            raise ValueError(
+                "memory_estimate_gb must be a positive finite number or None; "
+                f"got {self.memory_estimate_gb!r}"
+            )
+        if self.memory_basis == "unknown" or not self.memory_context:
+            raise ValueError(
+                "a memory estimate needs memory_basis 'measured' or 'estimated' "
+                "and a memory_context naming its device, workload and source"
+            )
+
+
 @dataclass(frozen=True)
 class InstrumentMode:
 
     name: str
     forms: frozenset[Form]
     topologies: frozenset[DataTopology]
-    provider_kind: Literal["finite_diff", "autograd", "none"]
+    provider_kind: str
+    derivative_service: Literal["platform", "plugin", "none"] = "none"
+    requires_surrogate: bool = False
+    config_values: Mapping[str, Any] = field(default_factory=dict)
+    component_fields: Mapping[str, str] = field(default_factory=dict)
     description: str = ""
     sketch: SketchClauseLevels = SketchClauseLevels()
     lhs_orders: frozenset[int] | None = None
@@ -78,10 +139,13 @@ class InstrumentMode:
 
     field_names: tuple[str, ...] | None = None
     spatial_axes: tuple[str, ...] | None = None
+
+    spatial_axes_exact: bool = False
     names_from: str | None = None
     selectable_from_data: bool = True
 
     selector: ModeSelector | None = None
+    resources: ResourceHints | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -92,6 +156,8 @@ class InstrumentMode:
             raise ValueError(f"reserved forms are not claimable: {names}")
         if not self.topologies:
             raise ValueError("mode topologies must be non-empty")
+        if self.spatial_axes_exact and self.spatial_axes is None:
+            raise ValueError("spatial_axes_exact requires declared spatial_axes")
         overlap = set(self.selected_by).intersection(
             key for params in self.order_params.values() for key in params
         )
@@ -183,6 +249,7 @@ class InstrumentDescriptor:
 
 
     surrogate_fields: frozenset[str] = field(kw_only=True)
+    requirements: RuntimeRequirements | None = field(kw_only=True, default=None)
 
     facade_inert_fields: frozenset[str] = frozenset()
 
@@ -221,6 +288,56 @@ class InstrumentDescriptor:
                 )
 
 
+def derivative_provider_eligible(
+    mode: InstrumentMode, entry: DerivativeProviderEntry
+) -> bool:
+    return (
+        mode.derivative_service == "platform"
+        and entry.surrogate == mode.requires_surrogate
+    )
+
+
+def execution_mode(
+    descriptor: InstrumentDescriptor,
+    topology: DataTopology,
+    config: Mapping[str, Any],
+    *,
+    lhs_order: int | None = None,
+) -> InstrumentMode:
+    matches = [
+        mode
+        for mode in descriptor.modes
+        if topology in mode.topologies
+        and all(config.get(key) == value for key, value in mode.config_values.items())
+        and (
+            mode.selector is None
+            or (config.get(mode.selector.field) is not None) == mode.selector.present
+        )
+    ]
+    if len(matches) > 1:
+        form = None
+        if topology is DataTopology.TABULAR:
+            form = Form.REGRESSION
+        elif lhs_order is not None:
+            form = Form.HOMOGENEOUS if lhs_order == 0 else Form.EVOLUTION
+        matches = [
+            mode
+            for mode in matches
+            if (form is None or not mode.forms or form in mode.forms)
+            and (
+                lhs_order is None
+                or mode.lhs_orders is None
+                or lhs_order in mode.lhs_orders
+            )
+        ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"cannot resolve derivative service mode for {descriptor.algorithm!r}: "
+            f"{[mode.name for mode in matches]}"
+        )
+    return matches[0]
+
+
 def mode_for_topology(
     descriptor: InstrumentDescriptor,
     topology: DataTopology,
@@ -242,12 +359,17 @@ def sketch_eligible_modes(
     sketch_lower_owner: Literal["platform", "native"],
     config: Mapping[str, Any] | None = None,
 ) -> tuple[InstrumentMode, ...]:
+    form = Form.EVOLUTION if sketch.lhs_spec.order > 0 else Form.REGRESSION
     return tuple(
         mode
         for mode in descriptor.modes
-        if Form.EVOLUTION in mode.forms
+        if form in mode.forms
         if mode.lhs_orders is None or sketch.lhs_spec.order in mode.lhs_orders
-        if not (mode.provider_kind == "none" and sketch_lower_owner == "platform")
+        if not (
+            mode.provider_kind == "none"
+            and sketch_lower_owner == "platform"
+            and DataTopology.TABULAR not in mode.topologies
+        )
         if config is None
         or mode.selector is None
         or (config.get(mode.selector.field) is not None) == mode.selector.present
@@ -266,8 +388,9 @@ def assert_sketch_supported(
         descriptor, sketch, sketch_lower_owner=sketch_lower_owner, config=config
     )
     if not modes:
+        kind = "an evolution" if sketch.lhs_spec.order > 0 else "a regression"
         raise ValueError(
-            f"algorithm {algorithm!r} has no mode that can run an evolution "
+            f"algorithm {algorithm!r} has no mode that can run {kind} "
             f"sketch with LHS order {sketch.lhs_spec.order}"
         )
     used = used_clauses(sketch)
@@ -293,6 +416,8 @@ def assert_sketch_supported(
 def _spatial_dims(mode: InstrumentMode) -> list[int] | None:
     if mode.spatial_axes is None or mode.names_from is not None:
         return None
+    if mode.spatial_axes_exact:
+        return [len(mode.spatial_axes)]
     return list(range(1, len(mode.spatial_axes) + 1))
 
 
@@ -300,6 +425,35 @@ def _field_counts(mode: InstrumentMode) -> list[int] | None:
     if mode.field_names is None or mode.names_from is not None:
         return None
     return [len(mode.field_names)]
+
+
+def _requirements_row(requirements: RuntimeRequirements | None) -> dict[str, Any]:
+    if requirements is None:
+        requirements = RuntimeRequirements(extras=(), import_names=(), environment=())
+    return {
+        "extras": list(requirements.extras),
+        "import_names": list(requirements.import_names),
+        "environment": [
+            {
+                "name": item.name,
+                "required": item.required,
+                "unless_argument": item.unless_argument,
+            }
+            for item in requirements.environment
+        ],
+    }
+
+
+def _resources_row(resources: ResourceHints | None) -> dict[str, Any] | None:
+    if resources is None:
+        return None
+    return {
+        "preferred_device": resources.preferred_device,
+        "memory_estimate_gb": resources.memory_estimate_gb,
+        "memory_basis": resources.memory_basis,
+        "memory_platform": resources.memory_platform,
+        "memory_context": resources.memory_context,
+    }
 
 
 def _config_cls_ref(plugin_cls: type[FacadeWiringContract]) -> str:
@@ -320,6 +474,17 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
                 "forms": sorted(form.value for form in mode.forms),
                 "topologies": sorted(topology.value for topology in mode.topologies),
                 "provider_kind": mode.provider_kind,
+                "derivative_service": mode.derivative_service,
+                "derivative_providers": [
+                    name
+                    for name in derivative_providers()
+                    if derivative_provider_eligible(mode, derivative_provider(name))
+                ]
+                if mode.derivative_service == "platform"
+                else [],
+                "requires_surrogate": mode.requires_surrogate,
+                "config_values": dict(mode.config_values),
+                "component_fields": dict(mode.component_fields),
                 "description": mode.description,
                 "sketch": {
                     clause: mode.sketch.level(clause) for clause in SKETCH_CLAUSES
@@ -354,6 +519,7 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
                         "present": mode.selector.present,
                     }
                 ),
+                "resources": _resources_row(mode.resources),
             }
             for mode in descriptor.modes
         ],
@@ -380,6 +546,7 @@ def tool_schema(plugin_cls: type[FacadeWiringContract]) -> dict[str, Any]:
         "config_artifact_keys": sorted(descriptor.config_artifact_keys),
         "surrogate_fields": sorted(descriptor.surrogate_fields),
         "facade_inert_fields": sorted(descriptor.facade_inert_fields),
+        "requirements": _requirements_row(descriptor.requirements),
     }
 
 
@@ -425,10 +592,13 @@ def mode_accepts(
     fields_match = mode["field_names"] is None or set(field_names) == set(
         mode["field_names"]
     )
-    axes_match = (
-        mode["spatial_axes"] is None
-        or bool(spatial_axes)
+    axes_match = mode["spatial_axes"] is None or (
+        bool(spatial_axes)
         and set(spatial_axes) <= set(mode["spatial_axes"])
+        and (
+            mode["spatial_dims"] is None
+            or len(set(spatial_axes)) in mode["spatial_dims"]
+        )
     )
     if not fields_match or not axes_match:
         reason = (
@@ -474,12 +644,15 @@ __all__ = [
     "SCORE_FRAME_NATIVE_INTERNAL",
     "SCORE_FRAME_PLATFORM_FULL_GRID",
     "SCORE_FRAME_SURROGATE_FIELD",
+    "EnvironmentRequirement",
     "InstrumentDescriptor",
     "InstrumentMode",
     "Knob",
     "ModeSelector",
     "ModeVerdict",
+    "ResourceHints",
     "ResumeTier",
+    "RuntimeRequirements",
     "Segmentation",
     "assert_sketch_supported",
     "mode_accepts",

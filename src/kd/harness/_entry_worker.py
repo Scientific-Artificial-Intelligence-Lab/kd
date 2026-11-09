@@ -16,7 +16,7 @@ from kd.core.interrupt import SearchInterrupted
 from kd.harness.episode import EpisodeOutcome, run_episode
 from kd.harness.plan import PlanEntry
 from kd.harness.recording import RecordingOptions
-from kd.harness.runner import stage_outcome
+from kd.harness.runner import entry_dependencies, stage_outcome
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -46,9 +46,14 @@ def main(argv: list[str]) -> None:
 
 
     dataset = torch.load(job["dataset_file"], map_location="cpu", weights_only=False)
+    entry = PlanEntry.from_dict(job["entry"])
+    if entry_dependencies(entry, dataset) != job["dependencies"]:
+        raise ValueError(
+            "execution component origins changed between parent and worker"
+        )
     recording = job["recording"]
     run_episode(
-        entry=PlanEntry.from_dict(job["entry"]),
+        entry=entry,
         entry_index=job["entry_index"],
         dataset=dataset,
         model_factory=Model,

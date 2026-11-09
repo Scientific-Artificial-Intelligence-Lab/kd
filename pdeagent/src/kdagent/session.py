@@ -71,12 +71,12 @@ class Session:
         self.action_presented: set[str] = set()
         self.action_pipelines: dict[str, dict[str, Any]] = {}
         self.successful_runs: dict[str, dict[str, Any]] = {}
+        self.uncertified_candidates: dict[str, dict[str, Any]] = {}
         self.sealed_lhs: dict[str, dict[str, Any] | None] = {}
         self.sealed_laws: dict[str, dict[str, Any]] = {}
         self.sealed_fits: dict[str, dict[str, Any]] = {}
         self.derived_inputs: dict[str, str] = {}
         self.search_inputs: dict[str, dict[str, Any]] = {}
-        self.search_verify: dict[str, dict[str, float] | None] = {}
         self.receipts: dict[str, dict[str, Any]] = {}
         self.evidence: dict[str, dict[str, Any]] = {}
         self.sketches: dict[str, dict[str, Any]] = {}

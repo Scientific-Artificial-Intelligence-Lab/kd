@@ -1,0 +1,46 @@
+{
+  "format": "kd-experience-pipelines-v1",
+  "pipelines": [
+    {
+      "id": "raw-poly3",
+      "pipeline": {
+        "algorithm": "pysindy", "mode": "default",
+        "config": {"threshold": 0.0, "alpha": 0.0}, "input": "raw",
+        "conditioning": {"library_rule": ["poly3", "product_derivative", "coordinate_ratio_if_axis_excludes_zero"]}
+      },
+      "preparation": null,
+      "frame": {"method": "fd2", "trim": {"spatial": 20, "time": 5}},
+      "selection": {"subsets_up_to": 3, "ratio": 2.0}
+    },
+    {
+      "id": "savgol11-poly3",
+      "pipeline": {
+        "algorithm": "pysindy", "mode": "default",
+        "config": {"threshold": 0.0, "alpha": 0.0}, "input": "savgol",
+        "conditioning": {"library_rule": ["poly3", "product_derivative", "coordinate_ratio_if_axis_excludes_zero"]}
+      },
+      "preparation": {"method": "savgol", "savgol_window": 11},
+      "frame": {"method": "fd2", "trim": {"spatial": 20, "time": 5}},
+      "selection": {"subsets_up_to": 3, "ratio": 2.0}
+    },
+    {
+      "id": "network5000-poly3",
+      "pipeline": {
+        "algorithm": "pysindy", "mode": "default",
+        "config": {"threshold": 0.0, "alpha": 0.0}, "input": "network",
+        "conditioning": {"library_rule": ["poly3", "product_derivative", "coordinate_ratio_if_axis_excludes_zero"]}
+      },
+      "preparation": {
+        "method": "network", "seed": 0,
+        "network_recipe": {
+          "name": "dlga_nn_1", "version": 1,
+          "hidden_sizes": [50, 50, 50, 50, 50], "activation": "sin",
+          "lr": 0.001, "max_epochs": 5000, "patience": null,
+          "val_ratio": 0.2, "restore_best": true, "training_dtype": "float32"
+        }
+      },
+      "frame": {"method": "fd2", "trim": {"spatial": 20, "time": 5}},
+      "selection": {"subsets_up_to": 3, "ratio": 2.0}
+    }
+  ]
+}

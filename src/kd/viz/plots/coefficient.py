@@ -18,6 +18,7 @@ from kd.viz.style import (
     INK_2,
     INK_MUTED,
     SERIES,
+    SMALL_FONTSIZE,
     style_context,
 )
 
@@ -44,7 +45,6 @@ _FRAME_INCHES = 1.4
 
 
 _WIDE_RANGE_RATIO = 100.0
-_VALUE_LABEL_FONTSIZE = 9.5
 
 
 def coefficient_bar_figsize(result: ExperimentResult) -> tuple[float, float]:
@@ -187,8 +187,8 @@ def _mark_normalization_baseline(
         textcoords="offset points",
         ha="left",
         va="center",
-        fontsize=_VALUE_LABEL_FONTSIZE,
-        color=INK_MUTED,
+        fontsize=SMALL_FONTSIZE,
+        color=INK_2,
     )
 
 
@@ -268,7 +268,7 @@ def _mark_na_positions(ax: Axes, positions: np.ndarray) -> None:
             transform=ax.get_yaxis_transform(),
             ha="left",
             va="center",
-            fontsize=8,
+            fontsize=SMALL_FONTSIZE,
             color=INK_MUTED,
         )
 
@@ -303,7 +303,7 @@ def _annotate_bar_values(ax: Axes, bars: object, coeffs: np.ndarray) -> None:
             textcoords="offset points",
             ha="left" if positive else "right",
             va="center",
-            fontsize=_VALUE_LABEL_FONTSIZE,
+            fontsize=SMALL_FONTSIZE,
             color=INK_2,
         )
 

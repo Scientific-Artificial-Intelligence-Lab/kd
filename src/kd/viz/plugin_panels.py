@@ -18,7 +18,14 @@ from kd.viz.gap_notes import (
     band_measured_flags,
     measured_flags,
 )
-from kd.viz.style import CONTEXT, REF_LINE_WIDTH, SERIES, isolated_point_marks
+from kd.viz.style import (
+    CONTEXT,
+    INK_MUTED,
+    REF_LINE_WIDTH,
+    SERIES,
+    SERIES_DASHES,
+    isolated_point_marks,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -29,6 +36,9 @@ logger = logging.getLogger(__name__)
 
 
 NO_DATA_TEXT = "No data"
+
+
+_ZERO_CLEARANCE = 0.03
 
 
 class Panel(Protocol):
@@ -109,6 +119,8 @@ def no_data_reason(recorder: VizRecorder | None) -> str:
 
 
 def draw_no_data(ax: Axes, name: str, reason: str) -> list[str]:
+    ax.set(xticks=[], yticks=[])
+    ax.grid(False)
     ax.text(
         0.5,
         0.5,
@@ -116,6 +128,7 @@ def draw_no_data(ax: Axes, name: str, reason: str) -> list[str]:
         transform=ax.transAxes,
         ha="center",
         va="center",
+        color=INK_MUTED,
     )
     return [f"plugin plot '{name}': {NO_DATA_TEXT} ({reason})"]
 
@@ -168,13 +181,19 @@ def series_gap_annotator(vocab: GapVocabulary) -> Callable[[Axes, list[Any]], No
 
 
 def _plot_index_curve(
-    ax: Axes, values: Any, *, label: str | None = None, color: str = SERIES[0]
+    ax: Axes,
+    values: Any,
+    *,
+    label: str | None = None,
+    color: str = SERIES[0],
+    linestyle: Any = "-",
 ) -> None:
     ax.plot(
         range(len(values)),
         values,
         color=color,
         label=label,
+        linestyle=linestyle,
         **isolated_point_marks(values),
     )
 
@@ -219,6 +238,14 @@ class SeriesPanel:
             _plot_index_curve(ax, mask_for_log(plotted))
         else:
             _plot_index_curve(ax, mask_non_finite(plotted))
+        if self.count_axis:
+
+
+
+            bottom, top = ax.get_ylim()
+            if bottom < 0:
+                top = max(top, 1.0)
+                ax.set_ylim(-_ZERO_CLEARANCE * top, top)
         if self.annotate is not None:
             self.annotate(ax, recorded)
         return []
@@ -262,11 +289,14 @@ class BandPanel:
             return draw_no_data(ax, self.name, no_data_reason(recorder))
         for index, metric in enumerate(self.metrics):
             padded = pad_series(by_metric[metric], width)
+
+
             _plot_index_curve(
                 ax,
                 mask_non_finite(padded),
                 label=metric,
                 color=SERIES[index % len(SERIES)],
+                linestyle=SERIES_DASHES[index % len(SERIES_DASHES)],
             )
         ax.legend()
         annotate_gaps(ax, band_measured_flags(by_metric.values(), width), self.gaps)

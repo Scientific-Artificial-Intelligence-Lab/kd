@@ -25,24 +25,34 @@ The calls below are templates: supply the user's arrays, names and run budget.
    For arrays, use `kd.PDEDataset.from_arrays(coords=..., fields=..., lhs=...)`
    on a grid or `kd.PDEDataset.from_scatter(coords=..., fields=..., lhs=...)`
    on points; scalar X-to-y data uses `kd.TabularDataset(...)`.
+   `table = kd.load_tabular(path)` reads a `kd-tabular-npz-v1` file.
+   `table = kd.data.trajectories_to_tabular(trajectories, target_state)`
+   converts a `kd.data.TrajectorySet` to one state's time-derivative table,
+   using finite differences separately along each trajectory.
    Grid field dimensions follow coordinate mapping order; scattered arrays
    share one point count. Periodicity is never inferred from a file: declare
    it with `periodic={...}` when constructing a grid, without a repeated endpoint.
    Unsupported inspection containers need their own reader before loading.
 
-2. **Preview before fitting.** For each PDE dataset, inspect the axes, fields
+2. **Preview before fitting.** For each dataset, inspect the axes, fields
    and LHS before any fit, and resolve warnings until `Status: ready to fit`.
    `kd.preview(dataset)`
    This checks data readiness; algorithm compatibility is the next step.
-   Preview accepts `PDEDataset`, not `TabularDataset`; for a table inspect
-   `X`, `y`, feature names and target name before fitting.
+   A `TabularDataset` previews its feature and target columns, with the target
+   as the LHS and no axes.
 
 3. **Select a compatible algorithm.** Read the declarations rather than
    guessing from an algorithm's name.
-   `schemas = kd.instrument_schemas()`
-   Each mode declares `forms`, `topologies`, `provider_kind` and `lhs_orders`.
-   Match all of them to the data and target. `fit()` refuses a mismatch and
-   names what the algorithm supports. Use the schema and website for parameters.
+   `inputs = kd.search.mode_inputs(kd.preview_report(dataset).to_dict())`
+   `verdicts = {(s["algorithm"], m["name"]): kd.mode_accepts(m, **inputs) for s in kd.instrument_schemas() for m in s["modes"]}`
+   `kd.mode_accepts` checks every declaration that decides acceptance: forms,
+   topologies, LHS orders, whether the mode is selectable from data, field
+   names and spatial axes. Read each verdict's `accepts`, `reason` and
+   `params`: the parameters that select the mode or that you must set
+   (`"<set>"` marks a value you choose; on fields or axes other than the
+   defaults, a mode that builds its catalog from them asks for `terms` or
+   `library`). `fit()` refuses a mismatch and names what the algorithm
+   supports. Use the schema and website for parameters.
 
 4. **Choose derivatives and preprocessing.** Use finite differences for clean
    regular grids. For noisy fields consider SGA with `derivatives="autograd"`
@@ -67,7 +77,8 @@ The calls below are templates: supply the user's arrays, names and run budget.
    A network field is an input like any other dataset, not a surrogate an
    algorithm injects, and its training report (`prepared.quality`) does not
    say its derivatives are accurate.
-   Measured on seven benchmark problems with three noise draws per level: the
+   Measured on 2026-09-20 on seven benchmark problems with three noise draws
+   per level: the
    true equation refitted on finite differences of the raw field passed (NMSE
    below 0.05 and every coefficient within 5%) on all seven without noise, on
    two at relative noise 1e-4 plus one more on 1 of 3 draws, and on none at
@@ -75,17 +86,22 @@ The calls below are templates: supply the user's arrays, names and run budget.
    (`savgol_window=11` on `kd.Model`) it passed up to 1e-3 on three problems
    and up to 1e-4 on three, and at no level, including no noise, on the
    problem with a shock. DLGA with surrogates trained for 20000 epochs found
-   the equation on 3 of 3 seeds on two problems at 1e-2. Along x, the median
+   the equation on 3 of 3 GA seeds on two problems at 1e-2; each cell shared
+   one network. These measurements predate trainer RNG isolation
+   (2026-09-25) and elitism restoration (2026-10-02), and were not repeated
+   on current code. Along x, the median
    `noise_estimate` from `kd.preview_report(dataset)` was within 5% of the
    relative noise at 1e-2 and 5e-2 on all seven problems.
 
 5. **Validate explicit term libraries.** Before fitting a PDE term library on
    a grid, check it with the platform's finite-difference evaluator.
-   `validation = kd.validate_terms(dataset, terms)`
+   `validation = kd.validate_terms(dataset, terms, max_order=3)`
    It executes terms but trains no model and fits no coefficients; inspect
    `validation.rejected` for offending terms and reasons. Use function-call
    syntax and separate additive terms. Set `max_order=` when the terminal
    derivatives require it, consistently in validation and later evaluation.
+   The default 2 refuses third-order terminals such as `u_xxx`; it does not
+   gate open-form derivatives.
 
 6. **Fit and read the equation.** Supply the selected algorithm, seed and budget,
    plus its derivative and library settings chosen above.
@@ -119,17 +135,26 @@ The calls below are templates: supply the user's arrays, names and run budget.
                      "derivative_order": "total-effective"}}
    ```
    Each mode in `kd.instrument_schemas()` lists the clause levels it supports
-   under `sketch`; tabular data take no sketch.
+   under `sketch`. On tabular data a sketch's LHS is the target at order 0
+   with no axis and no coordinates, and the law's terms are split at its
+   additions, its constant being `one`. Every clause is judged at
+   exit; a backend may also act on an `exit_checked` clause before exit.
    `model.result_.sketch_outcome.solution` is the certified law, or None when
    the result misses a clause or the residual gate (NMSE at most 0.05 by
-   default); `failure` then says why.
+   default). `best_candidate` retains the lifted candidate; `verdict` reports
+   clause matches and `full_verify` the residual evidence. `failure` names
+   lift, matching or verification errors and can be None when only a clause
+   misses. `compile_report.notes` describe the backend's configured rules.
    Pin only a term and coefficient that agreed across several of your own
    fits (seeds or algorithms), not one taken from the task text, and record
    which fits justified the pin. A pin with a wrong coefficient is not
    repaired by the search: a hole candidate whose expansion shares a monomial
-   with a pinned term is refused before scoring, and the law then fails the
-   residual gate (on a noise-free 128 by 51 Burgers grid, a pin with the wrong
-   sign gave no certified law in 8 of 8 DISCOVER runs and 10 of 10 SGA runs).
+   with a pinned term is refused before scoring, but this does not cover every
+   rational or joint-term respelling; pin reservation alone does not establish
+   the physical coefficient. On 2026-09-25, a wrong-sign pin on a noise-free
+   128 by 51 Burgers grid gave no certified law in 8 of 8 DISCOVER and 10 of
+   10 SGA runs. The SGA results predate its 2026-10-07 STRidge correction
+   and have not been remeasured on current code.
    No hole clause excludes an explicit coordinate factor along an axis the
    hole differentiates: `fields` limits which data fields a term contains, and
    `axes` limits derivative axes and coordinate factors together, so
@@ -142,25 +167,30 @@ The calls below are templates: supply the user's arrays, names and run budget.
    revised Sketch are a sequence of hypotheses: a recurring term or a large
    drop-one rise is not evidence that the term is physically present.
    `small_term_rtol` is not applied on a sketch fit. The residual gate uses
-   platform finite differences of the data the search sees, after
-   `savgol_window` smoothing when that is set; pass
-   `verify=kd.VerifyPolicy(nmse_max=...)` to `fit` to set it. Least-squares
+   the actual verification frame and input; pass
+   `verify=kd.VerifyPolicy(nmse_max=...)` to `fit` to set its threshold
+   (default 0.05). Least-squares
    fits of the true terms on finite differences of unsmoothed noisy benchmark
    fields had median NMSE above 0.05 on 4 of 7 problems at relative noise
-   1e-4, 6 of 7 at 1e-3 and 7 of 7 at 1e-2 (after window-11 smoothing: 1, 3
-   and 6 of 7), so under the default gate a sketch cannot certify the true law
-   on such data. An earlier comparison of sketch fits with blind search ran
-   on code of 2026-09-12, before two derivative fixes, on that Burgers grid
+   1e-4, 6 of 7 at 1e-3 and 7 of 7 at 1e-2 (after window-11 smoothing: 1, 2
+   and 6 of 7). These medians over three noise draws were measured on
+   2026-09-20 using the benchmark judge's finite differences, not through
+   the current exit gate. An earlier comparison of sketch fits with blind
+   search ran on code of 2026-09-12, including that day's executor fix but
+   before the 2026-09-15 periodic-boundary fix and 2026-10-07 STRidge change,
+   on that Burgers grid
    with relative noise added, with SGA (population 20, 100 generations, five
    seeds) and coefficients judged within 40% on SGA's own derivatives: blind
    search found the equation on 3 of 5 seeds at noise 1e-4 and 4 of 5 at
    2e-4, and a constrained hole on 5 of 5 at both; at 3e-4 and above every
    arm found it on 0 of 5. That comparison covers one problem and one
-   algorithm. On current code, DISCOVER on KdV with a pinned term and a
-   constrained hole, in three sketch configurations (pinned, hole only, wrong
-   pin) over three rounds and two budgets, certified 0 of 24 runs, and 6
-   blind runs did not find the equation either; the hole candidates carried
-   coordinate factors the sketch could not exclude.
+   algorithm, not current-code performance; the later fixes' effect on that
+   generated grid was not measured. On 2026-10-18, DISCOVER on KdV with a
+   pinned term and a constrained hole, in three sketch configurations
+   (pinned, hole only, wrong pin) over three rounds and two parameter
+   settings, certified 0 of 27 runs. Six blind runs did not find the equation
+   either; 18 of the 27 sketch runs had hole candidates with coordinate
+   factors the sketch could not exclude.
 
 8. **Compare in a shared frame.** For grid PDE term sets, compare separate refits:
    `evaluation = kd.evaluate_terms(dataset, terms)`
@@ -183,17 +213,24 @@ The calls below are templates: supply the user's arrays, names and run budget.
    and 0 drops nothing; the rest is then refitted. The measured gain from
    dropping came from `kd.Model(small_term_rtol=1e-4)`, which drops those
    terms from the algorithm's result without a refit: it turned 73 of 1641
-   noise-free answers right and none wrong. To refit on a smoothed field, smooth first with
+   noise-free answers right and none wrong in a retrospective check of
+   2026-09 records, including SGA results before the 2026-10-07 STRidge
+   correction. This was not a new search on current code. To refit on a
+   smoothed field, smooth first with
    `smoothed = kd.data.savgol_smooth(dataset, savgol_window)`.
    Read `refit.terms`, `refit.coefficients`, `refit.dropped`, `refit.nmse`,
    `refit.r2` and `refit.condition_number`; `refit.frame` is the resolved
    measurement frame. `method="weak"` with
    `weak=kd.WeakFormOptions(spectrum_tau=..., noise_correction=...)` fits
    integrals against smooth test windows instead of pointwise derivatives
-   (one field, one spatial axis, a first-order time derivative, and only
+   (one field, one spatial axis, a first- or second-order time derivative, and only
    `one`, the field, its square and cube (`n2(u)`/`n3(u)` or the raw products
-   `mul(u,u)` and `mul(mul(u,u),u)`), pure spatial derivatives up to third
-   order and the field times its first derivative; other terms are refused);
+   `mul(u,u)` and `mul(mul(u,u),u)`), pure spatial derivatives up to fourth
+   order and the field times its first derivative; other terms are refused).
+   Fourth-order terms require `max_order=4` and `WeakFormOptions(bump_degree=6)`;
+   defaults remain 3 and 4. Weak frames accept `u_xxxx`, `diff_x(u_xxx)` and
+   `diff2_x(u_xx)`; finite-difference frames keep `max_order=3` and use the
+   nested spellings under kd's existing third-order terminal/stencil cap;
    `noise_correction="gaussian"` assumes additive zero-mean Gaussian noise of
    one level everywhere, so report the uncorrected fit beside it.
    `method="autograd"` with `surrogate=` differentiates a stored surrogate
@@ -201,18 +238,31 @@ The calls below are templates: supply the user's arrays, names and run budget.
    finite differences are taken. `kd.ablate_terms(dataset, terms)` refits
    without each term in one frame (`relative_rise` per dropped term) and
    `kd.score_term_sets(dataset, term_sets)` fits several supports in one
-   frame; numbers from different frames do not compare. Coefficient cutoffs
+   frame; numbers from different frames do not compare. In the controller,
+   `select_support` scores the same sets once and chooses the fewest terms
+   whose NMSE is at most `ratio` times the lowest (default 2.0), breaking
+   ties by lower NMSE, with no absolute floor. It returns the ranked table
+   and chosen entry with a measurement receipt (`law`, `refinement_id`).
+   Submit on the same cited search, or refit with `refine_candidate` first.
+   The controller admits the cited search's terms or an exact term set
+   measured on this run's registered input by a receipt; the sealed LHS
+   stays unchanged. `answer_origin` distinguishes search terms from
+   `receipt_measured`; edited coefficients borrow no measurement. Coefficient cutoffs
    such as `small_term_rtol` or a thresholding solver's threshold depend on
    the data's units and scale: state them with the result. On a table, refit the numeric
    constants inside the terms: `refit = kd.refit_constants(dataset, terms)`,
    then read `refit.terms`, `refit.coefficients`, `refit.constants` and
-   `refit.nmse`. The grid refit uses finite differences. On noisy data it was
-   not better than the algorithm's own coefficients, and coefficients DLGA
-   took from its trained network should not be replaced by it.
+   `refit.nmse`. The default grid refit uses finite differences. In the
+   measured raw noisy-data cases it was not better than the algorithm's
+   own coefficients, and replacing DLGA's network-derived coefficients
+   worsened the result. That observation does not cover a refit on a
+   separately prepared network field: derive it with `smooth_input(method="network")`
+   and pass its id as `evaluation_input_id` to `refine_candidate`, stating
+   the method and trim used.
 
 10. **Check a candidate against the data.** Three separate discrepancy
-    measurements: `kd.validate_terms(dataset, terms)` (can each term be
-    evaluated), `kd.block_dispersion(dataset, terms)` (how much the
+    measurements: `kd.validate_terms(dataset, terms, max_order=3)` (can each term be
+    evaluated), `kd.block_dispersion(dataset, terms, max_order=3)` (how much the
     coefficients move across grid blocks) and
     `kd.forward_error(dataset, terms, coefficients, max_seconds=seconds)` (the
     relative error of the law integrated from the first time slice; a

@@ -85,7 +85,13 @@ def capture_first_request(
     llm4ed: Llm4edConfig | None = None,
 ) -> dict[str, Any]:
     model = orchestration.build_model(
-        replace(config, api_key="fingerprint-placeholder", effort=None),
+        replace(
+            config,
+            api_key="fingerprint-placeholder",
+            effort=None,
+            min_call_interval=None,
+            max_retries=None,
+        ),
         client_class=RecordingAnthropic
         if config.protocol == "anthropic"
         else RecordingOpenAI,
@@ -168,7 +174,7 @@ def compute(
         "first_requests": _digest(requests),
         "skill_files": skill_files,
         "experience_render": _digest(
-            orchestration.render_experience(summary, retrieval, advice)
+            orchestration.render_experience(summary, retrieval)
         ),
         "action_memory_render": _digest(
             [

@@ -3,19 +3,20 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 import sympy
 
-from kd.core.equation.signature import law_term_entry, law_term_key
 from kd.core.equation.sketch import (
     Sketch,
     anchor_spelled_by,
+    clause_entry,
     constraint_admits,
     pinned_monomials,
     term_admission,
 )
+from kd.core.expr.executor import UNITY_TOKEN
 from kd.core.expr.jet import Monomial
 from kd.core.expr.sympy_bridge import to_sympy
 from kd.core.expr.term_features import (
@@ -25,7 +26,7 @@ from kd.core.expr.term_features import (
     column_fingerprint,
 )
 from kd.core.platform.sketch_compile import CompileReport, SketchClauseLevels
-from kd.search.llm4ed.prompts import _symbol_list
+from kd.search.llm4ed.prompts import TABULAR_OPERATORS, _symbol_list
 
 SKETCH_LEVELS: Final = SketchClauseLevels(
     fixed_terms="lowered",
@@ -35,6 +36,7 @@ SKETCH_LEVELS: Final = SketchClauseLevels(
     operator_set="exit_checked",
     field_axis_set="generation_enforced",
 )
+TABULAR_SKETCH_LEVELS: Final = replace(SKETCH_LEVELS, derivative_order="unsupported")
 
 
 
@@ -74,11 +76,13 @@ def _leaves(key: str) -> frozenset[str]:
     return frozenset(_heads_and_leaves(key)[1])
 
 
-def _assert_spelled(key: str, operands: Sequence[str], kind: str) -> None:
+def _assert_spelled(
+    key: str, operands: Sequence[str], functions: frozenset[str], kind: str
+) -> None:
     spelling = f"spell it over the operands {list(operands)} with the EDL operators"
     heads, leaves = _heads_and_leaves(key)
     for head in heads:
-        if head not in _TERM_HEADS:
+        if head not in _TERM_HEADS | functions:
             raise ValueError(
                 f"LLM4ED {kind} term {key!r} uses {head!r}, an operator outside "
                 f"the EDL library; {spelling}"
@@ -155,6 +159,10 @@ class Llm4edCompiled:
         )
 
 
+def _levels(sketch: Sketch) -> SketchClauseLevels:
+    return TABULAR_SKETCH_LEVELS if sketch.lhs_spec.order == 0 else SKETCH_LEVELS
+
+
 def _closed_compilation(sketch: Sketch, operands: Sequence[str]) -> Llm4edCompiled:
     pins = ", ".join(pin.term_ir for pin in sketch.pinned)
     return Llm4edCompiled(
@@ -168,7 +176,7 @@ def _closed_compilation(sketch: Sketch, operands: Sequence[str]) -> Llm4edCompil
         anchor_fingerprints=frozenset(),
         hint="",
         report=CompileReport(
-            levels=SKETCH_LEVELS,
+            levels=_levels(sketch),
             notes=(
                 "closed sketch: the operand vocabulary and the target remain "
                 "unchanged because the search result is discarded; lift from "
@@ -180,46 +188,53 @@ def _closed_compilation(sketch: Sketch, operands: Sequence[str]) -> Llm4edCompil
     )
 
 
+def _clause_leaves(sketch: Sketch, operands: Sequence[str]) -> tuple[str, ...]:
+    if sketch.lhs_spec.order == 0:
+        return (*operands, UNITY_TOKEN)
+    return tuple(operands)
+
+
 def _pin_entries(
-    sketch: Sketch, operands: Sequence[str]
+    sketch: Sketch, operands: Sequence[str], functions: frozenset[str]
 ) -> tuple[tuple[str, float], ...]:
     entries = []
+    leaves = _clause_leaves(sketch, operands)
     for pin in sketch.pinned:
-        key, signed_value = law_term_entry(pin.term_ir, pin.value)
-        _assert_spelled(key, operands, "pinned")
-        entries.append((key, signed_value))
+        entry = clause_entry(pin.term_ir, pin.value, sketch)
+        _assert_spelled(entry.key, leaves, functions, "pinned")
+        entries.append((entry.key, entry.value))
     return tuple(entries)
 
 
 def _anchor_features(
-    sketch: Sketch, operands: Sequence[str]
+    sketch: Sketch, operands: Sequence[str], functions: frozenset[str]
 ) -> tuple[tuple[str, TermFeatures], ...]:
     anchors = []
+    leaves = _clause_leaves(sketch, operands)
     for anchor in sketch.anchored:
-        key = law_term_key(anchor.term_ir)
-        _assert_spelled(key, operands, "anchored")
+        key = clause_entry(anchor.term_ir, 1.0, sketch).key
+        _assert_spelled(key, leaves, functions, "anchored")
         _assert_one_term(key, anchor.term_ir)
         anchors.append((key, analyze_term(key, sketch.vocabulary)))
     return tuple(anchors)
 
 
-def _assert_operator_clauses_generable(sketch: Sketch) -> None:
+def _assert_operator_clauses_generable(
+    sketch: Sketch, functions: frozenset[str]
+) -> None:
+    generable = _GENERABLE_FEATURES | functions
     for hole in sketch.holes:
         clause = hole.constraint.operators
         if not clause:
             continue
-        unknown = clause - _GENERABLE_FEATURES
+        unknown = clause - generable
         if unknown:
             raise ValueError(
                 f"LLM4ED hole {hole.id!r} operator clause names {sorted(unknown)!r}; "
-                f"an LLM4ED term carries only {sorted(_GENERABLE_FEATURES)!r} "
+                f"an LLM4ED term carries only {sorted(generable)!r} "
                 "(division is written mul+recip); an empty clause means "
                 "terminal-only"
             )
-
-
-def _is_coordinate(name: str) -> bool:
-    return name != "u" and not name.startswith("u_")
 
 
 def _narrow_operands(
@@ -246,7 +261,7 @@ def _narrow_operands(
             continue
         admitted = (
             name in axes
-            if _is_coordinate(name)
+            if name in sketch.vocabulary.coordinates
             else any(
                 constraint_admits(hole.constraint, features) for hole in sketch.holes
             )
@@ -333,16 +348,21 @@ def _notes(
 ) -> tuple[str, ...]:
     anchors = ", ".join(anchor.term_ir for anchor in sketch.anchored) or "none"
     pins = ", ".join(key for key, _value in pinned) or "none"
+    tabular = sketch.lhs_spec.order == 0
+    target = (
+        "the table's target column" if tabular else "the EDL finite-difference target"
+    )
+    hint = "" if tabular else ", and the narrowed operator list as a hint"
     notes = [
-        f"pinned terms deducted from the EDL finite-difference target: {pins}",
+        f"pinned terms deducted from {target}: {pins}",
         f"anchors required in every scored candidate and kept out of STRidge "
         f"thresholding: {anchors}; the exit still requires |coefficient| >= "
         "support_threshold, and the EDL valid_coef gate still drops a fit "
         "whose anchor coefficient is outside [1e-4, 1e4]",
         "the prompt offers the narrowed operand vocabulary, which the parser "
-        "enforces, and the narrowed operator list as a hint; before the fit "
-        "the gate refuses any term outside the sketch vocabulary, any term on "
-        "a pinned law key or sharing a jet monomial with a pin, any term "
+        f"enforces{hint}; before the fit the gate refuses any term outside the "
+        "sketch vocabulary, any term on a pinned law key or sharing a jet "
+        "monomial with a pin, any term "
         "carrying an anchor's jet monomial without spelling the anchor, and "
         "any term no hole admits unless it spells an anchor (column "
         "fingerprint and jet expansion)",
@@ -353,17 +373,27 @@ def _notes(
     return tuple(notes)
 
 
-def compile_for_llm4ed(sketch: Sketch, operands: Sequence[str]) -> Llm4edCompiled:
+def compile_for_llm4ed(
+    sketch: Sketch,
+    operands: Sequence[str],
+    functions: frozenset[str] = frozenset(),
+) -> Llm4edCompiled:
     if not sketch.anchored and not sketch.holes:
         return _closed_compilation(sketch, operands)
     pin_monomials = pinned_monomials(sketch)
-    pinned = _pin_entries(sketch, operands)
-    anchors = _anchor_features(sketch, operands)
-    _assert_operator_clauses_generable(sketch)
+    pinned = _pin_entries(sketch, operands, functions)
+    anchors = _anchor_features(sketch, operands, functions)
+    _assert_operator_clauses_generable(sketch, functions)
     dropped: list[tuple[str, str]] = []
     kept = _narrow_operands(sketch, operands, anchors, dropped)
     _assert_required_holes_live(sketch, kept)
-    operators = _narrow_operators(sketch, anchors, dropped)
+
+
+    operators = (
+        TABULAR_OPERATORS
+        if sketch.lhs_spec.order == 0
+        else _narrow_operators(sketch, anchors, dropped)
+    )
     frozen_dropped = tuple(dropped)
     return Llm4edCompiled(
         sketch=sketch,
@@ -378,11 +408,16 @@ def compile_for_llm4ed(sketch: Sketch, operands: Sequence[str]) -> Llm4edCompile
         ),
         hint=_hint(sketch, pinned, anchors),
         report=CompileReport(
-            levels=SKETCH_LEVELS,
+            levels=_levels(sketch),
             notes=_notes(sketch, pinned, kept, operators, frozen_dropped),
         ),
         dropped=frozen_dropped,
     )
 
 
-__all__ = ["SKETCH_LEVELS", "Llm4edCompiled", "compile_for_llm4ed"]
+__all__ = [
+    "SKETCH_LEVELS",
+    "TABULAR_SKETCH_LEVELS",
+    "Llm4edCompiled",
+    "compile_for_llm4ed",
+]

@@ -10,6 +10,8 @@ from kd.core.verify import SKETCH_EXIT_VERIFY, VerifyPolicy
 from kd.search.descriptor import InstrumentDescriptor
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import torch
     from torch import Tensor
     from torch.nn import Module
@@ -33,6 +35,7 @@ __all__ = [
     "ScoreContract",
     "SearchAlgorithm",
     "SearchedVocabularyAlgorithm",
+    "StoredSurrogateTrainer",
     "SurrogateTrainer",
     "TerminatingSearchAlgorithm",
 ]
@@ -70,6 +73,7 @@ class PlatformComponents:
     task: DiscoveryTask | None = None
     device: torch.device | None = None
     deadline: float | None = None
+    derivative_provider: str | None = None
 
 
 @runtime_checkable
@@ -105,6 +109,18 @@ class SurrogateTrainer(Protocol):
         ...
 
     def train_surrogate(self, dataset: PDEDataset) -> tuple[Module, TrainingResult]:
+        ...
+
+
+class StoredSurrogateTrainer(SurrogateTrainer, Protocol):
+
+    def train_surrogate(
+        self,
+        dataset: PDEDataset,
+        *,
+        device: str | None = None,
+        save_to: str | Path | None = None,
+    ) -> tuple[Module, TrainingResult]:
         ...
 
 
@@ -161,7 +177,7 @@ class IterativeSearchAlgorithm(SearchAlgorithm, Protocol):
 class DerivativeSourceAlgorithm(SearchAlgorithm, Protocol):
 
     @property
-    def derivative_source(self) -> Literal["finite_diff", "autograd", "none"]:
+    def derivative_source(self) -> str:
         ...
 
 

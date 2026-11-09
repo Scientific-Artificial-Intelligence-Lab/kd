@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import tempfile
+from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,42 @@ def _parser() -> argparse.ArgumentParser:
     )
     skill = commands.add_parser("skill", help="install the KD Python workflow skill")
     _skill_parser(skill)
+    experience = commands.add_parser(
+        "experience", help="build offline search experience"
+    )
+    builds = experience.add_subparsers(dest="experience_command", required=True)
+    learn = builds.add_parser(
+        "learn", help="update experience after a sealed, graded round (no model calls)"
+    )
+    learn.add_argument("--round", type=Path, required=True)
+    learn.add_argument(
+        "--out", type=Path, required=True, help="persistent private learning directory"
+    )
+    learn.add_argument("--menu", type=Path, help="bounded pipeline menu JSON")
+    learn.add_argument(
+        "--pipeline", action="append", help="select a menu id; repeat to select several"
+    )
+    learn.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    learn.add_argument(
+        "--seconds", type=float, default=300.0, help="wall limit per complete pipeline"
+    )
+    build = builds.add_parser("build", help="aggregate already graded searches")
+    sources = build.add_mutually_exclusive_group(required=True)
+    sources.add_argument("--export", type=Path, help="kdb-observations-v2 JSONL")
+    sources.add_argument(
+        "--graded-runs", type=Path, help="kd-agent-graded-searches-v1 JSONL"
+    )
+    build.add_argument("--out", type=Path, required=True)
+    build.add_argument("--log", type=Path, help="private provenance and refusal log")
+    build.add_argument("--min-support", type=int, default=1)
+    build.add_argument("--across-examinee-versions", action="store_true")
+    build.add_argument(
+        "--heldout",
+        type=Path,
+        help="kdb-observations-v2 JSONL holding the withheld groups' rows (the "
+        "exporter's observations-usage.jsonl); the build log lists what the "
+        "document retrieves for each held-out problem",
+    )
     run = commands.add_parser("run", help="discover an equation in one run")
     chat = commands.add_parser("chat", help="discuss discovery interactively")
     fingerprint = commands.add_parser(
@@ -143,10 +180,32 @@ def _parser() -> argparse.ArgumentParser:
             "omitted, each network trains in its data's dtype",
         )
 
-    fingerprint.set_defaults(effort=None)
+    fingerprint.set_defaults(
+        effort=None, min_call_interval=None, max_retries=None, max_model_calls=None
+    )
     for command in (run, chat):
         command.add_argument(
             "--effort", help="reasoning effort passed to the model provider"
+        )
+
+        command.add_argument(
+            "--min-call-interval",
+            type=float,
+            metavar="SECONDS",
+            help="at least this many seconds between the starts of two model calls",
+        )
+        command.add_argument(
+            "--max-retries",
+            type=int,
+            metavar="N",
+            help="retries of a failed model call (default 6 for a preset "
+            "endpoint, 2 otherwise)",
+        )
+        command.add_argument(
+            "--max-model-calls",
+            type=int,
+            metavar="N",
+            help="end the run (a chat turn) after N main-agent and subagent model calls; excludes summarization calls",
         )
         command.add_argument(
             "--advice",
@@ -332,6 +391,9 @@ def _configuration(args: argparse.Namespace) -> EndpointConfig:
             base_url=args.base_url,
             model=args.model,
             effort=args.effort,
+            min_call_interval=args.min_call_interval,
+            max_retries=args.max_retries,
+            max_model_calls=args.max_model_calls,
             environ={**os.environ, "KD_AGENT_API_KEY": "fingerprint-placeholder"}
             if args.command == "fingerprint"
             else None,
@@ -351,6 +413,9 @@ def _configuration(args: argparse.Namespace) -> EndpointConfig:
         base_url=args.base_url,
         model=args.model,
         effort=args.effort,
+        min_call_interval=args.min_call_interval,
+        max_retries=args.max_retries,
+        max_model_calls=args.max_model_calls,
     )
 
 
@@ -376,6 +441,11 @@ def _closeout(result: dict[str, Any]) -> dict[str, Any]:
         "truncation_nudges",
         "endpoint",
         "model",
+        *(
+            key
+            for key in ("min_call_interval", "max_retries", "max_model_calls")
+            if key in result
+        ),
         "device",
         *(["training_dtype"] if "training_dtype" in result else []),
         "report_path",
@@ -388,6 +458,8 @@ def _closeout(result: dict[str, Any]) -> dict[str, Any]:
         keys += ["answer_selection"]
     if "answer_system" in result:
         keys += ["answer_system"]
+    if "answer_origin" in result:
+        keys += ["answer_origin"]
     if "answer_receipt" in result:
         keys += ["answer_receipt"]
     if "reason" in result:
@@ -433,6 +505,8 @@ def _interrupted(
     device: str = "cpu",
     training_dtype: str | None = None,
     llm4ed: Llm4edConfig | None = None,
+    *,
+    answer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "stop_reason": "interrupted",
@@ -444,6 +518,7 @@ def _interrupted(
         "truncation_nudges": None,
         "endpoint": config.endpoint,
         "model": config.model,
+        **config.pacing(),
         "device": device,
         **({} if training_dtype is None else {"training_dtype": training_dtype}),
         "report_path": None,
@@ -452,6 +527,7 @@ def _interrupted(
         "task_kind": None,
         "target": None,
         **({} if llm4ed is None else {"llm4ed": llm4ed.public()}),
+        **({} if answer is None else answer),
     }
 
 
@@ -461,8 +537,14 @@ def _stop_on_sigterm(
     device: str,
     training_dtype: str | None,
     llm4ed: Llm4edConfig | None,
-) -> Any:
+) -> tuple[Any, Callable[[Callable[[], dict[str, Any]]], None]]:
     from kdagent import episode_worker
+
+    reading: Callable[[], dict[str, Any]] | None = None
+
+    def hand_over(current: Callable[[], dict[str, Any]]) -> None:
+        nonlocal reading
+        reading = current
 
     def stop(signum: int, frame: Any) -> None:
 
@@ -471,13 +553,20 @@ def _stop_on_sigterm(
         episode_worker.stop_live_workers(episode_worker.KILL_GRACE_SECONDS)
         if result_path is not None:
             _write_result(
-                result_path, _interrupted(config, device, training_dtype, llm4ed)
+                result_path,
+                _interrupted(
+                    config,
+                    device,
+                    training_dtype,
+                    llm4ed,
+                    answer=None if reading is None else reading(),
+                ),
             )
         sys.stdout.flush()
         sys.stderr.flush()
         os._exit(128 + signal.SIGTERM)
 
-    return signal.signal(signal.SIGTERM, stop)
+    return signal.signal(signal.SIGTERM, stop), hand_over
 
 
 def _execute(
@@ -521,7 +610,7 @@ def _execute(
         return 0
     from kdagent.run import run
 
-    previous = _stop_on_sigterm(
+    previous, hand_over = _stop_on_sigterm(
         args.result, config, args.device, args.training_dtype, llm4ed
     )
     try:
@@ -530,6 +619,7 @@ def _execute(
             prior=args.prior,
             memory=args.memory,
             action_memory=args.action_memory,
+            on_interrupted_answer=hand_over,
             **options,
         )
     finally:
@@ -544,6 +634,25 @@ def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     parser = _parser()
     args = parser.parse_args(arguments if arguments else ["chat"])
+    if args.command == "experience":
+        if args.experience_command == "learn":
+            from kdagent.experience_learn import learn
+
+            logging.basicConfig(level=logging.INFO, format="%(message)s")
+            learn(
+                args.round,
+                out=args.out,
+                menu_path=args.menu,
+                pipeline_ids=args.pipeline,
+                device=args.device,
+                seconds=args.seconds,
+            )
+            return 0
+        if args.min_support < 1:
+            parser.error("--min-support must be at least 1 distinct problem")
+        from kdagent.experience_build import build
+
+        return build(args)
     if args.command == "skill":
         return _install_skill(args.to, force=args.force)
     if (

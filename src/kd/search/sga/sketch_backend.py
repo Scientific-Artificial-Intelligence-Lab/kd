@@ -18,7 +18,7 @@ from kd.core.equation.sketch import (
 
 
 from kd.core.expr.executor import DIFF_OPERATOR_PATTERN
-from kd.core.expr.jet import Monomial, jet_expansion
+from kd.core.expr.jet import Monomial, jet_expansion, jet_monomials
 from kd.core.expr.naming import parse_compound_derivative
 from kd.core.expr.term_features import (
     ColumnFingerprint,
@@ -33,7 +33,7 @@ from kd.search.sga.tree import Node, Tree
 
 _LEVELS = SketchClauseLevels(
     fixed_terms="lowered",
-    anchors="exit_checked",
+    anchors="fit_enforced",
     hole_count="exit_checked",
     derivative_order="generation_enforced",
     operator_set="generation_enforced",
@@ -63,6 +63,7 @@ _OUTSIDE_VOCABULARY = "outside-vocabulary"
 _CONSTRAINT_FILTERED = "constraint-filtered"
 _PINNED = "pinned"
 _ANCHOR_OVERLAP = "anchor-overlap"
+_ANCHOR_PROTECTED = "anchor-protected"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -76,7 +77,8 @@ class SGACompiled:
     op2: OperatorPool
     pinned: tuple[tuple[str, float, Tree], ...]
     pinned_keys: frozenset[str]
-    pinned_monomials: frozenset[Monomial]
+    anchored: tuple[tuple[str, Tree], ...]
+    reserved_monomials: frozenset[Monomial]
     anchor_fingerprints: frozenset[ColumnFingerprint]
     default_kept: bool
     default_hole_id: str | None
@@ -207,27 +209,10 @@ def _parse_pins(
     return tuple(pinned), frozenset(key for key, _value, _tree in pinned)
 
 
-def _operator_rooted_hint(term_ir: str, tree: Tree, sketch: Sketch) -> str:
-    parsed = parse_compound_derivative(
-        term_ir,
-        known_fields=set(sketch.vocabulary.fields),
-        known_axes=set(sketch.vocabulary.coordinates),
-    )
-    if parsed is None:
-        return tree_to_kd_expr(tree)
-    field, segments = parsed
-    orders: dict[str, int] = {}
-    for axis, order in segments:
-        orders[axis] = orders.get(axis, 0) + order
-    node = Node(field, 0)
-    for axis, order in sorted(orders.items()):
-        node = _compose_derivative(node, axis, order)
-    return tree_to_kd_expr(Tree(node))
-
-
 def _parse_anchors(
-    sketch: Sketch, variables: tuple[str, ...], default_key: str | None
-) -> tuple[TermFeatures, ...]:
+    sketch: Sketch, variables: tuple[str, ...]
+) -> tuple[tuple[tuple[str, Tree], ...], tuple[TermFeatures, ...]]:
+    anchored: list[tuple[str, Tree]] = []
     features: list[TermFeatures] = []
     for anchor in sketch.anchored:
         key = law_term_key(anchor.term_ir)
@@ -239,53 +224,77 @@ def _parse_anchors(
         ) == column_fingerprint(anchor_features) and jet_expansion(
             rendered, sketch.vocabulary
         ) == jet_expansion(key, sketch.vocabulary)
-        if key != default_key and (tree.root.is_leaf or not same_column):
+        if not same_column:
             raise ValueError(
-                f"SGA anchor {anchor.term_ir!r} is not reachable; use the "
-                f"operator-rooted spelling "
-                f"{_operator_rooted_hint(anchor.term_ir, tree, sketch)!r}"
+                f"SGA anchor {anchor.term_ir!r} parses to the tree {rendered!r}, "
+                "which is not the anchor's column"
             )
+        anchored.append((key, tree))
         features.append(anchor_features)
-    return tuple(features)
+    return tuple(anchored), tuple(features)
 
 
 def _default_decision(
     sketch: Sketch,
     default_term_name: str | None,
     pinned_keys: frozenset[str],
-) -> tuple[bool, str | None, str | None, tuple[str, str] | None]:
+) -> tuple[bool, str | None, tuple[str, str] | None]:
     if default_term_name is None:
-        return False, None, None, None
+        return False, None, None
     try:
         key = law_term_key(default_term_name)
         features = analyze_term(default_term_name, sketch.vocabulary)
         spelled = anchor_spelled_by(key, sketch)
         carried = anchor_carried_by(key, sketch) if sketch.anchored else None
     except ValueError:
-        return False, None, None, (default_term_name, _OUTSIDE_VOCABULARY)
+        return False, None, (default_term_name, _OUTSIDE_VOCABULARY)
     if key in pinned_keys:
-        return False, key, None, (default_term_name, _PINNED)
+        return False, None, (default_term_name, _PINNED)
+
+
     if spelled is not None:
-        return True, key, None, None
+        return False, None, (default_term_name, _ANCHOR_PROTECTED)
 
 
     if carried is not None:
-        return False, key, None, (default_term_name, _ANCHOR_OVERLAP)
+        return False, None, (default_term_name, _ANCHOR_OVERLAP)
     for hole in sketch.holes:
         if constraint_admits(hole.constraint, features):
-            return True, key, hole.id, None
-    return False, key, None, (default_term_name, _CONSTRAINT_FILTERED)
+            return True, hole.id, None
+    return False, None, (default_term_name, _CONSTRAINT_FILTERED)
 
 
 def _assert_feasible(sketch: Sketch, config: SGAConfig, default_kept: bool) -> None:
-    required = sum(hole.min_count for hole in sketch.holes) + len(sketch.anchored)
+    required = sum(hole.min_count for hole in sketch.holes)
     capacity = config.width + int(default_kept)
     if required > capacity:
         raise ValueError(
-            f"SGA sketch requires {required} terms but config.width={config.width} "
-            f"plus retained-default capacity {int(default_kept)} provides only "
-            f"{capacity}"
+            f"SGA sketch holes require {required} terms but config.width="
+            f"{config.width} plus retained-default capacity {int(default_kept)} "
+            f"provides only {capacity}"
         )
+
+
+def _assert_holes_to_search(sketch: Sketch) -> None:
+    if sketch.holes:
+        return
+    anchors = [anchor.term_ir for anchor in sketch.anchored]
+    raise ValueError(
+        f"SGA cannot search a sketch with anchors {anchors!r} and no hole: "
+        "anchors are supplied to the fit, not generated, so there is nothing "
+        "to search. Refit the anchored terms instead with "
+        "kd.refit_terms(dataset, [a.term_ir for a in sketch.anchored], "
+        "sketch=sketch); that call supplies the sketch's pinned values only, "
+        "adds no anchor columns of its own and certifies nothing, and it uses "
+        "finite differences unless method= names another footing."
+    )
+
+
+def _reserved_monomials(sketch: Sketch) -> frozenset[Monomial]:
+    anchors: set[Monomial] = set()
+    for anchor in sketch.anchored:
+        anchors.update(jet_monomials(law_term_key(anchor.term_ir), sketch.vocabulary))
+    return pinned_monomials(sketch).union(anchors)
 
 
 def _assert_operator_clauses_generable(sketch: Sketch) -> None:
@@ -431,6 +440,17 @@ def _notes(
         f"default column kept={default_kept}; hole seat={seat}",
         "pinned columns use SGA execute_tree footing; full verification uses "
         "the platform footing",
+        "anchors are supplied to the fit, not generated: each anchored column "
+        "is executed once on SGA execute_tree footing and leads every "
+        "regression as a protected column that STRidge never thresholds and "
+        "ridge never shrinks, counted in neither the AIC's k nor complexity; "
+        "the exit still requires |coefficient| >= support_threshold, so with "
+        "support_threshold=0 an anchored clause fails only on an exactly zero "
+        "coefficient",
+        "pre-score membership also refuses a term sharing a jet monomial with "
+        "an anchor, so no generated term spells or carries an anchored column; "
+        "the pools keep the anchors' atoms, so such spellings are still "
+        "proposed and refused",
         "pin reservation refuses a term on a pin's law key or whose expansion "
         "into jet monomials (total derivatives by the chain rule, symbol-free "
         "factors stripped as coefficients, division by or log of an "
@@ -471,7 +491,8 @@ def _closed_compilation(
         op2=op2,
         pinned=(),
         pinned_keys=frozenset(law_term_key(pin.term_ir) for pin in sketch.pinned),
-        pinned_monomials=frozenset(),
+        anchored=(),
+        reserved_monomials=frozenset(),
         anchor_fingerprints=frozenset(),
         default_kept=default_term_name is not None,
         default_hole_id=None,
@@ -511,12 +532,13 @@ def compile_for_sga(
             default_term_name=default_term_name,
         )
 
+    _assert_holes_to_search(sketch)
     pinned, pinned_keys = _parse_pins(sketch, variables)
-    pin_monomials = pinned_monomials(sketch)
-    default_kept, default_key, default_hole_id, default_drop = _default_decision(
+    reserved = _reserved_monomials(sketch)
+    default_kept, default_hole_id, default_drop = _default_decision(
         sketch, default_term_name, pinned_keys
     )
-    anchor_features = _parse_anchors(sketch, variables, default_key)
+    anchored, anchor_features = _parse_anchors(sketch, variables)
     anchor_fingerprints = frozenset(
         column_fingerprint(features) for features in anchor_features
     )
@@ -555,7 +577,8 @@ def compile_for_sga(
         op2=narrowed_op2,
         pinned=pinned,
         pinned_keys=pinned_keys,
-        pinned_monomials=pin_monomials,
+        anchored=anchored,
+        reserved_monomials=reserved,
         anchor_fingerprints=anchor_fingerprints,
         default_kept=default_kept,
         default_hole_id=default_hole_id,

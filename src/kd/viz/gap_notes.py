@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from kd.core.jsonsafe import NO_MEASUREMENT as NO_MEASUREMENT
 from kd.core.jsonsafe import is_measured as is_measured
+from kd.viz.style import FONTSIZE
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ def partial_gap_note(n_gaps: int, n_samples: int, vocab: GapVocabulary) -> str:
 
 
 def append_subtitle(ax: Axes, note: str) -> None:
-    ax.set_title(f"{ax.get_title()}\n{note}", fontsize="medium")
+    ax.set_title(f"{ax.get_title()}\n{note}", fontsize=FONTSIZE)
 
 
 def annotate_gaps(ax: Axes, measured: Sequence[bool], vocab: GapVocabulary) -> None:

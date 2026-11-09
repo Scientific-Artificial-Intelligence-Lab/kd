@@ -47,6 +47,18 @@ installed driver supports, or the CPU build. See
 for environment setup, pip installation, CPU/CUDA builds and optional components.
 For a source checkout, clone this repository's `trunk` branch and run `uv sync`.
 
+### Local web interface
+
+On Linux (including WSL) and Windows, install the UI extra and start a workspace:
+
+```bash
+uv pip install "sail-kd[ui]" --torch-backend=auto
+kd-ui --workspace ./kd-ui-workspace
+```
+
+Open the URL printed in the terminal to load data, configure searches, inspect
+results and compare runs. Uploads and run history are stored in the workspace.
+
 ## Quick start
 
 Discover Burgers' equation from the bundled 256 × 201 field:

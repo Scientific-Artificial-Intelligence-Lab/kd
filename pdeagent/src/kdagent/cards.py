@@ -22,6 +22,7 @@ _PARAM_TABLE_HEAD = (
     "|---|---|---|---|---|---|",
 )
 _EFFECT_NOTES = {
+    "derivative_provider": "Registered derivative provider selected for a platform mode.",
     "preprocessing": "smooths data before the search; grid data only (0 = off)",
     "answer_selection": (
         "drops small-coefficient terms from the reported answer (0 = off)"
@@ -142,8 +143,8 @@ def _sketch_markdown(schema: dict[str, Any]) -> str:
         cells = " | ".join(f"`{mode['sketch'][clause]}`" for mode in modes)
         lines.append(f"| `{clause}` | {cells} |")
     derivatives = (
-        ", and its derivatives are not `none` (kd subtracts the pinned terms "
-        "with its own derivatives for this instrument)"
+        ", and its derivatives are not `none` unless its data is tabular (kd "
+        "subtracts the pinned terms with its own evaluator for this instrument)"
         if schema["sketch_lower_owner"] == "platform"
         else ""
     )
@@ -166,14 +167,15 @@ def _sketch_markdown(schema: dict[str, Any]) -> str:
         "the level kd declares for the mode the search runs in; a clause the "
         "sketch actually uses must be at least `exit_checked` on every mode "
         "that can run the sketch, or kd refuses the fit naming the clause. A "
-        "mode can run the sketch when its form includes `EVOLUTION` and its "
+        "mode can run the sketch when its form includes `EVOLUTION` "
+        "(`REGRESSION` for a sketch of LHS order 0) and its "
         f"LHS orders include the sketch's{derivatives}; the other modes in "
         f"the table below do not count.{selection}\n\n" + "\n".join(lines)
     )
 
 
 def _surrogate_markdown(schema: dict[str, Any]) -> str:
-    modes = [mode for mode in schema["modes"] if mode["provider_kind"] == "autograd"]
+    modes = [mode for mode in schema["modes"] if mode["requires_surrogate"]]
     if not schema["config_artifact_keys"] or not modes:
         return ""
     fields = surrogate_parameter_names(schema)
@@ -193,7 +195,7 @@ def _surrogate_markdown(schema: dict[str, Any]) -> str:
         + ", ".join(f"`{name}`" for name in fields)
         + ", plus the separate `seed` argument. Injection enters under "
         + ", ".join(f"`{key}`" for key in schema["config_artifact_keys"])
-        + f"; select an autograd mode with params {selections}. "
+        + f"; select a surrogate mode with params {selections}. "
         + training
         + " A lineage keeps one surrogate; a different id requires a fresh lineage."
     )
@@ -229,6 +231,89 @@ def applicability_line(schema: dict[str, Any]) -> str:
             text += f" (other names require {mode['names_from']})"
         parts.append(text)
     return "; ".join(parts) + "."
+
+
+def _environment_phrase(item: dict[str, Any]) -> str:
+    if not item["required"]:
+        return f"kd reads the optional environment variable `{item['name']}`"
+    if item["unless_argument"] is None:
+        return f"kd needs environment variable `{item['name']}`"
+    return (
+        f"kd's `Model` needs environment variable `{item['name']}` unless its "
+        f"`{item['unless_argument']}` argument is passed"
+    )
+
+
+def _install_phrases(requirements: dict[str, Any]) -> list[str]:
+    phrases = [
+        f"needs the `sail-kd[{extra}]` extra" for extra in requirements["extras"]
+    ]
+    return phrases + [
+        f"needs the importable module `{name}`" for name in requirements["import_names"]
+    ]
+
+
+def _memory_phrase(resources: dict[str, Any]) -> str:
+    estimate = resources["memory_estimate_gb"]
+    if estimate is None:
+        return "memory unknown"
+    platform = resources["memory_platform"]
+    qualifier = resources["memory_basis"] + (f", {platform}" if platform else "")
+    return f"memory about {estimate:g} GiB ({qualifier})"
+
+
+def runtime_line(schema: dict[str, Any]) -> str:
+    modes = []
+    for mode in schema["modes"]:
+        resources = mode["resources"]
+        if resources is None:
+            modes.append(f"{mode['name']}: no resource hints declared")
+            continue
+        device = resources["preferred_device"]
+        text = f"{mode['name']}: " + (
+            f"prefers {device}, " if device is not None else ""
+        )
+        modes.append(text + _memory_phrase(resources))
+    install = "; ".join(_install_phrases(schema["requirements"])) or "none beyond kd"
+    return f"Requirements: {install}. Resources: {'; '.join(modes)}."
+
+
+def _requirements_markdown(requirements: dict[str, Any]) -> str:
+    phrases = _install_phrases(requirements)
+    phrases += [_environment_phrase(item) for item in requirements["environment"]]
+    text = "Requirements: " + ("; ".join(phrases) or "none beyond kd") + "."
+    if requirements["environment"]:
+        text += " In this run, the Availability table says whether it can run."
+    return text
+
+
+def _runtime_markdown(schema: dict[str, Any]) -> str:
+    lines = [
+        "### Requirements and resources\n",
+        _requirements_markdown(schema["requirements"]) + "\n",
+        "| Mode | Preferred device | Memory (GiB) | Basis | Platform | Context |",
+        "|---|---|---|---|---|---|",
+    ]
+    for mode in schema["modes"]:
+        resources = mode["resources"]
+        if resources is None:
+            lines.append(f"| `{mode['name']}` | | | undeclared | | |")
+            continue
+        estimate = resources["memory_estimate_gb"]
+        cells = [
+            f"`{mode['name']}`",
+            resources["preferred_device"] or "",
+            "unknown" if estimate is None else f"{estimate:g}",
+            resources["memory_basis"],
+            resources["memory_platform"] or "",
+            _text_cell(resources["memory_context"]),
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append(
+        "\nMemory figures are kd's recorded observations or estimates for the "
+        "named workload, not guaranteed upper bounds."
+    )
+    return "\n".join(lines)
 
 
 def _capabilities_markdown(schema: dict[str, Any]) -> str:
@@ -276,6 +361,7 @@ def _capabilities_markdown(schema: dict[str, Any]) -> str:
         f"\nNative score: `{schema['score_kind']}` "
         f"(direction: `{schema['score_direction']}`). Cost class: `{schema['cost_class']}`."
     )
+    lines.append("\n" + _runtime_markdown(schema))
     return "\n".join(lines)
 
 
@@ -293,6 +379,10 @@ def instrument_briefs() -> list[dict[str, str]]:
 
             "cost_class": schema["cost_class"],
             "applicability": applicability_line(schema),
+
+
+
+            "runtime": runtime_line(schema),
 
 
 
@@ -332,8 +422,9 @@ _PARAMETERS_PREAMBLE = (
     "Pass these as the `params` mapping of `run_discovery`. `seed` is a "
     "separate argument of that tool, not a `params` key.\n\n"
     "`Resume` is kd's classification of changing that parameter: `resume_safe` "
-    "can take effect on a search restored from a checkpoint, `init_only` "
-    "cannot, and `identity_breaking` makes it a different run rather than the "
+    "can take effect on a search restored from a checkpoint, changing an "
+    "`init_only` parameter is refused on resume, and `identity_breaking` "
+    "makes it a different run rather than the "
     "same one continued. Facade controls have no config-field tier; generations "
     "adds work, and preprocessing changes the fit input."
 )
@@ -384,7 +475,8 @@ def algorithm_card(brief: dict[str, str]) -> str:
     builtin = brief["source"] == "builtin"
     prose, narrowing_note = _prose_sections(algorithm) if builtin else ([], "")
     description = (
-        f"{brief['summary']} Cost class {brief['cost_class']}. {brief['applicability']}"
+        f"{brief['summary']} Cost class {brief['cost_class']}. "
+        f"{brief['applicability']} {brief['runtime']}"
     )
     preamble = _parameters_preamble(brief["segmentation_archive"], builtin=builtin)
     parts = [

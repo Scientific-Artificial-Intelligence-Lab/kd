@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
@@ -35,6 +36,7 @@ def make_pinn_dataset(
     *,
     lhs_field: str,
     lhs_axis: str,
+    lhs_order: int = 1,
 ) -> PDEDataset:
     _validate_dataset_names(axis_names, field_names, lhs_field, lhs_axis)
     return PDEDataset(
@@ -45,6 +47,7 @@ def make_pinn_dataset(
         fields=None,
         lhs_field=lhs_field,
         lhs_axis=lhs_axis,
+        lhs_order=lhs_order,
     )
 
 
@@ -62,7 +65,17 @@ def make_pinn_dataset_from(source: PDEDataset) -> PDEDataset:
         field_names=field_names,
         lhs_field=source.lhs_field,
         lhs_axis=source.lhs_axis,
+        lhs_order=source.lhs_order,
     )
+
+
+@dataclass
+class _CollocationContext(ExecutionContext):
+
+    points: Tensor = field(kw_only=True)
+
+    def unity_column(self) -> Tensor:
+        return torch.ones_like(self.points)
 
 
 class PINNExecutor:
@@ -85,15 +98,16 @@ class PINNExecutor:
         _validate_term_inputs(terms, coefficients)
         provider = AutogradProvider(model, coords, dataset_metadata)
         device = _infer_device(coords)
-        context = ExecutionContext(
+        context = _CollocationContext(
             dataset=dataset_metadata,
             derivative_provider=provider,
             device=device,
+            points=next(iter(coords.values())),
         )
         executor = PythonExecutor(self._registry, max_depth=_MAX_EXECUTOR_DEPTH)
         field_value = provider.get_field(lhs_field)
         _log_memory("after_get_field", logger)
-        lhs = provider.diff(field_value, lhs_axis, order=1)
+        lhs = provider.diff(field_value, lhs_axis, order=dataset_metadata.lhs_order)
         term_values: list[Tensor] = []
         for i, term in enumerate(terms):
             term_values.append(_evaluate_term(executor, term, context))

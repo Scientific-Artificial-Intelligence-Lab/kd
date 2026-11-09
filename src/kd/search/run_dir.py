@@ -13,7 +13,16 @@ from typing import Any, Final, Literal
 
 from kd.core.jsonsafe import JSON_INDENT_SPACES
 from kd.search._record_schema import validate_lineage
-from kd.search.iteration_events import IterationEvent
+from kd.search.iteration_events import (
+    PHASE_FAILURE_VOCABULARY,
+    PHASE_FIT_INTERRUPTED,
+    PHASE_SEARCH_CRASHED,
+    PHASE_SEARCH_ENDED,
+    PHASE_SEARCH_STARTED,
+    STAGE_SEARCH,
+    IterationEvent,
+    PhaseEvent,
+)
 from kd.search.result import ExperimentResult
 
 __all__ = [
@@ -26,10 +35,12 @@ __all__ = [
     "RUNDIR_SCHEME",
     "RUNDIR_SCHEMA_VERSION",
     "RunDirPaths",
+    "RunState",
     "create_run_dir",
     "finalize_run_dir",
     "last_completed_iteration",
     "new_run_id",
+    "read_run_state",
     "run_id_of_run_dir",
 ]
 
@@ -254,3 +265,60 @@ def last_completed_iteration(
             return "no_completed_iteration"
         payload = json.loads(lines[-2])
     return IterationEvent.from_dict(payload)
+
+
+@dataclass(frozen=True)
+class RunState:
+
+    state: Literal["preparing", "running", "completed", "failed", "interrupted"]
+    sealed: bool
+    stage: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+
+
+def _last_phase_event(phases: Path) -> PhaseEvent | None:
+    if not phases.is_file():
+        return None
+    text = phases.read_text(encoding="utf-8")
+
+
+    lines = text[: text.rfind("\n") + 1].splitlines()
+    return PhaseEvent.from_dict(json.loads(lines[-1])) if lines else None
+
+
+def read_run_state(run_dir: Path | str) -> RunState:
+    paths = RunDirPaths(root=Path(run_dir))
+    if not paths.root.is_dir():
+        raise FileNotFoundError(f"run directory does not exist: {paths.root}")
+    status: str | None = None
+    if paths.manifest.is_file():
+        manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+        if manifest.get("scheme") != RUNDIR_SCHEME:
+            raise ValueError(
+                f"{paths.manifest} is not a {RUNDIR_SCHEME} manifest "
+                f"(scheme {manifest.get('scheme')!r})"
+            )
+        status = manifest["status"]
+    sealed = status is not None
+    last = _last_phase_event(paths.phases)
+    phase = None if last is None else last.phase
+    if last is not None and phase in PHASE_FAILURE_VOCABULARY:
+        return RunState(
+            state="interrupted" if phase == PHASE_FIT_INTERRUPTED else "failed",
+            sealed=sealed,
+            stage=last.stage,
+            error_type=last.error_type,
+            error_message=last.error_message,
+        )
+    if phase == PHASE_SEARCH_CRASHED:
+
+
+        return RunState(state="failed", sealed=sealed, stage=STAGE_SEARCH)
+    if status == "raised":
+        return RunState(state="failed", sealed=sealed)
+    if sealed or phase == PHASE_SEARCH_ENDED:
+        return RunState(state="completed", sealed=sealed)
+    if phase == PHASE_SEARCH_STARTED or (last is None and paths.events.is_file()):
+        return RunState(state="running", sealed=False)
+    return RunState(state="preparing", sealed=False)

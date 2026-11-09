@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 _DERIV_NAMES = frozenset({"d", "d^2"})
 
-_UNAVAILABLE_TEXT = "Native genome unavailable (see Expression Tree)"
+_UNAVAILABLE_TEXT = "Native genome unavailable (see Equation Tree)"
 
 GENOME_TREE_INFO = PlotInfo(
     name="genome_tree",
@@ -25,7 +25,7 @@ GENOME_TREE_INFO = PlotInfo(
         "Raw GP genome of the best individual — operator names (*, ^2, d) as "
         "the genetic operators produced them, pre-canonicalization. Shows all "
         "evolved terms before STRidge pruning, so its term count may exceed the "
-        "discovered equation's (Expression Tree). Unavailable for results loaded "
+        "discovered equation's (Equation Tree). Unavailable for results loaded "
         "from disk (no live population)."
     ),
 )

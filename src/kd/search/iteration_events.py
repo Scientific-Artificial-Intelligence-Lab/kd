@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -10,12 +12,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final, TextIO
 
+from kd.core.interrupt import SearchInterrupted
 from kd.core.jsonsafe import finite_or_none
 
 __all__ = [
     "ITEREVENT_DIAGNOSTICS_KEYS",
     "ITEREVENT_SCHEME",
     "ITEREVENT_SCHEMA_VERSION",
+    "ERROR_MESSAGE_MAX_CHARS",
+    "PHASE_FAILURE_SCHEMA_VERSION",
+    "PHASE_FAILURE_STAGES",
+    "PHASE_FAILURE_VOCABULARY",
+    "PHASE_FIT_FAILED",
+    "PHASE_FIT_INTERRUPTED",
     "PHASE_SCHEME",
     "PHASE_SCHEMA_VERSION",
     "PHASE_VOCABULARY",
@@ -348,7 +357,85 @@ _PHASE_V1_FIELDS: Final[tuple[str, ...]] = (
     "created_at",
     "elapsed_seconds",
 )
-_PHASE_V1_FIELD_SET: Final[frozenset[str]] = frozenset(_PHASE_V1_FIELDS)
+
+
+
+
+
+
+PHASE_FAILURE_SCHEMA_VERSION: Final[int] = 2
+
+PHASE_FIT_FAILED: Final[str] = "fit_failed"
+PHASE_FIT_INTERRUPTED: Final[str] = "fit_interrupted"
+PHASE_FAILURE_VOCABULARY: Final[frozenset[str]] = frozenset(
+    {PHASE_FIT_FAILED, PHASE_FIT_INTERRUPTED}
+)
+
+
+
+
+
+
+STAGE_SETUP: Final[str] = "setup"
+STAGE_PREPARE: Final[str] = "prepare"
+STAGE_SEARCH: Final[str] = "search"
+STAGE_FINALIZE: Final[str] = "finalize"
+_STAGE_AFTER_PHASE: Final[dict[str | None, str]] = {
+    None: STAGE_SETUP,
+    PHASE_FIT_STARTED: STAGE_PREPARE,
+    PHASE_SEARCH_STARTED: STAGE_SEARCH,
+    PHASE_SEARCH_CRASHED: STAGE_SEARCH,
+    PHASE_SEARCH_ENDED: STAGE_FINALIZE,
+}
+PHASE_FAILURE_STAGES: Final[frozenset[str]] = frozenset(_STAGE_AFTER_PHASE.values())
+
+
+
+
+ERROR_MESSAGE_MAX_CHARS: Final[int] = 2000
+
+
+
+
+
+
+
+_CREDENTIAL_NAME: Final[re.Pattern[str]] = re.compile(
+    r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH", re.IGNORECASE
+)
+_CREDENTIAL_MIN_CHARS: Final[int] = 8
+
+
+def _without_environment_credentials(text: str) -> str:
+    credentials = sorted(
+        (
+            (value, name)
+            for name, value in os.environ.items()
+            if len(value) >= _CREDENTIAL_MIN_CHARS and _CREDENTIAL_NAME.search(name)
+        ),
+
+        key=lambda credential: len(credential[0]),
+        reverse=True,
+    )
+    for value, name in credentials:
+        text = text.replace(value, f"[redacted:{name}]")
+    return text
+
+
+_PHASE_V2_FIELDS: Final[tuple[str, ...]] = (
+    *_PHASE_V1_FIELDS,
+    "stage",
+    "error_type",
+    "error_message",
+)
+_PHASE_FIELDS_BY_VERSION: Final[dict[int, tuple[str, ...]]] = {
+    PHASE_SCHEMA_VERSION: _PHASE_V1_FIELDS,
+    PHASE_FAILURE_SCHEMA_VERSION: _PHASE_V2_FIELDS,
+}
+_PHASE_VOCABULARY_BY_VERSION: Final[dict[int, frozenset[str]]] = {
+    PHASE_SCHEMA_VERSION: PHASE_VOCABULARY,
+    PHASE_FAILURE_SCHEMA_VERSION: PHASE_FAILURE_VOCABULARY,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,26 +446,40 @@ class PhaseEvent:
     phase: str
     created_at: str
     elapsed_seconds: float
+    stage: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {field: getattr(self, field) for field in _PHASE_V1_FIELDS}
+        return {
+            field: getattr(self, field)
+            for field in _PHASE_FIELDS_BY_VERSION[self.schema_version]
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PhaseEvent:
         if not isinstance(data, dict):
             raise ValueError(f"PhaseEvent payload must be a dict, got {type(data)}")
+        if "schema_version" not in data:
+            raise ValueError("PhaseEvent: missing keys ['schema_version']")
+        version = data["schema_version"]
+        if type(version) is not int:
+            raise ValueError(
+                f"PhaseEvent.schema_version must be an int, got {version!r}"
+            )
+        if version not in _PHASE_FIELDS_BY_VERSION:
+            raise ValueError(
+                f"PhaseEvent: unsupported schema_version {version!r}; "
+                f"expected one of {sorted(_PHASE_FIELDS_BY_VERSION)!r}"
+            )
+        fields = _PHASE_FIELDS_BY_VERSION[version]
         keys = set(data)
-        unknown = keys - _PHASE_V1_FIELD_SET
+        unknown = keys - set(fields)
         if unknown:
             raise ValueError(f"PhaseEvent: unknown keys {sorted(unknown)!r}")
-        missing = _PHASE_V1_FIELD_SET - keys
+        missing = set(fields) - keys
         if missing:
             raise ValueError(f"PhaseEvent: missing keys {sorted(missing)!r}")
-        if type(data["schema_version"]) is not int:
-            raise ValueError(
-                f"PhaseEvent.schema_version must be an int, "
-                f"got {data['schema_version']!r}"
-            )
         for str_field in ("scheme", "phase", "created_at"):
             value = data[str_field]
             if not isinstance(value, str) or not value:
@@ -391,17 +492,33 @@ class PhaseEvent:
                 f"PhaseEvent: unsupported scheme {data['scheme']!r}; "
                 f"expected {PHASE_SCHEME!r}"
             )
-        if data["schema_version"] != PHASE_SCHEMA_VERSION:
+        vocabulary = _PHASE_VOCABULARY_BY_VERSION[version]
+        if data["phase"] not in vocabulary:
             raise ValueError(
-                f"PhaseEvent: unsupported schema_version "
-                f"{data['schema_version']!r}; expected {PHASE_SCHEMA_VERSION!r}"
+                f"PhaseEvent: unknown phase {data['phase']!r} for "
+                f"schema_version {version}; expected one of {sorted(vocabulary)!r}"
             )
-        if data["phase"] not in PHASE_VOCABULARY:
-            raise ValueError(
-                f"PhaseEvent: unknown phase {data['phase']!r}; "
-                f"expected one of {sorted(PHASE_VOCABULARY)!r}"
-            )
-        return cls(**{field: data[field] for field in _PHASE_V1_FIELDS})
+        if version == PHASE_FAILURE_SCHEMA_VERSION:
+            if data["stage"] not in PHASE_FAILURE_STAGES:
+                raise ValueError(
+                    f"PhaseEvent: unknown stage {data['stage']!r}; "
+                    f"expected one of {sorted(PHASE_FAILURE_STAGES)!r}"
+                )
+            if not isinstance(data["error_type"], str) or not data["error_type"]:
+                raise ValueError(
+                    "PhaseEvent.error_type must be a non-empty str, "
+                    f"got {data['error_type']!r}"
+                )
+            if not isinstance(data["error_message"], str):
+                raise ValueError(
+                    "PhaseEvent.error_message must be a str, "
+                    f"got {data['error_message']!r}"
+                )
+        return cls(**{field: data[field] for field in fields})
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class PhaseWriter:
@@ -410,6 +527,11 @@ class PhaseWriter:
         self._path = path
         self._t0 = time.perf_counter()
         self._created = False
+        self._last_phase: str | None = None
+
+    @property
+    def last_phase(self) -> str | None:
+        return self._last_phase
 
     def write(self, phase: str) -> None:
         if phase not in PHASE_VOCABULARY:
@@ -417,15 +539,36 @@ class PhaseWriter:
                 f"unknown phase {phase!r}; expected one of "
                 f"{sorted(PHASE_VOCABULARY)!r}"
             )
-        event = PhaseEvent(
-            schema_version=PHASE_SCHEMA_VERSION,
-            scheme=PHASE_SCHEME,
-            phase=phase,
-            created_at=datetime.now(timezone.utc).isoformat(
-                timespec="seconds"
-            ),
-            elapsed_seconds=time.perf_counter() - self._t0,
+        self._append(
+            PhaseEvent(
+                schema_version=PHASE_SCHEMA_VERSION,
+                scheme=PHASE_SCHEME,
+                phase=phase,
+                created_at=_utc_now(),
+                elapsed_seconds=time.perf_counter() - self._t0,
+            )
         )
+        self._last_phase = phase
+
+    def write_failure(self, exc: BaseException) -> None:
+
+
+        message = _without_environment_credentials(str(exc))
+        interrupted = isinstance(exc, KeyboardInterrupt | SearchInterrupted)
+        self._append(
+            PhaseEvent(
+                schema_version=PHASE_FAILURE_SCHEMA_VERSION,
+                scheme=PHASE_SCHEME,
+                phase=PHASE_FIT_INTERRUPTED if interrupted else PHASE_FIT_FAILED,
+                created_at=_utc_now(),
+                elapsed_seconds=time.perf_counter() - self._t0,
+                stage=_STAGE_AFTER_PHASE[self._last_phase],
+                error_type=type(exc).__qualname__,
+                error_message=message[:ERROR_MESSAGE_MAX_CHARS],
+            )
+        )
+
+    def _append(self, event: PhaseEvent) -> None:
         line = json.dumps(
             event.to_dict(),
             sort_keys=True,

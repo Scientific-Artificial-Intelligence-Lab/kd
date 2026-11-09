@@ -5,16 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Experiment Report: {{ dataset_name }} ({{ algorithm_name }})</title>
 <script>
-  // The page carries every equation as plain text. Once MathJax has loaded,
-  // each .math element is swapped for its TeX and typeset; without MathJax
-  // (offline, blocked CDN) the plain text stays, never raw TeX.
+  // Every equation is on the page from the start as mathtext SVG (or as its
+  // plain text where mathtext could not typeset it). Once MathJax has loaded
+  // from the CDN, each .math element's TeX is typeset off the page; the
+  // results replace the SVG together, and only where MathJax typeset the TeX
+  // without an error. Offline, with the CDN blocked, or on a TeX error, the
+  // SVG or the plain text stays: the reader never sees raw TeX.
   window.MathJax = {
+    tex: {
+      // A TeX error or an unknown command throws instead of drawing its source.
+      packages: {"[-]": ["noundefined"]},
+      formatError: (jax, error) => { throw error; },
+    },
     startup: {
-      pageReady: () => {
-        document.querySelectorAll(".math[data-tex]").forEach((node) => {
-          node.textContent = "\\(" + node.dataset.tex + "\\)";
-        });
-        return MathJax.startup.defaultPageReady();
+      pageReady: async () => {
+        const typeset = [];
+        for (const node of document.querySelectorAll(".math[data-tex]")) {
+          const options = {...MathJax.getMetricsFor(node, false), display: false};
+          try {
+            typeset.push([node, await MathJax.tex2chtmlPromise(node.dataset.tex, options)]);
+          } catch (error) {
+            console.warn("MathJax left an equation as kd typeset it:", error.message);
+          }
+        }
+        MathJax.startup.document.clear();
+        MathJax.startup.document.updateDocument();
+        for (const [node, math] of typeset) node.replaceChildren(math);
       },
     },
   };
@@ -24,42 +40,44 @@
 <style>
   :root {
     color-scheme: light dark;
-    --page: #f6f5f9;
+    /* Warm neutrals of the figure palette (kd.viz.style), so the page and
+       the figures on it read as one surface. */
+    --page: #f5f4f0;
     --card: #ffffff;
     --figure-card: #ffffff;
-    --figure-ink: #4a4660;
-    --ink: #1b1035;
-    --ink-2: #4a4660;
-    --ink-muted: #6b6880;
-    --rule: #46256b29;
+    --figure-ink: #52514e;
+    --ink: #1a1a18;
+    --ink-2: #52514e;
+    --ink-muted: #6d6c67;
+    --rule: #1a1a181f;
     --accent: #0e6763;
-    --code-bg: #efedf4;
+    --code-bg: #f1f0ec;
     --warn-rule: #b58a00;
     --warn-bg: #fbf3e4;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
-      --page: #14101f;
-      --card: #1c1730;
-      --ink: #e8e6f0;
-      --ink-2: #b9b5c9;
-      --ink-muted: #9a96ad;
-      --rule: #e8e6f029;
+      --page: #151514;
+      --card: #1f1f1d;
+      --ink: #ecebe6;
+      --ink-2: #bdbbb3;
+      --ink-muted: #94928a;
+      --rule: #ecebe629;
       --accent: #4fd1c9;
-      --code-bg: #241e3a;
+      --code-bg: #282826;
       --warn-rule: #a87a00;
       --warn-bg: #2a2214;
     }
   }
   :root[data-theme="dark"] {
-    --page: #14101f;
-    --card: #1c1730;
-    --ink: #e8e6f0;
-    --ink-2: #b9b5c9;
-    --ink-muted: #9a96ad;
-    --rule: #e8e6f029;
+    --page: #151514;
+    --card: #1f1f1d;
+    --ink: #ecebe6;
+    --ink-2: #bdbbb3;
+    --ink-muted: #94928a;
+    --rule: #ecebe629;
     --accent: #4fd1c9;
-    --code-bg: #241e3a;
+    --code-bg: #282826;
     --warn-rule: #a87a00;
     --warn-bg: #2a2214;
   }
@@ -89,9 +107,10 @@
     font-weight: 600;
   }
   h2 {
-    margin: 2.25rem 0 0.6rem;
+    margin: 2.5rem 0 0.7rem;
     font-size: 1.1rem;
     font-weight: 600;
+    letter-spacing: 0.005em;
   }
   h3 {
     margin: 1.5rem 0 0.5rem;
@@ -133,8 +152,9 @@
     text-align: left;
   }
   table.reads td {
-    padding: 0.1rem 0 0;
-    font-size: 1.05rem;
+    padding: 0.15rem 0 0;
+    font-size: 1.2rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
   }
   .truth {
@@ -166,6 +186,28 @@
     font-weight: 500;
   }
   table.terms td.number { text-align: right; }
+
+  /* Until MathJax replaces them, equations are inline SVG typeset by
+     mathtext, inked in currentColor; the plain text beside each is for
+     reading, copying and screen readers. An equation mathtext could not
+     typeset is its plain text alone. */
+  .math-svg { overflow: visible; }
+  .math.typeset .math-text {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--ink-2);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+  table.terms .math.typeset .math-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 
   figure.card {
     margin: 0;
@@ -237,6 +279,9 @@
 </style>
 </head>
 <body>
+{% macro math(m) -%}
+<span class="math{% if m.svg %} typeset{% endif %}"{% if m.tex %} data-tex="{{ m.tex }}"{% endif %}>{% if m.svg %}{{ m.svg | safe }}{% endif %}<span class="math-text">{{ m.text }}</span></span>
+{%- endmacro %}
 <main>
 
 <header>
@@ -245,7 +290,7 @@
 </header>
 
 <section class="card law">
-  <p class="equation"><span class="math"{% if law.tex %} data-tex="{{ law.tex }}"{% endif %}>{{ law.text }}</span></p>
+  <p class="equation">{{ math(law) }}</p>
 {% if law_note %}
   <p class="note">{{ law_note }}</p>
 {% endif %}
@@ -253,7 +298,7 @@
     <tr><th>Best {{ score_label | default("Score") }}</th><td>{{ best_score }}</td><th>R&sup2; on {{ lhs_label }}</th><td>{{ r2 }}</td><th>NMSE</th><td>{{ nmse }}</td></tr>
   </table>
 {% if truth %}
-  <p class="truth"><span class="label">Ground truth</span><span class="math"{% if truth.tex %} data-tex="{{ truth.tex }}"{% endif %}>{{ truth.text }}</span></p>
+  <p class="truth"><span class="label">Ground truth</span>{{ math(truth) }}</p>
 {% endif %}
 {% if fit_note %}
   <p class="note">{{ fit_note }}</p>
@@ -263,7 +308,7 @@
     <thead><tr><th>Term</th><th>Published</th><th>Ground truth</th></tr></thead>
     <tbody>
 {% for row in term_rows %}
-      <tr><td><span class="math" data-tex="{{ row.term.tex }}">{{ row.term.text }}</span></td><td class="number">{{ row.published }}</td><td class="number">{{ row.truth }}</td></tr>
+      <tr><td>{{ math(row.term) }}</td><td class="number">{{ row.published }}</td><td class="number">{{ row.truth }}</td></tr>
 {% endfor %}
     </tbody>
   </table>

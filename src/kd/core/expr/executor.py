@@ -148,7 +148,9 @@ class PythonExecutor:
 
         if use_full_path:
 
-            value = self._execute_with_diff(parsed.tree.body, context, depth=0)
+
+            with torch.enable_grad():
+                value = self._execute_with_diff(parsed.tree.body, context, depth=0)
         else:
 
             value = self._execute_simple(parsed, context)
@@ -192,7 +194,7 @@ class PythonExecutor:
 
 
         if not isinstance(result, Tensor):
-            result = torch.tensor(result, device=context.device, dtype=torch.float32)
+            result = torch.tensor(result, device=context.device, dtype=_LITERAL_DTYPE)
 
         return result
 
@@ -469,6 +471,9 @@ class _VariableAccessDict(dict[str, Any]):
             known_axes=self._known_axes,
         )
         if derivative is not None:
+
+
+            self[key] = derivative
             return derivative
 
 

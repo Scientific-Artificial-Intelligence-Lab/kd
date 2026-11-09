@@ -11,7 +11,7 @@ to funcall IR.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from kd.core.equation._sketch_terms import lower_term
@@ -49,6 +49,38 @@ _TYPED_PYSR_FIELDS: tuple[str, ...] = (
 )
 
 
+
+
+
+
+
+
+
+_KD_ONLY_OPERATORS: dict[str, str] = {
+    "add": "'+' or 'plus'",
+    "mul": "'*' or 'mult'",
+    "n2": "'square'",
+    "n3": "'cube'",
+    "recip": "'inv'",
+}
+
+
+def _refuse_kd_operator_names(field: str, operators: tuple[str, ...]) -> None:
+    """Raise ``ValueError`` when ``operators`` holds a kd-only funcall name."""
+    refused = [
+        f"{name!r} (use {_KD_ONLY_OPERATORS[name]})"
+        for name in operators
+        if name in _KD_ONLY_OPERATORS
+    ]
+    if refused:
+        raise ValueError(
+            f"{field} names kd term functions that PySR does not define: "
+            f"{', '.join(refused)}. PySR operators are symbols or Julia "
+            "function names; kd funcall names such as add and mul are for "
+            "terms"
+        )
+
+
 @dataclass(frozen=True)
 class PySRConfig:
     """Frozen configuration for a PySR symbolic-regression run.
@@ -76,7 +108,9 @@ class PySRConfig:
       nested inside structural terms; tabular defaults retain sin/cos/exp/log.
       Explicit operator sets are preserved. Adding ``"^"`` or a
       custom operator may cause the downstream ``from_sympy`` conversion to
-      fail hard.
+      fail hard. The names are PySR's (symbols, Julia function names, or a
+      Julia definition); kd's funcall names ``add``, ``mul``, ``n2``, ``n3``
+      and ``recip`` are refused with the PySR spelling to use.
     - ``extra_pysr_kwargs``: a pass-through seam splatted into the underlying
       ``PySRRegressor`` constructor. The caller owns the JSON-safe (and
       PySR-valid) responsibility for whatever it puts here; defaults to
@@ -102,6 +136,13 @@ class PySRConfig:
     """Unary operators allowed in the PySR expression grammar."""
     extra_pysr_kwargs: dict[str, Any] | None = None
     """Additional PySR backend options; typed configuration keys are refused."""
+    target_lhs_order: int = field(default=1, metadata={"legacy": 1})
+    """Order of the PDE left-hand derivative: 1 for u_t, 2 for u_tt.
+
+    Must match the dataset's left-hand order. The target is fixed throughout
+    the search. Tabular data uses its target column and refuses a nondefault
+    value of this PDE-only setting.
+    """
 
     def __post_init__(self) -> None:
         """Validate the configuration, raising ``ValueError`` on illegal input.
@@ -111,6 +152,11 @@ class PySRConfig:
         rewritten is ``terms``: an entry in product notation is stored as its
         funcall IR.
         """
+        if type(self.target_lhs_order) is not int or self.target_lhs_order not in (
+            1,
+            2,
+        ):
+            raise ValueError("target_lhs_order must be the integer 1 or 2")
         if not self.terms:
             raise ValueError("terms must be a non-empty tuple of candidate terms")
 
@@ -122,6 +168,8 @@ class PySRConfig:
             raise ValueError(f"maxsize must be > 0, got {self.maxsize}")
         if self.population_size <= 0:
             raise ValueError(f"population_size must be > 0, got {self.population_size}")
+        _refuse_kd_operator_names("binary_operators", self.binary_operators)
+        _refuse_kd_operator_names("unary_operators", self.unary_operators)
         if self.extra_pysr_kwargs:
             collisions = sorted(set(self.extra_pysr_kwargs) & set(_TYPED_PYSR_FIELDS))
             if collisions:

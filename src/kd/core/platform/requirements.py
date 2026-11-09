@@ -12,7 +12,7 @@ from kd.data.schema import DataTopology
 @dataclass(frozen=True)
 class DerivativeReqs:
 
-    provider_kind: Literal["finite_diff", "autograd", "none"] = "finite_diff"
+    provider_kind: str = "finite_diff"
     max_atomic_order: int = 2
     lhs_order: int = 1
     lhs_source: Literal["derivative", "field"] = "derivative"
@@ -35,12 +35,6 @@ class DerivativeReqs:
                     "lhs_source='field' requires provider_kind='none', got "
                     f"{self.provider_kind!r}"
                 )
-        if self.needs_surrogate and self.provider_kind != "autograd":
-            raise ValueError(
-                "needs_surrogate=True requires provider_kind='autograd' "
-                f"(got '{self.provider_kind}'); SurrogateContext relies on "
-                "AutogradProvider.get_field()"
-            )
 
 
         if self.provider_kind == "none":
@@ -101,14 +95,10 @@ def assert_dataset_supported(
     if dataset_lhs_order != reqs.lhs_order:
 
 
-
-
-
-
-
         order2_hint = (
-            " DLGA is the only packaged instrument that targets order 2: "
-            "set target_lhs_order=2."
+            " Select an instrument that supports order 2 and set "
+            "target_lhs_order=2 (for example, DLGA); supported lhs_orders "
+            "are listed by kd.instrument_schemas()."
             if dataset_lhs_order == 2
             else ""
         )

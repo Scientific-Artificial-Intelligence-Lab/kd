@@ -16,7 +16,12 @@ from kd.data.regression import TabularDataset
 from kd.data.tabular_bridge import dataset_from_tabular
 from kd.harness.plan import PlanEntry
 from kd.harness.recording import RecordingOptions
-from kd.search.iteration_events import IterationEventEmitter
+from kd.search.iteration_events import (
+    ERROR_MESSAGE_MAX_CHARS,
+    IterationEventEmitter,
+    IterationEventSinkError,
+    PhaseWriter,
+)
 from kd.search.run_dir import (
     CHECKPOINTS_DIRNAME,
     RunDirPaths,
@@ -42,6 +47,12 @@ if TYPE_CHECKING:
 
 SKETCH_SIDECAR_FILENAME: Final[str] = "sketch.json"
 
+
+
+
+RESULT_SIDECAR_FILENAME: Final[str] = "result.json"
+REPORT_SIDECAR_DIRNAME: Final[str] = "report"
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +61,8 @@ STATUS_COMPLETED: Final[str] = "completed"
 STATUS_RAISED: Final[str] = "raised"
 STATUS_NO_RECORD: Final[str] = "no_record"
 
-_ERROR_MESSAGE_MAX_CHARS: Final[int] = 2000
+
+_ERROR_MESSAGE_MAX_CHARS: Final[int] = ERROR_MESSAGE_MAX_CHARS
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -75,6 +87,16 @@ class EpisodeOutcome:
 
     lineage: dict[str, Any] | None = None
     error_traceback: str | None = None
+
+
+class EpisodeOutputError(Exception):
+
+    def __init__(self, outcome: EpisodeOutcome) -> None:
+        super().__init__(
+            f"episode {outcome.entry_index} completed and sealed its run dir "
+            f"{outcome.run_dir}, but writing its requested outputs failed"
+        )
+        self.outcome = outcome
 
 
 def _recording_kwargs(
@@ -140,6 +162,18 @@ def _finalize_recording(
     )
 
 
+def _write_output_sidecars(
+    model: Any, result: ExperimentResult, root: Path, options: RecordingOptions
+) -> None:
+    if options.save_result:
+        result.save(root / RESULT_SIDECAR_FILENAME)
+    if options.report:
+        model.report(
+            root / REPORT_SIDECAR_DIRNAME,
+            include_ground_truth=options.include_ground_truth,
+        )
+
+
 def run_episode(
     *,
     entry: PlanEntry,
@@ -148,6 +182,7 @@ def run_episode(
     model_factory: Callable[..., Any] = Model,
     device: str | None = None,
     run_dir: Path | None = None,
+    run_id: str | None = None,
     resume_from: Path | str | None = None,
     reseed: bool = False,
     sketch: Sketch | SketchSpec | None = None,
@@ -158,14 +193,19 @@ def run_episode(
     persist_outcome: Callable[[EpisodeOutcome], None] | None = None,
     extra_callbacks: Sequence[RunnerCallback] | None = None,
 ) -> EpisodeOutcome:
-    if run_dir is None and (recording is not None or record_ref is not None):
+    if run_dir is None and (
+        recording is not None or record_ref is not None or run_id is not None
+    ):
         raise ValueError(
-            "recording / record_ref require run_dir (they configure the run "
-            "directory an episode writes)"
+            "recording / record_ref / run_id require run_dir (they configure "
+            "the run directory an episode writes)"
         )
+    if run_id == "":
+        raise ValueError("run_id must be non-empty")
+    if run_dir is not None and run_id is None:
+        run_id = new_run_id(entry.instrument)
     start = time.perf_counter()
     paths: RunDirPaths | None = None
-    run_id: str | None = None
     try:
         if isinstance(dataset, TabularDataset):
             dataset = dataset_from_tabular(dataset)
@@ -176,7 +216,6 @@ def run_episode(
         sibling_kwargs: dict[str, Any] = {"callbacks": list(extra_callbacks or ())}
         if run_dir is not None:
             paths = create_run_dir(run_dir)
-            run_id = new_run_id(entry.instrument)
             sibling_kwargs.update(
                 _recording_kwargs(paths, options, extra_callbacks or ())
             )
@@ -229,6 +268,12 @@ def run_episode(
                 else _attempted_lineage(resume_from, reseed=reseed)
             ),
         )
+        if paths is not None and options.phases and not paths.phases.exists():
+
+
+
+
+            PhaseWriter(paths.phases).write_failure(exc)
         if persist_outcome is not None:
             persist_outcome(outcome)
         if paths is not None and run_id is not None:
@@ -247,6 +292,21 @@ def run_episode(
                 record_ref=None,
             )
         return outcome
+    except BaseException as exc:
+
+
+
+
+
+
+        if paths is not None and options.phases and not paths.phases.exists():
+            try:
+                PhaseWriter(paths.phases).write_failure(exc)
+            except IterationEventSinkError:
+                logger.exception(
+                    "could not record the interrupted episode in %s", paths.phases
+                )
+        raise
 
     elapsed = time.perf_counter() - start
     status = STATUS_NO_RECORD if record is None else STATUS_COMPLETED
@@ -318,14 +378,22 @@ def run_episode(
                 evidence_hash=record.evidence_hash,
                 path=paths.root / SKETCH_SIDECAR_FILENAME,
             )
+    if paths is not None and record is not None and result is not None:
+        try:
+            _write_output_sidecars(model, result, paths.root, options)
+        except Exception as exc:
+            raise EpisodeOutputError(outcome) from exc
     return outcome
 
 
 __all__ = [
+    "REPORT_SIDECAR_DIRNAME",
+    "RESULT_SIDECAR_FILENAME",
     "SKETCH_SIDECAR_FILENAME",
     "STATUS_COMPLETED",
     "STATUS_NO_RECORD",
     "STATUS_RAISED",
     "EpisodeOutcome",
+    "EpisodeOutputError",
     "run_episode",
 ]

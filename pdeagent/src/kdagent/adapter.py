@@ -1,11 +1,11 @@
 """kd's public surface -> tool objects. Narrowing and shaping both happen here.
 
 Narrowing = kd's three public surfaces add up to well over a hundred names, and
-this layer admits sixteen verbs (`list_datasets`, `run_discovery`,
+this layer admits seventeen verbs (`list_datasets`, `run_discovery`,
 `train_surrogate`, `prune_node`, `select_node`, `submit_answer`,
 `refine_candidate`, `smooth_input`, `ablate_candidate`, `score_term_sets`,
 `verify_candidate`, `verify_system`, `vote_terms`, `make_sketch`,
-`set_sketch`, `finish_without_answer`).
+`set_sketch`, `finish_without_answer`, `select_support`).
 
 Beside the envelopes, three kinds of record a later call can cite live in the
 `Session`: refinement receipts (`refinement_id`, bound by `submit_answer` on
@@ -61,6 +61,7 @@ the tools are built, where a name imported inside a function body is invisible.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -93,12 +94,20 @@ from kd.harness import SKETCH_SIDECAR_FILENAME, PlanEntry
 from kd.search import (
     CATALOG_FILENAME,
     DEFAULT_RUNS_ROOT,
+    PhaseEvent,
     RunDirPaths,
     RunRecord,
     new_run_id,
 )
 from kdagent import action_memory, action_memory_text
-from kdagent import criteria, experience, priors, surrogate_training
+from kdagent import (
+    criteria,
+    experience,
+    experience_applicability,
+    priors,
+    surrogate_training,
+)
+from kdagent.experience import MAX_TERM_SUBSETS
 from kdagent.episode_worker import (
     ABLATE_TASK,
     FORWARD_WORKER_SECONDS,
@@ -128,6 +137,7 @@ from kdagent.config import LLM4ED_LIMITS, Llm4edConfig
 from kdagent.prompt_text import (
     LLM4ED_OFF,
     combined_name_refusal,
+    optional_package_unavailable,
     registered_algorithms,
 )
 from kdagent.lineage import (
@@ -180,6 +190,7 @@ from kdagent.data_source import (
     raw_fingerprint,
     resolve_input,
     root_ref,
+    savgol_ref,
     save_input,
     sealed_input_failure,
     spell_modes,
@@ -375,7 +386,11 @@ def _selected_answer(session: Session, dataset_id: str) -> _Selected:
     (`_unbound_derived_runs`: an earlier run's node on a reopened workspace)
     is never published: an explicit selection of one falls through to the
     default rule, and the default rule's domain leaves them out (review
-    2026-10-20).
+    2026-10-20). A search whose law holds a term with no algebraic reading
+    (`criteria.undefined_terms`) is never published either: an explicit selection of
+    one (made by another route than `select_node`, which refuses it, as
+    `submit_answer` does) falls through, and the default rule's domain
+    leaves them out (`criteria.undefined_law_runs`).
 
     Law and provenance are None when the default rule has no winner
     (`criteria.selection_decision`: an empty domain, several targets, or no
@@ -405,14 +420,17 @@ def _explicit_answer(
 ) -> _Selected | None:
     """The answer the explicit selection holds for `dataset_id`, or None
     when none applies: a selected system of the input's raw trajectories
-    publishes its member for the input's target; a selected run applies
-    unless it is a partial, on another input, or an unbound derived one
-    (`_selected_answer`)."""
+    publishes its member for the input's target unless a member law holds
+    an undefined term (`criteria.undefined_members`); a selected run applies
+    unless it is a partial, on another input, an unbound derived one, or one
+    whose law holds an undefined term (`_selected_answer`)."""
     ledger = session.ledger
     system_id = ledger.selected_system
     if system_id is not None and raw is not None:
         system = ledger.system(system_id)
-        if system["raw_fingerprint"] == raw[0]:
+        if system["raw_fingerprint"] == raw[0] and not criteria.undefined_members(
+            system
+        ):
             entry = ledger.entry(system["members"][raw[1]])
             return (
                 entry.law,
@@ -427,6 +445,7 @@ def _explicit_answer(
         or explicit.law is None
         or not _same_input(explicit.dataset, dataset_id)
         or explicit.run_id in _unbound_derived_runs(session)
+        or criteria.undefined_terms(explicit.law["support"])
     ):
         return None
     return explicit.law, _entry_provenance(explicit), None, None
@@ -440,7 +459,10 @@ def _default_answer(
     ledger = session.ledger
     if raw is not None:
         decision = criteria.system_decision(
-            ledger, raw_fingerprint=raw[0], target=raw[1]
+            ledger,
+            raw_fingerprint=raw[0],
+            target=raw[1],
+            exclude=criteria.undefined_systems(ledger),
         )
         if decision is not None:
             if decision["run_id"] is None:
@@ -449,7 +471,10 @@ def _default_answer(
             system = _answer_system(ledger, decision["system_id"])
             return entry.law, _entry_provenance(entry), decision, system
     decision = criteria.selection_decision(
-        ledger, dataset_id=dataset_id, exclude=_unbound_derived_runs(session)
+        ledger,
+        dataset_id=dataset_id,
+        exclude=_unbound_derived_runs(session)
+        | criteria.undefined_law_runs(ledger, dataset_id=dataset_id),
     )
     if decision["run_id"] is None:
         return None, None, decision, None
@@ -630,6 +655,7 @@ def _outcome_envelope(
     unavailable_reason: str | None,
     sketch: dict[str, Any] | None,
     surrogate: str | None,
+    resolved_config: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], SegmentSummary | None]:
     """`EpisodeOutcome` -> (return envelope, baseline for child segments).
 
@@ -666,6 +692,13 @@ def _outcome_envelope(
     the record but the sidecar write itself failed, the envelope is still the
     completed record, `diagnostics.sketch` is absent and
     `diagnostics.post_seal_error` carries the failure.
+
+    `resolved_config` is the configuration kd resolved for the search, from
+    the worker's reply (`IsolatedEpisode.resolved_config`). A raised outcome
+    records it as `params.resolved` when the worker replied with one; a
+    completed outcome records its sealed config as `params.effective` and
+    never `resolved`, so `effective` keeps meaning a sealed search (the
+    action memory keys on it).
     """
     budget = session.budget()
     entry = outcome.entry
@@ -678,6 +711,7 @@ def _outcome_envelope(
         "surrogate": surrogate,
         "lineage": lineage,
         "wallclock_seconds": round(outcome.wallclock_seconds, 3),
+        "time_cap_seconds": time_cap_seconds,
         "run_id": outcome.run_id,
 
 
@@ -689,6 +723,22 @@ def _outcome_envelope(
         ),
     }
     if outcome.status == "raised":
+        phases = (
+            None
+            if outcome.run_dir is None
+            else RunDirPaths(root=outcome.run_dir).phases
+        )
+        provenance["search_started"] = (
+            phases is not None
+            and phases.is_file()
+            and any(
+                PhaseEvent.from_dict(json.loads(line)).phase == "search_started"
+                for line in phases.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        )
+        if resolved_config is not None:
+            params["resolved"] = deepcopy(resolved_config)
         return envelope(
             "failure",
             budget=budget,
@@ -1120,6 +1170,24 @@ def _lowpass_failure(
     return None
 
 
+def _lhs_axis_lowpass_failure(
+    lowpass_modes: int | dict[str, int] | str | None, lhs_axis: str | None
+) -> dict[str, Any] | None:
+    """The refusal of a low-pass mapping that names the left-hand side's
+    axis, or None. An integer count leaves that axis out; a mapping selects
+    the axes it names (kd's `lowpass_smooth` contract), so this layer refuses
+    the time axis there, where `time_window` is the filter."""
+    if not isinstance(lowpass_modes, dict) or lhs_axis not in lowpass_modes:
+        return None
+    return _failure(
+        "invalid_argument",
+        f"lowpass_modes names {lhs_axis!r}, the axis of the left-hand side, "
+        "which is never low-passed: time_window is its filter (an odd "
+        "Savitzky-Golay window along that axis after the low-pass). Map only "
+        "the other axes, or pass one integer for all of them",
+    )
+
+
 def _same_input(dataset_id: str, other: str) -> bool:
     """Whether two ids name one input or inputs derived from the same one:
     the pin and the selection domain are about the input, and a derived copy
@@ -1267,9 +1335,26 @@ def _input_refusal(session: Session, dataset_id: str) -> dict[str, Any] | None:
     then checked down to the root (`data_source.derivation_chain`): its
     descriptor can be rewritten through the file tools while its id still
     names the pinned input, so the pin test on the id (`_same_input`) is not
-    enough. Inputs that are not derived are left to the existing checks."""
+    enough. Inputs that are not derived are left to the existing checks. An
+    id this run did not derive is refused as such before any file is read,
+    naming the ones it did (a mistyped or made-up id otherwise surfaced as a
+    missing descriptor file)."""
     if not is_derived(dataset_id):
         return None
+    if dataset_id not in session.derived_inputs:
+        derived = sorted(session.derived_inputs)
+        return _failure(
+            "input_unverified",
+            f"derived input {dataset_id!r} does not verify: it was not derived "
+            "by the controller in this run, so this run has no input with that "
+            "id (only an input it derived and registered this run is used; "
+            "derive it with the call that names it); "
+            + (
+                f"the derived inputs of this run are {derived}"
+                if derived
+                else "this run has derived no input yet"
+            ),
+        )
     try:
         derivation_chain(session.workspace, dataset_id, written=session.derived_inputs)
     except (ValueError, KeyError, TypeError, OSError) as exc:
@@ -1285,12 +1370,18 @@ def _search_input_refusal(session: Session, run_id: str) -> dict[str, Any] | Non
     """Why the input a search of this run ran on can no longer be used, or
     None: the derived-input checks of `_input_refusal`, then the comparison
     of the workspace with what the search was launched on
-    (`Session.search_inputs`, `data_source.sealed_input_failure`)."""
-    dataset_id = session.successful_runs[run_id]["dataset"]
+    (`Session.search_inputs` or the uncertified candidate's launch record,
+    `data_source.sealed_input_failure`)."""
+    if run_id in session.successful_runs:
+        dataset_id = session.successful_runs[run_id]["dataset"]
+        record = session.search_inputs.get(run_id)
+    else:
+        candidate = session.uncertified_candidates[run_id]
+        dataset_id = candidate["dataset"]
+        record = candidate["input"]
     refusal = _input_refusal(session, dataset_id)
     if refusal is not None:
         return refusal
-    record = session.search_inputs.get(run_id)
     if record is None:
         return None
     failure = sealed_input_failure(
@@ -1327,7 +1418,23 @@ def _off_pin_refusal(
 def _unknown_run_failure(session: Session, run_id: str) -> dict[str, Any]:
     """The refusal for a `run_id` that is not a search that succeeded this
     run, naming the ones that did; `submit_answer` and `refine_candidate`
-    take only those."""
+    take only those. A value that is the directory of one of them (its name
+    or its workspace-relative path, which the file tools show) is still
+    refused, with the search's own run id named: the directory name is not
+    the run id (see `run_discovery`). A search's `run_dir` is null when its
+    episode ran without one (`EpisodeOutcome.run_dir`)."""
+    given = Path(run_id.strip("/"))
+    for eligible_id, record in session.successful_runs.items():
+        if record["run_dir"] is None:
+            continue
+        run_dir = Path(record["run_dir"])
+        if given in (run_dir, Path(run_dir.name)):
+            return _failure(
+                "unknown_run_id",
+                f"{run_id!r} is the directory of search {eligible_id!r}, not "
+                f"its run_id; pass run_id={eligible_id!r}, the value in "
+                "provenance.run_id of what run_discovery returned",
+            )
     eligible = sorted(session.successful_runs)
     return _failure(
         "unknown_run_id",
@@ -1399,7 +1506,10 @@ def _refine_refusal(
     for failed, detail in checks:
         if failed:
             return _failure("invalid_argument", detail)
-    lowpass = _lowpass_failure(lowpass_modes, time_window, optional=True)
+    lhs = session.sealed_lhs[run_id]
+    lowpass = _lowpass_failure(
+        lowpass_modes, time_window, optional=True
+    ) or _lhs_axis_lowpass_failure(lowpass_modes, None if lhs is None else lhs["axis"])
     if lowpass is not None:
         return lowpass
     if savgol_window != 0 and lowpass_modes:
@@ -1645,6 +1755,28 @@ def _smoothed_envelope(
     `lowpass_modes="auto"`, `selection` is kd's choice of the counts with
     its complete trace."""
     derived = description["derived"]
+    if "savgol" in derived:
+        return envelope(
+            "success",
+            budget=budget,
+            primary={
+                "dataset_id": description["ref"],
+                "derived_from": derived["from"],
+                "method": "savgol",
+                "savgol": derived["savgol"],
+                "reused": wallclock_seconds is None,
+            },
+            diagnostics=(
+                {}
+                if wallclock_seconds is None
+                else {"wallclock_seconds": round(wallclock_seconds, 3)}
+            ),
+            provenance={
+                **provenance,
+                "file_sha256": description["source"]["sha256"],
+                "path": f"inputs/{description['ref']}.npz",
+            },
+        )
     spectrum = derived["spectrum"]
     diagnostics: dict[str, Any] = {"spectrum": spectrum}
     if selection is not None:
@@ -1857,6 +1989,50 @@ def _spends_generations(schema: dict[str, Any] | None) -> bool:
     )
 
 
+
+
+
+
+_TOOL_ARGUMENT_PARAMS: Final[frozenset[str]] = frozenset(
+    {"seed", "checkpoint_every", "checkpoint_keep_last"}
+)
+_CONTROLLER_PARAMS: Final[frozenset[str]] = _TOOL_ARGUMENT_PARAMS | {
+    "device",
+    "algorithm",
+    "config",
+    "callbacks",
+    "provider",
+    "surrogate_model",
+    "checkpoint_dir",
+    "phases_path",
+    "verbose",
+}
+
+
+def _controller_param_refusal(requested: dict[str, Any]) -> dict[str, Any] | None:
+    """The refusal of a `params` entry the controller sets itself, or None;
+    `PlanEntry` would refuse it too, but in kd's words and after the call's
+    other checks."""
+    keys = sorted(_CONTROLLER_PARAMS & requested.keys())
+    if not keys:
+        return None
+    reasons = []
+    for key in keys:
+        if key in _TOOL_ARGUMENT_PARAMS:
+            reasons.append(f"pass {key!r} as run_discovery's own {key} argument")
+        elif key == "device":
+            reasons.append(
+                "'device' is not a search parameter: the run fixes the device "
+                "every search runs on (kd-agent --device)"
+            )
+        else:
+            reasons.append(f"the controller sets {key!r} itself")
+    return _failure(
+        "invalid_argument",
+        f"params must not contain {keys}: " + "; ".join(reasons),
+    )
+
+
 def _parameter_provenance(
     schema: dict[str, Any] | None,
     requested: dict[str, Any],
@@ -1980,14 +2156,36 @@ def _refuse_document_in_workspace(session: Session, path: Path, reach: str) -> N
         )
 
 
+def _refusal_vocabulary(schemas: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """The names kd declares, per registered algorithm, in the shape
+    `experience.check_refusal_vocabulary` reads: parameter names (fields and
+    facade parameters), mode names, and each facade-owned field's parameter."""
+    return {
+        schema["algorithm"]: {
+            "params": {field["name"] for field in schema["fields"]}
+            | {param["name"] for param in schema["facade_params"]},
+            "modes": {mode["name"] for mode in schema["modes"]},
+            "facade": {
+                field["name"]: field["facade_param"]
+                for field in schema["fields"]
+                if field["facade_param"] is not None
+            },
+        }
+        for schema in schemas
+    }
+
+
 def prime_experience(
     session: Session, memory_path: Path
 ) -> tuple[dict[str, str], experience.Retrieval | None]:
-    """Load a v2 document and retrieve rows plus their input readings.
+    """Load a v4 document and retrieve rows, refusal rows and input readings.
 
     The document stays outside the model-readable workspace. Its declaration
-    digest must match installed kd; the stored input summary supplies the
-    report and task kind, without loading the dataset again.
+    digest must match installed kd, and every name its refusal rows carry must
+    be one installed kd declares (the loader checks only their shape); the
+    stored input summary supplies the report and task kind, without loading
+    the dataset again. A retrieved rule row is written out for that report
+    (`experience.instantiate`) before anything renders it.
     """
     import kd
 
@@ -2001,19 +2199,30 @@ def prime_experience(
         raise ValueError(
             "instrument_schema_sha256 differs from installed kd; rebuild the experience document"
         )
+    experience.check_refusal_vocabulary(
+        document, _refusal_vocabulary(kd.instrument_schemas())
+    )
     summary = cast(dict[str, Any], session.input_source)["summary"]
     report, kind = summary["report"], summary["task_kind"]
     vocabulary = document["features_vocabulary"][kind]
     features = experience.features_of(report, kind, vocabulary, document["bins"])
-    rows = experience.retrieve(document, kind, features, k=2)
+    rows = [
+        experience.instantiate(row, report)
+        for row in experience_applicability.retrieve_for_report(
+            document, kind, report, k=2
+        )
+    ]
+    refusals = experience.retrieve_refusals(document, kind, features)
+    lessons = experience.retrieve_lessons(document, kind, features)
     record = {
         "memory_path": str(memory_path),
         "memory_sha256": file_sha256(memory_path),
     }
-    if not rows:
+    if not rows and not refusals and not lessons:
         return record, None
-    return record, {
+    retrieval: experience.Retrieval = {
         "rows": rows,
+        "refusals": refusals,
         "readings": experience.readings(report, kind, vocabulary, document["bins"]),
         "vocabulary": vocabulary,
         "templates": document["templates"][kind],
@@ -2022,6 +2231,11 @@ def prime_experience(
         "rules_version": document["rules_version"],
         "task_kind": kind,
     }
+    if "usage_scope" in document:
+        retrieval["usage_scope"] = document["usage_scope"]
+    if lessons:
+        retrieval["lessons"] = lessons
+    return record, retrieval
 
 
 def prime_action_experience(
@@ -2371,11 +2585,10 @@ Trim = int | dict[str, int] | Literal["by_order"]
 removed at both ends of every axis, per axis, or `"by_order"` (the stencil
 footprint of the terms)."""
 
-METHODS: Final = ("finite_diff", "autograd", "weak")
 """The derivative methods of a framed measurement (`kd.refit_terms`)."""
 
 WEAK_OPTIONS: Final = frozenset(
-    {"half_widths", "spectrum_tau", "noise_correction", "noise_sigma"}
+    {"half_widths", "spectrum_tau", "noise_correction", "noise_sigma", "bump_degree"}
 )
 """The keys of `weak`: the fields of `kd.WeakFormOptions`."""
 
@@ -2579,6 +2792,30 @@ def _llm4ed_cap(
     return min(limits), None
 
 
+def _search_cap(
+    session: Session, max_search_seconds: int | None
+) -> tuple[float | None, dict[str, Any] | None]:
+    """The wall-clock cap of a search other than LLM4ED's (decision D17): an
+    explicit `max_search_seconds` clipped to the run's remaining time, with
+    no floor; without one, the remaining time with a 60-second floor; no
+    budget and no explicit cap is no cap. A run whose time is spent is
+    refused before anything starts."""
+    remaining = session.budget()["remaining_seconds"]
+    if remaining is not None and remaining <= 0:
+        return None, _failure(
+            "budget_exhausted",
+            f"this run's time budget is spent ({remaining} s remaining), so no "
+            "new search is started; submit an answer from the searches already "
+            "made, or finish without one",
+        )
+    if max_search_seconds is not None:
+        cap = float(max_search_seconds)
+        return (cap if remaining is None else min(cap, float(remaining))), None
+
+
+    return (None if remaining is None else max(60.0, float(remaining))), None
+
+
 def _llm4ed_description(llm4ed: Llm4edConfig | None) -> str:
     """The `run_discovery` description's LLM4ED paragraph for this run."""
     if llm4ed is None:
@@ -2668,6 +2905,7 @@ _ACTION_REFS: Final[dict[str, tuple[str, ...]]] = {
     "refine_candidate": ("refinement_id", "dataset_id"),
     "ablate_candidate": ("evidence_id",),
     "score_term_sets": ("evidence_id",),
+    "select_support": ("evidence_id",),
     "verify_candidate": ("evidence_id",),
     "vote_terms": ("evidence_id",),
     "make_sketch": ("sketch_id",),
@@ -2755,15 +2993,23 @@ def _frame_refusal(
     value, `trim="by_order"` with autograd, a term outside the weak class)
     come back from the worker.
     """
-    if method not in METHODS:
+    if method not in kd.refit_methods():
         return _failure(
             "invalid_argument",
-            f"method has to be one of {list(METHODS)}, got {method!r}",
+            f"method has to be one of {list(kd.refit_methods())}, got {method!r}",
         )
-    if weak is not None and method != "weak":
+    declaration = kd.refit_method(method)
+    for dependency in kd.extension_dependencies("refit_method", method):
+        if dependency["source"] == "process":
+            return _failure(
+                "instrument_unavailable",
+                f"{dependency['kind']} {dependency['name']!r} is registered "
+                "in this process only; register it through a kd.extensions hook",
+            )
+    if weak is not None and not declaration.weak_options:
         return _failure(
             "invalid_argument",
-            f"weak options apply to method='weak' only; this call has method={method!r}",
+            f"method={method!r} refuses weak options",
         )
     unknown = sorted(set(weak or {}) - WEAK_OPTIONS)
     if unknown:
@@ -2771,7 +3017,14 @@ def _frame_refusal(
             "invalid_argument",
             f"weak takes {sorted(WEAK_OPTIONS)}; {unknown} are not weak options",
         )
-    if method == "weak" and (trim != 0 or surrogate_id is not None or inline):
+    if not declaration.row_selection and (trim != 0 or inline):
+        if not declaration.weak_options:
+            return _failure(
+                "invalid_argument",
+                f"method={method!r} refuses trim, savgol_window, lowpass_modes "
+                "and pinn_epochs; derive a smoothed input first and pass it "
+                "as the measurement input",
+            )
         return _failure(
             "invalid_argument",
             "a weak fit integrates the input it is given over test-function "
@@ -2779,43 +3032,61 @@ def _frame_refusal(
             "pinn_epochs are refused with it. Derive a smoothed input first "
             "and pass it as the measurement input",
         )
-    if method == "autograd" and (surrogate_id is None or inline):
+    if trim == "by_order" and not declaration.stencil_trim:
+        return _failure(
+            "invalid_argument", f"method={method!r} refuses trim='by_order'"
+        )
+    if declaration.surrogate == "required" and (surrogate_id is None or inline):
         return _failure(
             "invalid_argument",
-            "method='autograd' takes field values and derivatives from the "
+            f"method={method!r} takes field values and derivatives from the "
             "model surrogate_id names, bound to the input as it is, so it "
             "needs surrogate_id and takes no savgol_window, lowpass_modes or "
             "pinn_epochs",
         )
-    if surrogate_id is not None and method != "autograd":
+    if surrogate_id is not None and declaration.surrogate == "refused":
         return _failure(
             "invalid_argument",
-            "surrogate_id is the model an autograd fit differentiates; pass "
-            "method='autograd' with it, or drop it",
+            f"method={method!r} refuses surrogate_id",
         )
     return None
 
 
 def _measured_input(
-    session: Session, run_id: str, input_id: str | None
+    session: Session,
+    run_id: str,
+    input_id: str | None,
+    *,
+    allow_uncertified: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """The input a measurement of search `run_id` is made on, or a refusal.
 
-    The search must have succeeded this run, and the input it ran on must
+    The search must have succeeded this run (or, for ablation and verification,
+    have sealed an uncertified Sketch candidate), and the input it ran on must
     still be what it was launched on. An omitted `input_id` is that input;
     an explicit one must be its root or an input derived from that root and
     registered this run (a derived input keeps its parent's left-hand side
     at every link, so the same root is the same left-hand side). Nothing
     substitutes another input. Returns the search and measurement dataset
-    ids, the measurement input's description and record, and the search's
-    sealed left-hand side.
+    ids, the measurement input's description, verified chain and record, and
+    the search's sealed left-hand side.
     """
-    if run_id not in session.successful_runs:
+    uncertified = session.uncertified_candidates.get(run_id)
+    if run_id not in session.successful_runs and not (
+        allow_uncertified and uncertified is not None
+    ):
         return None, _unknown_run_failure(session, run_id)
     refusal = _search_input_refusal(session, run_id)
     if refusal is not None:
         return None, refusal
-    searched = session.successful_runs[run_id]["dataset"]
+    searched = (
+        session.successful_runs[run_id]["dataset"]
+        if uncertified is None
+        else uncertified["dataset"]
+    )
+    lhs = (
+        session.sealed_lhs[run_id] if uncertified is None else uncertified["law"]["lhs"]
+    )
     dataset_id = searched if input_id is None else input_id
     if root_ref(dataset_id) != root_ref(searched):
         return None, _failure(
@@ -2837,8 +3108,9 @@ def _measured_input(
         "searched": searched,
         "dataset_id": dataset_id,
         "input_source": chain[-1] if chain else _resolve(session, dataset_id),
+        "chain": chain,
         "record": input_record(dataset_id, chain),
-        "lhs": session.sealed_lhs[run_id],
+        "lhs": lhs,
     }, None
 
 
@@ -2848,9 +3120,14 @@ def _candidate_law(
     """The law a measurement of search `run_id` measures: its sealed law, or
     a given one held to the shape and left-hand side `submit_answer`
     checks."""
+    sealed = (
+        session.sealed_laws[run_id]
+        if run_id in session.successful_runs
+        else session.uncertified_candidates[run_id]["law"]
+    )
     if law is None:
-        return deepcopy(session.sealed_laws[run_id]), None
-    refusal = _law_shape_failure(law) or _lhs_failure(law, session.sealed_lhs[run_id])
+        return deepcopy(sealed), None
+    refusal = _law_shape_failure(law) or _lhs_failure(law, sealed["lhs"])
     if refusal is not None:
         return None, refusal
     return deepcopy(law), None
@@ -2995,18 +3272,36 @@ def _support_origin(session: Session, run_id: str, support: list[str]) -> str:
     """`"search-derived"` when every term a refinement was given is a term of
     the source search's sealed law, so the support came from that search
     (pruned or not); `"agent-proposed"` when it holds a term the search did
-    not find, whatever search the call cites. Terms are compared by
-    spelling, then by kd's law-term identity; a term with a numeric constant
-    inside (a table's) has no law-term key, so only its spelling places it.
+    not find, whatever search the call cites. A term spelled as a sealed
+    term is one. A term with a numeric constant (one kd's law-term identity
+    refuses, `_law_keys`) is placed by its spelling only: its keys depend on
+    the constant's start value, which a constants refit then moves
+    (`sin(mul(0.0,x))` has no keys, its refit `sin(mul(1.0,x))` has). Any
+    other term is compared by `kd.term_monomial_keys` in the search input's
+    frame, the identity `submit_answer`'s origin check uses: its keys within
+    the keys of the search's terms. A term kd cannot read is placed by its
+    spelling only, and so is a term with no algebraic reading
+    (`criteria.undefined_terms`): an enclosing operation can simplify its undefined
+    node away (`recip(div(u,sub(u,u)))` has no keys).
     """
     found = list(session.sealed_laws[run_id]["support"])
     if set(support) <= set(found):
         return "search-derived"
+    frame = _term_frame(session, session.successful_runs[run_id]["dataset"])
+
+    def keys(term: str) -> frozenset[str]:
+        return kd.term_monomial_keys(term, **frame)
+
     try:
-        derived = set(_law_keys(support)) <= set(_law_keys(found))
+        sealed = frozenset().union(*(keys(term) for term in found))
+        for term in support:
+            if term not in found:
+                _law_keys([term])
+                if criteria.undefined_terms([term]) or not keys(term) <= sealed:
+                    return "agent-proposed"
     except ValueError:
-        derived = False
-    return "search-derived" if derived else "agent-proposed"
+        return "agent-proposed"
+    return "search-derived"
 
 
 def _record_receipt(
@@ -3021,6 +3316,7 @@ def _record_receipt(
     measurement: dict[str, Any],
     output_record: dict[str, Any] | None = None,
     artifact_sha256: str | None = None,
+    operation: str = "refine_candidate",
 ) -> str:
     """Store the immutable receipt of one successful refinement and return
     its `refinement_id`.
@@ -3040,6 +3336,7 @@ def _record_receipt(
     receipt = {
         "format": RECEIPT_FORMAT,
         "refinement_id": refinement_id,
+        "operation": operation,
         "parent_ref": {"kind": "search", "run_id": run_id},
         "source_run_id": run_id,
         "support_origin": _support_origin(session, run_id, support),
@@ -3057,6 +3354,363 @@ def _record_receipt(
     _append_record(session, RECEIPTS_FILENAME, receipt)
     session.receipts[refinement_id] = receipt
     return refinement_id
+
+
+def _measurement_receipt(
+    session: Session,
+    setup: dict[str, Any],
+    fit: dict[str, Any],
+    *,
+    terms: list[str],
+    frame: dict[str, Any],
+    parameters: dict[str, Any],
+    operation: str,
+) -> dict[str, Any]:
+    """Attach a submission receipt to a measured, nonempty finite fit.
+
+    Unscored fits and the empty ablation model stay diagnostics, not laws.
+    The caller passes kd's fitted coefficients, never the law ablation was
+    asked to compare. Input identity is the same sealed measurement record
+    used by refinement.
+    """
+    if not terms or fit["nmse"] is None or any(c is None for c in fit["coefficients"]):
+        return {}
+    law = {
+        "support": list(terms),
+        "coefficients": list(fit["coefficients"]),
+        "lhs": deepcopy(setup["lhs"]),
+    }
+    receipt_id = _record_receipt(
+        session,
+        run_id=setup["run_id"],
+        law=law,
+        support=terms,
+        method=parameters["method"],
+        parameters=parameters,
+        evaluation=setup["record"],
+        measurement={**fit, "refit_frame": frame},
+        operation=operation,
+    )
+    return {"law": law, "refinement_id": receipt_id}
+
+
+def _term_frame(session: Session, dataset_id: str) -> dict[str, Any]:
+    """The field names, coordinate names and time axis of `dataset_id` (a
+    derived input keeps its root's axes), the keyword arguments of
+    `kd.term_monomial_keys` that read terms in it."""
+    description = _resolve(session, dataset_id)
+    report = (
+        preview_report(get_dataset(dataset_id).loader()).to_dict()
+        if description is None
+        else description["summary"]["report"]
+    )
+    return {
+        "fields": tuple(field["name"] for field in report["fields"]),
+        "coordinates": tuple(axis["name"] for axis in report["axes"] or []),
+        "time_axis": report["lhs_axis"],
+    }
+
+
+def _pinn_field(
+    session: Session, chain: list[dict[str, Any]], laws: dict[str, list[str]]
+) -> dict[str, Any] | None:
+    """The network field a call's input is or derives from (decision D9):
+    the PINN link of `chain` (the input's verified chain, root first), the
+    terms and residual weight its network was fitted to, and a `note` when
+    the weight is not zero and a law of the call (`laws`, label -> terms)
+    has the same monomials as those terms. None when no link is a PINN fit.
+    A diagnostic: nothing is refused."""
+    link = next(
+        (
+            link
+            for link in reversed(chain)
+            if link.get("derived", {}).get("pinn") is not None
+        ),
+        None,
+    )
+    if link is None:
+        return None
+    pinn = link["derived"]["pinn"]
+    weight = pinn["residual_weight"]
+    block: dict[str, Any] = {
+        "input": link["ref"],
+        "terms": list(pinn["terms"]),
+        "residual_weight": weight,
+    }
+    if weight == 0:
+        return block
+    frame = _term_frame(session, link["ref"])
+
+    def keys(terms: list[str]) -> frozenset[str]:
+        return frozenset().union(
+            *(kd.term_monomial_keys(term, **frame) for term in terms)
+        )
+
+    trained = keys(pinn["terms"])
+    same = [label for label, terms in laws.items() if keys(terms) == trained]
+    if same:
+        one = len(same) == 1
+        block["note"] = (
+            f"{' and '.join(same)} {'names' if one else 'name'} the terms the "
+            f"network field {link['ref']!r} was fitted to with residual weight "
+            f"{weight}, so {'its' if one else 'their'} agreement with this field "
+            "is not independent evidence for those terms"
+        )
+    return block
+
+
+def _note_pinn_field(
+    session: Session,
+    result: dict[str, Any],
+    chain: list[dict[str, Any]],
+    laws: dict[str, list[str]],
+) -> None:
+    """Put `_pinn_field` into a successful result's diagnostics; a failure
+    to read it is one more failure on the result, never its end."""
+    try:
+        block = _pinn_field(session, chain, laws)
+    except Exception as exc:
+        result["failures"].append(_crashed(exc))
+        return
+    if block is not None:
+        result["diagnostics"]["pinn_field"] = block
+
+
+def _constants_refit(session: Session, law: dict[str, Any], run_id: str) -> bool:
+    """Whether `law` is exactly the output of a refinement of `run_id` that
+    refitted only the numeric constants inside the search's own terms: a
+    table's `kd.refit_constants` (method `constants`) given a
+    `search-derived` support. Its terms then differ from the sealed ones in
+    those constants alone (`sin(mul(1.4,x1))` -> `sin(1.5*x1)`)."""
+    return any(
+        receipt["source_run_id"] == run_id
+        and receipt["law"] == law
+        and receipt["method"] == "constants"
+        and receipt["support_origin"] == "search-derived"
+        for receipt in session.receipts.values()
+    )
+
+
+def _term_keys(session: Session) -> Callable[[list[str], str], frozenset[str]]:
+    """The union of `kd.term_monomial_keys` of terms read in the frame of a
+    search's input; each input's frame is read once per returned function."""
+    frames: dict[str, dict[str, Any]] = {}
+
+    def keys_of(terms: list[str], search: str) -> frozenset[str]:
+        dataset_id = session.successful_runs[search]["dataset"]
+        if dataset_id not in frames:
+            frames[dataset_id] = _term_frame(session, dataset_id)
+        return frozenset().union(
+            *(kd.term_monomial_keys(term, **frames[dataset_id]) for term in terms)
+        )
+
+    return keys_of
+
+
+def _citable_runs(
+    session: Session,
+    *,
+    lhs: dict[str, Any] | None,
+    submitted: list[str] | None,
+) -> list[str]:
+    """The searches of this run a law can rest on: successful, not pruned,
+    with the left-hand side `lhs`, inputs still usable, a sealed law with no
+    undefined term (`criteria.undefined_terms`) and, when `submitted` is given, a
+    sealed law holding every submitted term (`kd.term_monomial_keys`).
+    Raises ValueError, when `submitted` is given, for a term kd cannot
+    read."""
+    keys_of = _term_keys(session)
+    return sorted(
+        other
+        for other, record in session.successful_runs.items()
+        if not session.ledger.is_pruned(other)
+        and session.sealed_lhs[other] == lhs
+        and _off_pin_refusal(session, other, record["dataset"]) is None
+        and _search_input_refusal(session, other) is None
+        and not criteria.undefined_terms(session.sealed_laws[other]["support"])
+        and (
+            submitted is None
+            or keys_of(submitted, other)
+            <= keys_of(session.sealed_laws[other]["support"], other)
+        )
+    )
+
+
+def _undefined_law_failure(
+    run_id: str,
+    support: list[str],
+    alternatives: Callable[[], list[str]],
+    *,
+    cited: bool,
+) -> dict[str, Any] | None:
+    """Refuse a search whose sealed law (`support`) holds a term kd reads as
+    undefined (`criteria.undefined_terms`), or None. Such a law has no algebraic
+    reading, so it is neither this run's answer nor the search an answer
+    cites (`cited`); the refusal names the searches `alternatives` returns."""
+    undefined = criteria.undefined_terms(support)
+    if not undefined:
+        return None
+    others = alternatives()
+    detail = (
+        f"search {run_id} returned a law with terms that have no algebraic "
+        f"reading: {undefined}. Each divides by, or takes the log of, an "
+        "expression that is identically zero; the search evaluated it as a "
+        "finite column, but the law it is in cannot be read as an equation, "
+        "so this search cannot be "
+        + ("the one an answer cites. " if cited else "this run's answer. ")
+    )
+    detail += (
+        (
+            "Searches of this run whose returned law holds all submitted "
+            f"terms and can be cited: {others}."
+            if cited
+            else f"Searches of this run that can be selected instead: {others}."
+        )
+        if others
+        else "No other search of this run can be used instead; run another search."
+    )
+    return {
+        **_failure("undefined_term", detail),
+        "undefined_terms": undefined,
+        "alternative_run_ids": others,
+    }
+
+
+def _undefined_submission_failure(support: list[str]) -> dict[str, Any] | None:
+    """Refuse a submitted law (`support`) holding a term kd reads as
+    undefined (`criteria.undefined_terms`), or None. A refinement can return one,
+    and its keys can be empty (`recip(div(u,sub(u,u)))`), so the origin
+    check alone would pass it."""
+    undefined = criteria.undefined_terms(support)
+    if not undefined:
+        return None
+    return {
+        **_failure(
+            "undefined_term",
+            f"the submitted law holds terms that have no algebraic reading: "
+            f"{undefined}. Each divides by, or takes the log of, an expression "
+            "that is identically zero; it can be evaluated as a finite column, "
+            "but a law holding it cannot be read as an equation, so it is not "
+            "this run's answer. Submit the law without these terms",
+        ),
+        "undefined_terms": undefined,
+    }
+
+
+def _origin_failure(
+    session: Session, law: dict[str, Any], run_id: str
+) -> dict[str, Any] | None:
+    """Refuse a submitted law with a term the cited search's sealed law does
+    not hold, or None. Terms are compared by `kd.term_monomial_keys` in the
+    input's own coordinates; coefficients are not compared, and
+    neither are the constants a recorded table refit of the search's own
+    terms changed (`_constants_refit`). The refusal lists the searches of
+    this run that could be cited instead (`_citable_runs`). Raises
+    ValueError for a term kd cannot read or a derivative the input does not
+    define."""
+    if _constants_refit(session, law, run_id):
+        return None
+    keys_of = _term_keys(session)
+    submitted = list(law["support"])
+    sealed = keys_of(session.sealed_laws[run_id]["support"], run_id)
+    absent = [term for term in submitted if not keys_of([term], run_id) <= sealed]
+    if not absent:
+        return None
+    containing = _citable_runs(
+        session, lhs=session.sealed_lhs[run_id], submitted=submitted
+    )
+    detail = (
+        f"Not recorded: the submitted terms {absent} are not in the law that "
+        f"search {run_id} returned. An answer must cite a search whose returned "
+        "law contains every submitted term, or a receipt from this run measuring "
+        "the exact submitted term set on this search input or its registered "
+        "derived inputs (refine_candidate, score_term_sets, select_support, "
+        "ablate_candidate). For the search route dropping terms is fine; spellings "
+        "are compared after expansion, so mul(u,u_x) equals u*u_x. "
+    )
+    detail += (
+        f"Searches of this run whose returned law contains all submitted terms: "
+        f"{containing}. Submit with one of those run_ids; a refinement receipt "
+        "stays bound to the search it refined, so refit under the search you "
+        "cite if you want refined coefficients."
+        if containing
+        else "No search of this run returned all of these terms."
+    )
+    return {
+        **_failure("terms_not_in_cited_search", detail),
+        "absent_terms": absent,
+        "containing_run_ids": containing,
+    }
+
+
+def _receipt_input_failure(
+    session: Session, receipt: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A receipt may only authorize a law on its still-registered input."""
+    record = receipt["evaluation_input_record"]
+    refusal = _input_refusal(session, record["dataset_id"])
+    if refusal is not None:
+        return refusal
+    failure = sealed_input_failure(
+        session.workspace, record, written=session.derived_inputs
+    )
+    if failure is None:
+        return None
+    return _failure(
+        "input_unverified",
+        f"measurement {receipt['refinement_id']!r} input no longer verifies: {failure}",
+    )
+
+
+def _submission_origin(
+    session: Session, law: dict[str, Any], run_id: str, producer: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Attribute support independently of coefficient production.
+
+    Search terms retain their algebraic identity and subset rule. The new
+    route requires the exact measured term set (same spellings, order may
+    differ), not a subset or a union of separately measured supports.
+    Edited coefficients borrow no score even when a receipt admits support.
+    """
+    if producer["kind"] == "refinement":
+        refusal = _receipt_input_failure(
+            session, session.receipts[producer["refinement_id"]]
+        )
+        if refusal is not None:
+            return {}, refusal
+    failure = _origin_failure(session, law, run_id)
+    if failure is None:
+        keys = _term_keys(session)
+        same = _constants_refit(session, law, run_id) or (
+            keys(law["support"], run_id)
+            == keys(session.sealed_laws[run_id]["support"], run_id)
+        )
+        return {
+            "answer_origin": "search_terms" if same else "search_terms_dropped",
+            "origin_ref": {"kind": "search", "run_id": run_id},
+        }, None
+    matches = [
+        receipt
+        for receipt in session.receipts.values()
+        if receipt["source_run_id"] == run_id
+        and receipt["law"]["lhs"] == law["lhs"]
+        and sorted(receipt["law"]["support"]) == sorted(law["support"])
+        and receipt["measurement"]["nmse"] is not None
+    ]
+    if not matches:
+        return {}, failure
+    receipt = (
+        session.receipts[producer["refinement_id"]]
+        if producer["kind"] == "refinement"
+        else matches[-1]
+    )
+    refusal = _receipt_input_failure(session, receipt)
+    if refusal is not None:
+        return {}, refusal
+    return {
+        "answer_origin": "receipt_measured",
+        "origin_ref": {"kind": "refinement", "refinement_id": receipt["refinement_id"]},
+    }, None
 
 
 def _producer(
@@ -3779,22 +4433,25 @@ def _measurement_setup(
     law: dict[str, Any] | None,
     input_id: str | None,
     max_seconds: Any,
-    frame: tuple[str, Trim, dict[str, Any] | None, str | None] | None,
+    frame: tuple[str, Trim, dict[str, Any] | None, str | None, int] | None,
+    allow_uncertified: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """What every measurement of a search's law checks before a worker
     starts, in order: the frame (`frame` is `(method, trim, weak,
-    surrogate_id)`, None for the verification, which has none), the cap,
+    surrogate_id, max_order)`, None for the verification, which has none), the cap,
     the search and the measurement input, the law, and the model an autograd
     frame differentiates. Returns the input, the law and the frame's worker
     keys, or the first refusal."""
     if frame is not None:
-        refusal = _frame_refusal(*frame)
+        refusal = _frame_refusal(*frame[:4])
         if refusal is not None:
             return None, refusal
     refusal = _positive_seconds("max_seconds", max_seconds)
     if refusal is not None:
         return None, refusal
-    measured, refusal = _measured_input(session, run_id, input_id)
+    measured, refusal = _measured_input(
+        session, run_id, input_id, allow_uncertified=allow_uncertified
+    )
     if refusal is not None:
         return None, refusal
     measured = cast(dict[str, Any], measured)
@@ -3803,7 +4460,7 @@ def _measurement_setup(
         return None, refusal
     keys: dict[str, Any] = {}
     if frame is not None:
-        method, trim, weak, surrogate_id = frame
+        method, trim, weak, surrogate_id, max_order = frame
         model = None
         if surrogate_id is not None:
             model, refusal = _model_binding(
@@ -3811,7 +4468,9 @@ def _measurement_setup(
             )
             if refusal is not None:
                 return None, refusal
-        keys = frame_request(method=method, trim=trim, weak=weak, surrogate=model)
+        keys = frame_request(
+            method=method, trim=trim, weak=weak, surrogate=model, max_order=max_order
+        )
     lhs = measured["lhs"]
     return {
         **measured,
@@ -3842,11 +4501,11 @@ def _ablate_candidate(
     run_id: str,
     law: dict[str, Any] | None,
     input_id: str | None,
-    frame: tuple[str, Trim, dict[str, Any] | None, str | None],
+    frame: tuple[str, Trim, dict[str, Any] | None, str | None, int],
     max_seconds: Any,
 ) -> dict[str, Any]:
     """`ablate_candidate`: one worker, one `kd.ablate_terms` call, one frame."""
-    method, trim, weak, surrogate_id = frame
+    method, trim, weak, surrogate_id, max_order = frame
     provenance: dict[str, Any] = {
         "run_id": run_id,
         "input_id": input_id,
@@ -3854,6 +4513,7 @@ def _ablate_candidate(
         "trim": trim,
         "weak": weak,
         "surrogate_id": surrogate_id,
+        "max_order": max_order,
         "max_seconds": max_seconds,
     }
 
@@ -3873,6 +4533,7 @@ def _ablate_candidate(
             input_id=input_id,
             max_seconds=max_seconds,
             frame=frame,
+            allow_uncertified=True,
         )
         if refusal is not None:
             return refused(refusal)
@@ -3890,6 +4551,30 @@ def _ablate_candidate(
         value = finite_tree(task.value)
         baseline = value["baseline"]
         frame_record, weak_record = baseline.pop("frame"), baseline.pop("weak")
+        if run_id in session.successful_runs:
+            baseline.update(
+                _measurement_receipt(
+                    session,
+                    setup,
+                    baseline,
+                    terms=terms,
+                    frame=frame_record,
+                    parameters=provenance,
+                    operation="ablate_candidate",
+                )
+            )
+            for row in value["rows"]:
+                row.update(
+                    _measurement_receipt(
+                        session,
+                        setup,
+                        row,
+                        terms=list(row["retained_terms"]),
+                        frame=frame_record,
+                        parameters=provenance,
+                        operation="ablate_candidate",
+                    )
+                )
         result = {
             "law": setup["law"],
             "baseline": baseline,
@@ -3906,7 +4591,7 @@ def _ablate_candidate(
         )
     except Exception as exc:
         return refused(_crashed(exc))
-    return envelope(
+    ablated = envelope(
         "success",
         budget=session.budget(),
         primary={"evidence_id": evidence_id, **result},
@@ -3917,6 +4602,8 @@ def _ablate_candidate(
         },
         provenance=provenance,
     )
+    _note_pinn_field(session, ablated, setup["chain"], {"the ablated law": terms})
+    return ablated
 
 
 def _score_term_sets(
@@ -3925,12 +4612,15 @@ def _score_term_sets(
     run_id: str,
     term_sets: list[list[str]],
     input_id: str | None,
-    frame: tuple[str, Trim, dict[str, Any] | None, str | None],
+    frame: tuple[str, Trim, dict[str, Any] | None, str | None, int],
     max_seconds: Any,
+    ranked: bool,
+    operation: str = "score_term_sets",
 ) -> dict[str, Any]:
     """`score_term_sets`: one worker, one `kd.score_term_sets` call, one
-    frame for the union of the sets."""
-    method, trim, weak, surrogate_id = frame
+    frame for the union of the sets; `ranked` orders the reply's entries by
+    nmse and gives each its size (the subset mode)."""
+    method, trim, weak, surrogate_id, max_order = frame
     provenance: dict[str, Any] = {
         "run_id": run_id,
         "input_id": input_id,
@@ -3938,6 +4628,7 @@ def _score_term_sets(
         "trim": trim,
         "weak": weak,
         "surrogate_id": surrogate_id,
+        "max_order": max_order,
         "max_seconds": max_seconds,
     }
 
@@ -3978,7 +4669,18 @@ def _score_term_sets(
 
         for entry in entries:
             if entry["fit"] is not None:
-                entry["fit"].pop("frame")
+                entry_frame = entry["fit"].pop("frame")
+                entry.update(
+                    _measurement_receipt(
+                        session,
+                        setup,
+                        entry["fit"],
+                        terms=list(entry["terms"]),
+                        frame=entry_frame,
+                        parameters=provenance,
+                        operation=operation,
+                    )
+                )
         fitted = [
             term
             for entry in entries
@@ -3995,7 +4697,12 @@ def _score_term_sets(
         )
     except Exception as exc:
         return refused(_crashed(exc))
-    return envelope(
+    if ranked:
+        entries = sorted(
+            ({**entry, "size": len(entry["terms"])} for entry in entries),
+            key=_nmse_order,
+        )
+    scored = envelope(
         "success",
         budget=session.budget(),
         primary={"evidence_id": evidence_id, "entries": entries},
@@ -4005,6 +4712,91 @@ def _score_term_sets(
         },
         provenance=provenance,
     )
+    _note_pinn_field(
+        session,
+        scored,
+        setup["chain"],
+        {
+            f"term set {index}": list(entry["terms"])
+            for index, entry in enumerate(entries)
+        },
+    )
+    return scored
+
+
+def _nmse_order(entry: dict[str, Any]) -> tuple[bool, float]:
+    """Lowest nmse first; a set with no fit, or a non-finite nmse (null in
+    the reply), after every scored one."""
+    nmse = None if entry["fit"] is None else entry["fit"]["nmse"]
+    return (nmse is None, 0.0 if nmse is None else nmse)
+
+
+def _support_selection(entries: list[dict[str, Any]], ratio: float) -> dict[str, Any]:
+    """Choose the fewest terms within `ratio` of the first scored NMSE.
+
+    Entries are already ranked by `_score_term_sets`; no absolute NMSE
+    floor applies, and ties on size go to the lower NMSE.
+    """
+    scored = [
+        entry
+        for entry in entries
+        if entry["fit"] is not None and entry["fit"]["nmse"] is not None
+    ]
+    if not scored:
+        return {"chosen": None, "ratio": ratio, "lowest": None, "window": None}
+    lowest = scored[0]["fit"]["nmse"]
+    window = ratio * lowest
+    chosen = min(
+        (entry for entry in scored if entry["fit"]["nmse"] <= window),
+        key=lambda entry: (entry["size"], entry["fit"]["nmse"]),
+    )
+    return {"chosen": chosen, "ratio": ratio, "lowest": lowest, "window": window}
+
+
+def _term_sets_argument(
+    term_sets: list[list[str]] | None,
+    terms: list[str] | None,
+    subsets_up_to: int | None,
+) -> tuple[list[list[str]], dict[str, Any] | None]:
+    """`score_term_sets`' sets: as given, or every subset of `terms` of 1 to
+    `subsets_up_to` terms in the library's order; or the refusal of a call
+    that gives both modes, neither, or a malformed library."""
+    if (term_sets is None) == (terms is None):
+        return [], _failure(
+            "invalid_argument",
+            "give term_sets, or terms with subsets_up_to, and not both",
+        )
+    if term_sets is not None:
+        if subsets_up_to is not None:
+            return [], _failure(
+                "invalid_argument", "subsets_up_to applies to terms only"
+            )
+        return term_sets, None
+    library = cast(list[str], terms)
+    if not library or len(set(library)) != len(library):
+        return [], _failure(
+            "invalid_argument",
+            f"terms has to be a non-empty list of distinct terms, got {library!r}",
+        )
+    if type(subsets_up_to) is not int or not 1 <= subsets_up_to <= len(library):
+        return [], _failure(
+            "invalid_argument",
+            f"subsets_up_to has to be an integer from 1 to {len(library)} "
+            f"(the number of terms), got {subsets_up_to!r}",
+        )
+    count = sum(math.comb(len(library), size) for size in range(1, subsets_up_to + 1))
+    if count > MAX_TERM_SUBSETS:
+        return [], _failure(
+            "invalid_argument",
+            f"{len(library)} terms with subsets_up_to={subsets_up_to} give {count} "
+            f"sets; one call scores at most {MAX_TERM_SUBSETS}: lower subsets_up_to "
+            "or split the library",
+        )
+    return [
+        list(subset)
+        for size in range(1, subsets_up_to + 1)
+        for subset in itertools.combinations(library, size)
+    ], None
 
 
 def _verify_candidate(
@@ -4039,6 +4831,7 @@ def _verify_candidate(
             input_id=input_id,
             max_seconds=max_seconds,
             frame=None,
+            allow_uncertified=True,
         )
         if refusal is not None:
             return refused(refusal)
@@ -4451,7 +5244,8 @@ def _system_envelope(
 def _system_refusal(session: Session, system_id: str) -> dict[str, Any] | None:
     """Why a system cannot be named by `select_node` or `submit_answer`, or
     None: it must be one a verification recorded on this workspace's tree,
-    with no abandoned member."""
+    with no abandoned member and no member law holding an undefined term
+    (`criteria.undefined_members`)."""
     recorded = [system["system_id"] for system in session.ledger.systems()]
     if system_id not in recorded:
         return _failure(
@@ -4466,6 +5260,20 @@ def _system_refusal(session: Session, system_id: str) -> dict[str, Any] | None:
             f"a member of system {system_id!r} was abandoned (itself or an "
             "ancestor of it), so the system cannot be published",
         )
+    undefined = criteria.undefined_members(session.ledger.system(system_id))
+    if undefined:
+        return {
+            **_failure(
+                "undefined_term",
+                f"members of system {system_id!r} returned laws with terms that "
+                f"have no algebraic reading: {undefined}. Each divides by, or "
+                "takes the log of, an expression that is identically zero; the "
+                "search evaluated it as a finite column, but the law it is in "
+                "cannot be read as an equation, so the system cannot be "
+                "published. Name another system, or a search on its own",
+            ),
+            "undefined_terms": [term for terms in undefined.values() for term in terms],
+        }
     return None
 
 
@@ -4891,6 +5699,7 @@ def _network_preparation(
 def _smooth_argument_refusal(
     *,
     method: str,
+    savgol_window: int | None,
     lowpass_modes: int | dict[str, int] | str | None,
     time_window: int,
     surrogate_id: str | None,
@@ -4909,21 +5718,33 @@ def _smooth_argument_refusal(
     network_args = surrogate_id is not None or network_recipe is not None or seed != 0
     checks = (
         (
-            method not in ("lowpass", "network"),
-            f"method has to be 'lowpass' or 'network', got {method!r}",
+            method not in ("lowpass", "network", "savgol"),
+            f"method has to be 'lowpass', 'network' or 'savgol', got {method!r}",
+        ),
+        (
+            method != "savgol" and savgol_window is not None,
+            "savgol_window belongs to method='savgol'",
+        ),
+        (
+            method == "savgol"
+            and (
+                savgol_window is None
+                or savgol_window <= SAVGOL_POLYORDER
+                or savgol_window % 2 == 0
+            ),
+            "method='savgol' needs savgol_window: an odd window of 5 or more",
         ),
         (
             method == "lowpass" and lowpass_modes is None,
             "method='lowpass' needs lowpass_modes (a count, a mapping or 'auto')",
         ),
         (
-            method == "lowpass" and network_args,
+            method != "network" and network_args,
             "surrogate_id, network_recipe and seed belong to method='network'",
         ),
         (
-            method == "network" and (lowpass_modes is not None or time_window != 0),
-            "method='network' samples a field network and takes no lowpass_modes "
-            "or time_window",
+            method != "lowpass" and (lowpass_modes is not None or time_window != 0),
+            f"method={method!r} takes no lowpass_modes or time_window",
         ),
         (
             selector and not auto,
@@ -5065,6 +5886,7 @@ def _smooth_input(
     lowpass_modes: int | dict[str, int] | str | None,
     time_window: int,
     method: str,
+    savgol_window: int | None,
     surrogate_id: str | None,
     network_recipe: dict[str, Any] | None,
     seed: int,
@@ -5075,13 +5897,15 @@ def _smooth_input(
 ) -> dict[str, Any]:
     """`smooth_input`: the refusals that need no data, then the parent's
     chain, then the low-pass (with kd's automatic choice first for
-    `"auto"`) or the network preparation."""
+    `"auto"`), Savitzky-Golay copy or network preparation."""
     provenance: dict[str, Any] = {
         "dataset": dataset_id,
         "method": method,
         "lowpass_modes": lowpass_modes,
         "time_window": time_window,
     }
+    if savgol_window is not None:
+        provenance["savgol_window"] = savgol_window
 
     def refused(failure: dict[str, Any]) -> dict[str, Any]:
         return envelope(
@@ -5093,6 +5917,7 @@ def _smooth_input(
 
     refusal = _smooth_argument_refusal(
         method=method,
+        savgol_window=savgol_window,
         lowpass_modes=lowpass_modes,
         time_window=time_window,
         surrogate_id=surrogate_id,
@@ -5166,6 +5991,9 @@ def _smooth_input(
                     "derived input would carry none either",
                 )
             )
+        time_axis = _lhs_axis_lowpass_failure(lowpass_modes, report["lhs_axis"])
+        if time_axis is not None:
+            return refused(time_axis)
         provenance["parent_sha256"] = description["source"]["sha256"]
         provenance["root"] = root_ref(dataset_id)
         provenance["chain"] = [
@@ -5180,6 +6008,15 @@ def _smooth_input(
                 surrogate_id=surrogate_id,
                 network_recipe=network_recipe,
                 seed=seed,
+                max_seconds=max_seconds,
+                provenance=provenance,
+            )
+        if method == "savgol":
+            return _savgol_derivation(
+                session,
+                dataset_id=dataset_id,
+                description=description,
+                savgol_window=cast(int, savgol_window),
                 max_seconds=max_seconds,
                 provenance=provenance,
             )
@@ -5225,6 +6062,90 @@ def _smooth_input(
 def _window_refusal(time_window: int) -> dict[str, Any] | None:
     window = _window_failure("time_window", time_window)
     return None if window is None else _failure("invalid_argument", window)
+
+
+def _savgol_derivation(
+    session: Session,
+    *,
+    dataset_id: str,
+    description: dict[str, Any],
+    savgol_window: int,
+    max_seconds: int | None,
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Reuse or write an order-3 Savitzky-Golay field with the low-pass trust
+    rules. A window longer than an axis, which scipy refuses, is refused here
+    from the summary's axis lengths, before a worker starts."""
+
+    def refused(failure: dict[str, Any]) -> dict[str, Any]:
+        return envelope(
+            "failure",
+            budget=session.budget(),
+            provenance=provenance,
+            failures=[failure],
+        )
+
+    short = {
+        axis["name"]: axis["n"]
+        for axis in description["summary"]["report"]["axes"]
+        if axis["n"] < savgol_window
+    }
+    if short:
+        return refused(
+            _failure(
+                "invalid_argument",
+                f"savgol_window {savgol_window} is longer than the axes {short}; "
+                "the window is at most every axis's length",
+            )
+        )
+    derived_id = savgol_ref(dataset_id, savgol_window)
+    existing, refusal = _reusable(session, derived_id)
+    if refusal is not None:
+        return refused(refusal)
+    elapsed = None
+    if existing is None:
+        session.workers_started += 1
+        smoothed = run_isolated_smooth(
+            dataset_id=dataset_id,
+            input_source=description,
+            lowpass_modes=None,
+            time_window=0,
+            savgol_window=savgol_window,
+            output_path=session.workspace / "inputs" / f"{derived_id}.npz",
+            time_cap_seconds=(
+                float(max_seconds)
+                if max_seconds is not None
+                else _remaining_cap(session)
+            ),
+        )
+        if smoothed.description is None:
+            return refused(
+                _failure(
+                    "smooth_timeout"
+                    if smoothed.error_code == "SearchTimeout"
+                    else str(smoothed.error_code),
+                    str(smoothed.error_message),
+                )
+            )
+        save_input(session.workspace, smoothed.description)
+        try:
+            existing = _register_derived(session, smoothed.description)
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            return refused(
+                _failure(
+                    "input_unverified",
+                    f"the Savitzky-Golay copy written as {derived_id!r} does not verify, "
+                    f"so it is not registered: {exc}",
+                )
+            )
+        elapsed = smoothed.wallclock_seconds
+    return _smoothed_envelope(
+        existing,
+        wallclock_seconds=elapsed,
+        selection=None,
+        provenance=provenance,
+        budget=session.budget(),
+    )
 
 
 def _lowpass_derivation(
@@ -5343,15 +6264,15 @@ def _refine_candidate(
     smoothing: dict[str, Any],
     pinn: dict[str, Any],
     evaluation_input_id: str | None,
-    frame: tuple[str, Trim, dict[str, Any] | None, str | None],
+    frame: tuple[str, Trim, dict[str, Any] | None, str | None, int],
 ) -> dict[str, Any]:
     """`refine_candidate`: the refusals that need no data, the measurement
     input, then a PINN fit or one framed refit in a worker, and the receipt
     of a successful one. `smoothing` holds `small_term_rtol`,
     `savgol_window`, `lowpass_modes` and `time_window`; `pinn` holds
     `pinn_epochs`, `pinn_pretrain_epochs` and `pinn_residual_weight`;
-    `frame` is `(method, trim, weak, surrogate_id)`."""
-    method, trim, weak, surrogate_id = frame
+    `frame` is `(method, trim, weak, surrogate_id, max_order)`."""
+    method, trim, weak, surrogate_id, max_order = frame
     parameters = {
         "law": law,
         "terms": terms,
@@ -5362,6 +6283,7 @@ def _refine_candidate(
         "trim": trim,
         "surrogate_id": surrogate_id,
         "weak": weak,
+        "max_order": max_order,
     }
     provenance: dict[str, Any] = {
         "run_id": run_id,
@@ -5418,7 +6340,7 @@ def _refine_candidate(
             savgol_window=smoothing["savgol_window"],
             lowpass_modes=smoothing["lowpass_modes"],
             pinn_epochs=pinn["pinn_epochs"],
-            framed=method != "finite_diff" or trim != 0,
+            framed=method != "finite_diff" or trim != 0 or max_order != 3,
         )
         if refusal is not None:
             return refused(refusal)
@@ -5456,6 +6378,7 @@ def _refine_candidate(
             trim=trim,
             weak=weak,
             surrogate=model,
+            max_order=max_order,
             time_cap_seconds=_remaining_cap(session),
         )
         result = _refined_envelope(
@@ -5493,6 +6416,15 @@ def _refine_candidate(
                     )
                 },
                 artifact_sha256=None if model is None else model["sha256"],
+            )
+            _note_pinn_field(
+                session,
+                result,
+                measured["chain"],
+                {
+                    "the candidate": given,
+                    "the refitted law": list(result["primary"]["law"]["support"]),
+                },
             )
     except Exception as exc:
 
@@ -5561,11 +6493,11 @@ def _pinn_receipt(
 
 
 def make_tools(session: Session) -> list[Callable[..., Any]]:
-    """Wrap kd into the sixteen verbs admitted for this run, in a fixed
+    """Wrap kd into the seventeen verbs admitted for this run, in a fixed
     order: `[list_datasets, run_discovery, train_surrogate, prune_node,
     select_node, submit_answer, refine_candidate, smooth_input,
     ablate_candidate, score_term_sets, verify_candidate, verify_system,
-    vote_terms, make_sketch, set_sketch, finish_without_answer]`.
+    vote_terms, make_sketch, set_sketch, finish_without_answer, select_support]`.
 
     The order is part of the surface (callers unpack it positionally), so it is
     stated once here. No exception may escape a tool: one that does loses the
@@ -5760,19 +6692,32 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 such as `"sga"`; the input and `params` select its mode, as
                 the Availability table shows. Its skill card lists the
                 parameters it accepts and what they cost.
-            params: Instrument parameters as plain JSON, passed through
-                unchanged. Omitting the instrument's generation count gets you
-                a small default, which is smaller than kd's own; pass one
-                explicitly when you want a different one.
+            params: Instrument parameters as plain JSON. The controller
+                does not rewrite them, but refuses, among others, these before
+                any worker starts: a parameter that names a file
+                (`untrusted_asset`);
+                `extra_pysr_kwargs` keys other than `deterministic` and
+                `parallelism`; operator definitions; LLM4ED's
+                `tape_record_path`, an endpoint setting other than the
+                run's and a limit above the run's; and the keys the
+                controller sets itself (such as `seed`, the checkpoint
+                controls and `device`). Omitting the instrument's
+                generation count gets you a small default, which is
+                smaller than kd's own; pass one explicitly when you want
+                a different one.
             seed: Random seed. Omitting it on a fresh call runs seed 0.
                 Omitting it on a resumed call inherits the parent segment's
                 seed, so a zero-change continuation needs nothing here; an
                 explicit seed that differs from the parent's is refused,
                 because kd classifies `seed` `init_only` -- unless the call
                 also passes `reseed`, which is what a differing seed is for.
-            max_search_seconds: Wall-clock cap for this one search. When
-                omitted, a cap is derived from this run's remaining time
-                budget if one was set; otherwise the search is uncapped.
+            max_search_seconds: Wall-clock cap for this one search, lowered
+                to this run's remaining time budget when one was set. When
+                omitted, the cap is the remaining time with a floor of 60
+                seconds; with no budget the search is uncapped. LLM4ED
+                instead uses the smallest of its configured, explicit and
+                remaining-time bounds. Once the budget is spent a new search
+                is refused (`budget_exhausted`).
             max_evaluations: Candidate-evaluation cap for this one search:
                 the number of candidates the instrument may score, every
                 instrument counted the same way (`diagnostics.evaluations`
@@ -5783,7 +6728,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             resume_from_run_id: A sealed run from this session to continue or
                 branch from. Omit `resume_iteration` to continue from its
                 latest eligible checkpoint; provide an iteration to roll back
-                and fork from that point.
+                and fork from that point. A resume inherits the parent's
+                seed, Sketch, surrogate and residual threshold, not its
+                `params`: an omitted parameter takes its default, so repeat
+                every parameter the parent set.
             resume_iteration: An exact eligible checkpoint iteration in the
                 parent run. It requires `resume_from_run_id`.
             reseed: Turn the resume into a branch: the search state restored
@@ -5895,11 +6843,18 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         `run_id` -- the value
         `submit_answer` asks for. `primary.now_selected` is the `run_id` whose
         law this run publishes if you submit nothing: your `select_node`
-        choice, otherwise the default rule over every search on the tree (on
-        raw ODE trajectories, once a system `verify_system` measured has a
-        result, the rule over the systems, and the `run_id` is the winning
-        system's member for this run's target), or null when that rule has
-        no answer. `diagnostics.selection_forward` is
+        choice, otherwise the default rule over the searches on the input
+        this search ran on (the raw input and each derived copy are ranked
+        separately; a `target_state` search of another state is not ranked,
+        and the rule stays on this run's target; on raw ODE trajectories,
+        once a system `verify_system`
+        measured has a result, the rule over the systems, and the `run_id` is
+        the winning system's member for this run's target), or null when that
+        rule has no answer. A law with a term that divides by, or takes the
+        log of, an identically zero expression is returned as a success but
+        has no algebraic reading: the default rule skips it, and
+        `submit_answer` and `select_node` refuse it (`undefined_term`).
+        `diagnostics.selection_forward` is
         the forward error of this search's sealed law, with its own
         coefficients, that the default rule ranks searches of different
         algorithms on: measured once after the search in a worker of at most
@@ -5915,7 +6870,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         `reason` when there is none). The id works where a `train_surrogate`
         id does: `surrogate` on a fresh lineage, `method="autograd"` with
         `surrogate_id` in `refine_candidate`, `ablate_candidate` and
-        `score_term_sets`, and `smooth_input(surrogate_id=)`. A network the
+        `score_term_sets`, `select_support`, and `smooth_input(surrogate_id=)`.
+        A network the
         cap cut short (`stopped_at_deadline` true) is not a complete
         training: kd refuses it as a search's surrogate and `train_surrogate`
         does not reuse it, while the autograd measurements take it. A network
@@ -5971,6 +6927,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         asset_failure = _untrusted_asset_failure(schema_of(algorithm), params or {})
         if asset_failure is None and algorithm == "llm4ed":
             asset_failure = _llm4ed_refusal(session.llm4ed, params or {})
+        if asset_failure is None:
+            missing_package = optional_package_unavailable(schema_of(algorithm))
+            if missing_package is not None:
+                asset_failure = _failure("instrument_unavailable", missing_package)
         if asset_failure is not None:
             return envelope(
                 "failure",
@@ -6227,32 +7187,23 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                     },
                     failures=[sketch_failure],
                 )
-        if algorithm == "llm4ed":
-            time_cap_seconds, exhausted = _llm4ed_cap(session, max_search_seconds)
-            if exhausted is not None:
-                return envelope(
-                    "failure",
-                    budget=session.budget(),
-                    diagnostics=prior_diagnostics,
-                    provenance={
-                        "instrument": algorithm,
-                        "dataset": dataset_id,
-                        "seed": seed,
-                        "lineage": lineage,
-                    },
-                    failures=[exhausted],
-                )
-        elif max_search_seconds is not None:
-            time_cap_seconds = float(max_search_seconds)
-        else:
-
-
-
-
-
-            remaining = session.budget()["remaining_seconds"]
-            time_cap_seconds = (
-                None if remaining is None else max(60.0, float(remaining))
+        time_cap_seconds, exhausted = (
+            _llm4ed_cap(session, max_search_seconds)
+            if algorithm == "llm4ed"
+            else _search_cap(session, max_search_seconds)
+        )
+        if exhausted is not None:
+            return envelope(
+                "failure",
+                budget=session.budget(),
+                diagnostics=prior_diagnostics,
+                provenance={
+                    "instrument": algorithm,
+                    "dataset": dataset_id,
+                    "seed": seed,
+                    "lineage": lineage,
+                },
+                failures=[exhausted],
             )
         runs_root = session.workspace / DEFAULT_RUNS_ROOT
         provenance_params: dict[str, Any] | None = None
@@ -6310,6 +7261,21 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             provenance_params = _parameter_provenance(
                 schema, requested, defaults_applied
             )
+            param_failure = _controller_param_refusal(requested)
+            if param_failure is not None:
+                return envelope(
+                    "failure",
+                    budget=session.budget(),
+                    diagnostics=prior_diagnostics,
+                    provenance={
+                        "instrument": algorithm,
+                        "dataset": dataset_id,
+                        "seed": seed,
+                        "params": provenance_params,
+                        "lineage": lineage,
+                    },
+                    failures=[param_failure],
+                )
             if resume_from_run_id is not None:
                 resolved_resume, resume_failure = _resolve_resume(
                     session,
@@ -6336,10 +7302,28 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                     )
                 lineage = _lineage_provenance(resolved_resume, session.workspace)
                 source = session.ledger.entry(resume_from_run_id)
-
-
-
-                parent_verify = session.search_verify.get(resume_from_run_id)
+                parent_verify = source.verify
+                if parent_verify == "unknown":
+                    return envelope(
+                        "failure",
+                        budget=session.budget(),
+                        diagnostics=prior_diagnostics,
+                        provenance={
+                            "instrument": algorithm,
+                            "dataset": dataset_id,
+                            "seed": seed,
+                            "params": provenance_params,
+                            "lineage": lineage,
+                        },
+                        failures=[
+                            _failure(
+                                "resume_source_unusable",
+                                f"run {resume_from_run_id!r}'s verification "
+                                "threshold was not recorded; start a fresh "
+                                "search with the desired verify policy",
+                            )
+                        ],
+                    )
                 if verify is None:
                     effective_verify = parent_verify
                 elif _threshold(verify) != _threshold(parent_verify):
@@ -6491,7 +7475,11 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 launch_chain = []
                 input_source = _resolve(session, dataset_id)
             launched_on = input_record(dataset_id, launch_chain)
-            if effective_sketch is not None and is_table(input_source):
+            if (
+                effective_sketch is not None
+                and is_table(input_source)
+                and effective_sketch["lhs_spec"]["order"] > 0
+            ):
                 return envelope(
                     "failure",
                     budget=session.budget(),
@@ -6499,7 +7487,9 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                     failures=[
                         _failure(
                             "sketch_unsupported",
-                            "Tabular input does not accept sketch; omit sketch",
+                            "A table takes a Sketch whose left-hand side is its "
+                            "target at order 0; this Sketch's left-hand side "
+                            f"has order {effective_sketch['lhs_spec']['order']}",
                         )
                     ],
                 )
@@ -6597,8 +7587,6 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 ),
             )
             outcome = isolated.outcome
-            if outcome.run_id is not None:
-                session.search_verify[outcome.run_id] = deepcopy(effective_verify)
             result, summary = _outcome_envelope(
                 outcome,
                 provenance_params,
@@ -6616,6 +7604,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 unavailable_reason=isolated.unavailable_reason,
                 sketch=effective_sketch,
                 surrogate=effective_surrogate,
+                resolved_config=isolated.resolved_config,
             )
 
 
@@ -6717,6 +7706,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 selection_forward=selection_forward,
                 reason=reason,
                 trained_surrogate=trained_surrogate,
+                verify=effective_verify,
             )
         except Exception as exc:
             result["failures"].append(_crashed(exc))
@@ -6736,6 +7726,22 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         except Exception as exc:
             result["failures"].append(_crashed(exc))
         if result["status"] != "success":
+            verdict = result["diagnostics"].get("sketch")
+            if (
+                result["status"] == "partial"
+                and verdict is not None
+                and not verdict["certified"]
+                and verdict["candidate"] is not None
+            ):
+                session.uncertified_candidates[result["provenance"]["run_id"]] = (
+                    deepcopy(
+                        {
+                            "dataset": dataset_id,
+                            "law": verdict["candidate"],
+                            "input": launched_on,
+                        }
+                    )
+                )
             return result
 
 
@@ -6775,6 +7781,12 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             key: deepcopy(launched_on[key])
             for key in ("dataset_id", "file_sha256", "chain")
         }
+        _note_pinn_field(
+            session,
+            result,
+            launch_chain,
+            {"the returned law": list(result["primary"]["law"]["support"])},
+        )
         answer_law, answer_provenance, decision, answer_system = _selected_answer(
             session, cast(str, _answer_version(session)) if auxiliary else dataset_id
         )
@@ -7037,10 +8049,27 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 ],
             )
         try:
+            model_kwargs = surrogate_training.training_model_kwargs(schema, requested)
+            mode = surrogate_training.selected_mode(schema, model_kwargs)
+            if not surrogate_training.uses_surrogate(mode, model_kwargs):
+                provider = model_kwargs.get("derivatives", mode["provider_kind"])
+                return envelope(
+                    "failure",
+                    budget=session.budget(),
+                    provenance=provenance,
+                    failures=[
+                        _failure(
+                            "surrogate_unsupported",
+                            f"{algorithm}/{mode['name']} with derivatives={provider!r} "
+                            "does not consume a derivative surrogate; select a "
+                            "surrogate-consuming mode/provider to train one",
+                        )
+                    ],
+                )
             requested = surrogate_training.resolve_training_params(
                 schema, requested, session.training_dtype
             )
-        except ValueError as exc:
+        except (KeyError, ValueError) as exc:
             return envelope(
                 "failure",
                 budget=session.budget(),
@@ -7238,11 +8267,15 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
         Abandoning is not deleting: the sealed run directory stays where it is
         and the row stays on the tree, marked. What changes is what may be
-        published. `primary.now_selected` reports which search the policy holds
-        once this one is gone, and is null when the default rule then has no
-        answer (no publishable search left on this dataset, or none it can
-        rank) -- this run then ends with no answer unless you submit one,
-        select one or run another search.
+        published. `primary.answer_changed` is false when this prune did not
+        touch the answer (the abandoned search was on another input than the
+        answer's and in no ODE system): the answer is then whatever the last
+        `now_selected` named, and `primary.now_selected` is null. When it is
+        true, `primary.now_selected` reports which search the policy holds
+        once this one is gone, and is null when the policy then holds no
+        answer (no publishable search left on that input, or none the default
+        rule can rank) -- this run then ends with no answer unless you submit
+        one, select one or run another search.
         """
         ledger = session.ledger
         refusal = _node_refusal(session, run_id, action="abandoned again")
@@ -7309,6 +8342,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 "run_id": run_id,
                 "reason": reason,
                 "now_selected": None if provenance is None else provenance["run_id"],
+
+
+
+                "answer_changed": recomputed,
             },
             provenance=_entry_provenance(node),
         )
@@ -7425,6 +8462,19 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 budget=session.budget(),
                 provenance=_entry_provenance(entry),
                 failures=[off_pin],
+            )
+        undefined = _undefined_law_failure(
+            run_id,
+            law["support"],
+            lambda: _citable_runs(session, lhs=law["lhs"], submitted=None),
+            cited=False,
+        )
+        if undefined is not None:
+            return envelope(
+                "failure",
+                budget=session.budget(),
+                provenance=_entry_provenance(entry),
+                failures=[undefined],
             )
 
 
@@ -7547,15 +8597,21 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             run_id: The search this answer is based on, taken from that
                 search's `provenance.run_id`. It must be a search from this
                 run that returned `status: success`; any other id is refused
-                and the eligible ones are listed. The law itself need not match
-                that search's output term for term -- dropping a negligible
-                term is fine -- but the answer must rest on a search that
-                actually ran and succeeded, and `lhs` must be that search's
-                `primary.law.lhs`, passed through unchanged.
-            refinement_id: The `primary.refinement_id` a `refine_candidate`
-                call on this same `run_id` returned, when `law` is the law it
-                returned: the answer then carries that refinement's
-                measurement. It must be that refinement's law exactly, term
+                and the eligible ones are listed. Either every term comes
+                from that search (dropping terms and equivalent expanded
+                spellings are allowed), or this run has a measurement receipt
+                for the exact term set on that search's input or a registered
+                input derived from the same root. Receipt matching keeps term
+                spellings and multiplicity, ignores order, and admits neither
+                unmeasured subsets nor unions of separate fits. `lhs`
+                must be that search's `primary.law.lhs`, passed through
+                unchanged.
+            refinement_id: A receipt from `refine_candidate` (primary),
+                `score_term_sets` / `select_support` (each fitted entry), or
+                `ablate_candidate` (baseline or nonempty reduced row) on this
+                same `run_id`. Pass its accompanying `law` unchanged: the
+                answer then carries that fit's measurement.
+                It must be that receipt's law exactly, term
                 spellings included (`mul(u,u_x)` for a returned `u*u_x` is
                 another law); anything else is refused.
             reason: Why you make this call, in your own words. It is
@@ -7575,7 +8631,12 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         that only spells a term another way included, is recorded as edited,
         with no measurement borrowed from either.
         `provenance.producer_ref` says which (`kind` `refinement`, `search` or
-        `edited`), beside `cited_run_id`.
+        `edited`), beside `cited_run_id`. Support provenance is separate:
+        `provenance.answer_origin` is `search_terms`, `search_terms_dropped`
+        or `receipt_measured`, with the authorizing search or receipt in
+        `origin_ref`. Receipt inputs must still verify against this run's
+        registration. Edited coefficients may use a measured support but
+        carry no measured NMSE; omit `refinement_id` for such edits.
 
         A successful submission ends this run: no further model turn happens
         after it. Any other tool you called in the same turn still runs, because
@@ -7644,8 +8705,37 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             return envelope(
                 "failure", budget=session.budget(), failures=[producer_failure]
             )
+        producer = cast(dict[str, Any], producer)
+        origin: dict[str, Any] = {}
+        try:
+            origin_failure = _undefined_submission_failure(
+                law["support"]
+            ) or _undefined_law_failure(
+                run_id,
+                session.sealed_laws[run_id]["support"],
+                lambda: _citable_runs(
+                    session,
+                    lhs=session.sealed_lhs[run_id],
+                    submitted=list(law["support"]),
+                ),
+                cited=True,
+            )
+            if origin_failure is None:
+                origin, origin_failure = _submission_origin(
+                    session, law, run_id, producer
+                )
+        except ValueError as exc:
+            origin_failure = _failure("invalid_term", str(exc))
+        if origin_failure is not None:
+            return envelope(
+                "failure",
+                budget=session.budget(),
+                provenance=provenance,
+                failures=[origin_failure],
+            )
         provenance = {
             **provenance,
+            **origin,
             "nmse": nmse,
             "producer_ref": producer,
             "cited_run_id": run_id,
@@ -7726,6 +8816,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         pinn_residual_weight: float = 1.0,
         evaluation_input_id: str | None = None,
         method: str = "finite_diff",
+        max_order: int = 3,
         trim: Trim = 0,
         surrogate_id: str | None = None,
         weak: dict[str, Any] | None = None,
@@ -7741,7 +8832,8 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 succeeded this run. Its `primary.law` is the candidate unless
                 `law` or `terms` replaces it, its data are refitted, and its
                 `lhs` is kept, so the refined law can be submitted with this
-                same `run_id`.
+                same `run_id` when every term of it is a term of that
+                search's law.
             law: A law to refit instead, in the shape of `primary.law`
                 (`support`, `coefficients`, `lhs`), for example that law with
                 a term removed. Its `lhs` must be the search's
@@ -7754,7 +8846,9 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 (`mul(u,u_x)`). The refined law keeps the terms as written
                 and in this order, and a term counts as one of the search's
                 when kd's law-term identity says so, whatever its spelling.
-                Pass either `law` or `terms`, not both.
+                Pass either `law` or `terms`, not both. A refit with added
+                terms measures a proposed support; submit its law and receipt
+                on this run_id through the receipt-measured origin route.
             small_term_rtol: Grid data only, in [0, 1). Before the refit,
                 drop each term whose coefficient is smaller in magnitude than
                 this fraction of the largest one; the largest term always
@@ -7800,31 +8894,37 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 that input or an input derived from that root this run (a
                 low-passed copy, a network field); any other is refused.
                 Not with `pinn_epochs`.
-            method: `"finite_diff"` (default), `"autograd"` or `"weak"`.
+            method: A registered measurement method (listed below), default
+                `"finite_diff"`. Built-in `"autograd"` and `"weak"` behave as follows.
                 `"autograd"` takes field values and derivatives from the
                 model `surrogate_id` names, which has to be trained on the
                 measurement input itself (not on an input sampled from it).
                 `"weak"` integrates the input against test-function windows
-                (`kd-weak-v1`: one field, one spatial axis, the terms one,
+                (`kd-weak-v2`: one field, one spatial axis, first- or
+                second-order time LHS, the terms one,
                 the field, its square and cube as `n2`/`n3` of it or as the
                 raw products `mul(u,u)` and `mul(mul(u,u),u)`, its spatial
-                derivatives of order 1 to 3 and `mul` of it with its first
+                derivatives of order 1 to 4 and `mul` of it with its first
                 derivative); a term outside that class is refused, never
                 fitted another way.
                 Neither takes `savgol_window`, `lowpass_modes` or
                 `pinn_epochs`; derive a smoothed input and measure that.
-            trim: Finite differences only: 0 (default), a number of grid
+            max_order: Derivative cap (default 3). For fourth-order weak
+                terms use 4 and weak={"bump_degree": 6}. Finite-difference
+                frames retain kd's cap of 3; use nested diff2_x(u_xx) there.
+            trim: For methods declaring row selection: 0 (default), a number of grid
                 points to drop at both ends of every axis, a mapping from
                 axis name to one, or `"by_order"` (the stencil footprint of
                 the terms and the left-hand side). Derivatives are taken on
                 the whole input first.
-            surrogate_id: With `method="autograd"`, the model to
+            surrogate_id: For methods requiring a surrogate, the model to
                 differentiate: a `smooth_input(method="network")` or
                 `train_surrogate` id.
             weak: With `method="weak"`, any of `half_widths` (axis name to
                 a support half-width in grid points), `spectrum_tau`
                 (default 0.03), `noise_correction` (`"none"` or
-                `"gaussian"`) and `noise_sigma`.
+                `"gaussian"`), `noise_sigma` and `bump_degree` (default 4;
+                use 6 for fourth-order spatial terms).
             reason: Why you make this call, in your own words. It is
                 recorded with the call on this workspace's policy tree
                 (`tree.jsonl`) and shown in the report. Optional; an empty
@@ -7833,7 +8933,9 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         On grid data the kept terms are fitted once on the measurement input
         in the frame `method` and `trim` choose (by default least squares on
         the whole grid with finite-difference derivatives, the frame of a
-        search's `platform_nmse`). On a table the numeric constants inside
+        search's `platform_nmse`). A grid law with no time-derivative left-
+        hand side (homogeneous or order zero) is refused as `unsupported_form`.
+        On a table the numeric constants inside
         the terms are refitted and the outer coefficients solved again;
         nothing is pruned, smoothed or framed, so those parameters keep
         their defaults. Nothing is searched, and the call counts against no
@@ -7851,7 +8953,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         names this refinement's receipt, which records the law, the source
         search, whether its support came from that search
         (`search-derived`) or not (`agent-proposed`), both inputs and the
-        frame. `diagnostics` holds `nmse`, `frame` (a tag of what the number
+        frame. A refit with added terms measures a proposed support;
+        submit_answer admits that exact term set through `receipt_measured`
+        while preserving its `agent-proposed` support origin. `diagnostics`
+        holds `nmse`, `frame` (a tag of what the number
         measures: untrimmed finite differences on unsmoothed grid data give
         the frame of a search's `platform_nmse`, a Savitzky-Golay window
         `kd-evaluate-terms-full-grid-savgol<window>-v1`, a low-pass
@@ -7917,7 +9022,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 "pinn_residual_weight": pinn_residual_weight,
             },
             evaluation_input_id=evaluation_input_id,
-            frame=(method, trim, weak, surrogate_id),
+            frame=(method, trim, weak, surrogate_id, max_order),
         )
         return _logged(
             session,
@@ -7960,7 +9065,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         dataset_id: str,
         lowpass_modes: int | dict[str, int] | Literal["auto"] | None = None,
         time_window: int = 0,
-        method: Literal["lowpass", "network"] = "lowpass",
+        method: Literal["lowpass", "network", "savgol"] = "lowpass",
         surrogate_id: str | None = None,
         network_recipe: dict[str, Any] | None = None,
         seed: int = 0,
@@ -7969,11 +9074,12 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         max_counts: int = 8,
         max_seconds: int | None = None,
         reason: str | None = None,
+        savgol_window: int | None = None,
     ) -> dict[str, Any]:
         """Write a smoothed copy of a grid file input as a new file input and
         register it under an id derived from the parent's: a low-passed copy
-        (`method="lowpass"`), or the field of a neural network fitted to the
-        data (`method="network"`).
+        (`method="lowpass"`), a Savitzky-Golay copy (`method="savgol"`), or
+        the field of a neural network fitted to the data (`method="network"`).
 
         Args:
             dataset_id: The file input to smooth, a `file-v1-...` id with a
@@ -7995,7 +9101,16 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             time_window: Low-pass only. 0, or an odd window of 5 or more: a
                 Savitzky-Golay filter (polynomial order 3) applied along the
                 left-hand side's axis after the spectral pass.
-            method: `"lowpass"` (default) or `"network"`.
+            method: `"lowpass"` (default), `"savgol"` or `"network"`.
+            savgol_window: Savitzky-Golay only, required with that method.
+                An odd window of 5 or more, at most every grid axis's length.
+                Filters every field along every axis, including the time axis,
+                with polynomial order 3 and polynomial edge handling
+                (`mode="interp"`). This is the field
+                `refine_candidate(savgol_window=...)` refits on the parent; a
+                refit of a search on this copy takes no `savgol_window`, which
+                would smooth it a second time. Low-pass and network arguments
+                are refused with this method.
             surrogate_id: Network only. A model already registered for this
                 input (a `smooth_input` network or a `train_surrogate`
                 surrogate trained on it): its field is sampled and nothing
@@ -8004,9 +9119,16 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 of kd's `FieldRecipe`: `name`, `version`, `hidden_sizes`
                 (a list of layer widths), `activation` (`"tanh"`, `"sin"` or
                 `"relu"`), `lr`, `max_epochs`, `patience` (null: none),
-                `val_ratio`, `restore_best`. Omitted, kd's `dlga_nn_1`
-                (five sine layers of 50, 50,000 epochs), which takes a long
-                time on a CPU; give `max_seconds` what the epochs need.
+                `val_ratio`, `restore_best`, and optionally `training_dtype`
+                (`"float32"` or `"float64"`, the precision the network is
+                trained in; with the same seed the two precisions start from
+                different weights, so they are different networks). A
+                missing or null `training_dtype` takes the run's precision,
+                or the data's dtype when the run sets none; a value that
+                differs from the run's precision is refused. Omitted, kd's
+                `dlga_nn_1` (five sine layers of 50, 50,000 epochs), which
+                takes a long time on a CPU; give `max_seconds` what the
+                epochs need.
             seed: Network only. The training seed; another seed is another
                 network.
             terms: With `lowpass_modes="auto"`: the candidate terms whose
@@ -8044,8 +9166,17 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         and `submit_answer`), and `list_datasets` lists it with its
         `derived_from`.
 
+        A Savitzky-Golay copy also keeps the parent's axes, fields, shape,
+        left-hand side and periodic flags, including on multi-field grids;
+        its id is `<dataset_id>+savgol<savgol_window>`. Pass this id as
+        `input_id` to `score_term_sets` or `ablate_candidate` to measure
+        their finite-difference fits on the smoothed field with the same
+        method and trim as an inline Savitzky-Golay refit of the parent.
+
         Returns an envelope whose `primary` holds `dataset_id` (the derived
-        id), `derived_from` and `reused`. A low-pass adds `lowpass_modes`,
+        id), `derived_from` and `reused`. A Savitzky-Golay copy adds
+        `method="savgol"` and `savgol` (`window_length`, `polyorder`).
+        A low-pass adds `lowpass_modes`,
         `time_window` and `energy_kept`: for each smoothed axis, the fraction
         of the left-hand side field's spectral energy held by the kept modes,
         averaged over the other axes; `diagnostics.spectrum` gives, for each
@@ -8088,6 +9219,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             lowpass_modes=lowpass_modes,
             time_window=time_window,
             method=method,
+            savgol_window=savgol_window,
             surrogate_id=surrogate_id,
             network_recipe=network_recipe,
             seed=seed,
@@ -8108,6 +9240,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         law: dict[str, Any] | None = None,
         input_id: str | None = None,
         method: str = "finite_diff",
+        max_order: int = 3,
         weak: dict[str, Any] | None = None,
         max_seconds: int = 60,
         trim: Trim = 0,
@@ -8119,8 +9252,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         carries.
 
         Args:
-            run_id: The search whose law is measured, a search that
-                succeeded this run (its `provenance.run_id`).
+            run_id: The search whose law is measured: a successful search
+                or a partial Sketch search with a sealed candidate this run
+                (its `provenance.run_id`). Measuring an uncertified candidate
+                does not certify it or make it eligible for submission.
             law: A law to measure instead, in the shape of `primary.law`,
                 with that search's `lhs`; its terms are in KD's term notation
                 (as in `refine_candidate`), and each row names its term as
@@ -8128,17 +9263,22 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             input_id: The input to measure on: omitted, the input the search
                 ran on; otherwise its root or an input derived from that
                 root this run. Any other is refused.
-            method: `"finite_diff"` (default), `"autograd"` (with
+            method: A registered measurement method (listed below), default
+                `"finite_diff"`. Built-ins include `"autograd"` (with
                 `surrogate_id`, a model trained on this input) or `"weak"`
                 (test-function windows; a term outside kd's weak class is
                 refused, never fitted another way).
             weak: With `method="weak"`: `half_widths`, `spectrum_tau`,
-                `noise_correction`, `noise_sigma`.
+                `noise_correction`, `noise_sigma`, `bump_degree` (default 4;
+                use 6 with max_order=4 for fourth-order spatial terms).
             max_seconds: Wall-clock cap of the call; it is stopped at it and
                 keeps nothing.
-            trim: Finite differences only: 0, an integer, a per-axis
+            max_order: Derivative cap (default 3). For fourth-order weak
+                terms use 4 and weak={"bump_degree": 6}. Finite-difference
+                frames retain kd's cap of 3; use nested diff2_x(u_xx) there.
+            trim: For methods declaring row selection: 0, an integer, a per-axis
                 mapping or `"by_order"`.
-            surrogate_id: With `method="autograd"`, the model to
+            surrogate_id: For methods requiring a surrogate, the model to
                 differentiate.
             reason: Why you make this call, in your own words. It is
                 recorded with the call on this workspace's policy tree
@@ -8158,6 +9298,9 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         importance. `diagnostics.frame` is kd's resolved frame and
         `diagnostics.weak` the weak windows. A large rise says a term
         carries the fit in this frame, not that it is physically present.
+        On a successful search, the baseline and each finite nonempty row
+        carry their fitted `law` and `refinement_id` for submission on that
+        run_id. An uncertified search or the empty model grants no receipt.
         """
         reason_failure = _reason_refusal(reason)
         if reason_failure is not None:
@@ -8170,7 +9313,7 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             run_id=run_id,
             law=law,
             input_id=input_id,
-            frame=(method, trim, weak, surrogate_id),
+            frame=(method, trim, weak, surrogate_id, max_order),
             max_seconds=max_seconds,
         )
         return _logged(
@@ -8184,9 +9327,12 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
 
     def score_term_sets(
         run_id: str,
-        term_sets: list[list[str]],
+        term_sets: list[list[str]] | None = None,
+        terms: list[str] | None = None,
+        subsets_up_to: int | None = None,
         input_id: str | None = None,
         method: str = "finite_diff",
+        max_order: int = 3,
         trim: Trim = 0,
         surrogate_id: str | None = None,
         weak: dict[str, Any] | None = None,
@@ -8204,8 +9350,18 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
                 keeps its terms as written; a set with a term kd cannot read
                 fails alone, and the other sets are fitted as they would be
                 on their own.
+            terms: Instead of `term_sets`, a library of distinct terms whose
+                subsets are fitted: every subset of 1 to `subsets_up_to` of
+                them, each keeping the library's order (seven terms up to 3
+                are 63 sets). One call scores at most 200 sets, each one
+                entry of the reply; a larger count is refused.
+            subsets_up_to: The largest subset size, with `terms` only; an
+                integer from 1 to the number of terms.
             input_id: As in `ablate_candidate`.
             method: As in `ablate_candidate`.
+            max_order: Derivative cap (default 3). For fourth-order weak
+                terms use 4 and weak={"bump_degree": 6}. Finite-difference
+                frames retain kd's cap of 3; use nested diff2_x(u_xx) there.
             trim: As in `ablate_candidate`.
             surrogate_id: As in `ablate_candidate`.
             weak: As in `ablate_candidate`.
@@ -8218,26 +9374,134 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         windows, rank and column count, null otherwise) or null, `failure` and
         `failure_kind` (`refused`: a term the frame rejects; `fit_failed`:
         the fit failed). A set with no fit has no score; it is not a zero.
-        `diagnostics.frame` is the one frame every set was fitted in.
+        With `terms`, the entries are ordered by `nmse` instead, lowest
+        first and the sets with no score last, and each carries `size`, its
+        number of terms. `diagnostics.frame` is the one frame every set was
+        fitted in. Each finite fit also carries `law` and `refinement_id`:
+        submit those on the same run_id to retain its measurement.
         """
         reason_failure = _reason_refusal(reason)
         if reason_failure is not None:
             return envelope(
                 "failure", budget=session.budget(), failures=[reason_failure]
             )
+        sets, sets_failure = _term_sets_argument(term_sets, terms, subsets_up_to)
+        if sets_failure is not None:
+            return envelope("failure", budget=session.budget(), failures=[sets_failure])
         started = session.workers_started
         result = _score_term_sets(
             session,
             run_id=run_id,
-            term_sets=term_sets,
+            term_sets=sets,
             input_id=input_id,
-            frame=(method, trim, weak, surrogate_id),
+            frame=(method, trim, weak, surrogate_id, max_order),
             max_seconds=max_seconds,
+            ranked=terms is not None,
         )
         return _logged(
             session,
             result,
             verb="score_term_sets",
+            reason=reason,
+            started=started,
+            run_id=run_id,
+        )
+
+    def select_support(
+        run_id: str,
+        term_sets: list[list[str]] | None = None,
+        terms: list[str] | None = None,
+        subsets_up_to: int | None = None,
+        input_id: str | None = None,
+        method: str = "finite_diff",
+        max_order: int = 3,
+        trim: Trim = 0,
+        surrogate_id: str | None = None,
+        weak: dict[str, Any] | None = None,
+        max_seconds: int = 60,
+        reason: str | None = None,
+        ratio: float = 2.0,
+    ) -> dict[str, Any]:
+        """Score term sets in one frame and choose the fewest terms within
+        `ratio` times the lowest NMSE, breaking size ties by lower NMSE.
+
+        Args:
+            run_id: The successful search whose input is measured.
+            term_sets: Explicit supports to fit, as in `score_term_sets`.
+            terms: Instead of `term_sets`, a library of distinct terms in
+                KD's term notation; fit every subset of 1 to `subsets_up_to`.
+            subsets_up_to: Largest subset size with `terms`, an integer
+                from 1 to the number of terms.
+            input_id: As in `score_term_sets`.
+            method: As in `score_term_sets`.
+            max_order: Derivative cap (default 3). For fourth-order weak
+                terms use 4 and weak={"bump_degree": 6}. Finite-difference
+                frames retain kd's cap of 3; use nested diff2_x(u_xx) there.
+            trim: As in `score_term_sets`.
+            surrogate_id: As in `score_term_sets`.
+            weak: As in `score_term_sets`.
+            max_seconds: Wall-clock cap of the call.
+            reason: Why these supports are being compared; omit if absent.
+            ratio: Finite multiplier of the lowest NMSE, at least 1;
+                defaults to 2.0. No absolute NMSE floor is applied.
+
+        Returns an envelope whose `primary` holds `evidence_id`, the complete
+        `entries` ranked by NMSE (unscored last), `ratio`, `lowest`, `window`
+        (`ratio * lowest`) and `chosen`, the selected entry with `terms`,
+        `fit`, `size`, `failure` and `failure_kind`. Every entry has `size`.
+        Null fits or null NMSEs cannot be chosen; if none is scored, the
+        result is `partial` with the failure `no_scored_sets`: the table and
+        its `evidence_id` stand, with `chosen`, `lowest` and `window` null.
+        `diagnostics.frame` describes the common frame.
+        Each scored nonempty fit carries `law` and `refinement_id` for
+        `submit_answer` on the same run_id, through the receipt-measured
+        route when the search did not return those terms. You can also
+        refine the chosen terms in another frame before submitting.
+        """
+        reason_failure = _reason_refusal(reason)
+        if reason_failure is not None:
+            return envelope(
+                "failure", budget=session.budget(), failures=[reason_failure]
+            )
+        if not math.isfinite(ratio) or ratio < 1:
+            return envelope(
+                "failure",
+                budget=session.budget(),
+                failures=[
+                    _failure("invalid_argument", "ratio must be finite and at least 1")
+                ],
+            )
+        sets, sets_failure = _term_sets_argument(term_sets, terms, subsets_up_to)
+        if sets_failure is not None:
+            return envelope("failure", budget=session.budget(), failures=[sets_failure])
+        started = session.workers_started
+        result = _score_term_sets(
+            session,
+            run_id=run_id,
+            term_sets=sets,
+            input_id=input_id,
+            frame=(method, trim, weak, surrogate_id, max_order),
+            max_seconds=max_seconds,
+            ranked=True,
+            operation="select_support",
+        )
+        result["provenance"]["ratio"] = ratio
+        if result["status"] == "success":
+            result["primary"].update(
+                _support_selection(result["primary"]["entries"], ratio)
+            )
+            if result["primary"]["chosen"] is None:
+
+
+
+                result["status"] = "partial"
+                result["failures"].append(
+                    _failure("no_scored_sets", "no term set has a fitted NMSE")
+                )
+        return _logged(
+            session,
+            result,
+            verb="select_support",
             reason=reason,
             started=started,
             run_id=run_id,
@@ -8256,8 +9520,10 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         forward from the first time slice ends from the data.
 
         Args:
-            run_id: The search whose law is checked, a search that succeeded
-                this run.
+            run_id: The search whose law is checked: a successful search or
+                a partial Sketch search with a sealed candidate this run.
+                Measuring it does not change certification or submission
+                eligibility.
             law: A law to check instead, in the shape of `primary.law`, with
                 that search's `lhs` and a number for every coefficient; its
                 terms are in KD's term notation (as in `refine_candidate`).
@@ -8593,6 +9859,54 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
             if schema["config_artifact_keys"]
         ),
     )
+    providers = (
+        " Registered derivative providers by platform mode: "
+        + "; ".join(
+            f"{schema['algorithm']}/{mode['name']}: "
+            + ", ".join(mode["derivative_providers"])
+            for schema in instrument_schemas()
+            for mode in schema["modes"]
+            if mode["derivative_service"] == "platform"
+        )
+        + ". Select with params.derivatives."
+    )
+    run_discovery.__doc__ = run_discovery.__doc__ + providers
+    train_surrogate.__doc__ = (
+        train_surrogate.__doc__
+        + " Derivative providers by surrogate-consuming mode: "
+        + "; ".join(
+            f"{schema['algorithm']}/{mode['name']}: "
+            + ", ".join(
+                mode["derivative_providers"]
+                if mode["derivative_service"] == "platform"
+                else [mode["provider_kind"]]
+            )
+            for schema in instrument_schemas()
+            if schema["config_artifact_keys"]
+            for mode in schema["modes"]
+            if mode["requires_surrogate"]
+        )
+        + ". Select with params.derivatives."
+    )
+    methods = (
+        " Registered measurement methods: "
+        + "; ".join(
+            f"{name}: {kd.refit_method(name).description} "
+            f"(row selection: {kd.refit_method(name).row_selection}; "
+            f"stencil trim: {kd.refit_method(name).stencil_trim}; "
+            f"surrogate: {kd.refit_method(name).surrogate}; "
+            f"weak options: {kd.refit_method(name).weak_options})"
+            for name in kd.refit_methods()
+        )
+        + "."
+    )
+    for measurement in (
+        refine_candidate,
+        ablate_candidate,
+        score_term_sets,
+        select_support,
+    ):
+        measurement.__doc__ = cast(str, measurement.__doc__) + methods
     return [
         list_datasets,
         run_discovery,
@@ -8610,4 +9924,5 @@ def make_tools(session: Session) -> list[Callable[..., Any]]:
         make_sketch,
         set_sketch,
         finish_without_answer,
+        select_support,
     ]

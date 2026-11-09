@@ -17,7 +17,14 @@ from kd.harness.consensus_report import (
     write_consensus_artifact,
 )
 from kd.harness.consensus_verify import MemberVerification, VerificationStatus
-from kd.harness.episode import SKETCH_SIDECAR_FILENAME, EpisodeOutcome, run_episode
+from kd.harness.episode import (
+    REPORT_SIDECAR_DIRNAME,
+    RESULT_SIDECAR_FILENAME,
+    SKETCH_SIDECAR_FILENAME,
+    EpisodeOutcome,
+    EpisodeOutputError,
+    run_episode,
+)
 from kd.harness.jobs import JobResult, run_jobs
 from kd.harness.plan import PLAN_HASH_SCHEME, ExperimentPlan, PlanEntry
 from kd.harness.recording import RecordingOptions
@@ -45,12 +52,15 @@ __all__ = [
     "CONSENSUS_ARTIFACT_TAG",
     "ELIGIBILITY_RULES_VERSION",
     "PLAN_HASH_SCHEME",
+    "REPORT_SIDECAR_DIRNAME",
+    "RESULT_SIDECAR_FILENAME",
     "SKETCH_SIDECAR_FILENAME",
     "STRATUM_RULES_VERSION",
     "ConsensusArtifactError",
     "ConsensusPolicy",
     "ConsensusReport",
     "EpisodeOutcome",
+    "EpisodeOutputError",
     "EvidenceStore",
     "EvidenceStoreError",
     "ExperimentPlan",

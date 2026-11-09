@@ -28,6 +28,7 @@ from kd.viz.style import (
     CONTEXT,
     DISCOVERED,
     DPI,
+    FONTSIZE,
     OBSERVED,
     PANEL_H,
     PANEL_W,
@@ -46,7 +47,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RESIDUAL_FIGSIZE = (3 * PANEL_W, PANEL_H)
-_WARNING_FONTSIZE = 12
 
 
 def plot_pde_residual_field(
@@ -88,7 +88,9 @@ def plot_pde_residual_field(
                 infer_grid=infer_grid,
             )
             if note is not None:
-                fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
+                fig.suptitle(
+                    f"Search fit: {_fit_target_label(result)}", fontsize=FONTSIZE
+                )
             _annotate_spatial_slice(fig, dataset, warnings)
         return fig, warnings
 
@@ -140,7 +142,7 @@ def plot_pde_residual_field(
             _line_fallback(axes[2], residual_1d, f"Residual ({_RESIDUAL_SIGN})")
 
     if note is not None:
-        fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=11)
+        fig.suptitle(f"Search fit: {_fit_target_label(result)}", fontsize=FONTSIZE)
     return fig, warnings
 
 

@@ -67,9 +67,18 @@ def resolve_field_tier(
 
 
 
-    from kd.search.registry import EXTENSION_CONFIG_KEY
+    from kd.search.registry import (
+        COMPONENT_DEPENDENCIES_CONFIG_KEY,
+        DERIVATIVE_PROVIDER_CONFIG_KEY,
+        EXTENSION_CONFIG_KEY,
+    )
 
-    if field in (SKETCH_CONFIG_KEY, EXTENSION_CONFIG_KEY):
+    if field in (
+        SKETCH_CONFIG_KEY,
+        EXTENSION_CONFIG_KEY,
+        DERIVATIVE_PROVIDER_CONFIG_KEY,
+        COMPONENT_DEPENDENCIES_CONFIG_KEY,
+    ):
         return "identity_breaking"
     for knob in plugin_cls.descriptor.knobs:
         if knob.name == field:
@@ -103,13 +112,9 @@ def _change_detail(
 
 def _render_change(field: str, stored: object, live: object) -> str:
     if stored is _MISSING:
-        return (
-            f"{field} (present only in the live config, absent from the checkpoint)"
-        )
+        return f"{field} (present only in the live config, absent from the checkpoint)"
     if live is _MISSING:
-        return (
-            f"{field} (present only in the checkpoint, absent from the live config)"
-        )
+        return f"{field} (present only in the checkpoint, absent from the live config)"
     return f"{field} (stored {_short(stored)} -> live {_short(live)})"
 
 
@@ -266,15 +271,34 @@ def check_resume_config(
 def _refuse_extension_without_snapshot(
     algorithm: str, live_config: Mapping[str, Any]
 ) -> None:
-    from kd.search.registry import EXTENSION_CONFIG_KEY
+    from kd.search.registry import (
+        COMPONENT_DEPENDENCIES_CONFIG_KEY,
+        DERIVATIVE_PROVIDER_CONFIG_KEY,
+        EXTENSION_CONFIG_KEY,
+    )
 
-    if EXTENSION_CONFIG_KEY not in live_config:
+    fields = [
+        key
+        for key in (
+            EXTENSION_CONFIG_KEY,
+            DERIVATIVE_PROVIDER_CONFIG_KEY,
+            COMPONENT_DEPENDENCIES_CONFIG_KEY,
+        )
+        if key in live_config
+    ]
+    if not fields:
         return
-    live = live_config[EXTENSION_CONFIG_KEY]
-    rendered = _render_change(EXTENSION_CONFIG_KEY, _MISSING, live)
     raise _tier_error(
-        _build_message(algorithm, [rendered], [], False),
-        [_change_detail(EXTENSION_CONFIG_KEY, "identity_breaking", _MISSING, live)],
+        _build_message(
+            algorithm,
+            [_render_change(key, _MISSING, live_config[key]) for key in fields],
+            [],
+            False,
+        ),
+        [
+            _change_detail(key, "identity_breaking", _MISSING, live_config[key])
+            for key in fields
+        ],
     )
 
 

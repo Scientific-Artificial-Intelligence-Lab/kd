@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from torch import Tensor
 
-from kd.core.equation import Form
+from kd.core.equation import Form, LhsSpec
 from kd.core.equation.library import TermLibrarySpec
 from kd.core.equation.sketch import Sketch
 from kd.core.evaluator import EvaluationResult, Evaluator
@@ -21,6 +21,8 @@ from kd.search.descriptor import (
     InstrumentDescriptor,
     InstrumentMode,
     Knob,
+    ResourceHints,
+    RuntimeRequirements,
     Segmentation,
 )
 from kd.search.protocol import PlatformComponents
@@ -37,23 +39,21 @@ from kd.search.pysr.sketch_backend import (
 )
 from kd.search.recorder import VizRecorder, log_whitelisted_metrics
 from kd.search.result import invalid_evaluation_result
+from kd.search.term_utils import refuse_target_derivatives
 from kd.viz.extension import PlotInfo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
+    from kd.data.schema import PDEDataset
     from kd.search.protocol import DiscoveryTask
+    from kd.search.registry import DerivativeSelection
 
 logger = logging.getLogger(__name__)
 
 ALGORITHM_NAME = "pysr"
 INITIAL_BEST_EXPRESSION = ""
 INITIAL_BEST_SCORE = float("inf")
-
-
-
-_MIN_ATOMIC_ORDER = 1
-_LHS_ORDER = 1
 
 
 
@@ -124,6 +124,8 @@ class PySRPlugin:
 
 
 
+    derivative_selection: DerivativeSelection | None = None
+
     score_kind: ClassVar[str] = "NMSE"
     score_direction: ClassVar[Literal["min", "max"]] = "min"
     headline_coefficient_source: ClassVar[Literal["native", "platform_refit"]] = (
@@ -145,9 +147,21 @@ class PySRPlugin:
             "mode) or dataset-derived feature columns (tabular mode)."
         ),
         cost_class="medium",
+        requirements=RuntimeRequirements(
+            extras=("pysr",),
+            import_names=("pysr",),
+            environment=(),
+        ),
         modes=(
             InstrumentMode(
                 name="default",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=None,
+                    memory_basis="unknown",
+                    memory_platform=None,
+                    memory_context="Not measured.",
+                ),
                 field_names=("u",),
                 spatial_axes=("x", "y"),
                 names_from="terms",
@@ -155,16 +169,32 @@ class PySRPlugin:
                 forms=frozenset({Form.EVOLUTION}),
                 topologies=frozenset({DataTopology.GRID}),
                 provider_kind="finite_diff",
+                derivative_service="platform",
                 sketch=_SKETCH_LEVELS,
-                lhs_orders=frozenset({1}),
+                lhs_orders=frozenset({1, 2}),
+                order_params={
+                    1: {"target_lhs_order": 1},
+                    2: {"target_lhs_order": 2},
+                },
             ),
             InstrumentMode(
                 name="tabular",
+                resources=ResourceHints(
+                    preferred_device="cpu",
+                    memory_estimate_gb=1.5,
+                    memory_basis="measured",
+                    memory_platform="linux",
+                    memory_context=(
+                        "Whole-process peak RSS of one tabular fit including "
+                        "PySR's Julia backend (CPU), 2026-10-03."
+                    ),
+                ),
                 default_overrides={"unary_operators": ["sin", "cos", "exp", "log"]},
-                refused_fields={"terms": "any"},
+                refused_fields={"terms": "any", "target_lhs_order": "non_default"},
                 forms=frozenset({Form.REGRESSION}),
                 topologies=frozenset({DataTopology.TABULAR}),
                 provider_kind="none",
+                derivative_service="none",
                 description="Scalar symbolic regression on tabular X -> y data.",
                 lhs_orders=frozenset({0}),
             ),
@@ -210,7 +240,7 @@ class PySRPlugin:
 
         segmentation=Segmentation(archive="progress", unit="iterations", reseed=True),
         identity_breaking_fields=frozenset(
-            {"terms", "binary_operators", "unary_operators"}
+            {"terms", "binary_operators", "unary_operators", "target_lhs_order"}
         ),
         config_artifact_keys=frozenset(),
         surrogate_fields=frozenset(),
@@ -246,6 +276,10 @@ class PySRPlugin:
             if mode == "tabular"
             else PySRConfig()
         )
+        if mode == "tabular" and self._config.target_lhs_order != 1:
+            raise ValueError(
+                "target_lhs_order is a PDE-only setting; omit it for tabular data"
+            )
         self._library: TermLibrarySpec = TermLibrarySpec.from_terms(
             self._compile_task(task)
         )
@@ -280,7 +314,16 @@ class PySRPlugin:
 
 
 
+    def refuse_lhs_terms(self, dataset: PDEDataset) -> None:
+        if self._mode == "tabular":
+            return
+        refuse_target_derivatives(
+            self._library.terms,
+            LhsSpec(dataset.lhs_field, dataset.lhs_axis, dataset.lhs_order),
+        )
+
     def prepare(self, components: PlatformComponents) -> None:
+        self.refuse_lhs_terms(components.dataset)
         if components.evaluator is None:
             raise TypeError(
                 "PySRPlugin requires components.evaluator (Theta build + "
@@ -433,8 +476,8 @@ class PySRPlugin:
         )
         return DerivativeReqs(
             provider_kind="finite_diff",
-            max_atomic_order=max(_MIN_ATOMIC_ORDER, max_order),
-            lhs_order=_LHS_ORDER,
+            max_atomic_order=max(self._config.target_lhs_order, max_order),
+            lhs_order=self._config.target_lhs_order,
             needs_surrogate=False,
         )
 

@@ -14,11 +14,10 @@ from kd.core.executor.context import ExecutionContext
 from kd.core.executor.surrogate_context import SurrogateContext
 from kd.core.expr import FunctionRegistry, PythonExecutor
 from kd.core.interrupt import SearchInterrupted
-from kd.core.linear_solve.least_squares import LeastSquaresSolver
+from kd.core.linear_solve import sparse_solver
 from kd.core.oom import is_cpu_alloc_failure
 from kd.core.platform.requirements import DerivativeReqs
-from kd.data.derivatives.autograd import AutogradProvider
-from kd.data.derivatives.finite_diff import FiniteDiffProvider
+from kd.data.derivatives import ProviderRequest, derivative_provider
 from kd.data.derivatives.null import NullDerivativeProvider
 from kd.data.schema import DataTopology
 from kd.models.field_model import FieldModel
@@ -180,6 +179,7 @@ class PlatformBuilder:
                 task=self._task,
                 device=self._device,
                 deadline=self._deadline,
+                derivative_provider="none",
             )
         dataset = self._resolve_lhs(self._dataset)
         provider = self._build_provider(dataset)
@@ -196,6 +196,7 @@ class PlatformBuilder:
             task=self._task,
             device=self._device,
             deadline=self._deadline,
+            derivative_provider=self._reqs.provider_kind,
         )
 
     def train_surrogate(self) -> tuple[torch.nn.Module, TrainingResult]:
@@ -219,15 +220,6 @@ class PlatformBuilder:
                 "lhs_source='field' requires DataTopology.TABULAR, got "
                 f"{dataset.topology.value}"
             )
-
-
-
-
-        if self._task is not None and self._sketch_lower_owner == "platform":
-            raise NotImplementedError(
-                "platform sketch lowering is not supported on the tabular "
-                "field-target path; tabular datasets do not take sketches"
-            )
         provider = NullDerivativeProvider()
         if self._device is None:
             context = ExecutionContext(dataset, provider)
@@ -235,10 +227,19 @@ class PlatformBuilder:
             context = ExecutionContext(dataset, provider, device=self._device)
         registry = FunctionRegistry.create_default()
         executor = PythonExecutor(registry)
-        solver = LeastSquaresSolver(
-            compute_condition_number=self._compute_condition_number
+        solver = sparse_solver(
+            "ols", compute_condition_number=self._compute_condition_number
         )
         lhs = dataset.get_field(dataset.lhs_field).flatten().detach().to(context.device)
+
+
+        if (
+            self._task is not None
+            and self._sketch_lower_owner == "platform"
+            and self._task.sketch.pinned
+            and not self._task.compiled.closed
+        ):
+            lhs = self._lower_sketch_target(lhs, executor, context)
         evaluator = Evaluator(
             executor=executor,
             solver=solver,
@@ -255,6 +256,7 @@ class PlatformBuilder:
             task=self._task,
             device=self._device,
             deadline=self._deadline,
+            derivative_provider="none",
         )
 
 
@@ -266,28 +268,20 @@ class PlatformBuilder:
         return resolve_lhs_defaults(dataset)
 
     def _build_provider(self, dataset: PDEDataset) -> DerivativeProvider:
-        kind = self._reqs.provider_kind
-        if kind == "finite_diff":
-            return FiniteDiffProvider(dataset, max_order=self._reqs.max_atomic_order)
-        if kind == "autograd":
+        entry = derivative_provider(self._reqs.provider_kind)
+        if self._reqs.needs_surrogate and not entry.surrogate:
+            raise ValueError(
+                f"provider {self._reqs.provider_kind!r} lacks surrogate capability"
+            )
+        coords = None
+        model = None
+        if entry.surrogate:
             coords = self._build_autograd_coords(dataset, device=self._device)
             model = self._resolve_surrogate_model(dataset, coords)
-
-
-
-
-
-
             model.eval()
-            return AutogradProvider(
-                model,
-                coords,
-                dataset,
-                max_order=self._reqs.max_atomic_order,
-            )
-
-
-        raise ValueError(f"Unsupported provider_kind: {kind!r}")
+        return entry.build(
+            ProviderRequest(dataset, self._reqs, self._device, coords, model)
+        )
 
     def _build_context(
         self,
@@ -295,7 +289,6 @@ class PlatformBuilder:
         provider: DerivativeProvider,
     ) -> ExecutionContext:
         if self._reqs.needs_surrogate:
-
 
 
 
@@ -333,8 +326,8 @@ class PlatformBuilder:
                 "homogeneous (lhs_order=0) dataset; use a provider_kind='none' "
                 "plugin-private homogeneous path."
             )
-        solver = LeastSquaresSolver(
-            compute_condition_number=self._compute_condition_number
+        solver = sparse_solver(
+            "ols", compute_condition_number=self._compute_condition_number
         )
         lhs = (
             provider.get_derivative(
@@ -403,7 +396,7 @@ class PlatformBuilder:
             return self._align_model_to_coords(self._reqs.surrogate_model, coords)
         if not self._reqs.needs_surrogate:
             raise ValueError(
-                "provider_kind='autograd' needs a surrogate: set "
+                f"provider_kind={self._reqs.provider_kind!r} needs a surrogate: set "
                 "needs_surrogate=True to train one, or pass surrogate_model"
             )
         return self._train_default_surrogate(dataset, coords)

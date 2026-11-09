@@ -4,7 +4,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from importlib.metadata import Distribution, entry_points
 from typing import Any, Final, Generic, Literal, TypeVar, cast
 
@@ -39,10 +39,14 @@ _REGISTRIES: dict[str, Registry[Any]] = {}
 
 class Registry(Generic[_T]):
 
-    def __init__(self, kind: str) -> None:
+    def __init__(
+        self, kind: str, *, implementation_of: Callable[[_T], str] | None = None
+    ) -> None:
         self.kind = kind
         self.entries: dict[str, _T] = {}
         self.origins: dict[str, Origin] = {}
+        self.implementation_of = implementation_of
+        self.dependencies: dict[str, tuple[tuple[str, str], ...]] = {}
         _REGISTRIES[kind] = self
 
     def check_available(self, name: str) -> None:
@@ -59,10 +63,17 @@ class Registry(Generic[_T]):
     def __contains__(self, name: object) -> bool:
         return name in self.entries
 
-    def register(self, name: str, entry: _T) -> None:
+    def register(
+        self,
+        name: str,
+        entry: _T,
+        *,
+        dependencies: tuple[tuple[str, str], ...] = (),
+    ) -> None:
         self.check_available(name)
         self.entries[name] = entry
         self.origins[name] = _current
+        self.dependencies[name] = dependencies
 
     def get(self, name: str) -> _T:
         self._require(name)
@@ -96,8 +107,28 @@ def extension_origin(kind: str, name: str) -> dict[str, str | None]:
         "distribution": origin.distribution,
         "version": origin.version,
         "hook": origin.hook,
-        "implementation": f"{entry.__module__}:{entry.__qualname__}",
+        "implementation": (
+            registry.implementation_of(entry)
+            if registry.implementation_of is not None
+            else f"{entry.__module__}:{entry.__qualname__}"
+        ),
     }
+
+
+def extension_dependencies(kind: str, name: str) -> list[dict[str, str | None]]:
+    result: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def visit(kind: str, name: str) -> None:
+        if (kind, name) in seen:
+            return
+        seen.add((kind, name))
+        result.append({"kind": kind, "name": name, **extension_origin(kind, name)})
+        for dependency in _registry_of(kind).dependencies[name]:
+            visit(*dependency)
+
+    visit(kind, name)
+    return result
 
 
 def _registry_of(kind: str) -> Registry[Any]:
@@ -146,6 +177,7 @@ __all__ = [
     "Origin",
     "Registry",
     "Source",
+    "extension_dependencies",
     "extension_origin",
     "extension_source",
     "load_extensions",

@@ -39,9 +39,9 @@ __all__ = [
     "weak_zero_model",
 ]
 
-METHOD_VERSION: Final[str] = "kd-weak-v1"
+METHOD_VERSION: Final[str] = "kd-weak-v2"
 BUMP_DEGREE: Final[int] = 4
-_MAX_ORDER: Final[int] = 3
+_MAX_ORDER: Final[int] = 4
 _MAX_POWER: Final[int] = 3
 _MIN_SEGMENT: Final[int] = 3
 _FIRST_WIDTH: Final[int] = 4
@@ -51,7 +51,7 @@ _SPECTRUM_FLOOR: Final[float] = 1e-300
 _DEGENERATE_VARIANCE_RTOL: Final[float] = 1e-12
 _CLASS = (
     "one, the field, its square and cube as n2/n3 of the field or a raw mul "
-    "product of the field with itself, pure spatial derivatives of order 1-3 "
+    "product of the field with itself, pure spatial derivatives of order 1-4 "
     "and mul(field, first spatial derivative)"
 )
 
@@ -65,8 +65,11 @@ class WeakFormOptions:
     spectrum_tau: float = 0.03
     noise_correction: Literal["none", "gaussian"] = "none"
     noise_sigma: float | None = None
+    bump_degree: Literal[4, 6] = 4
 
     def __post_init__(self) -> None:
+        if type(self.bump_degree) is not int or self.bump_degree not in (4, 6):
+            raise ValueError(f"bump_degree must be 4 or 6; got {self.bump_degree!r}")
         if self.noise_correction not in ("none", "gaussian"):
             raise ValueError(
                 "noise_correction must be 'none' or 'gaussian'; "
@@ -145,6 +148,7 @@ class WeakFrame:
     noise_correction: str
     noise_sigma: float | None
     sigma_estimates: dict[str, float] | None
+    bump_degree: int
 
     @property
     def n_windows(self) -> int:
@@ -165,9 +169,9 @@ class WeakSolution:
 def check_weak_dataset(dataset: PDEDataset, lhs_order: int) -> tuple[str, str]:
     if dataset.topology is not DataTopology.GRID:
         raise NotImplementedError("the weak form integrates GRID datasets only")
-    if lhs_order != 1:
+    if lhs_order not in (1, 2):
         raise NotImplementedError(
-            "the weak form supports first-order evolution only; got lhs_order="
+            "the weak form supports first- or second-order evolution; got lhs_order="
             f"{lhs_order}"
         )
     fields = sorted(dataset.fields or {})
@@ -213,7 +217,9 @@ def classify_weak_terms(
             refusals.append(WeakRefusal(term, f"outside the class ({_CLASS})", True))
         elif member.kind == "derivative" and member.order > _MAX_ORDER:
             refusals.append(
-                WeakRefusal(term, f"derivative order {member.order} above 3", True)
+                WeakRefusal(
+                    term, f"derivative order {member.order} above {_MAX_ORDER}", True
+                )
             )
         elif member.kind != "power" and member.order > max_order:
             refusals.append(
@@ -308,30 +314,31 @@ def resolve_weak_frame(
     *,
     spatial_axis: str,
     time_axis: str,
+    lhs_order: int,
 ) -> WeakFrame:
     axes = (spatial_axis, time_axis)
     field = _field_array(dataset, spatial_axis, time_axis)
     spacing = {
         axis: float(np.diff(_axis_values(dataset, axis)[:2])[0]) for axis in axes
     }
-    corners: dict[str, int] | None = None
-    if options.half_widths is None:
-        corners = {a: spectral_corner(field, i, a) for i, a in enumerate(axes)}
-        widths = {
-            a: smallest_width(corners[a], field.shape[i], options.spectrum_tau, a)
-            for i, a in enumerate(axes)
-        }
-    else:
-        widths = _explicit_widths(options.half_widths, axes, field.shape)
-    space_tests = tuple(
-        _test_rows(field.shape[0], widths[spatial_axis], spacing[spatial_axis], r)
-        for r in range(_MAX_ORDER + 1)
+    widths, corners = _resolve_windows(field, axes, options)
+    space_tests = _axis_tests(
+        field.shape[0],
+        widths[spatial_axis],
+        spacing[spatial_axis],
+        _MAX_ORDER,
+        options.bump_degree,
     )
-    time_tests = tuple(
-        _test_rows(field.shape[1], widths[time_axis], spacing[time_axis], r)
-        for r in range(2)
+    time_tests = _axis_tests(
+        field.shape[1],
+        widths[time_axis],
+        spacing[time_axis],
+        lhs_order,
+        options.bump_degree,
     )
-    target = -(space_tests[0] @ field @ time_tests[1].T).ravel()
+    target = (-1.0) ** lhs_order * (
+        space_tests[0] @ field @ time_tests[lhs_order].T
+    ).ravel()
     sigma, estimates = _noise_sigma(field, options, axes)
     return WeakFrame(
         spatial_axis=spatial_axis,
@@ -346,7 +353,27 @@ def resolve_weak_frame(
         noise_correction=options.noise_correction,
         noise_sigma=sigma,
         sigma_estimates=estimates,
+        bump_degree=options.bump_degree,
     )
+
+
+def _resolve_windows(
+    field: Array, axes: tuple[str, str], options: WeakFormOptions
+) -> tuple[dict[str, int], dict[str, int] | None]:
+    if options.half_widths is not None:
+        return _explicit_widths(options.half_widths, axes, field.shape), None
+    corners = {a: spectral_corner(field, i, a) for i, a in enumerate(axes)}
+    widths = {
+        a: smallest_width(
+            corners[a],
+            field.shape[i],
+            options.spectrum_tau,
+            a,
+            bump_degree=options.bump_degree,
+        )
+        for i, a in enumerate(axes)
+    }
+    return widths, corners
 
 
 def _field_array(dataset: PDEDataset, spatial_axis: str, time_axis: str) -> Array:
@@ -377,7 +404,9 @@ def _explicit_widths(
     return {axis: int(half_widths[axis]) for axis in axes}
 
 
-def _bump(s: Array, order: int) -> Array:
+def _bump(s: Array, order: int, *, degree: int = BUMP_DEGREE) -> Array:
+    if degree == 6:
+        return _bump_six(s, order)
     w = 1.0 - s**2
     if order == 0:
         return w**4
@@ -385,11 +414,36 @@ def _bump(s: Array, order: int) -> Array:
         return -8.0 * s * w**3
     if order == 2:
         return 8.0 * w**2 * (7.0 * s**2 - 1.0)
-    return 48.0 * s * w * (3.0 - 7.0 * s**2)
+    if order == 3:
+        return 48.0 * s * w * (3.0 - 7.0 * s**2)
+    return 48.0 * (3.0 - 30.0 * s**2 + 35.0 * s**4)
 
 
-def _test_rows(n: int, m: int, h: float, order: int) -> Array:
-    values = _bump(np.arange(-m, m + 1) / m, order) / (m * h) ** order * h
+def _bump_six(s: Array, order: int) -> Array:
+    w = 1.0 - s**2
+    if order == 0:
+        return w**6
+    if order == 1:
+        return -12.0 * s * w**5
+    if order == 2:
+        return 12.0 * w**4 * (11.0 * s**2 - 1.0)
+    if order == 3:
+        return 120.0 * s * w**3 * (3.0 - 11.0 * s**2)
+    return 360.0 * w**2 * (1.0 - 18.0 * s**2 + 33.0 * s**4)
+
+
+def _axis_tests(
+    n: int, m: int, h: float, max_order: int, degree: int
+) -> tuple[Array, ...]:
+    return tuple(_test_rows(n, m, h, r, degree=degree) for r in range(max_order + 1))
+
+
+def _test_rows(
+    n: int, m: int, h: float, order: int, *, degree: int = BUMP_DEGREE
+) -> Array:
+    values = (
+        _bump(np.arange(-m, m + 1) / m, order, degree=degree) / (m * h) ** order * h
+    )
     centres = range(m, n - m, max(1, m // 2))
     rows = np.zeros((len(centres), n), dtype=np.float64)
     for i, centre in enumerate(centres):
@@ -423,9 +477,12 @@ def _affine_sse(x: Array, y: Array) -> float:
     return float(residual @ residual)
 
 
-def smallest_width(corner: int, n: int, tau: float, axis: str) -> int:
+def smallest_width(
+    corner: int, n: int, tau: float, axis: str, *, bump_degree: int = BUMP_DEGREE
+) -> int:
     for m in range(_FIRST_WIDTH, n // 2):
-        response = np.abs(np.fft.rfft(_bump(np.arange(-m, m + 1) / m, 0), n=n))
+        bump = _bump(np.arange(-m, m + 1) / m, 0, degree=bump_degree)
+        response = np.abs(np.fft.rfft(bump, n=n))
         if response[corner] <= tau * response[0]:
             return m
     raise ValueError(
@@ -537,7 +594,7 @@ def weak_diagnostics(
         if frame.corner_indices is None
         else dict(frame.corner_indices),
         spectrum_tau=frame.spectrum_tau,
-        bump_degree=BUMP_DEGREE,
+        bump_degree=frame.bump_degree,
         n_windows=frame.n_windows,
         rank=rank,
         n_columns=n_columns,

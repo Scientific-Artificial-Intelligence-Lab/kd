@@ -92,6 +92,9 @@ def _narrow_library(
     _assert_anchor_factors_configured(
         sketch, frozenset(column_fingerprint(item) for item in features.values())
     )
+    if not sketch.holes:
+
+        return ()
     kept: list[str] = []
     for token in config.library:
         if token not in features:
@@ -133,22 +136,24 @@ def _closed_compilation(config: DLGAConfig) -> DLGACompiled:
 
 def _reserved_monomials(sketch: Sketch) -> frozenset[Monomial]:
     pins = pinned_monomials(sketch)
-    owners: dict[Monomial, str] = {}
+    anchors: set[Monomial] = set()
     for anchor in sketch.anchored:
-        monomials = jet_monomials(law_term_key(anchor.term_ir), sketch.vocabulary)
-        first = next((owners[m] for m in monomials if m in owners), None)
-        if first is not None:
-            raise ValueError(
-                f"anchored terms {first!r} and {anchor.term_ir!r} are alias "
-                "spellings of one column (shared jet monomials); anchor it once"
-            )
-        owners.update(dict.fromkeys(monomials, anchor.term_ir))
-    return pins.union(owners)
+        anchors.update(jet_monomials(law_term_key(anchor.term_ir), sketch.vocabulary))
+    return pins.union(anchors)
 
 
 def _notes(
-    allow_products: bool, dropped: tuple[tuple[str, str], ...]
+    sketch: Sketch, allow_products: bool, dropped: tuple[tuple[str, str], ...]
 ) -> tuple[str, ...]:
+    generation = (
+        "pre-score membership refuses a term sharing a jet monomial with a pin "
+        "or an anchor, so no generated term spells or carries an anchored "
+        "column; any other term must be admitted by one hole; hole counts are "
+        "exit-checked"
+        if sketch.holes
+        else "anchors-only sketch: no term is generated; one fit of the "
+        "anchored columns reaches the sketch exit"
+    )
     return (
         "pinned terms are deducted from the platform's lowered target and "
         "added back at their exact values by the exit lift",
@@ -156,10 +161,7 @@ def _notes(
         "the exit still requires |coefficient| >= support_threshold, so with "
         "support_threshold=0 an anchored clause fails only on an exactly zero "
         "coefficient",
-        "pre-score membership refuses a term sharing a jet monomial with a pin "
-        "or an anchor, so no generated term spells or carries an anchored "
-        "column; any other term must be admitted by one hole; hole counts are "
-        "exit-checked",
+        generation,
         f"product modules enabled={allow_products}",
         *(f"dropped {token!r}: {reason}" for token, reason in dropped),
     )
@@ -182,7 +184,7 @@ def compile_for_dlga(sketch: Sketch, config: DLGAConfig) -> DLGACompiled:
         or hole.constraint.operators >= _PRODUCT_OPERATORS
         for hole in sketch.holes
     )
-    if not allow_products:
+    if not allow_products and sketch.holes:
         dropped.append(("mul", "constraint-filtered"))
     frozen_dropped = tuple(dropped)
     return DLGACompiled(
@@ -197,7 +199,7 @@ def compile_for_dlga(sketch: Sketch, config: DLGAConfig) -> DLGACompiled:
             for anchor in sketch.anchored
         ),
         report=CompileReport(
-            levels=_LEVELS, notes=_notes(allow_products, frozen_dropped)
+            levels=_LEVELS, notes=_notes(sketch, allow_products, frozen_dropped)
         ),
         dropped=frozen_dropped,
     )

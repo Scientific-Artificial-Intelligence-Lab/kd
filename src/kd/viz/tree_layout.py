@@ -5,9 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from matplotlib.colors import to_rgba
-
-from kd.viz.style import AXIS, GRID, SERIES
+from kd.viz.style import AXIS, GRID, LABEL_FONTSIZE, SERIES, SURFACE
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -16,23 +14,21 @@ if TYPE_CHECKING:
 _MAX_NODES = 60
 
 
-_LEAF_FILL_ALPHA = 0.18
 
 
 def _leaf_style(colour: str) -> dict[str, Any]:
-    return {"facecolor": to_rgba(colour, _LEAF_FILL_ALPHA), "edgecolor": colour}
+    return {"facecolor": SURFACE, "edgecolor": colour, "linewidth": 1.2}
 
 
 
 _KIND_STYLE: dict[str, dict[str, Any]] = {
-    "op": {"facecolor": GRID, "edgecolor": AXIS},
+    "op": {"facecolor": GRID, "edgecolor": AXIS, "linewidth": 0.8},
     "var": _leaf_style(SERIES[0]),
     "const": _leaf_style(SERIES[3]),
     "deriv": _leaf_style(SERIES[2]),
 }
 
 _EDGE_COLOR = AXIS
-_FONT_SIZE = 9
 _X_MARGIN = 0.6
 _Y_MARGIN = 0.4
 
@@ -105,7 +101,7 @@ def draw_tree(root: RenderNode, ax: Axes) -> list[str]:
         )
 
     for x0, y0, x1, y1 in edges:
-        ax.plot([x0, x1], [y0, y1], color=_EDGE_COLOR, linewidth=0.8, zorder=1)
+        ax.plot([x0, x1], [y0, y1], color=_EDGE_COLOR, linewidth=1.0, zorder=1)
 
     for node in placed:
         style = _KIND_STYLE.get(node.kind, _KIND_STYLE["op"])
@@ -115,9 +111,9 @@ def draw_tree(root: RenderNode, ax: Axes) -> list[str]:
             node.label,
             ha="center",
             va="center",
-            fontsize=_FONT_SIZE,
+            fontsize=LABEL_FONTSIZE,
             zorder=2,
-            bbox={"boxstyle": "round,pad=0.3", **style},
+            bbox={"boxstyle": "round,pad=0.4", **style},
         )
 
     xs = [p.x for p in placed]

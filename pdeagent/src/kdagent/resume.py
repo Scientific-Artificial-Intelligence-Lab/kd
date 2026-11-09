@@ -19,6 +19,7 @@ from kdagent.lineage import SegmentLedger, SegmentSummary
 from kdagent.segment_report import law_from_evidence
 from kdagent.session import Session
 from kdagent.surrogates import file_sha256
+from kdagent.surrogate_training import selected_mode, uses_surrogate
 
 
 def _failure(code: str, detail: str) -> dict[str, Any]:
@@ -159,6 +160,7 @@ def _record_segment(
     selection_forward: dict[str, Any] | None = None,
     reason: str | None = None,
     trained_surrogate: str | None = None,
+    verify: dict[str, float] | None = None,
 ) -> None:
     if outcome.run_dir is None or outcome.run_id is None:
         return
@@ -218,6 +220,7 @@ def _record_segment(
         selection_forward=selection_forward,
         reason=reason,
         trained_surrogate=trained_surrogate,
+        verify=verify,
     )
 
 
@@ -532,23 +535,19 @@ def _resolve_surrogate(
             "or no longer hashes to its registry row; run train_surrogate "
             "with the same recipe to rebuild it, then pass the id it returns",
         )
-    if schema is not None and any(
-        mode["provider_kind"] != "autograd" for mode in schema["modes"]
-    ):
-        row = next(
-            (row for row in schema["facade_params"] if row["name"] == "derivatives"),
-            None,
-        )
-        effective = requested.get(
-            "derivatives", None if row is None else row["default"]
-        )
-        if effective != "autograd":
+    if schema is not None:
+        mode = selected_mode(schema, requested)
+        if not uses_surrogate(mode, requested):
+            choices = [
+                candidate["selected_by"]
+                for candidate in schema["modes"]
+                if candidate["requires_surrogate"] and candidate["selected_by"]
+            ]
             return None, _failure(
                 "invalid_argument",
-                f"{algorithm} consults an injected surrogate only under "
-                f"derivatives=autograd, and this call runs derivatives="
-                f'{effective!r}; pass params={{"derivatives": "autograd"}} '
-                "(restating the rest of params) or drop surrogate",
+                f"{algorithm} mode {mode['name']!r} does not consume a surrogate; "
+                f"select a surrogate mode with params from {choices}, "
+                "or drop surrogate",
             )
     return (
         _ResolvedSurrogate(
@@ -593,23 +592,26 @@ def _sketch_failure(
     if schema is None:
         return None
     order = decoded.lhs_spec.order
+    form = "EVOLUTION" if order > 0 else "REGRESSION"
     modes = [
         mode
         for mode in schema["modes"]
-        if "EVOLUTION" in mode["forms"]
+        if form in mode["forms"]
         if mode["lhs_orders"] is None or order in mode["lhs_orders"]
         if not (
             mode["provider_kind"] == "none"
             and schema["sketch_lower_owner"] == "platform"
+            and "tabular" not in mode["topologies"]
         )
         if mode["selector"] is None
         or (params.get(mode["selector"]["field"]) is not None)
         == mode["selector"]["present"]
     ]
     if not modes:
+        kind = "an evolution" if order > 0 else "a regression"
         return _failure(
             "sketch_unsupported",
-            f"algorithm {algorithm!r} has no mode that can run an evolution "
+            f"algorithm {algorithm!r} has no mode that can run {kind} "
             f"sketch with LHS order {order}; use an instrument whose modes "
             "take this left-hand side",
         )

@@ -1,14 +1,30 @@
 """kd - Symbolic regression platform for PDE discovery."""
 
+from typing import TYPE_CHECKING
+
 from kd import _registry
-from kd._registry import extension_origin, extension_source
-from kd.api import Model, instrument_schema_digest, instrument_schemas
+from kd._refit_methods import (
+    FrameFit,
+    RefitMethod,
+    ResolvedFrame,
+    refit_method,
+    refit_methods,
+    register_refit_method,
+)
+from kd._registry import extension_dependencies, extension_origin, extension_source
+from kd.api import (
+    Model,
+    format_record_equation,
+    instrument_schema_digest,
+    instrument_schemas,
+)
 from kd.core.equation import (
     LhsSpec,
     law_signature,
     sketch_from_dict,
     sketch_to_dict,
 )
+from kd.core.equation._sketch_terms import lower_term
 from kd.core.equation.rendering import render_lhs_label
 from kd.core.equation.sketch_builder import sketch_from_anchors
 from kd.core.equation.sketch_input import (
@@ -20,6 +36,7 @@ from kd.core.equation.sketch_input import (
 )
 from kd.core.evaluator import EvaluationResult
 from kd.core.expr.jet import jet_polynomial
+from kd.core.expr.monomial_keys import term_monomial_keys, undefined_terms
 from kd.core.expr.sympy_bridge import (
     FormattedEquation,
     format_pde,
@@ -28,6 +45,7 @@ from kd.core.expr.sympy_bridge import (
 )
 from kd.core.interrupt import SearchInterrupted
 from kd.core.law_judge import ParsedLaw, TermVerdict, judge_law, law_from_equation
+from kd.core.linear_solve import register_sparse_solver, sparse_solvers
 from kd.core.rates import RateSummary, paired_exact_test, rate_summary, wilson_interval
 from kd.core.recovery import (
     RecoveryVerdict,
@@ -58,6 +76,7 @@ from kd.data import (
     TrajectorySet,
     add_noise,
     compute_dataset_fingerprint,
+    derivative_field,
     derivative_target,
     generate_advection_data,
     generate_burgers_data,
@@ -91,6 +110,11 @@ from kd.data import (
     select_lowpass_modes,
     surrogate_field,
     trajectories_to_tabular,
+)
+from kd.data.derivatives import (
+    derivative_provider,
+    derivative_providers,
+    register_derivative_provider,
 )
 from kd.data.tabular_file import load_tabular
 from kd.evaluate import (
@@ -151,18 +175,40 @@ from kd.search.eqgpt import EqGPTConfig
 from kd.search.llm4ed import Llm4edConfig
 from kd.search.pysindy import PySINDyConfig
 from kd.search.pysr import PySRConfig
-from kd.search.registry import register_algorithm
+from kd.search.registry import (
+    execution_dependencies,
+    execution_mode_for_request,
+    register_algorithm,
+)
 from kd.search.result import ExperimentResult
 from kd.search.sga import SGAConfig
 from kd.term_votes import TermVoteResult, TermVoteRow, vote_terms
-from kd.viz.engine import VizEngine
 
-__version__ = "0.9.0"
-
+__version__ = "0.10.0"
 
 
 
 
+
+
+
+
+if TYPE_CHECKING:
+    from kd.viz.engine import VizEngine
+
+
+def __getattr__(name: str) -> object:
+
+    if name == "VizEngine":
+        from kd.viz.engine import VizEngine
+
+        globals()[name] = VizEngine
+        return VizEngine
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | {"VizEngine"})
 
 
 __all__ = [
@@ -191,6 +237,7 @@ __all__ = [
     "FieldReport",
     "FormattedEquation",
     "ForwardError",
+    "FrameFit",
     "Hole",
     "InvalidTermsError",
     "KIND_FINAL",
@@ -208,8 +255,10 @@ __all__ = [
     "RateSummary",
     "RecoveryVerdict",
     "RefitFrame",
+    "RefitMethod",
     "RefitResult",
     "ResolvedCheckpoint",
+    "ResolvedFrame",
     "SGAConfig",
     "SKETCH_EXIT_VERIFY",
     "SearchInterrupted",
@@ -238,12 +287,19 @@ __all__ = [
     "add_noise",
     "block_dispersion",
     "compute_dataset_fingerprint",
+    "derivative_field",
+    "derivative_provider",
+    "derivative_providers",
     "derivative_target",
     "eligible_checkpoint_iterations",
     "evaluate_terms",
+    "execution_dependencies",
+    "execution_mode_for_request",
+    "extension_dependencies",
     "extension_origin",
     "extension_source",
     "format_pde",
+    "format_record_equation",
     "forward_error",
     "forward_error_trajectories",
     "from_sympy",
@@ -285,6 +341,7 @@ __all__ = [
     "load_wave",
     "load_wave_breaking",
     "load_wave_breaking_datasets",
+    "lower_term",
     "lowpass_smooth",
     "lowpass_spectrum",
     "mode_accepts",
@@ -296,8 +353,13 @@ __all__ = [
     "rate_summary",
     "refine_pinn",
     "refit_constants",
+    "refit_method",
+    "refit_methods",
     "refit_terms",
     "register_algorithm",
+    "register_derivative_provider",
+    "register_refit_method",
+    "register_sparse_solver",
     "render_lhs_label",
     "resolve_checkpoint",
     "save_sketch",
@@ -307,10 +369,13 @@ __all__ = [
     "sketch_from_dict",
     "sketch_to_dict",
     "span_floor",
+    "sparse_solvers",
     "surrogate_field",
+    "term_monomial_keys",
     "term_set_jaccard",
     "to_sympy",
     "trajectories_to_tabular",
+    "undefined_terms",
     "validate_terms",
     "verify_equation",
     "vote_terms",

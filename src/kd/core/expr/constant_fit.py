@@ -256,7 +256,9 @@ def refit_literals(
     starts: Sequence[float] = DEFAULT_STARTS,
 ) -> ConstantRefit:
     _check_target(target)
+    _refuse_unbound_placeholders(term_irs, columns)
     placeholder_irs, initial = literals_to_placeholders(term_irs)
+    _check_calls(term_irs, registry)
     names = list(initial)
     projection = _Projection(placeholder_irs, names, columns, target, registry)
     literals = np.array(list(initial.values()), dtype=np.float64)
@@ -281,6 +283,46 @@ def refit_literals(
         coefficients=tuple(coefficients.tolist()),
         nmse=fit_nmse,
     )
+
+
+def _refuse_unbound_placeholders(
+    term_irs: Sequence[str], columns: Mapping[str, Tensor]
+) -> None:
+    for term_ir in term_irs:
+        for name in _PLACEHOLDER.findall(term_ir):
+            if name not in columns:
+                raise KeyError(
+                    f"Term {term_ir!r} names {name!r}, which is not a column: c<k> "
+                    "is the name the refit's output gives a fitted constant; write "
+                    "the number in its place"
+                )
+
+
+def _check_calls(term_irs: Sequence[str], registry: FunctionRegistry) -> None:
+    for term_ir in term_irs:
+        for node in ast.walk(_parse(term_ir)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = cast("ast.Name", node.func).id
+            if not registry.has(name):
+                raise KeyError(
+                    f"Term {term_ir!r} calls {name!r}, which is not an operator of "
+                    "the registry the terms are evaluated with; its operators are "
+                    f"{', '.join(sorted(registry.list_names()))}"
+                )
+            arity, given = registry.get_arity(name), len(node.args)
+            if given != arity:
+                raise ValueError(_arity_message(term_ir, name, arity, given))
+
+
+def _arity_message(term_ir: str, name: str, arity: int, given: int) -> str:
+    plural = "" if arity == 1 else "s"
+    message = (
+        f"Term {term_ir!r}: {name!r} takes {arity} argument{plural}, {given} given"
+    )
+    if arity == 2 and given > 2:
+        message += f": nest the calls for more operands, {name}({name}(a, b), c)"
+    return message
 
 
 def _check_target(target: Tensor) -> None:

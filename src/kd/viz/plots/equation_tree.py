@@ -133,10 +133,10 @@ def plot_equation_tree(
         warnings.append("Empty expression; skipping equation tree")
         with style_context(style):
             _draw_placeholder(ax, "No expression")
-            ax.set_title("Expression Tree")
+            ax.set_title("Equation Tree")
         return warnings
 
     with style_context(style):
         warnings.extend(draw_tree(root, ax))
-        ax.set_title("Expression Tree")
+        ax.set_title("Equation Tree")
     return warnings

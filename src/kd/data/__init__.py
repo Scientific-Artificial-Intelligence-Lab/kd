@@ -14,6 +14,7 @@ from kd.data.catalog import (
     list_datasets,
     list_datasets_answer_blind,
 )
+from kd.data.derivative_field import derivative_field
 from kd.data.loaders import load_wave_breaking_datasets
 from kd.data.lowpass import lowpass_smooth, lowpass_spectrum, select_lowpass_modes
 from kd.data.network_smoothing import (
@@ -143,6 +144,7 @@ __all__ = [
     "load_wave",
     "load_wave_breaking",
     "load_wave_breaking_datasets",
+    "derivative_field",
     "lowpass_smooth",
     "lowpass_spectrum",
     "select_lowpass_modes",

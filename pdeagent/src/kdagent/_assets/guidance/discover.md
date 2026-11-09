@@ -25,7 +25,9 @@ the default `n_iterations` of 2000, a fresh call has no retraining phase unless
 phase, `pinn_epoch` times the number of collocation points (and of local
 samples when `local_sample` is on). The defaults are the research budget of
 the reference configuration, so set `pretrain_epoch`, `pinn_epoch` and
-`n_collocation` explicitly. A call with `pinn` accepts no sketch.
+`n_collocation` explicitly. A call with `pinn` accepts a sketch: its pins
+are deducted from every rebuilt collocation target and enter the PINN
+residual, and its anchors are fitted on every rebuilt evaluator.
 
 A PINN-mode run is continued, adjusted, rolled back and forked with
 `resume_from_run_id` like a run without `pinn`. The child keeps the parent's
@@ -36,8 +38,9 @@ to that count. A parent that ended exactly on a retraining boundary (with the
 default cycle length, a count that is a multiple of `n_iterations`) has not
 run that phase; the child runs it first, before its first generation. That
 phase is preparation, as pretraining is in a fresh call. The clean-stop clock
-starts after preparation with the remaining budget computed before `Model.fit()`;
-preparation neither reduces that budget nor is cut short by the clean stop.
+starts at fit entry, so pretraining and an owed retraining phase come out of
+the cap; neither is cut short, and a search whose cap preparation spent
+still runs one generation and seals a record.
 The parent sends SIGTERM at the cap plus 120 seconds from the worker's start,
 including preparation; a call still running then is terminated and returns a
 failure. A retraining phase reached
@@ -53,7 +56,8 @@ cold-started segments found the equation on 6 seeds where one continuous run
 did not and the reverse on 22. Eight segments that carry the network and
 optimizer state gave 11 against 13 against one continuous run, and 23 against
 9 against eight cold-started segments. Raising the evaluation
-cap from 8000 to 96000 left four problems at 0/3, 0/3, 1/3 and 1/3, from 0/3
+cap from 8000 to 96000 (112000 on one of the two that stayed at 0/3)
+left four problems at 0/3, 0/3, 1/3 and 1/3, from 0/3
 each. Reward combines fit with
 complexity and is not a recovery criterion. Read the split law and its aligned
 coefficients when the display is a nested genotype. Valid proposals with an

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from kd.core.platform.sketch_compile import SKETCH_CONFIG_KEY
-from kd.search.registry import execution_identity
+from kd.search.registry import algorithm_execution_identity
 from kd.search.resume_policy import config_artifact_overlay
 from kd.search.run_spec import (
     CONFIG_CANON_SCHEME,
@@ -96,7 +96,10 @@ def _config_snapshot(algorithm: Any) -> dict[str, Any] | None:
         )
     try:
         snapshot = canonicalize_config(
-            {**config, **execution_identity(_algorithm_name(algorithm))}
+            {
+                **config,
+                **algorithm_execution_identity(algorithm, _algorithm_name(algorithm)),
+            }
         )
     except ConfigCanonicalizationError:
         return None

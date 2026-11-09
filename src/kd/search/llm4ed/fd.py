@@ -12,8 +12,17 @@ FloatArray = npt.NDArray[np.float64]
 OPERAND_ORDER = ("x", "u_x", "u_xx", "u_xxx", "u")
 
 
-def operand_order(axes: Sequence[str]) -> tuple[str, ...]:
-    derivatives = [f"u_{axis * order}" for axis in axes for order in (1, 2, 3)]
+
+EDL_MAX_ORDER = 3
+MAX_ORDERS = (3, 4)
+
+
+def operand_order(
+    axes: Sequence[str], *, max_order: int = EDL_MAX_ORDER
+) -> tuple[str, ...]:
+    derivatives = [
+        f"u_{axis * order}" for axis in axes for order in range(1, max_order + 1)
+    ]
     return (*axes, *derivatives, "u")
 
 
@@ -88,6 +97,30 @@ def diff3(u: FloatArray, x: FloatArray) -> FloatArray:
     return diff(diff2(u, x), x)
 
 
+def diff4(u: FloatArray, x: FloatArray) -> FloatArray:
+    return diff2(diff2(u, x), x)
+
+
+
+_TEMPLATES: dict[int, Callable[[FloatArray, FloatArray], FloatArray]] = {
+    1: diff,
+    2: diff2,
+    3: diff3,
+    4: diff4,
+}
+
+
+def interior_rows(shape: Sequence[int], cells: int) -> npt.NDArray[np.bool_]:
+    mask = np.zeros(tuple(shape), dtype=bool)
+    if any(2 * cells >= size for size in shape):
+        raise ValueError(
+            f"edge_trim={cells} leaves no interior row on a grid of shape "
+            f"{tuple(shape)}"
+        )
+    mask[tuple(slice(cells, size - cells) for size in shape)] = True
+    return mask.reshape(-1)
+
+
 def build_operand_columns(
     u: FloatArray,
     x: FloatArray,
@@ -156,7 +189,7 @@ def _time_derivative(u: FloatArray, t: FloatArray) -> FloatArray:
 
 
 def _axis_columns(
-    u: FloatArray, index: int, name: str, values: FloatArray
+    u: FloatArray, index: int, name: str, values: FloatArray, max_order: int
 ) -> dict[str, FloatArray]:
     if values.shape[0] != u.shape[index]:
         raise ValueError(
@@ -165,8 +198,8 @@ def _axis_columns(
     shape = [1] * u.ndim
     shape[index] = values.shape[0]
     columns = {name: np.broadcast_to(values.reshape(shape), u.shape).reshape(-1)}
-    for order, template in ((1, diff), (2, diff2), (3, diff3)):
-        column = _along_axis(template, u, values, index)
+    for order in range(1, max_order + 1):
+        column = _along_axis(_TEMPLATES[order], u, values, index)
         columns[f"u_{name * order}"] = column.reshape(-1)
     return columns
 
@@ -175,13 +208,18 @@ def build_operand_columns_axes(
     u: FloatArray,
     axes: Mapping[str, FloatArray],
     t: FloatArray,
+    *,
+    max_order: int = EDL_MAX_ORDER,
 ) -> tuple[FloatArray, dict[str, FloatArray]]:
     names = tuple(axes)
-    if names == ("x",):
-        return build_operand_columns(u, axes["x"], t)
     if len(names) == 1:
-        lhs, columns = build_operand_columns(u, axes[names[0]], t)
-        return lhs, dict(zip(operand_order(names), columns.values(), strict=True))
+        (name,) = names
+        lhs, edl = build_operand_columns(u, axes[name], t)
+        columns = dict(zip(operand_order(names), edl.values(), strict=True))
+        if max_order == EDL_MAX_ORDER:
+            return lhs, columns
+        columns[f"u_{name * 4}"] = diff4(u, axes[name]).reshape(-1)
+        return lhs, {key: columns[key] for key in operand_order(names, max_order=4)}
     _require_float64("u", u)
     if u.ndim != len(names) + 1:
         raise ValueError(
@@ -192,7 +230,8 @@ def build_operand_columns_axes(
     coordinates: dict[str, FloatArray] = {}
     derivatives: dict[str, FloatArray] = {}
     for index, name in enumerate(names):
-        columns = _axis_columns(u, index, name, _axis_values(name, axes[name]))
+        values = _axis_values(name, axes[name])
+        columns = _axis_columns(u, index, name, values, max_order)
         coordinates[name] = columns.pop(name)
         derivatives.update(columns)
     features = {**coordinates, **derivatives, "u": u.reshape(-1)}
