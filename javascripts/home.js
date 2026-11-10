@@ -21,6 +21,8 @@
   function measure() {
     root.classList.toggle("kd-home--fx", !motion.matches);
     var box = hero.getBoundingClientRect();
+    // Fill the first viewport below the header; subsequent sections start below it.
+    root.style.setProperty("--kd-hero-start", box.top + window.scrollY + "px");
     // Reduced motion keeps a static background within the hero's page area.
     root.style.setProperty(
       "--kd-hero-end", box.bottom + window.scrollY + "px"

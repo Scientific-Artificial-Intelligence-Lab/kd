@@ -1,0 +1,99 @@
+/* Global destinations stay visible; the homepage leaves the detailed tree to docs. */
+.md-tabs { display: block; }
+.md-tabs__list { display: flex; flex-wrap: wrap; }
+.md-tabs__link { opacity: .8; }
+.md-tabs__item--active .md-tabs__link { opacity: 1; font-weight: 600; }
+/* The source link is a named GitHub icon, separate from the reading sections. */
+.md-header__source { display: block; width: auto; max-width: none; margin-left: .5rem; }
+.md-header__source .md-source { display: flex; width: 1.8rem; align-items: center; }
+.md-header__source .md-source__icon { width: 1.8rem; }
+.md-header__source .md-source__repository { display: none; }
+.md-header__source .md-source__facts { display: none; }
+html.kd-home .md-content { width: 100%; max-width: 62rem; margin-inline: auto; }
+html.kd-home .md-sidebar--primary { display: none; }
+html.kd-home .md-header__button[for="__drawer"] { display: none; }
+/* Light mode keeps the grid without the colored wash. Both themes use the
+   existing scroll fade, or a static grid when reduced motion is requested. */
+html.kd-home body[data-md-color-scheme="default"]::before {
+  background:
+    repeating-linear-gradient(90deg, var(--kd-hero-grid-a) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(0deg, var(--kd-hero-grid-b) 0 1px, transparent 1px 46px);
+}
+html.kd-home .kd-hero { padding: 1.2rem 0 1.4rem; min-height: calc(100svh - var(--kd-hero-start, 6.4rem)); }
+html.kd-home .kd-hero__inner { max-width: none; }
+html.kd-home .kd-hero__lede { max-width: 46rem; }
+#quick-start, #tutorials, #examples, #interactive-demo, #try-the-interface { scroll-margin-top: 4rem; }
+#try-the-interface { display: block; height: 0; }
+.md-typeset .kd-home-cases { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kd-home-intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 2.8rem; align-items: center; }
+html.kd-home .kd-home-summary .kd-hero__lede { max-width: 31rem; }
+.kd-home-actions { display: grid; grid-template-columns: repeat(3, max-content); gap: .5rem; }
+.md-typeset .kd-home-actions .kd-btn { padding-inline: .7rem; text-align: center; white-space: nowrap; }
+.kd-home-code { min-width: 0; padding: 1.2rem 1.4rem; border: 1px solid var(--kd-card-border); border-radius: .45rem; background: var(--md-default-bg-color); }
+.md-typeset .kd-home-code h2 { margin: 0 0 .8rem; padding: 0; border: 0; font-size: 1.1rem; }
+.md-typeset .kd-home-code pre { font-size: .65rem; }
+.kd-home-code pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.kd-home-code .kd-out { margin-block: 1.2rem; }
+.kd-home-code .kd-out__eq { font-size: 1.15rem; }
+.kd-quickstart-actions .kd-btn { display: inline-block; }
+.kd-home-ui { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.4fr); gap: 2.5rem; align-items: center; padding-block: 2rem; border-top: 1px solid var(--kd-card-border); }
+.md-typeset .kd-home-ui h2 { margin-top: 0; padding-top: 0; border-top: 0; }
+.kd-home-docs { padding-bottom: 4rem; }
+.kd-doc-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.8rem 2.8rem; margin-block: 1.5rem 2rem; }
+.kd-doc-sections > div { padding-top: 1rem; border-top: 1px solid var(--kd-card-border); }
+.md-typeset .kd-doc-sections h3 { margin-top: 0; }
+.md-typeset .kd-doc-sections p:last-child { margin-bottom: 0; font-size: .75rem; }
+.md-typeset .kd-home-docs > p:last-child { margin-bottom: 0; }
+.md-typeset .kd-home-preview { margin: 0; min-width: 0; }
+.md-typeset .kd-studio-links { display: flex; flex-wrap: wrap; gap: .7rem 1.4rem; margin: 1.2rem 0 1.4rem; }
+.kd-studio-links a { text-underline-offset: .18em; }
+.kd-studio-links a:hover { text-decoration: underline; }
+.kd-home-preview a { display: block; border: 1px solid var(--kd-card-border); border-radius: .45rem; overflow: hidden; }
+.kd-home-preview img { display: block; width: 100%; height: auto; }
+.md-typeset .kd-home-preview figcaption { margin-top: .6rem; font-size: .7rem; text-align: left; color: var(--md-default-fg-color--light); }
+.md-typeset .kd-home-cases .kd-card__thumb { background: white; }
+.md-typeset .kd-home-cases .kd-card__thumb img { object-fit: contain; }
+/* The demo is a standalone workspace with no documentation drawer. */
+body:has(.kd-demo-page) .md-sidebar { display: none; }
+body:has(.kd-demo-page) .md-header__button[for="__drawer"] { display: none; }
+body:has(.kd-demo-page) .md-content { width: 100%; max-width: 68rem; margin-inline: auto; }
+.kd-demo-page > p { max-width: 53rem; }
+.kd-algorithm-links { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; margin: 1.2rem 0; }
+.kd-algorithm-links a { font-weight: 600; padding-block: .3rem; border-bottom: 1px solid var(--kd-card-border); }
+.kd-algorithm-links span { font-size: .65rem; font-weight: 400; color: var(--md-default-fg-color--light); }
+/* A slightly larger reading scale for the homepage, retaining its hierarchy. */
+html.kd-home .md-typeset { font-size: .9rem; }
+html.kd-home .kd-hero .kd-hero__mark { font-size: 3.3rem; }
+html.kd-home .kd-hero__tag { font-size: clamp(1.1rem, 1.9vw, 1.35rem); }
+html.kd-home .md-typeset .kd-hero__lede { font-size: .92rem; line-height: 1.65; }
+html.kd-home .md-typeset h2 { font-size: 1.3rem; }
+html.kd-home .md-typeset h3 { font-size: 1.1rem; }
+html.kd-home .md-typeset .kd-home-code h2 { font-size: 1.2rem; }
+html.kd-home .kd-card__name { font-size: 1.2rem; }
+html.kd-home .kd-card__body { font-size: .85rem; }
+html.kd-home .md-typeset .kd-btn { font-size: .8rem; }
+html.kd-home .md-typeset .kd-home-code pre { font-size: .7rem; }
+html.kd-home .kd-home-code .kd-out__eq { font-size: 1.25rem; }
+html.kd-home .kd-out__tag { font-size: .67rem; }
+html.kd-home .md-typeset .kd-home-preview figcaption { font-size: .75rem; }
+html.kd-home .md-typeset .kd-doc-sections p:last-child { font-size: .8rem; }
+html.kd-home .kd-algorithm-links span { font-size: .7rem; }
+@media (max-width: 76.234375em) {
+  .md-tabs__list { padding-inline: .8rem; gap: 1rem; }
+  .md-tabs__item { padding-inline: 0; }
+  .md-tabs__link { font-size: .7rem; }
+}
+@media (max-width: 650px) {
+  .md-typeset .kd-home-cases { grid-template-columns: 1fr; }
+  html.kd-home .kd-hero { padding: .4rem 0 1rem; }
+  html.kd-home .kd-hero__actions { gap: .6rem; flex-wrap: wrap; }
+  .md-tabs__list { gap: .85rem; }
+  .kd-home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kd-home-actions .kd-btn--primary { grid-column: 1 / -1; }
+  .kd-home-code { padding: 1rem; }
+  .kd-doc-sections { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .kd-home-docs { padding-bottom: 3rem; }
+}
+@media (max-width: 1000px) {
+  .kd-home-intro, .kd-home-ui { grid-template-columns: minmax(0, 1fr); gap: 1.4rem; }
+}

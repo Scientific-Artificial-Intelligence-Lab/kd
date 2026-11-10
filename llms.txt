@@ -8,8 +8,12 @@ The PyPI distribution is `sail-kd`; Python code imports `kd`. After installation
 
 ## Entry points
 
+- [Documentation](https://scientific-artificial-intelligence-lab.github.io/kd/documentation/): Reading map for getting started, user guides, algorithms, reference and development.
+- [Quick start](https://scientific-artificial-intelligence-lab.github.io/kd/start/python/): The Python first fit, recorded result and explanation of report metrics.
+- [Development](https://scientific-artificial-intelligence-lab.github.io/kd/development/): Component registration, plugin interfaces and extension points.
+- [KD Studio](https://scientific-artificial-intelligence-lab.github.io/kd/guide/web-interface/): Local browser workflow, installation, data preview, search, verification, comparison and persistent workspaces; a recorded Burgers example.
 - [Installation](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/): Python requirements, uv and pip commands, environment activation and optional components.
-- [Getting started](https://scientific-artificial-intelligence-lab.github.io/kd/start/): Installation, a first fit and your own data.
+- [Getting started](https://scientific-artificial-intelligence-lab.github.io/kd/start/): Python installation, a first Burgers fit and its recorded result; links to KD Studio and agent workflows.
 - [User guide](https://scientific-artificial-intelligence-lab.github.io/kd/guide/): Data, algorithms, scores, visualization, checkpoints and batch runs.
 - [Experimental controller](https://scientific-artificial-intelligence-lab.github.io/kd/guide/controller/): Endpoint setup, data files, interactive searches and reports.
 - [Agent search example](https://scientific-artificial-intelligence-lab.github.io/kd/guide/agent-example/): A checkpoint/resume demonstration, results from both search segments and interactive requests.
@@ -19,6 +23,11 @@ The PyPI distribution is `sail-kd`; Python code imports `kd`. After installation
 - [Partial equations](https://scientific-artificial-intelligence-lab.github.io/kd/guide/sketch/): Pinned, anchored and hole clauses of kd.Sketch, term notation, algorithm support and the sketch outcome.
 - [Algorithm overview](https://scientific-artificial-intelligence-lab.github.io/kd/algorithms/): Algorithm capabilities and links to their reference pages.
 - [API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/): Import locations, signatures and parameters.
+
+- [KD Studio quick start](https://scientific-artificial-intelligence-lab.github.io/kd/start/web-ui/): Installation, startup and a first search in the local browser interface.
+- [KD Studio preview](https://scientific-artificial-intelligence-lab.github.io/kd/demo/): Static browser preview of datasets, preparation and algorithm settings; no search computation.
+- [Tutorials](https://scientific-artificial-intelligence-lab.github.io/kd/examples/): Reproducible notebooks and case studies.
+- [Gallery](https://scientific-artificial-intelligence-lab.github.io/kd/gallery/): Recorded equations, forward predictions, scientific animations and reports.
 
 ## Algorithms
 

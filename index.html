@@ -14,7 +14,7 @@
       
       
       
-        <link rel="next" href="start/">
+        <link rel="next" href="documentation/">
       
       
         
@@ -53,7 +53,11 @@
     
       <link rel="stylesheet" href="assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="stylesheets/kd.css?v=0ad94015">
+      <link rel="stylesheet" href="stylesheets/kd.css?v=f89afe23">
+    
+      <link rel="stylesheet" href="stylesheets/ui-demo.css?v=d8e88544">
+    
+      <link rel="stylesheet" href="stylesheets/site-layout.css?v=6c4165d0">
     
       <link rel="stylesheet" href="javascripts/katex/katex.min.css">
     
@@ -82,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quick-start" class="md-skip">
+        <a href="#kd-equation-discovery-from-data" class="md-skip">
           Skip to content
         </a>
       
@@ -94,9 +98,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="." title="KD" class="md-header__button md-logo" aria-label="KD" data-md-component="logo">
       
@@ -197,6 +199,18 @@
       
     
     
+      <div class="md-header__source">
+        <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
   </nav>
   
 </header>
@@ -205,6 +219,121 @@
       
       
         
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="documentation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="gallery/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Gallery
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="demo/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Preview
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
           
         
       
@@ -215,14 +344,16 @@
               
                 
               
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="." title="KD" class="md-nav__button md-logo" aria-label="KD" data-md-component="logo">
       
@@ -232,6 +363,18 @@
     </a>
     KD
   </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
   
   <ul class="md-nav__list" data-md-scrollfix>
     
@@ -247,6 +390,8 @@
       
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
+      
+        
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
@@ -290,6 +435,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -306,30 +453,35 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Quick start">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#experimental-controller" class="md-nav__link">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd-studio" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental controller
+        KD Studio
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#tutorials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorials
+      
+    </span>
+  </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
+  <a href="#gallery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Examples
+        Gallery
       
     </span>
   </a>
@@ -348,13 +500,63 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
+  <a href="#documentation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design
+        Documentation
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#user-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User guide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -385,8 +587,19 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
     
     
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
@@ -397,14 +610,14 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="start/" class="md-nav__link ">
+            <a href="documentation/" class="md-nav__link ">
               
   
   
   <span class="md-ellipsis">
     
   
-    Getting started
+    Documentation
   
 
     
@@ -426,12 +639,143 @@
             <span class="md-nav__icon md-icon"></span>
             
   
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="start/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
     Getting started
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="start/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="start/web-ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    KD Studio quick start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -469,14 +813,14 @@
   
   
     <li class="md-nav__item">
-      <a href="examples/getting_started/" class="md-nav__link">
+      <a href="guide/web-interface/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    First fit
+    KD Studio guide
   
 
     
@@ -497,14 +841,14 @@
   
   
     <li class="md-nav__item">
-      <a href="examples/your_own_data/" class="md-nav__link">
+      <a href="guide/controller/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Use your own data
+    Agent guide
   
 
     
@@ -524,9 +868,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -548,23 +893,18 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
     
     
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -586,14 +926,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -625,15 +965,18 @@
     
     
     
+      
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3_2" >
         
           
-          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2_3_2" id="__nav_2_3_2_label" tabindex="0">
             
   
   
@@ -651,8 +994,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -788,6 +1131,261 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="guide/sketch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Complete a partial equation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="viz/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Results and reports
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_3_4" id="__nav_2_3_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Results and reports
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="viz/howto/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Figure generation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="viz/gallery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Figure gallery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/scores/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Score conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/resume/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkpoints and resuming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/batch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch experiments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
       
@@ -812,12 +1410,15 @@
     
     
     
+      
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -839,14 +1440,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1079,881 +1680,42 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="viz/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Visualization
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_4">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Visualization
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="viz/howto/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Figure generation
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="viz/gallery/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Figure gallery
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="guide/sketch/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Complete a partial equation
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/scores/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Score conventions
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/resume/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Checkpoints and resuming
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/batch/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Batch experiments
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="guide/extensions/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Extensions
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="guide/controller/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Experimental controller
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="examples/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Examples
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Examples
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="examples/noisy_burgers_walkthrough/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Noisy Burgers walkthrough
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="guide/agent-example/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Agent search
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="examples/kdv_walkthrough/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Walkthrough
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="examples/wave_breaking/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Breaking waves
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="examples/two_engines/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Column chromatography
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="gallery/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Gallery
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Gallery
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="gallery/kdv/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    KdV solitons
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="gallery/allen-cahn/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Allen-Cahn fronts
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="gallery/lorenz/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Lorenz attractor
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="design/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Design
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Design
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/architecture/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/responsibilities/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Platform and plugins
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="design/ir/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Equation representation
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -1975,14 +1737,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_5" id="__nav_2_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2392,9 +2154,276 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
     
       
       
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="design/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components and execution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/responsibilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform and plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="design/ir/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equation representation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="development/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_7" id="__nav_2_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guide/extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extension guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -2407,7 +2436,610 @@
   <span class="md-ellipsis">
     
   
-    About
+    About and citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials and reports
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials and reports
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Python fit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/your_own_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use your own data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/kdv_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    KdV walkthrough
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guide/agent-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Case studies
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Case studies
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/noisy_burgers_walkthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Noisy Burgers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/wave_breaking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breaking waves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/two_engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column chromatography
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="gallery/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gallery
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Gallery
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="gallery/kdv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    KdV solitons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="gallery/allen-cahn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Allen-Cahn fronts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="gallery/lorenz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lorenz attractor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Preview
   
 
     
@@ -2439,6 +3071,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -2455,30 +3089,35 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Quick start">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#experimental-controller" class="md-nav__link">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kd-studio" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental controller
+        KD Studio
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#tutorials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorials
+      
+    </span>
+  </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#examples" class="md-nav__link">
+  <a href="#gallery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Examples
+        Gallery
       
     </span>
   </a>
@@ -2497,13 +3136,63 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
+  <a href="#documentation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design
+        Documentation
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#user-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User guide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2525,189 +3214,167 @@
 
 
 
+  
+  
+
 
 <div class="kd-hero">
-<div class="kd-hero__inner">
-  <div class="kd-hero__eyebrow">equation discovery · symbolic regression</div>
-  <h1 class="kd-hero__title">
-    <span class="kd-hero__mark"><span class="kd-k">K</span><span class="kd-d">D</span></span>
-    <span class="kd-hero__tag">A platform for <span class="kd-k">K</span>nowledge <span class="kd-d">D</span>iscovery</span>
-  </h1>
-  <p class="kd-hero__lede">
-    <b>KD</b> is a plug-in platform for equation discovery. It gives
-    different discovery algorithms a consistent, easy-to-use interface and provides shared
-    services such as visualization, evaluation, and experiment management, while leaving
-    each algorithm free to implement its own search procedure.
-  </p>
-
-  <div class="kd-hero__actions">
-    <a class="kd-btn kd-btn--primary" href="#quick-start">Quick start</a>
-    <a class="kd-btn kd-btn--ghost" href="guide/">User guide</a>
-    <a class="kd-btn kd-btn--ghost" href="examples/">Examples</a>
-  </div>
-
-<div class="kd-readout kd-readout--hero" style="--kd-fig-ar: 2.008">
-  <div class="kd-readout__bar">
-    <span>SGA-PDE · kdv · seed 42</span>
-    <span class="kd-readout__metric">generation 200 / 200 · nmse 2.70e-06 · AIC <b>-19.42</b></span>
-  </div>
-  <img class="kd-readout__fig" src="images/sga-field.png"
-       alt="Heatmap of the kdv field u over x and t">
-  <div class="kd-readout__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(-0.0025\,u_{xxx}\)</span></div>
-  <div class="kd-readout__cap">An SGA-PDE run on the KdV dataset, showing the field it was given and the equation it returned.</div>
-</div>
-
+<div class="kd-hero__inner kd-home-intro">
+<div class="kd-home-summary">
+<h1 class="kd-hero__title" id="kd-equation-discovery-from-data">
+  <span class="kd-hero__mark"><span class="kd-k">K</span><span class="kd-d">D</span></span>
+  <span class="kd-hero__tag">Equation discovery from data</span>
+</h1>
+<p class="kd-hero__lede">KD is a symbolic regression library for discovering equations from field data,
+ODE trajectories and feature tables. It provides data preparation, search and
+result analysis through a Python API and a local browser interface.</p>
+<div class="kd-hero__actions kd-home-actions">
+  <a class="kd-btn kd-btn--primary" href="start/">Get started</a>
+  <a class="kd-btn kd-btn--ghost" href="examples/">Tutorials</a>
+  <a class="kd-btn kd-btn--ghost" href="documentation/">Documentation</a>
 </div>
 </div>
-
-<div class="kd-flow">
+<div class="kd-home-code">
 <h2 id="quick-start">Quick start</h2>
-<p>Install KD and run your first equation-discovery experiment in a few lines of
-Python. The example below uses a Burgers dataset bundled with KD. Follow
-<a href="start/installation/">Installation</a> for Python environment setup, then activate the
-environment before running the code below.</p>
-<div class="kd-step">1 &nbsp;install</div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">pip</label><label for="__tabbed_1_2">uv</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>sail-kd
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>sail-kd
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>venv
-uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>sail-kd<span class="w"> </span>--torch-backend<span class="o">=</span>auto
-</code></pre></div>
-</div>
-</div>
-</div>
-<div class="kd-step">2 &nbsp;fit</div>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">kd</span>
-<span class="c1"># a 256 × 201 (x, t) field; for your own arrays, PDEDataset.from_arrays</span>
+<span class="c1"># Bundled Burgers field: 256 × 201 (x, t)</span>
 <span class="n">data</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">load_burgers</span><span class="p">()</span>
 
-<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">"sga"</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="n">report</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="s2">"out/first-fit"</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span>
+    <span class="n">algorithm</span><span class="o">=</span><span class="s2">"sga"</span><span class="p">,</span> <span class="n">generations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </code></pre></div>
 <div class="kd-out">
-<div class="kd-out__tag">5 generations · AIC -28.78</div>
+<div class="kd-out__tag">Recorded result · 5 generations · AIC -28.78</div>
 <div class="kd-out__eq"><span class="kd-eq__lhs">\(u_t =\)</span><span class="kd-eq__term" style="--i:0">\(-u\,u_x\)</span><span class="kd-eq__term" style="--i:1">\(+0.1002\,u_{xx}\)</span></div>
 </div>
-<h3 id="experimental-controller">Experimental controller</h3>
-<p>After <a href="guide/controller/#install-and-configure">installing the agent extra and configuring an endpoint</a>:</p>
-<div class="highlight"><pre><span></span><code>kd-agent<span class="w"> </span>run<span class="w"> </span>--data<span class="w"> </span>sample.npz<span class="w"> </span><span class="s2">"Find the equation governing this data."</span>
-</code></pre></div>
-<p>This experimental controller uses a language model to select and run KD
-algorithms, inspect their results and write a search report. See the
-<a href="guide/agent-example/">agent example</a> for file and bundled-dataset commands,
-or the <a href="guide/controller/">controller guide</a> for configuration and interactive use.</p>
-<h2 id="examples">Examples</h2>
-<div class="kd-grid">
+<div class="kd-quickstart-actions">
+  <a class="kd-btn kd-btn--ghost" href="start/python/">Full guide</a>
+</div>
+</div>
+</div>
+</div>
+<div class="kd-flow">
+<p><span id="try-the-interface"></span>
+<span id="interactive-demo"></span>
+<span id="web-interface"></span></p>
+<div class="kd-home-ui">
+<div>
+<p><span id="gui"></span></p>
+<h2 id="kd-studio">KD Studio</h2>
+<p>KD Studio provides data preparation, search settings and result inspection in a
+local browser workspace. Workspaces retain datasets, runs, verification and reports.</p>
+<p>The preview uses bundled data and recorded results. Searches run in the installed application.</p>
+<div class="kd-hero__actions">
+  <a class="kd-btn kd-btn--ghost" href="demo/">Open preview</a>
+</div>
+<p><a href="start/web-ui/">Installation</a> · <a href="guide/web-interface/">KD Studio documentation</a></p>
+</div>
+<figure class="kd-home-preview">
+  <a href="demo/" aria-label="Open KD Studio preview">
+    <img src="images/ui/studio-preview.png" alt="KD Studio preview showing the bundled Burgers field" width="1188" height="692" loading="lazy">
+  </a>
+  <figcaption>Burgers field in KD Studio preview.</figcaption>
+</figure>
+</div>
+<p><span id="examples"></span></p>
+<h2 id="tutorials">Tutorials</h2>
+<p>The notebooks include code, search settings and recorded outputs, from a first
+fit to custom datasets and noisy measurements.</p>
+<div class="kd-grid kd-home-cases">
 <a class="kd-card" href="examples/getting_started/">
-  <div class="kd-card__thumb"><img src="images/sga-field.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>notebook</span></div>
-<div class="kd-card__name">Getting started</div>
-<div class="kd-card__body">Load a bundled benchmark, fit in one call, read the result.</div>
+  <div class="kd-card__thumb"><img src="examples/getting_started_3_1.png" alt="Burgers field used in the first-fit notebook" loading="lazy"></div>
+<div class="kd-card__name">First fit</div>
+<div class="kd-card__body">Load the bundled Burgers field, fit an equation and inspect its coefficients and search history.</div>
 </a>
 <a class="kd-card" href="examples/your_own_data/">
-  <div class="kd-card__thumb"><img src="examples/your_own_data_4_0.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>notebook</span></div>
+  <div class="kd-card__thumb"><img src="examples/your_own_data_4_0.png" alt="Field constructed from coordinate and observation arrays" loading="lazy"></div>
 <div class="kd-card__name">Use your own data</div>
-<div class="kd-card__body">Two coordinate arrays and one field array, from NumPy to a fitted equation.</div>
-</a>
-<a class="kd-card" href="examples/kdv_walkthrough/">
-  <div class="kd-card__thumb"><img src="examples/kdv_walkthrough_4_0.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>notebook</span><span>SGA</span></div>
-<div class="kd-card__name">Walkthrough</div>
-<div class="kd-card__body">A 200-generation SGA-PDE fit on the KdV benchmark, read term by term, with every figure and the report.</div>
-</a>
-<a class="kd-card" href="guide/agent-example/">
-  <div class="kd-card__thumb kd-card__thumb--command"><code>kd-agent run \<br>--data sample.npz \<br>"Find the governing equation."</code></div>
-<div class="kd-card__eyebrow"><span>command line</span><span>experimental</span></div>
-<div class="kd-card__name">Agent search</div>
-<div class="kd-card__body">Run a short search, save a checkpoint and continue from it, with the results of both segments.</div>
-</a>
-<a class="kd-card" href="examples/wave_breaking/">
-  <div class="kd-card__thumb"><img src="examples/wave_breaking_3_1.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>notebook</span><span>EqGPT</span></div>
-<div class="kd-card__name">Breaking waves</div>
-<div class="kd-card__body">The published EqGPT equation, reproduced on 12 wave-tank experiments.</div>
+<div class="kd-card__body">Build a dataset from coordinate and field arrays, then run a search on it.</div>
 </a>
 <a class="kd-card" href="examples/noisy_burgers_walkthrough/">
-  <div class="kd-card__thumb"><img src="examples/noisy_burgers_walkthrough_4_0.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>notebook</span><span>DLGA</span></div>
-<div class="kd-card__name">Noisy Burgers walkthrough</div>
-<div class="kd-card__body">The Burgers benchmark with 15% Gaussian noise added, recovered by DLGA from a network fitted to the noisy field.</div>
-</a>
-<a class="kd-card" href="examples/two_engines/">
-  <div class="kd-card__thumb"><img src="images/tlc-two-engines.png" alt=""></div>
-<div class="kd-card__eyebrow"><span>worked example</span><span>DISCOVER</span><span>PySR</span></div>
-<div class="kd-card__name">Column chromatography</div>
-<div class="kd-card__body">Two algorithms on one 74-row table, both recovering the published formula.</div>
+  <div class="kd-card__thumb"><img src="examples/noisy_burgers_walkthrough_4_0.png" alt="Burgers field in the noisy-data notebook" loading="lazy"></div>
+<div class="kd-card__name">Noisy data</div>
+<div class="kd-card__body">Fit a field network to noisy Burgers data and use DLGA to discover its equation.</div>
 </a>
 </div>
+<p><a href="examples/">All tutorials</a></p>
+<h2 id="gallery">Gallery</h2>
+<p>The gallery presents recovered equations and compares their predictions with
+observations through field plots, trajectories and animations. Each case
+includes a run report.</p>
+<div class="kd-grid kd-home-cases">
+<a class="kd-card" href="gallery/kdv/">
+  <div class="kd-card__thumb"><img src="gallery/assets/kdv-cover.png" alt="Observed and predicted KdV wave profiles" loading="lazy"></div>
+<div class="kd-card__name">KdV solitons</div>
+<div class="kd-card__body">A recovered dispersive equation and the soliton train predicted from its initial profile.</div>
+</a>
+<a class="kd-card" href="gallery/allen-cahn/">
+  <div class="kd-card__thumb"><img src="gallery/assets/allen-cahn-cover.png" alt="Observed and predicted Allen-Cahn fields and their difference" loading="lazy"></div>
+<div class="kd-card__name">Allen–Cahn fronts</div>
+<div class="kd-card__body">A recovered reaction-diffusion equation and the evolution of its interfaces.</div>
+</a>
+<a class="kd-card" href="gallery/lorenz/">
+  <div class="kd-card__thumb"><img src="gallery/assets/lorenz-cover.png" alt="Observed and predicted Lorenz trajectories" loading="lazy"></div>
+<div class="kd-card__name">Lorenz attractor</div>
+<div class="kd-card__body">Three equations recovered from noisy trajectories and integrated together.</div>
+</a>
+</div>
+<p><a href="gallery/">All gallery results</a></p>
 <h2 id="algorithms">Algorithms</h2>
-<p>KD currently provides seven equation-discovery
-algorithms through a common interface.</p>
-<div class="kd-grid">
-<a class="kd-card" href="algorithms/sga/">
-  <div class="kd-card__eyebrow"><span>AIC</span><span>medium</span><span>finite_diff autograd</span></div>
-<div class="kd-card__name">SGA-PDE</div>
-<div class="kd-card__body">A genetic search over expression trees; the coefficients come from the algorithm's own sparse regression.</div>
-</a>
-<a class="kd-card" href="algorithms/dlga/">
-  <div class="kd-card__eyebrow"><span>DLGA fitness</span><span>heavy</span><span>autograd</span></div>
-<div class="kd-card__name">DLGA-PDE</div>
-<div class="kd-card__body">A neural network fits the field and supplies derivatives; a genetic algorithm searches term sets over a candidate library.</div>
-</a>
-<a class="kd-card" href="algorithms/discover/">
-  <div class="kd-card__eyebrow"><span>reward</span><span>heavy</span><span>finite_diff autograd</span></div>
-<div class="kd-card__name">DISCOVER</div>
-<div class="kd-card__body">A recurrent controller writes expression trees token by token and is trained on its own best-rewarded draws; the coefficients come from a platform refit.</div>
-</a>
-<a class="kd-card" href="algorithms/eqgpt/">
-  <div class="kd-card__eyebrow"><span>EqGPT reward</span><span>heavy</span><span>finite_diff</span></div>
-<div class="kd-card__name">EqGPT</div>
-<div class="kd-card__body">A pretrained transformer proposes equations and is fine-tuned on candidates ranked by their fit to data.</div>
-</a>
-<a class="kd-card" href="algorithms/llm4ed/">
-  <div class="kd-card__eyebrow"><span>LLM4ED sparse reward</span><span>medium</span><span>finite_diff</span></div>
-<div class="kd-card__name">LLM4ED</div>
-<div class="kd-card__body">A large language model proposes and revises candidate equations round by round, filtered by a sparse reward.</div>
-</a>
-<a class="kd-card" href="algorithms/pysr/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>medium</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySR</div>
-<div class="kd-card__body">Multi-population evolutionary search returning a complexity/error Pareto front.</div>
-</a>
-<a class="kd-card" href="algorithms/pysindy/">
-  <div class="kd-card__eyebrow"><span>NMSE</span><span>light</span><span>finite_diff</span><span>external package</span></div>
-<div class="kd-card__name">PySINDy</div>
-<div class="kd-card__body">Sparse regression over a supplied candidate library, solved in one pass.</div>
-</a>
+<p>KD provides a common interface to methods based on genetic search,
+reinforcement learning, language models and sparse regression. Each method
+retains its own search procedure and score conventions.</p>
+<nav aria-label="Algorithm guides" class="kd-algorithm-links"><a href="algorithms/sga/">SGA-PDE</a>
+<a href="algorithms/dlga/">DLGA-PDE</a>
+<a href="algorithms/discover/">DISCOVER</a>
+<a href="algorithms/eqgpt/">EqGPT</a>
+<a href="algorithms/llm4ed/">LLM4ED</a>
+<a href="algorithms/pysr/">PySR <span>external</span></a>
+<a href="algorithms/pysindy/">PySINDy <span>external</span></a></nav>
+<p><a href="algorithms/">Compare algorithms and their requirements</a></p>
+<section class="kd-home-docs">
+<p><span id="start-with-kd"></span>
+<span id="examples-and-documentation"></span></p>
+<h2 id="documentation">Documentation</h2>
+<p>The documentation covers data preparation, algorithm configuration and result
+analysis, with API reference for Python programs and guides for extending KD.</p>
+<div class="kd-doc-sections">
+<div>
+<h3 id="user-guide"><a href="guide/">User guide</a></h3>
+<p>Prepare datasets, configure searches and interpret fitted equations. The guides
+also cover checkpoints, batch experiments and comparisons between runs.</p>
+<p><a href="data/shape/">Data loading</a> · <a href="viz/">Results and reports</a> · <a href="design/batch/">Batch experiments</a></p>
 </div>
-<h2 id="design">Design</h2>
-<div class="kd-grid">
-<a class="kd-card" href="design/">
-  <div class="kd-card__eyebrow"><span>design</span></div>
-<div class="kd-card__name">Platform and plugins</div>
-<div class="kd-card__body">The responsibilities shared by the platform and those implemented by each algorithm.</div>
-</a>
-<a class="kd-card" href="design/architecture/">
-  <div class="kd-card__eyebrow"><span>architecture</span></div>
-<div class="kd-card__name">Architecture</div>
-<div class="kd-card__body">The complete component diagram, import layers and execution order of a fit.</div>
-</a>
-<a class="kd-card" href="data/shape/">
-  <div class="kd-card__eyebrow"><span>data</span></div>
-<div class="kd-card__name">Data requirements</div>
-<div class="kd-card__body">Fields, coordinate axes, grid or scattered points, and how the left-hand side is chosen.</div>
-</a>
-<a class="kd-card" href="design/scores/">
-  <div class="kd-card__eyebrow"><span>score</span></div>
-<div class="kd-card__name">Score conventions and comparability</div>
-<div class="kd-card__body">Each algorithm builds its own final score. Refit the terms in one shared context before comparing.</div>
-</a>
+<div>
+<h3 id="api-reference"><a href="api/">API reference</a></h3>
+<p>Function signatures, parameters and return types for KD's public interfaces,
+including models, datasets, equations and plotting functions.</p>
+<p><a href="api/model/">Model</a> · <a href="api/data/">Datasets</a> · <a href="api/plots/">Plotting</a></p>
 </div>
+<div>
+<h3 id="architecture"><a href="design/">Architecture</a></h3>
+<p>The platform's data model, algorithm contracts and package boundaries. Component
+diagrams and the execution sequence describe how a fit proceeds from input data
+to a result.</p>
+<p><a href="design/architecture/">Components and execution</a> · <a href="design/responsibilities/">Platform and plugins</a></p>
+</div>
+<div>
+<h3 id="development"><a href="development/">Development</a></h3>
+<p>Add algorithms and components through KD's extension interfaces. The development
+guides describe component registration and the public contracts that plugins implement.</p>
+<p><a href="guide/extensions/">Extension guide</a> · <a href="api/search/">Plugin API</a></p>
+</div>
+</div>
+<div class="kd-hero__actions">
+  <a class="kd-btn kd-btn--ghost" href="documentation/">Documentation</a>
+</div>
+<p>The experimental <a href="guide/controller/">agent guide</a> covers language-model-assisted searches.</p>
+<p>For research using KD, cite the methods and datasets you use.
+<a href="about/#citation">About and citation</a> links the project metadata and references.</p>
+</section>
 </div>
 
 
@@ -2769,18 +3436,20 @@ algorithms through a common interface.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.tabs", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight"], "search": "assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
-        <script src="javascripts/home.js?v=5597fb36"></script>
+        <script src="javascripts/home.js?v=013fc08b"></script>
       
         <script src="javascripts/katex/katex.min.js"></script>
       
         <script src="javascripts/katex/auto-render.min.js"></script>
       
         <script src="javascripts/katex.js?v=e01b39c8"></script>
+      
+        <script src="javascripts/ui-demo.js?v=590d33ad"></script>
       
     
   </body>

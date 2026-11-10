@@ -13,18 +13,11 @@
   --kd-body: "IBM Plex Sans", "Noto Sans SC", -apple-system, sans-serif;
   --kd-mono: "IBM Plex Mono", ui-monospace, "Noto Sans Mono CJK SC", monospace;
 
-  /* The two letters of the name, wherever the mark appears. Cyan is the accent
-     the header and the buttons already carry; lavender is the hero's own purple
-     lifted far enough to read. Two pairs: one for dark grounds (the header bar
-     and the drawer band, dark whatever scheme the reader is in), one for this
-     page's own ground, which since 2026-09-01 is what the hero and the homepage
-     sidebar take as well. Within each pair the two
-     hexes are matched on relative luminance (dark .515/.499, paper .107/.111),
-     so neither letter recedes at 19px; both pairs clear 4.5:1 on their ground
-     by a wide margin (5.8 to 9.6). */
+  /* Related wordmark colors for light and dark grounds. The light K is
+     slightly brighter than the earlier #0e6763, retaining the cyan hue. */
   --kd-mark-k-dk: #4fd1c9;
   --kd-mark-d-dk: #c3b1f9;
-  --kd-mark-k: #0e6763;
+  --kd-mark-k: #17817c;
   --kd-mark-d: #6a45c0;
 
   /* The first screen is light (2026-09-01 ruling). Every colour it used to
@@ -35,7 +28,7 @@
      Two grounds, both derived from the viridis ramp the field figures are
      drawn in: the band sweeps plum to teal at the saturation of tinted paper,
      the run card is white on top of it. Every ink below clears 4.5:1 on both
-     (the wordmark keeps its own pair, --kd-mark-k / --kd-mark-d above). Yellow
+     (the wordmark uses the matching light/dark pair above). Yellow
      is the one viridis stop with no light-ground equivalent, #d8e219 on white
      is 1.6:1, so the value a run produced is marked in the ramp's green
      instead, darkened until it clears 5:1 on the band and on the card. */
@@ -209,10 +202,7 @@ body, .md-typeset {
   font-size: clamp(3rem, 6.5vw, 4.6rem);
 }
 
-/* The hero takes the ground pair of whichever scheme it is in, which is what
-   :root and the slate block already carry -- it needs no pair of its own. The
-   two letters are kerned tighter than the rest of the wordmark's tracking so
-   they read as one mark rather than as two initials. */
+/* Tight kerning keeps the two letters together as one wordmark. */
 .kd-hero__mark .kd-k { letter-spacing: -0.05em; }
 
 .kd-hero__tag {
@@ -353,12 +343,14 @@ body, .md-typeset {
 .md-typeset .kd-btn--primary { background: var(--kd-teal); color: #06231f; }
 .md-typeset .kd-btn--primary:hover { background: #2ba9a3; transform: translateY(-1px); }
 .md-typeset .kd-btn--ghost {
-  border-color: var(--kd-btn-ghost-border);
-  color: var(--kd-btn-ghost-ink);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--md-default-fg-color) 25%, transparent);
+  color: var(--md-default-fg-color);
 }
 .md-typeset .kd-btn--ghost:hover {
-  border-color: var(--kd-teal);
-  color: var(--kd-btn-ghost-ink-hover);
+  background: color-mix(in srgb, var(--md-default-fg-color) 6%, transparent);
+  border-color: color-mix(in srgb, var(--md-default-fg-color) 50%, transparent);
+  color: var(--md-default-fg-color);
 }
 .md-typeset .kd-btn:focus-visible { outline: 2px solid var(--kd-focus); outline-offset: 3px; }
 
@@ -457,7 +449,7 @@ html.kd-home .kd-readout--hero { --kd-fig-h: min(27vh, 13rem); }
   padding: .85rem 1.1rem .95rem;
   border-left: 3px solid var(--kd-teal);
   border-radius: 0 .4rem .4rem 0;
-  background: color-mix(in srgb, var(--kd-plum) 7%, var(--md-default-bg-color));
+  background: transparent;
 }
 .kd-out__tag {
   font-family: var(--kd-mono);
@@ -680,6 +672,8 @@ html.kd-home .kd-readout--hero { --kd-fig-h: min(27vh, 13rem); }
 }
 .md-logo::before { content: "K"; color: var(--kd-mark-k); letter-spacing: -0.05em; }
 .md-logo::after { content: "D"; color: var(--kd-mark-d); }
+/* Material dims header buttons on hover; keep the brand colors unchanged. */
+.md-header__button.md-logo:hover { opacity: 1; }
 
 /* With the mark in the logo slot the site name beside it is a second copy of
    the same two letters. The theme's two header topics are absolutely
@@ -706,9 +700,7 @@ html.kd-home .kd-readout--hero { --kd-fig-h: min(27vh, 13rem); }
   .md-nav--primary > .md-nav__title::after { font-size: 1.5rem; }
 }
 
-/* The header is dark on every page, so it takes the light pair whatever colour
-   scheme the reader is in. The homepage sidebar is no longer in that list: it
-   carries the hero's ground now, which is the scheme's own. */
+/* The header and mobile drawer stay dark in both themes. */
 .md-header {
   --kd-mark-k: var(--kd-mark-k-dk);
   --kd-mark-d: var(--kd-mark-d-dk);
