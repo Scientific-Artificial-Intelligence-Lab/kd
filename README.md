@@ -15,13 +15,15 @@
 Discovering governing equations from data
 
 [![PyPI](https://img.shields.io/pypi/v/sail-kd?style=flat-square&color=46256b&label=pypi)](https://pypi.org/project/sail-kd/)
-[![Documentation](https://img.shields.io/badge/documentation-online-21918c?style=flat-square)](https://scientific-artificial-intelligence-lab.github.io/kd/)
+[![Documentation](https://img.shields.io/badge/documentation-online-21918c?style=flat-square)](https://scientific-artificial-intelligence-lab.github.io/kd/documentation/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-46256b?style=flat-square)](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-46256b?style=flat-square)](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/LICENSE)
 
-[Documentation](https://scientific-artificial-intelligence-lab.github.io/kd/) ·
+[Website](https://scientific-artificial-intelligence-lab.github.io/kd/) ·
+[Documentation](https://scientific-artificial-intelligence-lab.github.io/kd/documentation/) ·
+[Getting started](https://scientific-artificial-intelligence-lab.github.io/kd/start/) ·
 [User guide](https://scientific-artificial-intelligence-lab.github.io/kd/guide/) ·
-[Examples](https://scientific-artificial-intelligence-lab.github.io/kd/examples/) ·
+[Tutorials](https://scientific-artificial-intelligence-lab.github.io/kd/examples/) ·
 [API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/)
 
 </div>
@@ -33,33 +35,63 @@ Five in-house algorithms (SGA, DLGA, DISCOVER, EqGPT, LLM4ED) and two external
 baselines (PySR, PySINDy) run behind one `kd.Model` API, with a common dataset
 interface, visualization and HTML reports.
 
-## Install
+## Discover an equation in the browser
 
-In an activated Python 3.11+ environment, install with [uv](https://docs.astral.sh/uv/):
+The local web interface takes you from a dataset to a fitted equation, its
+diagnostics and a comparison with other runs. Select data, configure a search,
+follow its progress and inspect the result in one workspace.
+
+<a href="https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/docs/images/ui-walkthrough.mp4">
+<img src="https://raw.githubusercontent.com/Scientific-Artificial-Intelligence-Lab/kd/trunk/docs/images/ui-result.png" width="960" alt="Completed Burgers search in KD; click to follow the first-search video from startup through data loading, parameter entry and results">
+</a>
+
+Click the image for a step-by-step first search: start KD, load Burgers from
+the catalog, enter the search parameters, watch the progress and open the result.
+The 81-second MP4 shows the actual mouse clicks, typed values and page
+transitions, with accelerated playback and shortened waits.
+[Open the recorded walkthrough (MP4)](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/docs/images/ui-walkthrough.mp4),
+[open the KD Studio preview](https://scientific-artificial-intelligence-lab.github.io/kd/demo/),
+or [follow the written steps](https://scientific-artificial-intelligence-lab.github.io/kd/guide/web-interface/).
+
+### Install and open a workspace
+
+In an activated Python 3.11+ environment on Linux, WSL or Windows:
+
+```bash
+uv pip install "sail-kd[ui]==0.10.0" "matplotlib==3.10.8" --torch-backend=auto
+kd-ui --workspace ./kd-ui-workspace
+```
+
+Open the URL printed in the terminal to load data, configure searches, inspect
+results and compare runs. Uploads and run history are stored in the workspace;
+restart with the same workspace path to reopen them. The
+[installation guide](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/)
+covers environment setup and pip installation. The Matplotlib pin keeps
+HTML reports working with KD 0.10.0. With [uv](https://docs.astral.sh/uv/),
+`--torch-backend=auto` selects a PyTorch build for the available hardware.
+
+| Step | What you do |
+|------|-------------|
+| **Data** | Choose a bundled dataset or load a file, map its arrays and inspect the field. |
+| **Search** | Select an algorithm, set its parameters and seeds, and follow the best expression and score history. |
+| **Result** | Read the equation and coefficients; inspect residuals, term ablation and forward predictions. |
+| **Compare** | Remeasure runs on the same data, compare their equations and keep their configurations and reports. |
+
+Python scripts use the same algorithms through `kd.Model`. The experimental
+[`kd-agent` controller](https://scientific-artificial-intelligence-lab.github.io/kd/guide/controller/)
+uses a configured language-model endpoint to organize searches and write reports.
+
+## Python quick start
+
+For Python use, install the base package:
 
 ```bash
 uv pip install sail-kd --torch-backend=auto
 ```
 
-The option selects the PyTorch build for your hardware: a CUDA build the
-installed driver supports, or the CPU build. See
-[Installation](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/)
-for environment setup, pip installation, CPU/CUDA builds and optional components.
 For a source checkout, clone this repository's `trunk` branch and run `uv sync`.
-
-### Local web interface
-
-On Linux (including WSL) and Windows, install the UI extra and start a workspace:
-
-```bash
-uv pip install "sail-kd[ui]" --torch-backend=auto
-kd-ui --workspace ./kd-ui-workspace
-```
-
-Open the URL printed in the terminal to load data, configure searches, inspect
-results and compare runs. Uploads and run history are stored in the workspace.
-
-## Quick start
+The [installation guide](https://scientific-artificial-intelligence-lab.github.io/kd/start/installation/)
+also covers CPU/CUDA builds and optional components.
 
 Discover Burgers' equation from the bundled 256 × 201 field:
 
@@ -125,7 +157,7 @@ Each linked page covers the method, its parameters and setup.
 
 SGA-PDE, DISCOVER, LLM4ED, PySR and PySINDy also accept feature tables. Every algorithm
 accepts a [sketch](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/21_sketch_discovery.py) for a PDE on gridded data,
-apart from the two modes named under "Discovery with a sketch"; a sketch
+apart from EqGPT's multi-case wave and steady modes; a sketch
 specifies known terms and constrains the unknown remainder. Algorithm settings
 can be passed as `Model` keywords;
 [the API reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/config/)
@@ -246,12 +278,22 @@ model.fit(dataset, sketch=sketch)
 `model.result_.sketch_outcome` reports the clause-by-clause verdict and, when
 the law satisfies every clause and fits the data, the certified solution.
 
-Every algorithm accepts a sketch when it searches a PDE on gridded data, except
-DISCOVER's PINN mode and EqGPT's multi-case wave mode; `kd.instrument_schemas()`
+Every algorithm accepts a sketch when it searches an evolution PDE on gridded data,
+including DISCOVER's PINN mode, except EqGPT's multi-case wave mode. EqGPT's
+steady mode also refuses sketches. `kd.instrument_schemas()`
 declares the support of each mode clause by clause. The
 [Burgers sketch example](https://github.com/Scientific-Artificial-Intelligence-Lab/kd/blob/trunk/examples/21_sketch_discovery.py) pins the advection term,
 searches for the missing diffusion term and explains how the result is checked
 against the sketch and the data.
+
+PySINDy and LLM4ED also accept sketches on feature tables, including tables
+projected from ODE trajectories. The [Sketch guide](https://scientific-artificial-intelligence-lab.github.io/kd/guide/sketch/)
+covers supported clauses, saving specifications and passing them to the controller.
+
+For second-order time targets such as `u_tt`, SGA, DISCOVER, PySR and PySINDy
+accept `target_lhs_order=2` when it matches the dataset's left-hand side.
+The [configuration reference](https://scientific-artificial-intelligence-lab.github.io/kd/api/config/)
+describes the available modes and parameters.
 
 ## Further use
 

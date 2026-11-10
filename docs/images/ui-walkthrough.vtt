@@ -1,0 +1,80 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:07.708
+Install the UI extra. Then run kd-ui with a workspace directory.
+
+00:00:07.708 --> 00:00:09.625
+Open the full printed URL, including its #token part. Keep the terminal
+open.
+
+00:00:09.625 --> 00:00:13.125
+The first page has no data selected. Filter the catalog for burgers.
+
+00:00:13.125 --> 00:00:14.167
+Click the burgers row to load the bundled one-dimensional field.
+
+00:00:14.167 --> 00:00:16.792
+Inspect the default field heatmap and its coordinates.
+
+00:00:16.792 --> 00:00:17.833
+Next, click Continue to Prepare at the top right.
+
+00:00:17.833 --> 00:00:21.333
+For this clean dataset, keep finite differences and no smoothing.
+
+00:00:21.333 --> 00:00:23.333
+Click Continue to Search to choose an algorithm and its parameters.
+
+00:00:23.333 --> 00:00:30.542
+Compatible modes are preselected. Keep only sga default for this first run.
+
+00:00:30.542 --> 00:00:33.167
+Set generations to 20. This controls how many search generations KD runs.
+
+00:00:33.167 --> 00:00:35.667
+Set Seeds to 0 for this example. Leave the other algorithm parameters
+unchanged.
+
+00:00:35.667 --> 00:00:40.667
+Set a 4 GiB memory cap and a two-minute time budget for this run.
+
+00:00:40.667 --> 00:00:42.167
+Click Check settings to validate this configuration.
+
+00:00:42.167 --> 00:00:43.583
+Click Queue 1 run to start the search.
+
+00:00:43.583 --> 00:00:45.125
+The queued job appears below. Click its job link to open live progress.
+
+00:00:45.125 --> 00:00:54.125
+Watch the generation counter, the best equation so far and the score curve.
+
+00:00:54.125 --> 00:00:55.833
+The run is complete. Click Open result to inspect the sealed equation.
+
+00:00:55.833 --> 00:00:59.208
+Read the fitted equation and coefficients. The scores here describe this
+completed run.
+
+00:00:59.208 --> 00:01:02.750
+Click Fit to inspect the convergence curve and the generated figures.
+
+00:01:02.750 --> 00:01:06.875
+Scroll to Field comparison: observed data, the discovered law integrated,
+and their difference.
+
+00:01:06.875 --> 00:01:11.125
+Return to Verify and click Compute under Forward simulation for a separate
+check.
+
+00:01:11.125 --> 00:01:14.042
+The forward error is now available. Read it separately from term ablation
+and block dispersion.
+
+00:01:14.042 --> 00:01:18.208
+Click Report to read or download the HTML report for this same run.
+
+00:01:18.208 --> 00:01:21.000
+Your run is saved. Restart kd-ui with the same workspace to return to it
+later.
